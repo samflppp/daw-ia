@@ -1,0 +1,58 @@
+{
+  "$schema": "./schema/workspace.schema.json",
+  "schemaVersion": 1,
+  "id": "ugc",
+  "label": "UGC",
+  "description": "Création rapide de contenus courts : boucles, stems et export au format réseaux sociaux.",
+  "panels": [
+    "transport",
+    "arrangement",
+    "assistant",
+    "export"
+  ],
+  "layout": {
+    "split": "vertical",
+    "children": [
+      {
+        "panel": "transport",
+        "weight": 1
+      },
+      {
+        "split": "horizontal",
+        "weight": 10,
+        "children": [
+          {
+            "panel": "arrangement",
+            "weight": 3
+          },
+          {
+            "split": "vertical",
+            "weight": 1,
+            "children": [
+              {
+                "panel": "assistant",
+                "weight": 2
+              },
+              {
+                "panel": "export",
+                "weight": 1
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "commands": [
+    "transport.play",
+    "transport.stop",
+    "project.undo",
+    "project.redo",
+    "project.export_audio",
+    "ai.generate_melody"
+  ],
+  "services": [
+    "ia_provider",
+    "conditioning"
+  ]
+}

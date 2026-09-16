@@ -1,0 +1,64 @@
+{
+  "$schema": "./schema/workspace.schema.json",
+  "schemaVersion": 1,
+  "id": "film",
+  "label": "Film",
+  "description": "Composition à l'image : vidéo synchronisée, marqueurs de scène, arrangement et mixeur.",
+  "panels": [
+    "transport",
+    "video",
+    "markers",
+    "arrangement",
+    "mixer",
+    "assistant"
+  ],
+  "layout": {
+    "split": "vertical",
+    "children": [
+      {
+        "panel": "transport",
+        "weight": 1
+      },
+      {
+        "split": "horizontal",
+        "weight": 5,
+        "children": [
+          {
+            "panel": "video",
+            "weight": 2
+          },
+          {
+            "panel": "markers",
+            "weight": 1
+          },
+          {
+            "panel": "assistant",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "panel": "arrangement",
+        "weight": 6
+      },
+      {
+        "panel": "mixer",
+        "weight": 3
+      }
+    ]
+  },
+  "commands": [
+    "transport.play",
+    "transport.stop",
+    "project.undo",
+    "project.redo",
+    "marker.add",
+    "ai.suggest_progression"
+  ],
+  "services": [
+    "mcp",
+    "harmony",
+    "conditioning",
+    "ia_provider"
+  ]
+}

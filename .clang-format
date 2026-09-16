@@ -1,0 +1,61 @@
+---
+# Pinned to options supported by clang-format 18 (Ubuntu 24.04).
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+
+ColumnLimit: 110
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
+NamespaceIndentation: None
+FixNamespaceComments: true
+
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: All
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+QualifierAlignment: Leave
+SpaceBeforeParens: ControlStatements
+SpaceAfterTemplateKeyword: true
+Cpp11BracedListStyle: true
+
+AlwaysBreakTemplateDeclarations: Yes
+BreakConstructorInitializers: BeforeComma
+PackConstructorInitializers: Never
+BinPackArguments: false
+BinPackParameters: false
+AlignAfterOpenBracket: Align
+AlignOperands: Align
+AlignTrailingComments: true
+
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  # Local headers of the same folder, then own module headers
+  - Regex: '^"[^/]+"$'
+    Priority: 1
+    SortPriority: 0
+  - Regex: '^"daw/'
+    Priority: 1
+    SortPriority: 1
+  # Third party: JUCE, Tracktion, CLAP, VST3
+  - Regex: '^<(juce_|tracktion_|clap/|pluginterfaces/|public\.sdk/)'
+    Priority: 2
+  # Standard library
+  - Regex: '^<[a-z_]+>$'
+    Priority: 3
+  - Regex: '.*'
+    Priority: 4
+
+InsertNewlineAtEOF: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+...

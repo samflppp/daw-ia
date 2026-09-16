@@ -1,0 +1,32 @@
+# Build trees
+/build/
+/out/
+/cmake-build-*/
+CMakeUserPresets.json
+compile_commands.json
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.user
+.vs/
+
+# Python (services/)
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+
+# Local project data (versioning store, caches)
+*.sqlite-wal
+*.sqlite-shm
+/local-data/
+
+# OS
+.DS_Store
+Thumbs.db

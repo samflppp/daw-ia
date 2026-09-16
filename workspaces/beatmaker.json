@@ -1,0 +1,71 @@
+{
+  "$schema": "./schema/workspace.schema.json",
+  "schemaVersion": 1,
+  "id": "beatmaker",
+  "label": "Beatmaker",
+  "description": "Production de beats : séquenceur de patterns, piano roll, navigateur de sons, mixeur.",
+  "panels": [
+    "transport",
+    "browser",
+    "pattern_sequencer",
+    "piano_roll",
+    "mixer",
+    "assistant"
+  ],
+  "layout": {
+    "split": "vertical",
+    "children": [
+      {
+        "panel": "transport",
+        "weight": 1
+      },
+      {
+        "split": "horizontal",
+        "weight": 8,
+        "children": [
+          {
+            "panel": "browser",
+            "weight": 1
+          },
+          {
+            "split": "vertical",
+            "weight": 4,
+            "children": [
+              {
+                "panel": "pattern_sequencer",
+                "weight": 1
+              },
+              {
+                "panel": "piano_roll",
+                "weight": 2
+              }
+            ]
+          },
+          {
+            "panel": "assistant",
+            "weight": 1
+          }
+        ]
+      },
+      {
+        "panel": "mixer",
+        "weight": 3
+      }
+    ]
+  },
+  "commands": [
+    "transport.play",
+    "transport.stop",
+    "project.undo",
+    "project.redo",
+    "clip.create_midi",
+    "note.add",
+    "ai.suggest_progression",
+    "ai.generate_melody"
+  ],
+  "services": [
+    "mcp",
+    "harmony",
+    "ia_provider"
+  ]
+}

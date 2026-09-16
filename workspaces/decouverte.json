@@ -1,0 +1,46 @@
+{
+  "$schema": "./schema/workspace.schema.json",
+  "schemaVersion": 1,
+  "id": "decouverte",
+  "label": "Découverte",
+  "description": "Espace d'entrée : un seul flux guidé pour créer une première boucle avec l'aide de l'IA.",
+  "panels": [
+    "assistant",
+    "arrangement",
+    "transport"
+  ],
+  "layout": {
+    "split": "vertical",
+    "children": [
+      {
+        "panel": "transport",
+        "weight": 1
+      },
+      {
+        "split": "horizontal",
+        "weight": 12,
+        "children": [
+          {
+            "panel": "arrangement",
+            "weight": 3
+          },
+          {
+            "panel": "assistant",
+            "weight": 1
+          }
+        ]
+      }
+    ]
+  },
+  "commands": [
+    "transport.play",
+    "transport.stop",
+    "project.undo",
+    "project.redo",
+    "ai.suggest_progression"
+  ],
+  "services": [
+    "ia_provider",
+    "harmony"
+  ]
+}

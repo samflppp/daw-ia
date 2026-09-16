@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dawia.local/schema/workspace.schema.json",
+  "title": "Workspace manifest",
+  "description": "Declarative description of a workspace: which panels exist, how they are laid out, which commands and services are exposed. Contains no pixel values: sizes are relative weights, visual values live in core/ui/tokens.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "label", "panels", "layout"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "id": { "$ref": "#/$defs/identifier" },
+    "label": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "panels": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/identifier" }
+    },
+    "layout": { "$ref": "#/$defs/layoutNode" },
+    "commands": {
+      "description": "Command Bus command types surfaced in this workspace (menus, palette, MCP).",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/commandType" }
+    },
+    "services": {
+      "description": "Python services this workspace needs at startup.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["mcp", "harmony", "conditioning", "ia_provider"] }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "commandType": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "layoutNode": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["panel"],
+          "properties": {
+            "panel": { "$ref": "#/$defs/identifier" },
+            "weight": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["split", "children"],
+          "properties": {
+            "split": { "enum": ["horizontal", "vertical"] },
+            "weight": { "type": "number", "exclusiveMinimum": 0 },
+            "children": {
+              "type": "array",
+              "minItems": 2,
+              "items": { "$ref": "#/$defs/layoutNode" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
