@@ -26,6 +26,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 # Embedded debug info (/Z7) so compiler caches (sccache) work with MSVC.
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
+# JUCE requires CMake 3.22, so CMP0141 is unset in its scope and
+# juce_recommended_config_flags adds /Zi, which overrides /Z7 (warning D9025).
+set(CMAKE_POLICY_DEFAULT_CMP0141 NEW)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
