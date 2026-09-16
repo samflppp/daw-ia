@@ -36,12 +36,22 @@ ctest --preset linux-clang
 
 Domaine seul, sans sous-modules : `cmake --preset domain-only`.
 
-Windows : ouvrir un « x64 Native Tools Command Prompt for VS 2022 », puis presets `windows-msvc`.
+## Démarrage (Windows 10/11)
 
-Services :
+Installation (Git, Python 3.12, uv, Build Tools VS 2022 avec MSVC + Windows SDK + CMake + Ninja, clang-format 18) :
 
-```bash
-cd services && uv sync && uv run pytest
+```bat
+powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1
+```
+
+Puis, dans « x64 Native Tools Command Prompt for VS 2022 » :
+
+```bat
+git submodule update --init external/JUCE external/tracktion_engine external/clap external/vst3sdk
+git -C external/vst3sdk submodule update --init base pluginterfaces public.sdk cmake
+cmake --preset windows-msvc
+cmake --build --preset windows-msvc
+ctest --preset windows-msvc
 ```
 
 ## Règles d'hygiène (vérifiées en CI)
