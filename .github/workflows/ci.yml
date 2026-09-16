@@ -33,7 +33,7 @@ jobs:
       - name: Hygiene rules (tokens, layout, domain isolation)
         run: python3 scripts/check_hygiene.py
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.1.0
 
       - name: Validate workspace manifests
         run: uv run --no-project --with jsonschema python scripts/validate_workspaces.py
@@ -55,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: "3.12"
 
