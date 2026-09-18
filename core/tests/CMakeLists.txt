@@ -2,7 +2,15 @@
 # device, so it stays fast enough to be run on every save.
 add_executable(daw_domain_tests
     TestMain.cpp
-    BuildInfoTests.cpp)
+    BuildInfoTests.cpp
+    ValueTests.cpp
+    IdsTests.cpp
+    ProjectStateTests.cpp
+    SerializationRoundTripTests.cpp
+    CommandBusTests.cpp
+    UndoRedoTests.cpp
+    CoalescingTests.cpp
+    ReplayTests.cpp)
 
 target_link_libraries(daw_domain_tests PRIVATE daw::domain doctest::doctest)
 daw_set_warnings(daw_domain_tests)

@@ -1,15 +1,25 @@
 # Third-party code fetched at configure time (pinned by archive hash, not by tag).
 #
-# doctest is header-only and stays invisible from the outside: it is used only
-# by core/tests.
+# Both dependencies are header-only and stay invisible from the outside:
+#   nlohmann/json  used only inside core/domain/src/serialization/Json.cpp
+#   doctest        used only by core/tests
 #
-# Unlike external/ (git submodules for JUCE, Tracktion, CLAP, VST3), it is small
-# enough to download, so the `domain-only` preset keeps working without
-# submodules. The archive is pinned by SHA-256: a tag moving upstream is a
+# Unlike external/ (git submodules for JUCE, Tracktion, CLAP, VST3), these are
+# small enough to download, so the `domain-only` preset keeps working without
+# submodules. The archives are pinned by SHA-256: a tag moving upstream is a
 # configure error, not a silent change.
 include_guard(GLOBAL)
 
 include(FetchContent)
+
+FetchContent_Declare(nlohmann_json
+    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+    URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    SYSTEM)
+set(JSON_BuildTests OFF CACHE INTERNAL "")
+set(JSON_Install OFF CACHE INTERNAL "")
+FetchContent_MakeAvailable(nlohmann_json)
 
 if(DAW_BUILD_TESTS)
     FetchContent_Declare(doctest

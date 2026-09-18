@@ -58,6 +58,7 @@
     "transport.stop",
     "project.undo",
     "project.redo",
+    "track.set_volume",
     "clip.create_midi",
     "note.add",
     "ai.suggest_progression",
