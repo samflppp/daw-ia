@@ -100,6 +100,28 @@ Result<Receipt> CommandBus::executeEntry(std::unique_ptr<Command> command,
 {
     const MutationScope scope{mutating_};
 
+    // Transient commands (the transport) never touch the history: no entry, no
+    // journal, and the redo stack is left alone because nothing about the past
+    // has changed. They are still validated and still notified.
+    if (command->historyPolicy() == HistoryPolicy::transient)
+    {
+        auto appliedTransient = command->apply(state_);
+        if (!appliedTransient)
+            return appliedTransient.error();
+
+        Receipt receipt{};
+        receipt.id = id;
+        receipt.type = std::string{command->type()};
+        receipt.at = at;
+        receipt.gesture = gesture;
+        receipt.coalesced = false;
+        receipt.undoDepth = undoStack_.size();
+        receipt.redoDepth = redoStack_.size();
+
+        notify(&BusObserver::onExecuted, receipt);
+        return receipt;
+    }
+
     // Both halves must agree: the caller asked for this gesture, and the type
     // on top of the history accepts to absorb the newcomer.
     const bool coalescing = allowCoalescing && gesture.has_value() && !undoStack_.empty() &&

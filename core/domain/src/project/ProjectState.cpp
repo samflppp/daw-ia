@@ -443,6 +443,21 @@ Result<void> ProjectState::removeNote(ClipId clipId, NoteId noteId)
     return {};
 }
 
+Result<void> ProjectState::setPlaying(bool playing)
+{
+    transport_.playing = playing;
+    return {};
+}
+
+Result<void> ProjectState::setPositionBeats(double positionBeats)
+{
+    if (positionBeats < 0.0)
+        return fail(ErrorCode::invalidArgument, "the playhead cannot go before the timeline origin");
+
+    transport_.positionBeats = positionBeats;
+    return {};
+}
+
 Value ProjectState::toValue() const
 {
     Value::Array serialisedTracks;

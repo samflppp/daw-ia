@@ -4,10 +4,24 @@
 #include "daw/domain/Value.h"
 #include "daw/domain/project/ProjectState.h"
 
+#include <cstdint>
 #include <string_view>
 
 namespace daw::domain
 {
+
+// What the bus does with a command once it has run.
+enum class HistoryPolicy : std::uint8_t
+{
+    // The normal case: history entry, journal, undo.
+    undoable,
+
+    // Executed, validated and notified like any other command, but it leaves
+    // no history entry and no journal entry. Reserved for the actions that are
+    // not project state: starting playback is not something you undo, and
+    // journalling it would make a replay start making noise.
+    transient,
+};
 
 // Every mutation of the project goes through a Command. No exception: it is
 // what gives undo, versioning and MCP control one single mechanism.
@@ -40,6 +54,8 @@ public:
     [[nodiscard]] virtual std::string_view type() const noexcept = 0;
 
     [[nodiscard]] virtual Value payload() const = 0;
+
+    [[nodiscard]] virtual HistoryPolicy historyPolicy() const noexcept { return HistoryPolicy::undoable; }
 
     // Validates first, mutates second: on failure the state is untouched, and
     // the bus records nothing.

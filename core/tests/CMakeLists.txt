@@ -10,7 +10,8 @@ add_executable(daw_domain_tests
     CommandBusTests.cpp
     UndoRedoTests.cpp
     CoalescingTests.cpp
-    ReplayTests.cpp)
+    ReplayTests.cpp
+    TransportTests.cpp)
 
 target_link_libraries(daw_domain_tests PRIVATE daw::domain doctest::doctest)
 daw_set_warnings(daw_domain_tests)

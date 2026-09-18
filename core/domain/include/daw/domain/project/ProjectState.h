@@ -65,11 +65,24 @@ struct Track
     friend bool operator==(const Track& lhs, const Track& rhs);
 };
 
+// Playback state. It is *not* project state: it is never serialized, never
+// compared, never journalled, and the commands that change it are transient.
+// A project file does not remember that it was playing.
+struct TransportState
+{
+    bool playing{false};
+    double positionBeats{0.0};
+};
+
 class ProjectState
 {
 public:
-    static constexpr double minVolumeDb = -60.0;
-    static constexpr double maxVolumeDb = 12.0;
+    // Both ranges come from Tracktion, not from taste.
+    //   volume: volumeFaderPositionToDB() maps the fader onto [-100, +6] dB;
+    //           above +6 the value is clamped, below -100 it is silence.
+    //   tempo:  TempoSetting::minBPM and maxBPM.
+    static constexpr double minVolumeDb = -100.0;
+    static constexpr double maxVolumeDb = 6.0;
     static constexpr double minTempo = 20.0;
     static constexpr double maxTempo = 300.0;
 
@@ -92,8 +105,14 @@ public:
     Result<void> addNote(ClipId clipId, Note note);
     Result<void> removeNote(ClipId clipId, NoteId noteId);
 
+    // --- transport (session state, outside toValue/fromValue and operator==)
+    [[nodiscard]] const TransportState& transport() const noexcept { return transport_; }
+    Result<void> setPlaying(bool playing);
+    Result<void> setPositionBeats(double positionBeats);
+
     // Whole-state serialization. Tests compare two states through it, and the
-    // versioning layer of a later week will hash it.
+    // versioning layer of a later week will hash it. Transport is excluded on
+    // purpose: an undo must not rewind the playhead.
     [[nodiscard]] Value toValue() const;
     [[nodiscard]] static Result<ProjectState> fromValue(const Value& value);
 
@@ -105,6 +124,7 @@ private:
 
     double tempo_{120.0};
     std::vector<Track> tracks_;
+    TransportState transport_;
 };
 
 } // namespace daw::domain

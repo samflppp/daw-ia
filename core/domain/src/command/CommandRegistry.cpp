@@ -3,6 +3,7 @@
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/CreateMidiClip.h"
 #include "daw/domain/commands/SetTrackVolume.h"
+#include "daw/domain/commands/TransportCommands.h"
 
 #include <algorithm>
 
@@ -15,6 +16,9 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<CreateMidiClip>());
     static_cast<void>(registry.add<AddNote>());
     static_cast<void>(registry.add<SetTrackVolume>());
+    static_cast<void>(registry.add<TransportPlay>());
+    static_cast<void>(registry.add<TransportStop>());
+    static_cast<void>(registry.add<TransportSetPosition>());
     return registry;
 }
 
