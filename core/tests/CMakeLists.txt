@@ -1,8 +1,13 @@
-# Dependency-free test runner for S1. Replace with a real framework
-# (Catch2 or doctest) when the Command Bus lands.
+# Domain test suite. Runs without JUCE, without Tracktion and without an audio
+# device, so it stays fast enough to be run on every save.
 add_executable(daw_domain_tests
-    DomainSmokeTests.cpp)
-target_link_libraries(daw_domain_tests PRIVATE daw::domain)
+    TestMain.cpp
+    BuildInfoTests.cpp)
+
+target_link_libraries(daw_domain_tests PRIVATE daw::domain doctest::doctest)
 daw_set_warnings(daw_domain_tests)
 
-add_test(NAME domain.smoke COMMAND daw_domain_tests)
+# One ctest entry per TEST_CASE, so a failure names the case, not the binary.
+doctest_discover_tests(daw_domain_tests
+    TEST_PREFIX "domain."
+    ADD_LABELS 0)
