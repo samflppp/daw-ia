@@ -27,6 +27,8 @@ std::string_view describe(ErrorCode code) noexcept
         return "gestureClosed";
     case ErrorCode::reentrantCall:
         return "reentrantCall";
+    case ErrorCode::wrongThread:
+        return "wrongThread";
     case ErrorCode::typeMismatch:
         return "typeMismatch";
     case ErrorCode::serialisationError:

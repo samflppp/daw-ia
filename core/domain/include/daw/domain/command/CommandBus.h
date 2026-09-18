@@ -13,6 +13,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace daw::domain
@@ -37,6 +38,24 @@ struct BusLimits
 //
 // The bus owns no state of its own about the project: it holds a reference to
 // a ProjectState and only touches it through commands.
+//
+// Threading: the bus belongs to the thread that constructed it, and to that
+// thread only. The engine projects onto a Tracktion Edit from inside the
+// notifications, and Tracktion expects that on the message thread, so a
+// command arriving from anywhere else would mutate an Edit under Tracktion's
+// feet. The rule is checked, not merely documented: every mutating entry
+// point refuses a call from another thread with ErrorCode::wrongThread, in
+// release as well as in debug, because the day a Python service pushes
+// commands in from a socket the mistake must be an error and not a crash
+// three layers down.
+//
+// rebindToCurrentThread() exists for the deliberate handover: loading a
+// project on a worker thread, then giving the bus to the message thread.
+//
+// beginGesture, clearHistory, addObserver and removeObserver are subject to
+// the same rule but return no Result, so they assert in debug instead. That
+// costs them nothing in release and loses no safety: none of them mutates the
+// project, and the command that would has to go through execute().
 class CommandBus
 {
 public:
@@ -71,6 +90,14 @@ public:
     [[nodiscard]] std::optional<GestureId> openGesture() const noexcept;
     [[nodiscard]] std::string_view openGestureLabel() const noexcept;
 
+    // --- threading ---------------------------------------------------------
+    [[nodiscard]] std::thread::id owningThread() const noexcept;
+
+    // Transfers ownership to the calling thread. Refused while a command is
+    // being applied, and refused from any thread but the current owner: a
+    // handover is a decision, never a race.
+    Result<void> rebindToCurrentThread();
+
     // --- observers ---------------------------------------------------------
     ObserverToken addObserver(BusObserver& observer);
     void removeObserver(ObserverToken token) noexcept;
@@ -102,6 +129,7 @@ private:
                                  std::optional<GestureId> gesture,
                                  bool allowCoalescing);
 
+    [[nodiscard]] Result<void> checkThread() const;
     [[nodiscard]] Receipt receiptFor(const Entry& entry, bool coalesced) const;
     void notify(void (BusObserver::*callback)(const Receipt&), const Receipt& receipt);
     void notifyTruncated(std::size_t dropped);
@@ -117,6 +145,7 @@ private:
     std::vector<Registration> observers_;
     std::uint64_t nextObserverToken_{1};
     bool mutating_{false};
+    std::thread::id owningThread_{std::this_thread::get_id()};
 };
 
 } // namespace daw::domain

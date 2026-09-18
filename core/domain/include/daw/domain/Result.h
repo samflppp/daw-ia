@@ -23,6 +23,7 @@ enum class ErrorCode : std::uint8_t
     nothingToRedo,
     gestureClosed, // the gesture referenced by the caller is not the open one
     reentrantCall, // mutation attempted from inside an observer notification
+    wrongThread,   // the bus was called from a thread that does not own it
     typeMismatch,  // Value holds another kind than the one asked for
     serialisationError,
 };

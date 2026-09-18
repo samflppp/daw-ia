@@ -11,7 +11,8 @@ add_executable(daw_domain_tests
     UndoRedoTests.cpp
     CoalescingTests.cpp
     ReplayTests.cpp
-    TransportTests.cpp)
+    TransportTests.cpp
+    ThreadingTests.cpp)
 
 target_link_libraries(daw_domain_tests PRIVATE daw::domain doctest::doctest)
 daw_set_warnings(daw_domain_tests)

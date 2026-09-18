@@ -1,6 +1,8 @@
 #include "daw/domain/command/CommandBus.h"
 
 #include <algorithm>
+#include <cassert>
+#include <sstream>
 #include <utility>
 
 namespace daw::domain
@@ -35,6 +37,13 @@ Error reentrant()
     return fail(ErrorCode::reentrantCall, "the bus is already applying a command");
 }
 
+std::string describeThread(std::thread::id id)
+{
+    std::ostringstream text;
+    text << id;
+    return text.str();
+}
+
 } // namespace
 
 CommandBus::CommandBus(ProjectState& state, const CommandRegistry& registry, BusLimits limits)
@@ -52,6 +61,9 @@ CommandBus::CommandBus(ProjectState& state, const CommandRegistry& registry, Bus
 
 Result<Receipt> CommandBus::execute(std::unique_ptr<Command> command, ExecuteOptions options)
 {
+    if (auto owned = checkThread(); !owned)
+        return owned.error();
+
     if (mutating_)
         return reentrant();
 
@@ -74,6 +86,9 @@ Result<Receipt> CommandBus::execute(std::unique_ptr<Command> command, ExecuteOpt
 
 Result<Receipt> CommandBus::executeSerialized(const Value& envelope)
 {
+    if (auto owned = checkThread(); !owned)
+        return owned.error();
+
     if (mutating_)
         return reentrant();
 
@@ -195,12 +210,17 @@ std::size_t CommandBus::redoDepth() const noexcept
 
 void CommandBus::clearHistory() noexcept
 {
+    assert(checkThread().ok() && "clearHistory called from a thread that does not own the bus");
+
     undoStack_.clear();
     redoStack_.clear();
 }
 
 Result<Receipt> CommandBus::undo()
 {
+    if (auto owned = checkThread(); !owned)
+        return owned.error();
+
     if (mutating_)
         return reentrant();
 
@@ -228,6 +248,9 @@ Result<Receipt> CommandBus::undo()
 
 Result<Receipt> CommandBus::redo()
 {
+    if (auto owned = checkThread(); !owned)
+        return owned.error();
+
     if (mutating_)
         return reentrant();
 
@@ -256,6 +279,8 @@ Result<Receipt> CommandBus::redo()
 
 GestureId CommandBus::beginGesture(std::string_view label)
 {
+    assert(checkThread().ok() && "beginGesture called from a thread that does not own the bus");
+
     openGesture_ = GestureId::generate();
     openGestureLabel_ = std::string{label};
     return *openGesture_;
@@ -263,6 +288,9 @@ GestureId CommandBus::beginGesture(std::string_view label)
 
 Result<void> CommandBus::endGesture(GestureId gesture)
 {
+    if (auto owned = checkThread(); !owned)
+        return owned.error();
+
     if (!openGesture_.has_value() || *openGesture_ != gesture)
         return fail(ErrorCode::gestureClosed, "gesture " + gesture.toString() + " is not the open one");
 
@@ -287,6 +315,8 @@ std::string_view CommandBus::openGestureLabel() const noexcept
 
 ObserverToken CommandBus::addObserver(BusObserver& observer)
 {
+    assert(checkThread().ok() && "addObserver called from a thread that does not own the bus");
+
     const ObserverToken token{nextObserverToken_++};
     observers_.push_back(Registration{token, &observer});
     return token;
@@ -294,6 +324,8 @@ ObserverToken CommandBus::addObserver(BusObserver& observer)
 
 void CommandBus::removeObserver(ObserverToken token) noexcept
 {
+    assert(checkThread().ok() && "removeObserver called from a thread that does not own the bus");
+
     const auto position =
         std::find_if(observers_.begin(),
                      observers_.end(),
@@ -353,6 +385,33 @@ std::vector<Value> CommandBus::journal() const
     }
 
     return envelopes;
+}
+
+Result<void> CommandBus::checkThread() const
+{
+    if (std::this_thread::get_id() == owningThread_)
+        return {};
+
+    return fail(ErrorCode::wrongThread,
+                "the bus belongs to thread " + describeThread(owningThread_) + ", called from " +
+                    describeThread(std::this_thread::get_id()));
+}
+
+std::thread::id CommandBus::owningThread() const noexcept
+{
+    return owningThread_;
+}
+
+Result<void> CommandBus::rebindToCurrentThread()
+{
+    if (mutating_)
+        return reentrant();
+
+    if (auto owned = checkThread(); !owned)
+        return owned.error();
+
+    owningThread_ = std::this_thread::get_id();
+    return {};
 }
 
 Receipt CommandBus::receiptFor(const Entry& entry, bool coalesced) const
