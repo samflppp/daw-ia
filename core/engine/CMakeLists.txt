@@ -1,0 +1,31 @@
+# daw_engine — adapter between core/domain and Tracktion Engine.
+#
+# INTERFACE library, for the same reason as daw_ui: its sources compile inside
+# the consuming target, so Tracktion's module code is compiled exactly once per
+# binary and no symbol is duplicated.
+#
+# The dependency goes one way only. This target links daw::domain; the domain
+# never links this one, and daw_forbid_ui_dependencies() keeps it that way.
+
+add_library(daw_engine INTERFACE)
+add_library(daw::engine ALIAS daw_engine)
+
+target_sources(daw_engine INTERFACE
+    src/EngineHost.cpp
+    src/ProjectProjector.cpp
+    src/TransportController.cpp)
+
+target_include_directories(daw_engine INTERFACE include)
+
+target_link_libraries(daw_engine INTERFACE
+    daw::domain
+    tracktion::tracktion_core
+    tracktion::tracktion_engine
+    tracktion::tracktion_graph
+    juce::juce_audio_devices
+    juce::juce_audio_processors
+    juce::juce_audio_utils)
+
+if(DAW_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()

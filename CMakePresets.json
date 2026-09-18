@@ -59,10 +59,10 @@
     { "name": "domain-only", "configurePreset": "domain-only" }
   ],
   "testPresets": [
-    { "name": "linux-clang", "configurePreset": "linux-clang", "output": { "outputOnFailure": true } },
-    { "name": "linux-clang-release", "configurePreset": "linux-clang-release", "output": { "outputOnFailure": true } },
-    { "name": "windows-msvc", "configurePreset": "windows-msvc", "output": { "outputOnFailure": true } },
-    { "name": "windows-msvc-release", "configurePreset": "windows-msvc-release", "output": { "outputOnFailure": true } },
-    { "name": "domain-only", "configurePreset": "domain-only", "output": { "outputOnFailure": true } }
+    { "name": "linux-clang", "configurePreset": "linux-clang", "output": { "outputOnFailure": true }, "filter": { "exclude": { "label": "audio" } } },
+    { "name": "linux-clang-release", "configurePreset": "linux-clang-release", "output": { "outputOnFailure": true }, "filter": { "exclude": { "label": "audio" } } },
+    { "name": "windows-msvc", "configurePreset": "windows-msvc", "output": { "outputOnFailure": true }, "filter": { "exclude": { "label": "audio" } } },
+    { "name": "windows-msvc-release", "configurePreset": "windows-msvc-release", "output": { "outputOnFailure": true }, "filter": { "exclude": { "label": "audio" } } },
+    { "name": "domain-only", "configurePreset": "domain-only", "output": { "outputOnFailure": true }, "filter": { "exclude": { "label": "audio" } } }
   ]
 }

@@ -26,6 +26,7 @@ target_compile_definitions(daw_app PRIVATE
 
 target_link_libraries(daw_app PRIVATE
     daw::domain
+    daw::engine
     daw::ui
     tracktion::tracktion_core
     tracktion::tracktion_engine
