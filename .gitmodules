@@ -10,3 +10,6 @@
 [submodule "external/vst3sdk"]
 	path = external/vst3sdk
 	url = https://github.com/steinbergmedia/vst3sdk.git
+[submodule "external/BLAKE3"]
+	path = external/BLAKE3
+	url = https://github.com/BLAKE3-team/BLAKE3.git

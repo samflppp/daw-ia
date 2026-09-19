@@ -17,7 +17,7 @@ services/             Python — process séparé, JSON-RPC sur socket local
 workspaces/           manifestes JSON déclaratifs
   schema/             JSON Schema des manifestes
   decouverte.json  beatmaker.json  ugc.json  film.json
-external/             sous-modules épinglés : JUCE, tracktion_engine, clap, vst3sdk
+external/             sous-modules épinglés : JUCE, tracktion_engine, clap, vst3sdk, BLAKE3
 cmake/                modules CMake du projet (warnings, garde-fous, dépendances)
 scripts/              installation, sous-modules, vérifications
 ```
@@ -47,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1
 Puis, dans « x64 Native Tools Command Prompt for VS 2022 » :
 
 ```bat
-git submodule update --init external/JUCE external/tracktion_engine external/clap external/vst3sdk
+git submodule update --init external/JUCE external/tracktion_engine external/clap external/vst3sdk external/BLAKE3
 git -C external/vst3sdk submodule update --init base pluginterfaces public.sdk cmake
 cmake --preset windows-msvc
 cmake --build --preset windows-msvc

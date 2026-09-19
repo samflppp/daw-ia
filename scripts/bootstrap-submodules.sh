@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 git submodule sync
-git submodule update --init external/JUCE external/tracktion_engine external/clap external/vst3sdk
+git submodule update --init external/JUCE external/tracktion_engine external/clap external/vst3sdk external/BLAKE3
 
 git -C external/vst3sdk submodule update --init base pluginterfaces public.sdk cmake
 
