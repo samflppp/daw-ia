@@ -12,6 +12,12 @@ namespace
 // about the domain.
 const juce::Identifier domainTrackIdProperty{"dawDomainTrackId"};
 
+// Same idea one level down: a hosted plugin carries the domain identifier of the
+// instance it projects, so a chain is bound by identity and never by position.
+// Removing a plugin in the middle cannot make the projector write a state into
+// the wrong plugin.
+const juce::Identifier domainPluginIdProperty{"dawDomainPluginId"};
+
 juce::String toJuce(const std::string& text)
 {
     return juce::String::fromUTF8(text.c_str(), static_cast<int>(text.size()));
@@ -19,9 +25,14 @@ juce::String toJuce(const std::string& text)
 
 } // namespace
 
-ProjectProjector::ProjectProjector(tracktion::Edit& edit, const domain::ProjectState& state)
+ProjectProjector::ProjectProjector(tracktion::Edit& edit,
+                                   const domain::ProjectState& state,
+                                   PluginCatalogue* catalogue,
+                                   PluginStateStore* stateStore)
     : edit_{edit}
     , state_{state}
+    , catalogue_{catalogue}
+    , stateStore_{stateStore}
     , transport_{edit}
 {
 }
@@ -98,18 +109,187 @@ void ProjectProjector::removeUnknownTracks()
     }
 }
 
-void ProjectProjector::ensureInstrument(tracktion::AudioTrack& track, tracktion::Edit& edit)
+void ProjectProjector::ensureInstrument(tracktion::AudioTrack& track, const domain::Track& source)
 {
-    // Without an instrument a MIDI clip is silent. 4OSC ships with Tracktion,
-    // so the project makes a sound without any external plugin. Hosting VST3
-    // and CLAP is a later week.
-    if (!track.pluginList.getPluginsOfType<tracktion::FourOscPlugin>().isEmpty())
+    // Without an instrument a MIDI clip is silent. 4OSC ships with Tracktion, so
+    // a project makes a sound with no external plugin at all.
+    //
+    // It is a fallback, not a fixture: as soon as the track holds a plugin the
+    // catalogue calls an instrument, 4OSC leaves. Keeping both would put a
+    // second synth under the user's own, playing the same notes.
+    const auto existing = track.pluginList.getPluginsOfType<tracktion::FourOscPlugin>();
+
+    if (hasDomainInstrument(source))
+    {
+        for (auto plugin : existing)
+        {
+            if (plugin != nullptr)
+                plugin->deleteFromParent();
+        }
+        return;
+    }
+
+    if (!existing.isEmpty())
         return;
 
-    if (auto plugin = edit.getPluginCache().createNewPlugin(tracktion::FourOscPlugin::xmlTypeName, {});
+    if (auto plugin = edit_.getPluginCache().createNewPlugin(tracktion::FourOscPlugin::xmlTypeName, {});
         plugin != nullptr)
     {
         track.pluginList.insertPlugin(plugin, 0, nullptr);
+    }
+}
+
+bool ProjectProjector::isInstrument(const domain::PluginRef& ref) const
+{
+    if (catalogue_ == nullptr)
+        return false;
+
+    const auto description = catalogue_->find(ref);
+    return description.has_value() && description->isInstrument;
+}
+
+bool ProjectProjector::hasDomainInstrument(const domain::Track& source) const
+{
+    return std::any_of(source.plugins.begin(),
+                       source.plugins.end(),
+                       [this](const domain::PluginInstance& plugin) { return isInstrument(plugin.ref); });
+}
+
+tracktion::Plugin* ProjectProjector::findPlugin(tracktion::AudioTrack& track, const domain::PluginId& id)
+{
+    const auto wanted = toJuce(id.toString());
+
+    for (auto plugin : track.pluginList.getPlugins())
+    {
+        if (plugin != nullptr && plugin->state.getProperty(domainPluginIdProperty).toString() == wanted)
+            return plugin;
+    }
+    return nullptr;
+}
+
+tracktion::Plugin::Ptr ProjectProjector::createPluginFor(const domain::PluginInstance& source)
+{
+    if (catalogue_ == nullptr)
+        return {};
+
+    const auto description = catalogue_->find(source.ref);
+    if (!description.has_value())
+    {
+        // Named, not silently replaced. The application shows the list; the
+        // project keeps the instance, so reinstalling the plugin is enough to
+        // get the sound back.
+        const auto missing = source.ref.format + ":" + source.ref.identifier;
+        if (std::find(missing_.begin(), missing_.end(), missing) == missing_.end())
+            missing_.push_back(missing);
+        return {};
+    }
+
+    auto plugin =
+        edit_.getPluginCache().createNewPlugin(tracktion::ExternalPlugin::xmlTypeName, *description);
+    if (plugin == nullptr)
+        return {};
+
+    plugin->state.setProperty(domainPluginIdProperty, toJuce(source.id.toString()), nullptr);
+    return plugin;
+}
+
+void ProjectProjector::removeUnknownPlugins(tracktion::AudioTrack& track, const domain::Track& source)
+{
+    for (auto plugin : track.pluginList.getPlugins())
+    {
+        if (plugin == nullptr)
+            continue;
+
+        const auto marker = plugin->state.getProperty(domainPluginIdProperty).toString();
+        if (marker.isEmpty())
+            continue; // volume, pan, the 4OSC fallback: not ours to remove here
+
+        const bool known = std::any_of(source.plugins.begin(),
+                                       source.plugins.end(),
+                                       [&marker](const domain::PluginInstance& instance)
+                                       { return toJuce(instance.id.toString()) == marker; });
+        if (!known)
+            plugin->deleteFromParent();
+    }
+}
+
+void ProjectProjector::applyPluginState(tracktion::Plugin& target, const domain::PluginInstance& source)
+{
+    if (stateStore_ == nullptr)
+        return;
+
+    const auto previous = std::find_if(projectedStates_.begin(),
+                                       projectedStates_.end(),
+                                       [&source](const auto& entry) { return entry.first == source.id; });
+
+    const bool alreadyProjected = previous != projectedStates_.end();
+    if (alreadyProjected && previous->second == source.state.digest)
+        return; // the digest has not moved: the plugin keeps what it holds
+
+    if (!source.state.isEmpty())
+    {
+        auto bytes = stateStore_->get(source.state);
+        if (!bytes)
+            return; // a missing or damaged blob leaves the plugin as it is
+
+        if (auto* external = dynamic_cast<tracktion::ExternalPlugin*>(&target); external != nullptr)
+        {
+            if (auto* instance = external->getAudioPluginInstance(); instance != nullptr)
+                instance->setStateInformation(bytes.value().getData(),
+                                              static_cast<int>(bytes.value().getSize()));
+        }
+    }
+
+    if (alreadyProjected)
+        previous->second = source.state.digest;
+    else
+        projectedStates_.emplace_back(source.id, source.state.digest);
+}
+
+void ProjectProjector::applyPluginParameters(tracktion::Plugin& target, const domain::PluginInstance& source)
+{
+    // The blob first, the sparse parameters over it: that order is the whole
+    // point of keeping the two apart, and it is applied here and nowhere else.
+    for (const auto& param : source.params)
+    {
+        auto parameter = target.getAutomatableParameterByID(toJuce(param.paramId));
+        if (parameter == nullptr)
+            continue;
+
+        const auto wanted = static_cast<float>(param.value);
+        if (juce::approximatelyEqual(parameter->getCurrentNormalisedValue(), wanted))
+            continue; // writing an unchanged value would only produce an echo
+
+        parameter->setNormalisedParameter(wanted, juce::dontSendNotification);
+    }
+}
+
+void ProjectProjector::reconcilePlugins(tracktion::AudioTrack& target, const domain::Track& source)
+{
+    removeUnknownPlugins(target, source);
+
+    // The fallback synth, when there is one, stays in front of the chain: the
+    // user's own plugins are placed after it, in the order the domain gives.
+    const auto offset = target.pluginList.getPluginsOfType<tracktion::FourOscPlugin>().size();
+
+    for (std::size_t index = 0; index < source.plugins.size(); ++index)
+    {
+        const auto& instance = source.plugins[index];
+
+        auto* plugin = findPlugin(target, instance.id);
+        if (plugin == nullptr)
+        {
+            auto created = createPluginFor(instance);
+            if (created == nullptr)
+                continue;
+
+            target.pluginList.insertPlugin(created, offset + static_cast<int>(index), nullptr);
+            plugin = created.get();
+        }
+
+        plugin->setEnabled(!instance.bypassed);
+        applyPluginState(*plugin, instance);
+        applyPluginParameters(*plugin, instance);
     }
 }
 
@@ -151,6 +331,15 @@ void ProjectProjector::rebuildClips(tracktion::AudioTrack& target, const domain:
 
 void ProjectProjector::reconcile()
 {
+    // Everything written into the Edit from here on is a projection, not a user
+    // action. The parameter bridge watches this flag to tell the two apart.
+    projecting_ = true;
+    const struct Guard
+    {
+        bool& flag;
+        ~Guard() { flag = false; }
+    } guard{projecting_};
+
     if (auto* tempo = edit_.tempoSequence.getTempo(0); tempo != nullptr)
         tempo->setBpm(state_.tempo());
 
@@ -185,7 +374,8 @@ void ProjectProjector::reconcile()
         if (auto* volume = target->getVolumePlugin(); volume != nullptr)
             volume->setVolumeDb(static_cast<float>(source.volumeDb));
 
-        ensureInstrument(*target, edit_);
+        ensureInstrument(*target, source);
+        reconcilePlugins(*target, source);
 
         // Clips are the expensive part, so they are rebuilt only when they
         // actually changed. Dragging a fader touches the volume and nothing else.

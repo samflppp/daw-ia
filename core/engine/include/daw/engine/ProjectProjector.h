@@ -3,10 +3,13 @@
 #include "daw/domain/Value.h"
 #include "daw/domain/command/BusObserver.h"
 #include "daw/domain/project/ProjectState.h"
+#include "daw/engine/PluginCatalogue.h"
+#include "daw/engine/PluginStateStore.h"
 #include "daw/engine/TransportController.h"
 
 #include <tracktion_engine/tracktion_engine.h>
 
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -32,7 +35,26 @@ namespace daw::engine
 class ProjectProjector final : public domain::BusObserver
 {
 public:
-    ProjectProjector(tracktion::Edit& edit, const domain::ProjectState& state);
+    // The catalogue resolves a PluginRef into an installed plugin, and the store
+    // holds the opaque states. Both are optional: a projection without them
+    // still does tracks, clips, notes and volume, which is all a test that
+    // touches no plugin needs.
+    ProjectProjector(tracktion::Edit& edit,
+                     const domain::ProjectState& state,
+                     PluginCatalogue* catalogue = nullptr,
+                     PluginStateStore* stateStore = nullptr);
+
+    // True while reconcile() is writing into the Edit.
+    //
+    // The parameter bridge reads it and stays silent: projecting a value makes
+    // the plugin report that value back, and turning that echo into a command
+    // would fight the user's own movement — or undo it.
+    [[nodiscard]] bool isProjecting() const noexcept { return projecting_; }
+
+    // Plugins the project names but this machine does not have. Reported rather
+    // than guessed: loading another plugin in its place would silently change
+    // the sound of a project.
+    [[nodiscard]] const std::vector<std::string>& missingPlugins() const noexcept { return missing_; }
 
     // Idempotent: calling it twice in a row changes nothing the second time.
     void reconcile();
@@ -46,12 +68,32 @@ private:
     [[nodiscard]] tracktion::AudioTrack* findTrack(const domain::TrackId& id) const;
     [[nodiscard]] tracktion::AudioTrack* createTrackFor(const domain::TrackId& id);
     void removeUnknownTracks();
-    static void ensureInstrument(tracktion::AudioTrack& track, tracktion::Edit& edit);
+    void ensureInstrument(tracktion::AudioTrack& track, const domain::Track& source);
     void rebuildClips(tracktion::AudioTrack& target, const domain::Track& source);
+
+    // --- plugins
+    void reconcilePlugins(tracktion::AudioTrack& target, const domain::Track& source);
+    [[nodiscard]] static tracktion::Plugin* findPlugin(tracktion::AudioTrack& track,
+                                                       const domain::PluginId& id);
+    [[nodiscard]] tracktion::Plugin::Ptr createPluginFor(const domain::PluginInstance& source);
+    static void removeUnknownPlugins(tracktion::AudioTrack& track, const domain::Track& source);
+    void applyPluginState(tracktion::Plugin& target, const domain::PluginInstance& source);
+    static void applyPluginParameters(tracktion::Plugin& target, const domain::PluginInstance& source);
+    [[nodiscard]] bool isInstrument(const domain::PluginRef& ref) const;
+    [[nodiscard]] bool hasDomainInstrument(const domain::Track& source) const;
 
     tracktion::Edit& edit_;
     const domain::ProjectState& state_;
+    PluginCatalogue* catalogue_{nullptr};
+    PluginStateStore* stateStore_{nullptr};
     TransportController transport_;
+    bool projecting_{false};
+    std::vector<std::string> missing_;
+
+    // The state digest last written into each plugin instance. A plugin whose
+    // digest has not changed is left alone: pushing a blob back into a running
+    // plugin would throw away whatever the user just did in its own window.
+    std::vector<std::pair<domain::PluginId, std::string>> projectedStates_;
 
     // Last projected form, keyed by domain identifier. Lets an unchanged track
     // be skipped without ever binding by position.

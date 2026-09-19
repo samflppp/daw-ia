@@ -13,6 +13,7 @@ add_library(daw::engine ALIAS daw_engine)
 target_sources(daw_engine INTERFACE
     src/ClapPluginFormat.cpp
     src/EngineHost.cpp
+    src/ParameterBridge.cpp
     src/PluginCatalogue.cpp
     src/PluginStateStore.cpp
     src/ProjectProjector.cpp
