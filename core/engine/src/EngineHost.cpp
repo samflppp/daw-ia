@@ -1,7 +1,16 @@
 #include "daw/engine/EngineHost.h"
 
+#include "daw/engine/ClapPluginFormat.h"
+
 namespace daw::engine
 {
+
+bool EngineHost::runAsPluginScannerIfAsked(const juce::String& commandLine)
+{
+    // Tracktion's own child-process scanner. When this returns true the process
+    // is a scanner: it talks to its parent over a pipe and nothing else.
+    return tracktion::PluginManager::startChildProcessPluginScan(commandLine);
+}
 
 EngineHost::EngineHost(const juce::String& applicationName)
     : engine_{std::make_unique<tracktion::Engine>(applicationName)}
@@ -18,6 +27,22 @@ EngineHost::EngineHost(const juce::String& applicationName)
     // and when, which is exactly the kind of question a caller should not have
     // to ask.
     engine_->getDeviceManager().dispatchPendingUpdates();
+
+    auto& pluginManager = engine_->getPluginManager();
+
+    // CLAP hosting is ours: neither JUCE nor Tracktion knows the format. Added
+    // here, it becomes just another juce::AudioPluginFormat, so scanning,
+    // instantiation and the projection treat VST3 and CLAP the same way.
+    pluginManager.pluginFormatManager.addFormat(std::make_unique<ClapPluginFormat>());
+
+    // A plugin that crashes must take a scanner process down, never the DAW.
+    pluginManager.setUsesSeparateProcessForScanning(true);
+
+    catalogue_ =
+        std::make_unique<PluginCatalogue>(*engine_, PluginCatalogue::defaultListFile(applicationName));
+    catalogue_->load();
+
+    stateStore_ = std::make_unique<PluginStateStore>(PluginStateStore::defaultRoot(applicationName));
 
     edit_ = std::make_unique<tracktion::Edit>(*engine_, tracktion::Edit::forEditing);
 

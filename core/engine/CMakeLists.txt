@@ -11,14 +11,21 @@ add_library(daw_engine INTERFACE)
 add_library(daw::engine ALIAS daw_engine)
 
 target_sources(daw_engine INTERFACE
+    src/ClapPluginFormat.cpp
     src/EngineHost.cpp
+    src/PluginCatalogue.cpp
+    src/PluginStateStore.cpp
     src/ProjectProjector.cpp
-    src/TransportController.cpp)
+    src/TransportController.cpp
+    src/clap/ClapPluginEditor.cpp
+    src/clap/ClapPluginInstance.cpp)
 
-target_include_directories(daw_engine INTERFACE include)
+target_include_directories(daw_engine INTERFACE include src)
 
 target_link_libraries(daw_engine INTERFACE
     daw::domain
+    daw::clap_sdk
+    BLAKE3::blake3
     tracktion::tracktion_core
     tracktion::tracktion_engine
     tracktion::tracktion_graph

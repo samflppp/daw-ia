@@ -1,5 +1,8 @@
 #pragma once
 
+#include "daw/engine/PluginCatalogue.h"
+#include "daw/engine/PluginStateStore.h"
+
 #include <tracktion_engine/tracktion_engine.h>
 
 #include <memory>
@@ -28,9 +31,22 @@ public:
     [[nodiscard]] tracktion::Engine& engine() noexcept { return *engine_; }
     [[nodiscard]] tracktion::Edit& edit() noexcept { return *edit_; }
 
+    // The plugins installed on this machine, and the store holding their opaque
+    // states. Both are machine state: they outlive a project and they are never
+    // part of one.
+    [[nodiscard]] PluginCatalogue& catalogue() noexcept { return *catalogue_; }
+    [[nodiscard]] PluginStateStore& stateStore() noexcept { return *stateStore_; }
+
+    // True when a command line asks this process to be a plugin scanner rather
+    // than the application. Call it first in main(): the child process must not
+    // build an Engine, an Edit or a window.
+    [[nodiscard]] static bool runAsPluginScannerIfAsked(const juce::String& commandLine);
+
 private:
     std::unique_ptr<tracktion::Engine> engine_;
     std::unique_ptr<tracktion::Edit> edit_;
+    std::unique_ptr<PluginCatalogue> catalogue_;
+    std::unique_ptr<PluginStateStore> stateStore_;
 };
 
 } // namespace daw::engine
