@@ -62,13 +62,41 @@ ctest --preset windows-msvc
 
 Plus : Command Bus — toute mutation d'état passe par une commande sérialisable.
 
+## Plugins de l'utilisateur (VST3 et CLAP)
+
+`docs/plugins.md` décrit le modèle d'état, les commandes, le scan et l'hôte CLAP.
+L'essentiel :
+
+```bat
+rem scanner les plugins installés, et persister la liste
+"DAW IA.exe" --scan
+
+rem jouer la démo avec un plugin réel, et ouvrir sa fenêtre
+"DAW IA.exe" --demo --plugin "C:\Program Files\Common Files\VST3\MonSynthe.vst3"
+```
+
+Les tests qui touchent un vrai plugin portent le label `audio` et sont exclus de
+la CI. Un plugin tiers se désigne par variable d'environnement — absente, le test
+est sauté ; présente et sans son, le test est rouge :
+
+```bat
+set DAW_TEST_VST3=C:\Program Files\Common Files\VST3\MonSynthe.vst3
+set DAW_TEST_CLAP=C:\Program Files\Common Files\CLAP\MonSynthe.clap
+ctest --preset windows-msvc -L audio
+```
+
+Le dépôt compile aussi son propre plugin CLAP de test
+(`core/engine/tests/clap_fixture/`) : un hôte ne se teste pas contre un mock, et
+un plugin commercial ne se commite pas.
+
 ## Versions épinglées
 
 | Sous-module | Version | Remarque |
 |---|---|---|
 | JUCE | `37c894f` (8.0.13, develop) | commit exact attendu par Tracktion (`modules/juce`) |
 | tracktion_engine | `00fe427` (3.5.0, develop) | seul `modules/` est ajouté, pas son JUCE interne |
-| clap | `1.2.10` | header-only |
+| clap | `1.2.10` | header-only ; l'hôte CLAP est écrit ici (`core/engine/src/clap/`) |
 | vst3sdk | `v3.8.1_build_84` | `base`, `pluginterfaces`, `public.sdk`, `cmake` uniquement |
+| BLAKE3 | `1.8.7` | digest des états de plugin ; SIMD épinglé sur la voie intrinsics |
 
 Pour monter JUCE : prendre le commit que Tracktion référence dans `modules/juce`, jamais une version indépendante.
