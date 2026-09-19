@@ -1,5 +1,7 @@
 #include "daw/engine/ProjectProjector.h"
 
+#include "HostedParameters.h"
+
 #include <algorithm>
 
 namespace daw::engine
@@ -252,7 +254,9 @@ void ProjectProjector::applyPluginParameters(tracktion::Plugin& target, const do
     // point of keeping the two apart, and it is applied here and nowhere else.
     for (const auto& param : source.params)
     {
-        auto parameter = target.getAutomatableParameterByID(toJuce(param.paramId));
+        // The plugin's own parameters, never Tracktion's dry and wet: see
+        // HostedParameters.h for why the difference matters.
+        auto* parameter = hostedParameter(target, param.paramId);
         if (parameter == nullptr)
             continue;
 
@@ -260,7 +264,15 @@ void ProjectProjector::applyPluginParameters(tracktion::Plugin& target, const do
         if (juce::approximatelyEqual(parameter->getCurrentNormalisedValue(), wanted))
             continue; // writing an unchanged value would only produce an echo
 
-        parameter->setNormalisedParameter(wanted, juce::dontSendNotification);
+        // Notified on purpose, and it costs nothing: Tracktion only writes the
+        // value into the plugin's ValueTree when it notifies, and rendering
+        // builds its own copy of the Edit from that tree. Without the
+        // notification the sound would follow the live instance and a render
+        // would silently use the old value.
+        //
+        // The notification reaches the parameter bridge too, which is exactly
+        // what the projecting flag is for.
+        parameter->setNormalisedParameter(wanted, juce::sendNotificationSync);
     }
 }
 
@@ -393,6 +405,10 @@ void ProjectProjector::reconcile()
     projected_ = std::move(stillProjected);
 
     transport_.apply(state_.transport());
+
+    projecting_ = false;
+    if (onProjected)
+        onProjected();
 }
 
 } // namespace daw::engine

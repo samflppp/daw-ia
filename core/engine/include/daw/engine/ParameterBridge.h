@@ -1,7 +1,6 @@
 #pragma once
 
 #include "daw/domain/Ids.h"
-#include "daw/domain/command/BusObserver.h"
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/engine/ProjectProjector.h"
@@ -46,15 +45,16 @@ namespace daw::engine
 //
 //   identity  a parameter is named by the format's own parameter id, never by
 //             its index in a list, because that id is what goes in the journal.
-class ParameterBridge final : private domain::BusObserver,
-                              private tracktion::AutomatableParameter::Listener,
-                              private juce::AsyncUpdater
+class ParameterBridge final : private tracktion::AutomatableParameter::Listener, private juce::AsyncUpdater
 {
 public:
+    // The projector is taken by non-const reference because the bridge hangs
+    // itself on its onProjected callback: subscriptions have to be rebuilt
+    // right after a projection, and nothing else knows when that happened.
     ParameterBridge(domain::CommandBus& bus,
                     const domain::ProjectState& state,
                     tracktion::Edit& edit,
-                    const ProjectProjector& projector);
+                    ProjectProjector& projector);
     ~ParameterBridge() override;
 
     ParameterBridge(const ParameterBridge&) = delete;
@@ -91,12 +91,6 @@ private:
         float value{0.0f};
     };
 
-    // --- bus observer: a projection may have added or removed plugins
-    void onExecuted(const domain::Receipt& receipt) override;
-    void onCoalesced(const domain::Receipt& receipt) override;
-    void onUndone(const domain::Receipt& receipt) override;
-    void onRedone(const domain::Receipt& receipt) override;
-
     // --- tracktion parameter listener
     void curveHasChanged(tracktion::AutomatableParameter&) override {}
     void parameterChanged(tracktion::AutomatableParameter& parameter, float newValue) override;
@@ -114,7 +108,7 @@ private:
     domain::CommandBus& bus_;
     const domain::ProjectState& state_;
     tracktion::Edit& edit_;
-    const ProjectProjector& projector_;
+    ProjectProjector& projector_;
 
     std::vector<Subscription> subscriptions_;
 

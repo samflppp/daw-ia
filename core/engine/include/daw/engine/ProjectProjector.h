@@ -9,6 +9,7 @@
 
 #include <tracktion_engine/tracktion_engine.h>
 
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -50,6 +51,15 @@ public:
     // the plugin report that value back, and turning that echo into a command
     // would fight the user's own movement — or undo it.
     [[nodiscard]] bool isProjecting() const noexcept { return projecting_; }
+
+    // Called at the end of every reconcile(), once the Edit agrees with the
+    // state and the projecting flag is down.
+    //
+    // The parameter bridge hangs on it instead of observing the bus: a bus
+    // observer would have to be registered after the projector to see a plugin
+    // that the projection has just created, and an ordering rule nobody can see
+    // in the code is a rule that breaks. Here the order is causality.
+    std::function<void()> onProjected;
 
     // Plugins the project names but this machine does not have. Reported rather
     // than guessed: loading another plugin in its place would silently change

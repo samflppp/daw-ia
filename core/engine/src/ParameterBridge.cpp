@@ -1,5 +1,6 @@
 #include "daw/engine/ParameterBridge.h"
 
+#include "HostedParameters.h"
 #include "daw/domain/commands/PluginCommands.h"
 
 #include <algorithm>
@@ -16,44 +17,21 @@ const juce::Identifier domainPluginIdProperty{"dawDomainPluginId"};
 ParameterBridge::ParameterBridge(domain::CommandBus& bus,
                                  const domain::ProjectState& state,
                                  tracktion::Edit& edit,
-                                 const ProjectProjector& projector)
+                                 ProjectProjector& projector)
     : bus_{bus}
     , state_{state}
     , edit_{edit}
     , projector_{projector}
 {
-    bus_.addObserver(*this);
+    projector_.onProjected = [this] { refresh(); };
     refresh();
 }
 
 ParameterBridge::~ParameterBridge()
 {
+    projector_.onProjected = nullptr;
     cancelPendingUpdate();
     unsubscribeAll();
-}
-
-void ParameterBridge::onExecuted(const domain::Receipt& receipt)
-{
-    static_cast<void>(receipt);
-    refresh();
-}
-
-void ParameterBridge::onCoalesced(const domain::Receipt& receipt)
-{
-    static_cast<void>(receipt);
-    refresh();
-}
-
-void ParameterBridge::onUndone(const domain::Receipt& receipt)
-{
-    static_cast<void>(receipt);
-    refresh();
-}
-
-void ParameterBridge::onRedone(const domain::Receipt& receipt)
-{
-    static_cast<void>(receipt);
-    refresh();
 }
 
 void ParameterBridge::unsubscribeAll()
@@ -101,17 +79,18 @@ void ParameterBridge::refresh()
             if (!pluginId)
                 continue;
 
-            const auto count = plugin->getNumAutomatableParameters();
-            for (int index = 0; index < count; ++index)
+            // Only the plugin's own parameters: Tracktion's dry and wet levels
+            // are the chain's, not the plugin's, and the project does not store
+            // them as plugin parameters.
+            for (auto& [paramId, parameter] : hostedParameters(*plugin))
             {
-                auto parameter = plugin->getAutomatableParameter(index);
                 if (parameter == nullptr)
                     continue;
 
                 Subscription subscription{};
-                subscription.parameter = parameter.get();
+                subscription.parameter = parameter;
                 subscription.pluginId = pluginId.value();
-                subscription.paramId = parameter->paramID.toStdString();
+                subscription.paramId = paramId;
                 subscriptions_.push_back(std::move(subscription));
 
                 parameter->addListener(this);

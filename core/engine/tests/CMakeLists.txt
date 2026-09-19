@@ -13,7 +13,8 @@ target_sources(daw_engine_tests PRIVATE
     EngineTestMain.cpp
     EngineHostTests.cpp
     ProjectionTests.cpp
-    TransportProjectionTests.cpp)
+    TransportProjectionTests.cpp
+    PluginHostingTests.cpp)
 
 target_compile_definitions(daw_engine_tests PRIVATE
     JUCE_WEB_BROWSER=0
@@ -40,3 +41,25 @@ endif()
 doctest_discover_tests(daw_engine_tests
     TEST_PREFIX "engine."
     PROPERTIES LABELS "audio")
+
+# ---------------------------------------------------------------------------
+# A real CLAP plugin, built here, used to prove the CLAP host.
+#
+# A host cannot be tested against a mock: the question is whether a real shared
+# library, loaded through the real CLAP entry point, produces sound in this
+# project. A commercial plugin proves that too, but it cannot be committed, it
+# is not installed on every machine, and many are silent until their own content
+# is loaded — which would make a failing test say nothing at all.
+# ---------------------------------------------------------------------------
+add_library(daw_test_clap MODULE clap_fixture/DawTestClapPlugin.cpp)
+set_target_properties(daw_test_clap PROPERTIES
+    PREFIX ""
+    SUFFIX ".clap"
+    POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(daw_test_clap PRIVATE daw::clap_sdk)
+target_compile_features(daw_test_clap PRIVATE cxx_std_20)
+daw_set_warnings(daw_test_clap)
+
+add_dependencies(daw_engine_tests daw_test_clap)
+target_compile_definitions(daw_engine_tests PRIVATE
+    DAW_TEST_CLAP_FIXTURE="$<TARGET_FILE:daw_test_clap>")
