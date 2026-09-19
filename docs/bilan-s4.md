@@ -1,8 +1,8 @@
 # Bilan de fin de S4 — DAW IA
 
 **Période :** semaine 4 sur 26 (6 – 12 octobre 2026). Rédigé le 19 septembre 2026.
-**Dépôt :** `samflppp/daw-ia` (privé), branche `main`, 6 commits (`3542048` → `98fb8d1` + ce bilan).
-**Volume :** 43 fichiers, +6 470 lignes. `core/engine` passe de 11 à 22 fichiers.
+**Dépôt :** `samflppp/daw-ia` (privé), branche `main`, 8 commits (`3542048` → `e3887ab`).
+**Volume :** 46 fichiers, +7 000 lignes environ. `core/engine` passe de 11 à 22 fichiers.
 **Tests :** 75 cas de domaine (sans JUCE), 33 cas d'engine sous label `audio`.
 
 ## 1. Livrables demandés
