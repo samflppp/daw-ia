@@ -38,7 +38,7 @@ void copyText(char* destination, std::size_t size, const char* text)
 
     const auto length = std::min(std::strlen(text), size - 1);
     std::memcpy(destination, text, length);
-    destination[length] = 0;
+    destination[length] = '\0';
 }
 
 const char* const features[] = {
@@ -88,7 +88,7 @@ struct Plugin
             return;
 
         clap_event_param_gesture_t begin{};
-        begin.header.size = sizeof(begin);
+        begin.header.size = static_cast<std::uint32_t>(sizeof(begin));
         begin.header.time = time;
         begin.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
         begin.header.type = static_cast<std::uint16_t>(CLAP_EVENT_PARAM_GESTURE_BEGIN);
@@ -96,7 +96,7 @@ struct Plugin
         out->try_push(out, &begin.header);
 
         clap_event_param_value_t change{};
-        change.header.size = sizeof(change);
+        change.header.size = static_cast<std::uint32_t>(sizeof(change));
         change.header.time = time;
         change.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
         change.header.type = static_cast<std::uint16_t>(CLAP_EVENT_PARAM_VALUE);
@@ -109,7 +109,7 @@ struct Plugin
         out->try_push(out, &change.header);
 
         clap_event_param_gesture_t end{};
-        end.header.size = sizeof(end);
+        end.header.size = static_cast<std::uint32_t>(sizeof(end));
         end.header.time = time;
         end.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
         end.header.type = static_cast<std::uint16_t>(CLAP_EVENT_PARAM_GESTURE_END);
@@ -147,15 +147,15 @@ struct Plugin
             const auto status = static_cast<std::uint8_t>(midi.data[0] & 0xf0);
 
             if (status == 0x90 && midi.data[2] > 0)
-                handleNoteOn(midi.data[1]);
+                handleNoteOn(static_cast<int>(midi.data[1]));
             else if (status == 0x80 || (status == 0x90 && midi.data[2] == 0))
-                handleNoteOff(midi.data[1]);
+                handleNoteOff(static_cast<int>(midi.data[1]));
             else if (status == 0xb0 && midi.data[1] == 1)
             {
                 // The plugin moves its own parameter, and says so with a
                 // gesture around it: exactly what happens when a user turns
                 // a knob in a plugin's own window.
-                gain = midi.data[2] / 127.0;
+                gain = static_cast<double>(midi.data[2]) / 127.0;
                 reportGainToHost(out, gain, header.time);
             }
             break;
@@ -186,8 +186,8 @@ bool audioPortsGet(const clap_plugin_t*, std::uint32_t index, bool isInput, clap
 
     info->id = 0;
     copyText(info->name, sizeof(info->name), "Out");
-    info->flags = CLAP_AUDIO_PORT_IS_MAIN;
-    info->channel_count = 2;
+    info->flags = static_cast<std::uint32_t>(CLAP_AUDIO_PORT_IS_MAIN);
+    info->channel_count = 2u;
     info->port_type = CLAP_PORT_STEREO;
     info->in_place_pair = CLAP_INVALID_ID;
     return true;
@@ -208,8 +208,9 @@ bool notePortsGet(const clap_plugin_t*, std::uint32_t index, bool isInput, clap_
         return false;
 
     info->id = 0;
-    info->supported_dialects = CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI;
-    info->preferred_dialect = CLAP_NOTE_DIALECT_MIDI;
+    info->supported_dialects = static_cast<std::uint32_t>(CLAP_NOTE_DIALECT_CLAP) |
+                               static_cast<std::uint32_t>(CLAP_NOTE_DIALECT_MIDI);
+    info->preferred_dialect = static_cast<std::uint32_t>(CLAP_NOTE_DIALECT_MIDI);
     copyText(info->name, sizeof(info->name), "Notes");
     return true;
 }
@@ -230,7 +231,7 @@ bool paramsGetInfo(const clap_plugin_t*, std::uint32_t index, clap_param_info_t*
 
     std::memset(info, 0, sizeof(*info));
     info->id = gainParamId;
-    info->flags = CLAP_PARAM_IS_AUTOMATABLE;
+    info->flags = static_cast<std::uint32_t>(CLAP_PARAM_IS_AUTOMATABLE);
     info->min_value = 0.0;
     info->max_value = 1.0;
     info->default_value = 0.5;
@@ -378,7 +379,8 @@ clap_process_status pluginProcess(const clap_plugin_t* plugin, const clap_proces
     auto& output = process->audio_outputs[0];
     const auto frames = process->frames_count;
 
-    const double frequency = self.key >= 0 ? 440.0 * std::pow(2.0, (self.key - 69) / 12.0) : 0.0;
+    const double frequency =
+        self.key >= 0 ? 440.0 * std::pow(2.0, static_cast<double>(self.key - 69) / 12.0) : 0.0;
     const double increment = frequency * 2.0 * 3.14159265358979323846 / self.sampleRate;
 
     for (std::uint32_t frame = 0; frame < frames; ++frame)

@@ -2,6 +2,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <cstdint>
+
 namespace daw::engine::clap_host
 {
 namespace
@@ -108,7 +110,9 @@ private:
         window.api = PluginInstance::nativeWindowApi();
 
 #if JUCE_LINUX || JUCE_BSD
-        window.x11 = reinterpret_cast<clap_xwnd>(handle);
+        // An X11 window id is an integer, not a pointer: the cast has to go
+        // through an integer type or it does not compile at all.
+        window.x11 = static_cast<clap_xwnd>(reinterpret_cast<std::uintptr_t>(handle));
 #else
         window.ptr = handle;
 #endif
