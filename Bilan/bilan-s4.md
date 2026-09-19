@@ -14,7 +14,7 @@
 | 3 | Projection des plugins par identité, sans rien reconstruire sans raison | Livré | `ProjectProjector::reconcilePlugins`, digest comparé avant écriture |
 | 4 | Modèle d'état du plugin — **le point de conception de la semaine** | Livré, exposé et validé avant d'écrire une ligne | `docs/plugins.md` §1–§2 |
 | 5 | Fenêtre d'édition ouverte depuis l'app | Livré, vu à l'écran | `PluginWindow`, log : `plugin window open, 1232 by 436` |
-| 6 | Preuve audible avec un plugin tiers réel | **Livré pour VST3**, partiel pour CLAP | AL-1 (VST3) : RMS mesuré, son entendu. CLAP : voir §5 |
+| 6 | Preuve audible avec un plugin tiers réel | **Livré**, VST3 et CLAP | AL-1 (VST3) et Vital (CLAP) : RMS mesuré, son entendu, fenêtres ouvertes |
 | 7 | Tests d'engine sous label `audio` | Livré | 33 cas, dont 12 nouveaux sur les plugins |
 
 Ajout non prévu lundi : un **vrai plugin CLAP compilé par le dépôt**
@@ -136,11 +136,35 @@ d'entrée CLAP :
 - un bouton tourné dans le plugin fait une seule entrée d'historique, et un undo
   rend le paramètre au plugin.
 
-**Ce qui reste ouvert :** un CLAP **commercial** n'a pas encore été chargé, faute
-d'en avoir un sur la machine. Décision prise avec toi : tu installes un CLAP
-gratuit (Surge XT ou Vital) et le test se lance avec `DAW_TEST_CLAP`. Le chemin de
-code est le même que celui déjà prouvé ; ce qui reste à vérifier, c'est la
-tolérance d'un plugin réel à un hôte jeune.
+**Preuve avec un CLAP commercial.** Vital a été installé en fin de semaine, et
+le test s'est lancé avec `DAW_TEST_CLAP` : chargement, trois notes par le bus,
+signal mesuré, état opaque capturé et relu par le magasin — 20 assertions, vert
+en 8,7 s. Dans l'application, `--demo --plugin Vital.clap` ouvre sa fenêtre en
+1475 × 864 et joue.
+
+Et Vital a fait ce que la fixture ne pouvait pas faire : **il a signalé trois
+manquements de l'hôte**, parce qu'il vérifie les contrats CLAP que le plugin de
+test ne vérifie pas.
+
+```
+clap_plugin_gui.destroy() was called while the plugin gui not created
+Host called the method clap_plugin.reset() on wrong thread! It must be called on audio thread!
+Host called the method clap_plugin.start_processing() on wrong thread!
+```
+
+Les trois sont corrigés, et les deux derniers venaient de la même erreur de
+compréhension : le *thread-check* de CLAP ne dit pas quel thread de l'OS tourne,
+il dit **quel rôle a l'appel en cours**. `process()`, `start_processing()`,
+`stop_processing()` et `reset()` appartiennent tous au rôle audio, et c'est
+l'hôte — seul à savoir qu'aucun rappel audio ne tourne en parallèle — qui le
+déclare. Un `ScopedAudioThreadRole` le déclare maintenant sur la portée exacte,
+et `start_processing()` est couvert par la déclaration au lieu de la suivre. Pour
+la gui : seul l'éditeur crée et détruit, et l'instance ne détruit que ce qui
+existe.
+
+C'est l'argument pour lequel un plugin tiers réel ne remplace pas la fixture et
+la fixture ne remplace pas un plugin tiers réel : l'un prouve que le son sort à
+chaque build, l'autre juge l'hôte.
 
 ## 6. VST3 : preuve audible
 
@@ -178,7 +202,7 @@ La distinction est faite ici plutôt que masquée par un seuil de test complaisa
 |---|---|
 | Lancer `scripts/setup-ubuntu.sh` en réel (hors `--ci`) | **Non payée.** La machine Ubuntu n'a pas été démarrée cette semaine. Hérité de S1, reporté à S5. |
 | Vérifier l'hébergement de plugins sous Linux | **Non payée.** Le code compile sous Linux en CI ; les tests d'engine y sont exclus par label, et aucun plugin n'est installé sur le runner. À faire sur la machine Ubuntu. |
-| Un CLAP commercial chargé | À faire dès que le plugin est installé (§5). |
+| Un CLAP commercial chargé | **Payée.** Vital installé, test vert, et trois manquements de l'hôte corrigés grâce à lui (§5). |
 | `plugin.move` (réordonner la chaîne) | Hors périmètre S4, validé comme tel. |
 
 ## 9. La question non tranchée
@@ -191,9 +215,9 @@ adressée par contenu que S5 utilisera, quelle que soit la réponse.
 ## 10. Où en est le jalon S8
 
 Ce qui restait d'inconnu technique majeur avant le jalon était l'hébergement de
-plugins tiers. Il ne l'est plus : un VST3 tiers réel joue, un vrai binaire CLAP
-joue, l'état survit à une capture et à une restauration, et un bouton du plugin
-entre dans l'historique.
+plugins tiers. Il ne l'est plus : un VST3 tiers réel joue, un CLAP commercial
+joue et ne reproche plus rien à l'hôte, l'état survit à une capture et à une
+restauration, et un bouton du plugin entre dans l'historique.
 
 Restent, pour le 9 novembre : le versioning SQLite (S5), l'UI, les services
 Python et l'IA — du travail, mais du travail dont la forme est connue.

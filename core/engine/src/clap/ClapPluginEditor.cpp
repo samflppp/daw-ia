@@ -31,6 +31,8 @@ public:
         if (!created_)
             return;
 
+        owner_.setGuiCreated(true);
+
         if (gui->set_scale != nullptr)
             gui->set_scale(owner_.plugin(), juce::Desktop::getInstance().getGlobalScaleFactor());
 
@@ -61,6 +63,8 @@ public:
                 gui->hide(owner_.plugin());
             if (gui->destroy != nullptr)
                 gui->destroy(owner_.plugin());
+
+            owner_.setGuiCreated(false);
         }
     }
 

@@ -139,6 +139,13 @@ public:
     [[nodiscard]] bool isGuiFloating() const noexcept { return guiIsFloating_; }
     [[nodiscard]] static const char* nativeWindowApi();
 
+    // The editor says when the plugin's gui exists, because only it creates and
+    // destroys it. Without this, closing a plugin that never opened a window
+    // would call clap_plugin_gui.destroy() on a gui that was never created —
+    // which a real plugin reports as a host error, and rightly so.
+    void setGuiCreated(bool created) noexcept { guiCreated_ = created; }
+    [[nodiscard]] bool isGuiCreated() const noexcept { return guiCreated_; }
+
 private:
     explicit PluginInstance(std::shared_ptr<EntryLibrary> library);
 
@@ -246,9 +253,38 @@ private:
     int mainInputPort_{-1};
     int mainOutputPort_{-1};
 
+    // Declares that the calling thread is acting in the audio-thread role for
+    // the duration of a scope.
+    //
+    // CLAP's thread-check is not about which OS thread runs: it is the host
+    // telling the plugin which role the current call has. process(),
+    // start_processing(), stop_processing() and reset() all belong to that role,
+    // and a plugin is entitled to refuse them anywhere else. The host is the one
+    // that knows no audio callback can run concurrently, so the host is the one
+    // that says so.
+    class ScopedAudioThreadRole
+    {
+    public:
+        explicit ScopedAudioThreadRole(std::atomic<bool>& flag) noexcept
+            : flag_{flag}
+            , previous_{flag.exchange(true, std::memory_order_acq_rel)}
+        {
+        }
+
+        ~ScopedAudioThreadRole() { flag_.store(previous_, std::memory_order_release); }
+
+        ScopedAudioThreadRole(const ScopedAudioThreadRole&) = delete;
+        ScopedAudioThreadRole& operator=(const ScopedAudioThreadRole&) = delete;
+
+    private:
+        std::atomic<bool>& flag_;
+        bool previous_;
+    };
+
     std::thread::id mainThread_{std::this_thread::get_id()};
     bool active_{false};
     bool processing_{false};
+    bool guiCreated_{false};
     std::atomic<bool> insideProcess_{false};
 
     std::vector<ClapParameter*> parameters_;

@@ -275,11 +275,21 @@ PluginInstance::~PluginInstance()
 
     if (plugin_ != nullptr)
     {
-        if (gui_ != nullptr && gui_->destroy != nullptr)
+        // Only a gui that exists is destroyed. The editor normally does it
+        // itself; this is the case where the plugin goes away with its window
+        // still open.
+        if (guiCreated_ && gui_ != nullptr && gui_->destroy != nullptr)
+        {
             gui_->destroy(plugin_);
+            guiCreated_ = false;
+        }
 
         if (processing_ && plugin_->stop_processing != nullptr)
+        {
+            const ScopedAudioThreadRole role{insideProcess_};
             plugin_->stop_processing(plugin_);
+            processing_ = false;
+        }
 
         if (active_ && plugin_->deactivate != nullptr)
             plugin_->deactivate(plugin_);
@@ -675,7 +685,10 @@ void PluginInstance::releaseResources()
     if (processing_)
     {
         if (plugin_->stop_processing != nullptr)
+        {
+            const ScopedAudioThreadRole role{insideProcess_};
             plugin_->stop_processing(plugin_);
+        }
         processing_ = false;
     }
 
@@ -689,8 +702,14 @@ void PluginInstance::releaseResources()
 
 void PluginInstance::reset()
 {
-    if (plugin_ != nullptr && active_ && plugin_->reset != nullptr)
-        plugin_->reset(plugin_);
+    if (plugin_ == nullptr || !active_ || plugin_->reset == nullptr)
+        return;
+
+    // reset() belongs to the audio-thread role. It is called here from the
+    // message thread, at a moment when the graph is not processing this plugin
+    // — which is the only moment Tracktion calls it.
+    const ScopedAudioThreadRole role{insideProcess_};
+    plugin_->reset(plugin_);
 }
 
 void PluginInstance::pushEvent(const clap_event_header_t& event)
@@ -932,6 +951,11 @@ void PluginInstance::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
         return;
     }
 
+    // Declared before start_processing, not after: the plugin asks the host
+    // which role the calling thread has, and start_processing is already part
+    // of the audio-thread role.
+    const ScopedAudioThreadRole role{insideProcess_};
+
     if (!processing_)
     {
         if (plugin_->start_processing != nullptr && !plugin_->start_processing(plugin_))
@@ -941,8 +965,6 @@ void PluginInstance::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
         }
         processing_ = true;
     }
-
-    insideProcess_.store(true, std::memory_order_release);
 
     collectInputEvents(midiMessages, buffer.getNumSamples());
     prepareAudioPorts(buffer);
@@ -960,8 +982,6 @@ void PluginInstance::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     process.out_events = &outputEvents_;
 
     const auto status = plugin_->process(plugin_, &process);
-
-    insideProcess_.store(false, std::memory_order_release);
 
     if (status == CLAP_PROCESS_ERROR)
         buffer.clear();

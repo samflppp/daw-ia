@@ -109,6 +109,13 @@ Thread audio : aucun verrou et aucune allocation dans `process()`. Les mouvement
 de paramètres traversent la frontière par des anneaux à indices atomiques, dans
 les deux sens.
 
+Le *thread-check* de CLAP ne dit pas quel thread de l'OS tourne : il dit **quel
+rôle a l'appel en cours**. `process()`, `start_processing()`, `stop_processing()`
+et `reset()` appartiennent tous au rôle audio, et c'est l'hôte — seul à savoir
+qu'aucun rappel audio ne tourne en parallèle — qui le déclare, par un
+`ScopedAudioThreadRole` posé sur la portée exacte. Vital refuse ces appels
+ailleurs, et il a raison de le faire.
+
 ## 6. Le pont de paramètres
 
 Sans lui, la moitié du projet échappe à l'undo : l'utilisateur tourne un bouton
