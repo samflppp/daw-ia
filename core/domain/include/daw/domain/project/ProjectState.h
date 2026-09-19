@@ -4,7 +4,10 @@
 #include "daw/domain/Result.h"
 #include "daw/domain/Value.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace daw::domain
@@ -51,12 +54,106 @@ struct Clip
     friend bool operator==(const Clip& lhs, const Clip& rhs);
 };
 
+// --- plugins ---------------------------------------------------------------
+//
+// Hosting a third-party plugin puts two very different kinds of state in the
+// project, and conflating them would cost either the undo or the journal:
+//
+//   PluginParam   light, continuous. One float per parameter the user has
+//                 touched. It arrives through the bus, one command per value,
+//                 merged per gesture, so a fader sweep is one undo step.
+//
+//   StateBlobRef  heavy, punctual. The plugin's own opaque chunk, which can
+//                 reach tens of megabytes for a sampler. It never enters the
+//                 project by value: the bytes go to a content-addressed store
+//                 and the project keeps the digest.
+//
+// Neither replaces the other. Parameters cannot express a loaded sample set;
+// a blob cannot be captured on every knob movement.
+
+// Names a plugin binary, not an instance. Nothing here is engendered by the
+// project: the scan finds these values, and they have to survive a move to
+// another machine, so the identifier is the format's own stable id and never
+// a file path or an index in a list.
+struct PluginRef
+{
+    static constexpr std::string_view vst3Format = "VST3";
+    static constexpr std::string_view clapFormat = "CLAP";
+
+    std::string format;     // "VST3" or "CLAP"
+    std::string identifier; // VST3 unique id, or CLAP plugin id
+    std::string name;       // human label, informative only
+
+    [[nodiscard]] Result<void> validate() const;
+    [[nodiscard]] Value toValue() const;
+    [[nodiscard]] static Result<PluginRef> fromValue(const Value& value);
+
+    friend bool operator==(const PluginRef& lhs, const PluginRef& rhs);
+};
+
+// Reference to an opaque plugin state, held in the content-addressed store.
+// An empty digest means "no captured state": the plugin keeps its own default.
+struct StateBlobRef
+{
+    static constexpr std::size_t digestLength = 64; // BLAKE3-256, lowercase hex
+
+    std::string digest;
+    std::uint64_t byteCount{0};
+
+    [[nodiscard]] bool isEmpty() const noexcept { return digest.empty(); }
+
+    [[nodiscard]] Result<void> validate() const;
+    [[nodiscard]] Value toValue() const;
+    [[nodiscard]] static Result<StateBlobRef> fromValue(const Value& value);
+
+    friend bool operator==(const StateBlobRef& lhs, const StateBlobRef& rhs);
+};
+
+// One parameter the user has touched at least once.
+//
+// The list is sparse on purpose. A plugin like Omnisphere exposes thousands of
+// parameters; mirroring them all would put megabytes of JSON into every
+// toValue(), therefore into every comparison and every hash. A parameter
+// absent from the list means "whatever the blob says, or the plugin's own
+// default" — the fallback is read at instantiation, in that order.
+struct PluginParam
+{
+    std::string paramId; // the format's own parameter id, never an index
+    double value{0.0};   // normalised 0..1, as the host sees it
+
+    [[nodiscard]] Result<void> validate() const;
+    [[nodiscard]] Value toValue() const;
+    [[nodiscard]] static Result<PluginParam> fromValue(const Value& value);
+
+    friend bool operator==(const PluginParam& lhs, const PluginParam& rhs);
+};
+
+struct PluginInstance
+{
+    PluginId id{};
+    PluginRef ref{};
+    bool bypassed{false};
+    std::vector<PluginParam> params; // sorted by paramId, one entry per id
+    StateBlobRef state{};
+
+    [[nodiscard]] const PluginParam* findParam(std::string_view paramId) const noexcept;
+
+    [[nodiscard]] Result<void> validate() const;
+    [[nodiscard]] Value toValue() const;
+    [[nodiscard]] static Result<PluginInstance> fromValue(const Value& value);
+
+    friend bool operator==(const PluginInstance& lhs, const PluginInstance& rhs);
+};
+
 struct Track
 {
     TrackId id{};
     std::string name;
     double volumeDb{0.0};
     std::vector<Clip> clips;
+
+    // Order is the chain order: index 0 is first in the signal path.
+    std::vector<PluginInstance> plugins;
 
     [[nodiscard]] Result<void> validate() const;
     [[nodiscard]] Value toValue() const;
@@ -105,6 +202,34 @@ public:
     Result<void> addNote(ClipId clipId, Note note);
     Result<void> removeNote(ClipId clipId, NoteId noteId);
 
+    // --- plugins
+    [[nodiscard]] const PluginInstance* findPlugin(PluginId id) const noexcept;
+
+    // Where the instance sits: which track, and at which place in its chain.
+    // remove() needs both to be undoable, so the pair is readable on its own.
+    struct PluginLocation
+    {
+        TrackId trackId{};
+        std::size_t index{0};
+    };
+
+    [[nodiscard]] Result<PluginLocation> pluginLocation(PluginId id) const;
+
+    // index beyond the current chain length appends; it is never an error, so
+    // a replayed payload cannot fail on a chain that grew differently.
+    Result<void> insertPlugin(TrackId trackId, PluginInstance plugin, std::size_t index);
+    Result<void> removePlugin(PluginId id);
+    Result<void> setPluginBypassed(PluginId id, bool bypassed);
+
+    // Adds the parameter if this is the first time it is touched, updates it
+    // otherwise. clearPluginParameter() undoes that first touch: without it,
+    // an undo would leave a parameter pinned to its default instead of giving
+    // it back to the blob.
+    Result<void> setPluginParameter(PluginId id, std::string paramId, double value);
+    Result<void> clearPluginParameter(PluginId id, std::string_view paramId);
+
+    Result<void> setPluginState(PluginId id, StateBlobRef state);
+
     // --- transport (session state, outside toValue/fromValue and operator==)
     [[nodiscard]] const TransportState& transport() const noexcept { return transport_; }
     Result<void> setPlaying(bool playing);
@@ -121,6 +246,7 @@ public:
 private:
     [[nodiscard]] Track* findTrackMutable(TrackId id) noexcept;
     [[nodiscard]] Clip* findClipMutable(ClipId id) noexcept;
+    [[nodiscard]] PluginInstance* findPluginMutable(PluginId id) noexcept;
 
     double tempo_{120.0};
     std::vector<Track> tracks_;

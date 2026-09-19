@@ -6,6 +6,7 @@ add_executable(daw_domain_tests
     ValueTests.cpp
     IdsTests.cpp
     ProjectStateTests.cpp
+    PluginStateTests.cpp
     SerializationRoundTripTests.cpp
     CommandBusTests.cpp
     UndoRedoTests.cpp

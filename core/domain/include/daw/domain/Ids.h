@@ -89,11 +89,17 @@ struct GestureIdTag;
 struct TrackIdTag;
 struct ClipIdTag;
 struct NoteIdTag;
+struct PluginIdTag;
 
 using CommandId = EntityId<CommandIdTag>;
 using GestureId = EntityId<GestureIdTag>;
 using TrackId = EntityId<TrackIdTag>;
 using ClipId = EntityId<ClipIdTag>;
 using NoteId = EntityId<NoteIdTag>;
+
+// Identifies one plugin *instance* on a track, not the plugin binary: two
+// copies of the same synth on the same track are two PluginIds. The binary is
+// named by PluginRef, which is not an identity the project engenders.
+using PluginId = EntityId<PluginIdTag>;
 
 } // namespace daw::domain

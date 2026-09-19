@@ -2,6 +2,7 @@
 
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/CreateMidiClip.h"
+#include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TransportCommands.h"
 
@@ -19,6 +20,11 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<TransportPlay>());
     static_cast<void>(registry.add<TransportStop>());
     static_cast<void>(registry.add<TransportSetPosition>());
+    static_cast<void>(registry.add<InsertPlugin>());
+    static_cast<void>(registry.add<RemovePlugin>());
+    static_cast<void>(registry.add<SetPluginBypassed>());
+    static_cast<void>(registry.add<SetPluginParameter>());
+    static_cast<void>(registry.add<CapturePluginState>());
     return registry;
 }
 
