@@ -26,11 +26,13 @@ dans le payload. Sinon, rejouer le même payload donnerait un projet différent.
 
 ```json
 {
-  "v": 1,
+  "v": 2,
   "id": "01K5X8Q2R7M3N0P4V6W8Y9Z1AB",
   "type": "note.add",
   "at": 1758182400123456,
   "gesture": null,
+  "origin": { "actor": "copilot",
+              "context": { "digest": "3f2a…", "byteCount": 8412 } },
   "payload": { "clipId": "...", "id": "...", "pitch": 60, "velocity": 100,
                "startBeats": 0.0, "lengthBeats": 0.25 }
 }
@@ -39,6 +41,24 @@ dans le payload. Sinon, rejouer le même payload donnerait un projet différent.
 - `id` : ULID, 26 caractères. Triable par date de création, clé SQLite directe.
 - `at` : micro-secondes UTC depuis l'epoch, en entier. Pas de texte, pas de locale.
 - `type` : le nom listé dans les manifestes de `workspaces/`.
+- `origin` : qui a demandé la commande. `actor` vaut `user`, `copilot` ou
+  `generator` ; `context` nomme par digest, dans le magasin adressé par
+  contenu, ce sur quoi l'agent a agi — jamais par valeur.
+
+### Versions
+
+`v: 1` est lue et vaut `user` : c'est ce que ces commandes étaient. `v: 2` est
+écrite, et une enveloppe v2 sans `origin` est refusée — elle est malformée, pas
+ancienne.
+
+La provenance est dans l'enveloppe et pas seulement dans la table SQLite, parce
+qu'un rejeu lit des enveloppes : rangée en colonne, elle serait perdue dès qu'un
+historique voyage en texte, par JSON-RPC ou dans un rapport de bogue.
+
+Les deux couches d'IA prévues — un copilote qui pilote mixage, routage et
+paramètres, un moteur génératif qui injecte du MIDI et de l'audio — passent par
+le bus comme n'importe quel utilisateur. La provenance est la seule trace
+qu'elles laissent, et le seul privilège qu'elles n'ont pas.
 
 `CommandRegistry` associe un `type` à une fabrique. Sans lui, une commande
 sérialisée n'est que du texte ; avec lui, elle redevient exécutable, dans un
@@ -91,13 +111,19 @@ le premier ; une annulation ferme le geste ouvert.
 
 `journal()` retourne les enveloppes qui construisent l'état courant, dans
 l'ordre, après fusion. Les rejouer sur un projet vide reproduit l'état à
-l'identique, identifiants et dates compris. C'est le format que la couche de
-versioning persistera.
+l'identique, identifiants et dates compris.
 
-## Les trois commandes de la S2
+Ce n'est pas le journal sur disque, et la distinction est la décision de S5 :
+`journal()` est une vue de la pile d'undo, `core/persistence` écrit une suite
+append-only qui garde tout, y compris les commandes annulées et les annulations
+elles-mêmes. Voir `docs/persistence.md`.
+
+## Les commandes de structure
 
 | Type | Ce qu'elle valide |
 |---|---|
+| `track.add` | création d'une piste ; sans elle, une piste ne viendrait d'aucune commande et un rechargement la perdrait |
+| `track.remove` | suppression ; l'undoRecord porte la piste entière et son index |
 | `clip.create_midi` | création structurelle, identifiant fourni par l'appelant, rejeu déterministe |
 | `note.add` | mutation imbriquée, échec propre si le clip n'existe pas |
 | `track.set_volume` | mutation continue, seule des trois à accepter le coalescing |

@@ -29,9 +29,18 @@ par-dessus**.
 
 ## 2. Le magasin adressé par contenu
 
-Les octets ne voyagent jamais dans un payload. Ils vont dans
-`ContentStore`, sous le dossier utilisateur, nommés par leur digest
-BLAKE3-256. Trois propriétés, et le modèle dépend des trois :
+Les octets ne voyagent jamais dans un payload. Ils vont dans `ContentStore`,
+**dans le dossier du projet** (`<projet>.dawproj/blobs/`), nommés par leur
+digest BLAKE3-256. Depuis S5 le magasin n'est plus sous le dossier utilisateur :
+un projet est un dossier copiable d'un bloc, et des blobs restés sur la machine
+donneraient une copie qui s'ouvre et qui ne sonne pas. Le prix est la
+déduplication entre projets, payé sciemment.
+
+Le magasin est aveugle à ce qu'il stocke : un rendu produit par le moteur
+génératif y entre exactement comme un enregistrement de l'utilisateur, et le
+contexte d'un agent référencé par une provenance y entre par les mêmes appels.
+
+Trois propriétés, et le modèle dépend des trois :
 
 - **déduplication** : deux instances au même état ne sont stockées qu'une fois ;
 - **immuabilité** : un digest ne désigne jamais d'autres octets, donc annuler une
@@ -40,7 +49,8 @@ BLAKE3-256. Trois propriétés, et le modèle dépend des trois :
   au lieu de les donner à un plugin.
 
 Rien n'est jamais supprimé. Récupérer les blobs non référencés demande de
-connaître tout l'historique : c'est la couche de versioning de S5.
+connaître tout l'historique : le journal de S5 le donne, le ramasse-miettes
+lui-même n'est pas écrit.
 
 ## 3. Ce que le domaine sait faire
 
