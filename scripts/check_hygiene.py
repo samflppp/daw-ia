@@ -3,9 +3,12 @@
 
 Rule 1: no hard-coded visual values. Colours, sizes and font sizes come from
         core/ui/tokens/tokens.json through daw::ui::Tokens.
-Rule 2: panels never know their position or size. Only layout hosts
-        (files named *View.cpp, *Layout*.cpp, or under core/ui/layout/) call
-        setBounds and friends. Windows are allowed to size themselves from tokens.
+Rule 2: a panel never knows where it is. It arranges the children it owns,
+        from token metrics, and that is all: reading its parent's geometry or
+        the screen's is refused everywhere but in a layout host (files named
+        *View.cpp, *Layout*.cpp, *Window.cpp, or under core/ui/layout/).
+        Placing a component is refused outside those hosts and the panels
+        themselves (core/ui/panels/, or a *Panel file).
 Rule 3: core/domain includes nothing from JUCE, Tracktion or ui.
 
 Standard library only. Exit code 1 on any violation.
@@ -35,8 +38,17 @@ VISUAL_PATTERNS = [
      "radius literal"),
 ]
 
-# Rule 2: geometry calls reserved to layout hosts.
+# Rule 2, first half: placing a component is for a layout host, or for a panel
+# arranging the children it owns.
 GEOMETRY_CALL = re.compile(r"\b(setBounds|setTopLeftPosition|setCentrePosition|setBoundsRelative)\s*\(")
+
+# Rule 2, second half: asking where you are, or how big the thing around you is.
+# That is the question a panel must never be able to answer, and no amount of
+# FlexBox hides it.
+CONTEXT_CALL = re.compile(
+    r"\b(getParentComponent|getParentWidth|getParentHeight|getParentMonitorArea"
+    r"|getTopLevelComponent|getScreenBounds|getScreenPosition|getScreenX|getScreenY)\s*\("
+)
 
 # Rule 3: forbidden includes in the domain.
 DOMAIN_FORBIDDEN_INCLUDE = re.compile(r'#\s*include\s*[<"](juce_|tracktion_|daw/ui/|clap/|pluginterfaces/)')
@@ -63,6 +75,11 @@ def is_layout_host(path: Path) -> bool:
     )
 
 
+def is_panel(path: Path) -> bool:
+    rel = path.relative_to(CORE).as_posix()
+    return rel.startswith("ui/panels/") or "ui/include/daw/ui/panels/" in rel or path.stem.endswith("Panel")
+
+
 def code_lines(path: Path):
     for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         yield number, LINE_COMMENT.sub("", raw)
@@ -77,8 +94,10 @@ def main() -> int:
             for pattern, label in VISUAL_PATTERNS:
                 if path != TOKEN_LOADER and pattern.search(line):
                     violations.append(f"{rel}:{number}: rule 1 ({label}): {line.strip()}")
-            if GEOMETRY_CALL.search(line) and not is_layout_host(path):
+            if GEOMETRY_CALL.search(line) and not (is_layout_host(path) or is_panel(path)):
                 violations.append(f"{rel}:{number}: rule 2 (geometry outside layout host): {line.strip()}")
+            if CONTEXT_CALL.search(line) and not is_layout_host(path):
+                violations.append(f"{rel}:{number}: rule 2 (a panel asks where it is): {line.strip()}")
 
     for path in cpp_files(CORE / "domain"):
         rel = path.relative_to(ROOT).as_posix()

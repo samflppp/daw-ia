@@ -3,12 +3,11 @@
 namespace daw::ui
 {
 
-WorkspaceView::WorkspaceView(const Tokens& tokens, DawLookAndFeel& lookAndFeel, const PanelRegistry& registry)
-    : tokens_(tokens)
-    , lookAndFeel_(lookAndFeel)
+WorkspaceView::WorkspaceView(const PanelServices& services, const PanelRegistry& registry)
+    : services_(services)
     , registry_(registry)
 {
-    setLookAndFeel(&lookAndFeel_);
+    setLookAndFeel(&services_.lookAndFeel);
 }
 
 WorkspaceView::~WorkspaceView()
@@ -27,7 +26,7 @@ void WorkspaceView::show(const WorkspaceManifest& manifest)
     // come back from layoutPanels() line up with this list index for index.
     for (const auto& id : manifest.placedPanels())
     {
-        PanelContext context{tokens_, lookAndFeel_, id};
+        PanelContext context{services_, id};
         auto panel = registry_.create(context);
 
         addAndMakeVisible(*panel);
@@ -46,15 +45,15 @@ Rect WorkspaceView::surface() const
 LayoutOptions WorkspaceView::options() const
 {
     LayoutOptions layoutOptions{};
-    layoutOptions.separator = tokens_.integer("stroke.hairline");
+    layoutOptions.separator = services_.tokens.integer("stroke.hairline");
     return layoutOptions;
 }
 
 void WorkspaceView::paint(juce::Graphics& g)
 {
-    g.fillAll(tokens_.colour("color.surface.base"));
+    g.fillAll(services_.tokens.colour("color.surface.base"));
 
-    g.setColour(tokens_.colour("color.border.hairline"));
+    g.setColour(services_.tokens.colour("color.border.hairline"));
     for (const auto& rule : layoutSeparators(layout_, surface(), options()))
         g.fillRect(rule.x, rule.y, rule.width, rule.height);
 }

@@ -10,7 +10,9 @@ juce_add_gui_app(daw_app
 target_sources(daw_app PRIVATE
     src/Main.cpp
     src/MainWindow.cpp
-    src/PluginWindow.cpp)
+    src/PluginWindow.cpp
+    src/EditClock.cpp
+    src/WorkspaceSwitch.cpp)
 
 target_include_directories(daw_app PRIVATE src)
 

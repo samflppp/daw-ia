@@ -124,8 +124,9 @@ TEST_CASE("a drag is one history entry, and undoing it gives back the note as it
     {
         const auto position = static_cast<double>(frame) / 60.0;
         REQUIRE(fixture.harness.bus
-                    .execute(std::make_unique<MoveNote>(fixture.clipId, fixture.middle, 64 + frame / 20, position),
-                             options)
+                    .execute(
+                        std::make_unique<MoveNote>(fixture.clipId, fixture.middle, 64 + frame / 20, position),
+                        options)
                     .ok());
     }
     REQUIRE(fixture.harness.bus.endGesture(gesture).ok());
@@ -147,12 +148,12 @@ TEST_CASE("two notes moved inside one gesture stay two entries")
     ExecuteOptions options{};
     options.gesture = gesture;
 
-    REQUIRE(
-        fixture.harness.bus.execute(std::make_unique<MoveNote>(fixture.clipId, fixture.first, 60, 1.0), options)
-            .ok());
-    REQUIRE(
-        fixture.harness.bus.execute(std::make_unique<MoveNote>(fixture.clipId, fixture.last, 67, 3.0), options)
-            .ok());
+    REQUIRE(fixture.harness.bus
+                .execute(std::make_unique<MoveNote>(fixture.clipId, fixture.first, 60, 1.0), options)
+                .ok());
+    REQUIRE(fixture.harness.bus
+                .execute(std::make_unique<MoveNote>(fixture.clipId, fixture.last, 67, 3.0), options)
+                .ok());
     REQUIRE(fixture.harness.bus.endGesture(gesture).ok());
 
     CHECK(fixture.harness.bus.undoDepth() == depth + 2);
@@ -174,10 +175,10 @@ TEST_CASE("the journal replays a removal and a drag into the same project")
     options.gesture = gesture;
     for (int frame = 1; frame <= 10; ++frame)
     {
-        REQUIRE(fixture.harness.bus
-                    .execute(std::make_unique<MoveNote>(fixture.clipId, fixture.last, 67, frame * 0.25),
-                             options)
-                    .ok());
+        REQUIRE(
+            fixture.harness.bus
+                .execute(std::make_unique<MoveNote>(fixture.clipId, fixture.last, 67, frame * 0.25), options)
+                .ok());
     }
     REQUIRE(fixture.harness.bus.endGesture(gesture).ok());
 

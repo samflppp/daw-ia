@@ -80,7 +80,7 @@ Result<Value> RemoveNote::apply(ProjectState& state) const
     auto record = note.toValue();
     auto storedClip = record.set("clipId", Value{clipId_.toString()});
     auto storedIndex = record.set("index", Value{static_cast<std::int64_t>(index.value())});
-    static_cast<void>(storedClip);  // note.toValue() is an object, set cannot fail
+    static_cast<void>(storedClip); // note.toValue() is an object, set cannot fail
     static_cast<void>(storedIndex);
     return record;
 }
@@ -185,7 +185,8 @@ Result<void> MoveNote::revert(ProjectState& state, const Value& undoRecord) cons
     if (!startBeats)
         return startBeats.error();
 
-    return state.moveNote(clipId.value(), noteId.value(), static_cast<int>(pitch.value()), startBeats.value());
+    return state.moveNote(
+        clipId.value(), noteId.value(), static_cast<int>(pitch.value()), startBeats.value());
 }
 
 bool MoveNote::canCoalesceWith(const Command& newer) const noexcept

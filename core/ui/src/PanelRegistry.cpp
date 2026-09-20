@@ -1,6 +1,8 @@
 #include "daw/ui/PanelRegistry.h"
 
 #include "daw/ui/panels/PlaceholderPanel.h"
+#include "daw/ui/panels/TrackListPanel.h"
+#include "daw/ui/panels/TransportPanel.h"
 
 #include <algorithm>
 #include <utility>
@@ -12,9 +14,14 @@ PanelRegistry PanelRegistry::withBuiltinPanels()
 {
     PanelRegistry registry;
 
-    // Nothing yet: the panels of the beatmaker land one by one, and until one
-    // exists its identifier resolves to the placeholder. The registry is the
-    // only place that has to change when it does.
+    // The panels of the beatmaker land one by one. Until one exists its
+    // identifier resolves to the placeholder, and this is the only place that
+    // has to change when it arrives.
+    registry.add("transport",
+                 [](const PanelContext& context) { return std::make_unique<TransportPanel>(context); });
+    registry.add("tracks",
+                 [](const PanelContext& context) { return std::make_unique<TrackListPanel>(context); });
+
     return registry;
 }
 

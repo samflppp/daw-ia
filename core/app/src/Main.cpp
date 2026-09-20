@@ -1,5 +1,7 @@
+#include "EditClock.h"
 #include "MainWindow.h"
 #include "PluginWindow.h"
+#include "WorkspaceSwitch.h"
 #include "daw/domain/BuildInfo.h"
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/command/CommandRegistry.h"
@@ -20,6 +22,8 @@
 #include "daw/ui/Tokens.h"
 #include "daw/ui/WorkspaceView.h"
 #include "daw/ui/Workspaces.h"
+#include "daw/ui/model/ProjectObserver.h"
+#include "daw/ui/model/Selection.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
@@ -76,6 +80,12 @@ public:
             engineHost_->edit(), state_, &engineHost_->catalogue(), contentStore_.get());
         bus_.addObserver(*projector_);
 
+        // The interface observes the bus like the projector does, and for the
+        // same reason: it is told that something changed, then reads the whole
+        // state. No panel is notified of what a command did.
+        bus_.addObserver(projectObserver_);
+        clock_ = std::make_unique<EditClock>(engineHost_->edit());
+
         // The Edit is a projection, so it is built from the state the journal
         // just rebuilt, in one pass rather than one per replayed command.
         projector_->reconcile();
@@ -121,6 +131,8 @@ public:
         window_.reset();
         juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
         lookAndFeel_.reset();
+        switch_.reset();
+        clock_.reset();
         bridge_.reset();
         projector_.reset();
         contentStore_.reset();
@@ -169,7 +181,18 @@ private:
             manifest = workspaces.find(ui::Workspaces::defaultId());
         }
 
-        auto view = std::make_unique<ui::WorkspaceView>(tokens, *lookAndFeel_, panelRegistry_);
+        switch_ = std::make_unique<WorkspaceSwitch>(
+            workspaces, manifest != nullptr ? manifest->id : std::string{ui::Workspaces::defaultId()});
+
+        const ui::PanelServices services{
+            tokens, *lookAndFeel_, bus_, state_, projectObserver_, selection_, *clock_, *switch_};
+
+        auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
+        auto* viewPointer = view.get();
+
+        // The switch rebuilds the screen through the view, and the view is what
+        // the window owns: the panel that asked never learns either fact.
+        switch_->onShow = [viewPointer](const ui::WorkspaceManifest& asked) { viewPointer->show(asked); };
 
         if (manifest != nullptr)
         {
@@ -462,6 +485,10 @@ private:
     std::unique_ptr<juce::FileLogger> logger_;
     std::unique_ptr<ui::DawLookAndFeel> lookAndFeel_;
     ui::PanelRegistry panelRegistry_{ui::PanelRegistry::withBuiltinPanels()};
+    ui::ProjectObserver projectObserver_;
+    ui::Selection selection_;
+    std::unique_ptr<EditClock> clock_;
+    std::unique_ptr<WorkspaceSwitch> switch_;
     std::unique_ptr<MainWindow> window_;
     std::unique_ptr<PluginWindow> pluginWindow_;
 };

@@ -65,13 +65,19 @@ target_sources(daw_ui INTERFACE
     src/Workspaces.cpp
     src/PanelRegistry.cpp
     src/WorkspaceView.cpp
-    src/panels/PlaceholderPanel.cpp)
+    src/model/ProjectObserver.cpp
+    src/model/Selection.cpp
+    src/panels/PlaceholderPanel.cpp
+    src/panels/TransportPanel.cpp
+    src/panels/TrackListPanel.cpp)
 
 target_include_directories(daw_ui INTERFACE include)
 
 target_link_libraries(daw_ui INTERFACE
+    daw::domain
     daw_ui_workspace
     daw_ui_tokens_data
     daw_ui_fonts_data
     daw_ui_workspaces_data
+    juce::juce_events
     juce::juce_gui_basics)

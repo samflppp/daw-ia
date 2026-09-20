@@ -25,7 +25,7 @@ namespace daw::ui
 class WorkspaceView final : public juce::Component
 {
 public:
-    WorkspaceView(const Tokens& tokens, DawLookAndFeel& lookAndFeel, const PanelRegistry& registry);
+    WorkspaceView(const PanelServices& services, const PanelRegistry& registry);
     ~WorkspaceView() override;
 
     // Tears down the panels of the previous workspace and builds the new ones.
@@ -47,8 +47,7 @@ private:
     [[nodiscard]] Rect surface() const;
     [[nodiscard]] LayoutOptions options() const;
 
-    const Tokens& tokens_;
-    DawLookAndFeel& lookAndFeel_;
+    PanelServices services_;
     const PanelRegistry& registry_;
 
     LayoutNode layout_;

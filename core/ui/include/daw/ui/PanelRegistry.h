@@ -1,7 +1,13 @@
 #pragma once
 
+#include "daw/domain/command/CommandBus.h"
+#include "daw/domain/project/ProjectState.h"
 #include "daw/ui/DawLookAndFeel.h"
 #include "daw/ui/Tokens.h"
+#include "daw/ui/model/ProjectObserver.h"
+#include "daw/ui/model/Selection.h"
+#include "daw/ui/model/TransportClock.h"
+#include "daw/ui/model/WorkspaceHost.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -19,11 +25,27 @@ namespace daw::ui
 // It is given no position, no size, and no neighbour: hygiene rule 2 is not a
 // convention here, it is the shape of this structure. A panel that wanted to
 // know where it sits would have to be handed something that is not in it.
-struct PanelContext
+struct PanelServices
 {
     const Tokens& tokens;
     DawLookAndFeel& lookAndFeel;
 
+    // The bus is the only way a panel changes anything. The state is const:
+    // a panel reads the project, it never writes into it.
+    domain::CommandBus& bus;
+    const domain::ProjectState& state;
+
+    // What changed, what is selected, where the playhead is, and which
+    // workspaces exist. None of these is project state.
+    ProjectObserver& project;
+    Selection& selection;
+    const TransportClock& clock;
+    WorkspaceHost& workspaces;
+};
+
+// The services, plus the one thing that differs from one panel to the next.
+struct PanelContext : PanelServices
+{
     // The identifier the manifest used. A panel needs it to name itself, and
     // the placeholder needs it to say what is missing.
     std::string id;
