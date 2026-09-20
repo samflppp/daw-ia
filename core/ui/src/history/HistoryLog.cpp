@@ -12,7 +12,7 @@ namespace
 // One label per command the registry knows. Kept next to nothing else, so that
 // adding a command and forgetting its label shows the command's own name in
 // the panel rather than a wrong sentence.
-constexpr std::array<std::pair<std::string_view, std::string_view>, 16> labels{{
+constexpr std::array<std::pair<std::string_view, std::string_view>, 17> labels{{
     {"track.add", "Nouvelle piste"},
     {"track.remove", "Piste supprimee"},
     {"track.set_volume", "Volume de piste"},
@@ -21,6 +21,7 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 16> labels{{
     {"note.add", "Note ajoutee"},
     {"note.remove", "Note effacee"},
     {"note.move", "Note deplacee"},
+    {"note.resize", "Note allongee"},
     {"plugin.insert", "Plugin insere"},
     {"plugin.remove", "Plugin retire"},
     {"plugin.set_bypassed", "Plugin contourne"},

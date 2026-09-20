@@ -195,4 +195,81 @@ bool MoveNote::canCoalesceWith(const Command& newer) const noexcept
     return other != nullptr && other->noteId_ == noteId_ && other->clipId_ == clipId_;
 }
 
+// --- note.resize -----------------------------------------------------------
+
+ResizeNote::ResizeNote(ClipId clipId, NoteId noteId, double lengthBeats)
+    : clipId_{clipId}
+    , noteId_{noteId}
+    , lengthBeats_{lengthBeats}
+{
+}
+
+Result<std::unique_ptr<Command>> ResizeNote::fromPayload(const Value& payload)
+{
+    auto clipId = clipIdAt(payload, "clipId");
+    if (!clipId)
+        return clipId.error();
+
+    auto noteId = noteIdAt(payload, "noteId");
+    if (!noteId)
+        return noteId.error();
+
+    auto lengthBeats = payload.doubleAt("lengthBeats");
+    if (!lengthBeats)
+        return lengthBeats.error();
+
+    return std::unique_ptr<Command>{new ResizeNote{clipId.value(), noteId.value(), lengthBeats.value()}};
+}
+
+Value ResizeNote::payload() const
+{
+    return Value::object({{"clipId", Value{clipId_.toString()}},
+                          {"noteId", Value{noteId_.toString()}},
+                          {"lengthBeats", Value{lengthBeats_}}});
+}
+
+Result<Value> ResizeNote::apply(ProjectState& state) const
+{
+    auto index = state.noteIndex(clipId_, noteId_);
+    if (!index)
+        return index.error();
+
+    const auto* clip = state.findClip(clipId_);
+    if (clip == nullptr)
+        return fail(ErrorCode::notFound, "no such clip: " + clipId_.toString());
+
+    const auto before = clip->notes[index.value()];
+
+    auto resized = state.resizeNote(clipId_, noteId_, lengthBeats_);
+    if (!resized)
+        return resized.error();
+
+    return Value::object({{"clipId", Value{clipId_.toString()}},
+                          {"noteId", Value{noteId_.toString()}},
+                          {"previousLengthBeats", Value{before.lengthBeats}}});
+}
+
+Result<void> ResizeNote::revert(ProjectState& state, const Value& undoRecord) const
+{
+    auto clipId = clipIdAt(undoRecord, "clipId");
+    if (!clipId)
+        return clipId.error();
+
+    auto noteId = noteIdAt(undoRecord, "noteId");
+    if (!noteId)
+        return noteId.error();
+
+    auto lengthBeats = undoRecord.doubleAt("previousLengthBeats");
+    if (!lengthBeats)
+        return lengthBeats.error();
+
+    return state.resizeNote(clipId.value(), noteId.value(), lengthBeats.value());
+}
+
+bool ResizeNote::canCoalesceWith(const Command& newer) const noexcept
+{
+    const auto* other = dynamic_cast<const ResizeNote*>(&newer);
+    return other != nullptr && other->noteId_ == noteId_ && other->clipId_ == clipId_;
+}
+
 } // namespace daw::domain

@@ -10,7 +10,7 @@
 namespace daw::domain
 {
 
-// The two commands a piano roll needs beyond note.add.
+// The three commands a piano roll needs beyond note.add.
 //
 // They are separate for the same reason mute and bypass are: they are two
 // different gestures with two different undo behaviours. Deleting is a click,
@@ -75,6 +75,40 @@ private:
     NoteId noteId_;
     int pitch_;
     double startBeats_;
+};
+
+// note.resize — changes the length of a note, and nothing else.
+//
+// Its start stays where it is: stretching from the right edge is the gesture
+// the interface offers, and a command that moved the note too would undo into
+// a note the user never had.
+//
+// Coalescing is per note, like note.move: a stretch is a movement of sixty
+// frames and has to be one history entry, and two notes stretched inside the
+// same gesture stay two entries.
+class ResizeNote final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "note.resize";
+
+    ResizeNote(ClipId clipId, NoteId noteId, double lengthBeats);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+    [[nodiscard]] bool canCoalesceWith(const Command& newer) const noexcept override;
+
+    [[nodiscard]] NoteId noteId() const noexcept { return noteId_; }
+    [[nodiscard]] double lengthBeats() const noexcept { return lengthBeats_; }
+
+private:
+    ClipId clipId_;
+    NoteId noteId_;
+    double lengthBeats_;
 };
 
 } // namespace daw::domain

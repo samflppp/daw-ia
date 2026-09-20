@@ -191,6 +191,19 @@ const domain::Note* PianoRollPanel::noteAt(juce::Point<int> point) const
     return nullptr;
 }
 
+bool PianoRollPanel::isOnResizeGrip(const domain::Note& note, juce::Point<int> point) const
+{
+    const auto right = xForBeat(note.startBeats + note.lengthBeats);
+    const auto grip = tokens_.integer("metric.pianoRoll.resizeGrip");
+
+    // Half a grip at most: on a note one sixteenth wide the grip would
+    // otherwise cover the whole note, and moving it would become impossible.
+    const auto width = std::min(
+        grip, std::max(xForBeat(note.startBeats + note.lengthBeats) - xForBeat(note.startBeats), 1) / 2);
+
+    return point.getX() >= right - width;
+}
+
 // --- painting --------------------------------------------------------------
 
 void PianoRollPanel::paint(juce::Graphics& g)
@@ -497,9 +510,11 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
     // user moves the note, not the point they clicked on.
     Drag drag{};
     drag.noteId = hit->id;
+    drag.mode = isOnResizeGrip(*hit, event.getPosition()) ? DragMode::resize : DragMode::move;
     drag.grabOffsetBeats = beatAtX(event.getPosition().getX()) - hit->startBeats;
     drag.grabPitch = hit->pitch;
-    drag.gesture = bus_.beginGesture("deplacer une note");
+    drag.gesture =
+        bus_.beginGesture(drag.mode == DragMode::resize ? "allonger une note" : "deplacer une note");
     drag_ = drag;
 
     repaint();
@@ -527,17 +542,46 @@ void PianoRollPanel::mouseDrag(const juce::MouseEvent& event)
 
     const auto* note = &(*found);
 
+    domain::ExecuteOptions options{};
+    options.gesture = drag_->gesture;
+
+    if (drag_->mode == DragMode::resize)
+    {
+        // The right edge follows the cursor and the start stays where it is.
+        // One sixteenth is the floor: a note of length zero is refused by the
+        // domain, and a note the user cannot see is a note they cannot delete.
+        const auto edge = quantise(beatAtX(event.getPosition().getX()) + gridStepBeats);
+        const auto length = std::max(edge - note->startBeats, gridStepBeats);
+
+        if (std::abs(note->lengthBeats - length) < gridStepBeats / 2.0)
+            return;
+
+        if (bus_.execute(std::make_unique<domain::ResizeNote>(edited->id, drag_->noteId, length), options)
+                .ok())
+            drag_->moved = true;
+
+        return;
+    }
+
     // Nothing changed at this pixel: no command, no history, no projection.
     // A drag emits one command per quantised step, not one per mouse move.
     if (note->pitch == pitch && std::abs(note->startBeats - start) < gridStepBeats / 2.0)
         return;
 
-    domain::ExecuteOptions options{};
-    options.gesture = drag_->gesture;
-
     if (bus_.execute(std::make_unique<domain::MoveNote>(edited->id, drag_->noteId, pitch, start), options)
             .ok())
         drag_->moved = true;
+}
+
+// The cursor is the only thing that says where the grip is. A note is fourteen
+// pixels tall and often one sixteenth wide; anything drawn on it would be
+// bigger than the note.
+void PianoRollPanel::mouseMove(const juce::MouseEvent& event)
+{
+    const auto* hit = noteAt(event.getPosition());
+    const auto onGrip = hit != nullptr && isOnResizeGrip(*hit, event.getPosition());
+
+    setMouseCursor(onGrip ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::NormalCursor);
 }
 
 void PianoRollPanel::mouseUp(const juce::MouseEvent& event)

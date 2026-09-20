@@ -199,10 +199,99 @@ TEST_CASE("the journal replays a removal and a drag into the same project")
     CHECK(replayedState == fixture.harness.state);
 }
 
+TEST_CASE("a note changes length without changing where it starts")
+{
+    Clip3 fixture;
+    const auto start = fixture.note(fixture.middle)->startBeats;
+    const auto pitch = fixture.note(fixture.middle)->pitch;
+
+    REQUIRE(
+        fixture.harness.bus.execute(std::make_unique<ResizeNote>(fixture.clipId, fixture.middle, 2.0)).ok());
+
+    CHECK(fixture.note(fixture.middle)->lengthBeats == doctest::Approx(2.0));
+    CHECK(fixture.note(fixture.middle)->startBeats == doctest::Approx(start));
+    CHECK(fixture.note(fixture.middle)->pitch == pitch);
+
+    REQUIRE(fixture.harness.bus.undo().ok());
+    CHECK(fixture.note(fixture.middle)->lengthBeats == doctest::Approx(0.25));
+}
+
+TEST_CASE("a length of zero is refused, and the note keeps the one it had")
+{
+    Clip3 fixture;
+    const auto depth = fixture.harness.bus.undoDepth();
+
+    auto resized =
+        fixture.harness.bus.execute(std::make_unique<ResizeNote>(fixture.clipId, fixture.middle, 0.0));
+    REQUIRE(!resized.ok());
+    CHECK(resized.error().code == ErrorCode::invalidArgument);
+
+    CHECK(fixture.note(fixture.middle)->lengthBeats == doctest::Approx(0.25));
+    CHECK(fixture.harness.bus.undoDepth() == depth);
+
+    auto backwards =
+        fixture.harness.bus.execute(std::make_unique<ResizeNote>(fixture.clipId, fixture.middle, -1.0));
+    REQUIRE(!backwards.ok());
+    CHECK(fixture.note(fixture.middle)->lengthBeats == doctest::Approx(0.25));
+}
+
+TEST_CASE("a stretch is one history entry, whatever the number of frames")
+{
+    Clip3 fixture;
+    const auto depth = fixture.harness.bus.undoDepth();
+
+    const auto gesture = fixture.harness.bus.beginGesture("allonger une note");
+    ExecuteOptions options{};
+    options.gesture = gesture;
+
+    for (int frame = 1; frame <= 40; ++frame)
+    {
+        REQUIRE(fixture.harness.bus
+                    .execute(std::make_unique<ResizeNote>(
+                                 fixture.clipId, fixture.middle, static_cast<double>(frame) * 0.25),
+                             options)
+                    .ok());
+    }
+    REQUIRE(fixture.harness.bus.endGesture(gesture).ok());
+
+    CHECK(fixture.harness.bus.undoDepth() == depth + 1);
+    CHECK(fixture.note(fixture.middle)->lengthBeats == doctest::Approx(10.0));
+
+    REQUIRE(fixture.harness.bus.undo().ok());
+    CHECK(fixture.note(fixture.middle)->lengthBeats == doctest::Approx(0.25));
+}
+
+TEST_CASE("moving and stretching inside one gesture stay two entries")
+{
+    Clip3 fixture;
+    const auto depth = fixture.harness.bus.undoDepth();
+
+    const auto gesture = fixture.harness.bus.beginGesture("editer");
+    ExecuteOptions options{};
+    options.gesture = gesture;
+
+    // Two different commands on the same note: coalescing is per command type
+    // as well as per note, so undoing the stretch must not move the note back.
+    REQUIRE(fixture.harness.bus
+                .execute(std::make_unique<MoveNote>(fixture.clipId, fixture.middle, 64, 2.0), options)
+                .ok());
+    REQUIRE(fixture.harness.bus
+                .execute(std::make_unique<ResizeNote>(fixture.clipId, fixture.middle, 1.5), options)
+                .ok());
+    REQUIRE(fixture.harness.bus.endGesture(gesture).ok());
+
+    CHECK(fixture.harness.bus.undoDepth() == depth + 2);
+
+    REQUIRE(fixture.harness.bus.undo().ok());
+    CHECK(fixture.note(fixture.middle)->lengthBeats == doctest::Approx(0.25));
+    CHECK(fixture.note(fixture.middle)->startBeats == doctest::Approx(2.0));
+}
+
 TEST_CASE("the note commands are registered under their own names")
 {
     const auto registry = CommandRegistry::withBuiltinCommands();
     CHECK(registry.contains("note.add"));
     CHECK(registry.contains("note.remove"));
     CHECK(registry.contains("note.move"));
+    CHECK(registry.contains("note.resize"));
 }

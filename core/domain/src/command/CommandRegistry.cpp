@@ -22,6 +22,7 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<AddNote>());
     static_cast<void>(registry.add<RemoveNote>());
     static_cast<void>(registry.add<MoveNote>());
+    static_cast<void>(registry.add<ResizeNote>());
     static_cast<void>(registry.add<SetTrackVolume>());
     static_cast<void>(registry.add<SetTrackMuted>());
     static_cast<void>(registry.add<TransportPlay>());

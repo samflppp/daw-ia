@@ -219,6 +219,10 @@ void HistoryPanel::paint(juce::Graphics& g)
 
         line.removeFromLeft(tokens_.integer("space.sm"));
 
+        // The same margin as the left inset, or the count of a coalesced
+        // gesture is drawn half outside the panel.
+        line.removeFromRight(tokens_.integer("space.md"));
+
         auto merged = line.removeFromRight(tokens_.integer("space.xl"));
         if (entry.merged > 1)
         {

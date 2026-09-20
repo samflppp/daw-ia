@@ -62,6 +62,7 @@
     "note.add",
     "note.remove",
     "note.move",
+    "note.resize",
     "plugin.insert",
     "plugin.remove",
     "plugin.set_bypassed"

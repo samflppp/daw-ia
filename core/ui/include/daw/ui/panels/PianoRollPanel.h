@@ -30,6 +30,7 @@ public:
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
+    void mouseMove(const juce::MouseEvent& event) override;
     bool keyPressed(const juce::KeyPress& key) override;
 
 private:
@@ -50,6 +51,11 @@ private:
     [[nodiscard]] int xForBeat(double beats) const;
     [[nodiscard]] double quantise(double beats) const;
     [[nodiscard]] const domain::Note* noteAt(juce::Point<int> point) const;
+
+    // True on the last few pixels of a note: there the drag stretches it
+    // instead of moving it. The grip is not drawn — the cursor says it, and a
+    // handle on a note one sixteenth wide would be the whole note.
+    [[nodiscard]] bool isOnResizeGrip(const domain::Note& note, juce::Point<int> point) const;
 
     void paintKeyboard(juce::Graphics& g, juce::Rectangle<int> area) const;
     void paintRuler(juce::Graphics& g, juce::Rectangle<int> area) const;
@@ -76,11 +82,22 @@ private:
 
     domain::NoteId selectedNote_{};
 
-    // A drag in progress: the note, the grab offset in beats, and the gesture
-    // that makes the whole movement one history entry.
+    // A drag in progress: what it does to the note, the grab offset in beats,
+    // and the gesture that makes the whole movement one history entry.
+    //
+    // Moving and stretching are two modes and two commands, never one: an undo
+    // has to give back either the position or the length, not a note that had
+    // both at once and that the user never saw.
+    enum class DragMode
+    {
+        move,
+        resize
+    };
+
     struct Drag
     {
         domain::NoteId noteId{};
+        DragMode mode{DragMode::move};
         double grabOffsetBeats{0.0};
         int grabPitch{0};
         domain::GestureId gesture{};

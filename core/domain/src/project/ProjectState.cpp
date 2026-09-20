@@ -791,6 +791,30 @@ Result<void> ProjectState::moveNote(ClipId clipId, NoteId noteId, int pitch, dou
     return {};
 }
 
+Result<void> ProjectState::resizeNote(ClipId clipId, NoteId noteId, double lengthBeats)
+{
+    auto* clip = findClipMutable(clipId);
+    if (clip == nullptr)
+        return fail(ErrorCode::notFound, "no such clip: " + clipId.toString());
+
+    const auto position = std::find_if(
+        clip->notes.begin(), clip->notes.end(), [noteId](const Note& note) { return note.id == noteId; });
+    if (position == clip->notes.end())
+        return fail(ErrorCode::notFound, "no such note: " + noteId.toString());
+
+    // Validated on a copy before anything is written, like moveNote: a length
+    // of zero or of NaN must leave the note as it was.
+    Note resized = *position;
+    resized.lengthBeats = lengthBeats;
+
+    auto valid = resized.validate();
+    if (!valid)
+        return valid;
+
+    *position = resized;
+    return {};
+}
+
 Result<void> ProjectState::removeNote(ClipId clipId, NoteId noteId)
 {
     auto* clip = findClipMutable(clipId);

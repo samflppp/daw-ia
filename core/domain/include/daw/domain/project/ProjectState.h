@@ -224,6 +224,11 @@ public:
     // command would make an undo give back a note the user never had.
     Result<void> moveNote(ClipId clipId, NoteId noteId, int pitch, double startBeats);
 
+    // Changes how long a note sounds, and nothing else. Its start does not
+    // move: stretching a note from its right edge is the gesture, and a
+    // command that also moved it would undo into a note the user never had.
+    Result<void> resizeNote(ClipId clipId, NoteId noteId, double lengthBeats);
+
     // --- plugins
     [[nodiscard]] const PluginInstance* findPlugin(PluginId id) const noexcept;
 
