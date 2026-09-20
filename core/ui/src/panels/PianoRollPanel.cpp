@@ -35,14 +35,14 @@ constexpr double newClipLengthBeats = 16.0;
 {
     switch (((pitch % semitonesPerOctave) + semitonesPerOctave) % semitonesPerOctave)
     {
-        case 1:
-        case 3:
-        case 6:
-        case 8:
-        case 10:
-            return true;
-        default:
-            return false;
+    case 1:
+    case 3:
+    case 6:
+    case 8:
+    case 10:
+        return true;
+    default:
+        return false;
     }
 }
 
@@ -225,18 +225,16 @@ void PianoRollPanel::paint(juce::Graphics& g)
     g.setColour(tokens_.colour("color.text.secondary"));
     g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
     const auto count = static_cast<int>(edited->notes.size());
-    g.drawText(juce::String(owner != nullptr ? owner->name : std::string{}) + "  ·  " +
-                   juce::String(count) + (count > 1 ? " notes" : " note"),
+    g.drawText(juce::String(owner != nullptr ? owner->name : std::string{}) + "  ·  " + juce::String(count) +
+                   (count > 1 ? " notes" : " note"),
                header,
                juce::Justification::centredLeft,
                false);
 
     const auto area = gridArea();
 
-    auto keyboard = juce::Rectangle<int>{0,
-                                         area.getY(),
-                                         tokens_.integer("metric.pianoRoll.keyboardWidth"),
-                                         area.getHeight()};
+    auto keyboard = juce::Rectangle<int>{
+        0, area.getY(), tokens_.integer("metric.pianoRoll.keyboardWidth"), area.getHeight()};
 
     auto ruler = juce::Rectangle<int>{area.getX(),
                                       area.getY() - tokens_.integer("metric.pianoRoll.rulerHeight"),
@@ -255,8 +253,8 @@ void PianoRollPanel::paintEmpty(juce::Graphics& g) const
     g.setColour(tokens_.colour("color.text.disabled"));
     g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
 
-    const auto message = track() == nullptr ? "selectionnez une piste"
-                                            : "cliquez pour creer un clip et poser une note";
+    const auto message =
+        track() == nullptr ? "selectionnez une piste" : "cliquez pour creer un clip et poser une note";
 
     g.drawText(message, getLocalBounds(), juce::Justification::centred, false);
 }
@@ -288,9 +286,9 @@ void PianoRollPanel::paintGrid(juce::Graphics& g, juce::Rectangle<int> area) con
         const auto onBar = std::fmod(beat, static_cast<double>(beatsPerBar)) < gridStepBeats / 2.0;
         const auto onBeat = std::fmod(beat, 1.0) < gridStepBeats / 2.0;
 
-        g.setColour(onBar ? tokens_.colour("color.grid.bar")
-                          : (onBeat ? tokens_.colour("color.grid.beat")
-                                    : tokens_.colour("color.grid.subdivision")));
+        g.setColour(
+            onBar ? tokens_.colour("color.grid.bar")
+                  : (onBeat ? tokens_.colour("color.grid.beat") : tokens_.colour("color.grid.subdivision")));
 
         g.fillRect(xForBeat(beat), area.getY(), hairline, area.getHeight());
     }
@@ -388,7 +386,9 @@ void PianoRollPanel::paintRuler(juce::Graphics& g, juce::Rectangle<int> area) co
     g.fillRect(area);
 
     g.setColour(tokens_.colour("color.border.hairline"));
-    g.fillRect(area.getX(), area.getBottom() - tokens_.integer("stroke.hairline"), area.getWidth(),
+    g.fillRect(area.getX(),
+               area.getBottom() - tokens_.integer("stroke.hairline"),
+               area.getWidth(),
                tokens_.integer("stroke.hairline"));
 
     g.setFont(lookAndFeel_.typography().mono("font.size.micro", "font.weight.regular"));
@@ -517,10 +517,10 @@ void PianoRollPanel::mouseDrag(const juce::MouseEvent& event)
     const auto start = quantise(beatAtX(event.getPosition().getX()) - drag_->grabOffsetBeats);
     const auto pitch = pitchAtY(event.getPosition().getY());
 
-    const auto found = std::find_if(edited->notes.begin(),
-                                    edited->notes.end(),
-                                    [this](const domain::Note& candidate)
-                                    { return candidate.id == drag_->noteId; });
+    const auto found =
+        std::find_if(edited->notes.begin(),
+                     edited->notes.end(),
+                     [this](const domain::Note& candidate) { return candidate.id == drag_->noteId; });
 
     if (found == edited->notes.end())
         return;
