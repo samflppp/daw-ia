@@ -86,8 +86,12 @@ public:
 
     [[nodiscard]] std::int64_t lastInsertRowId() const noexcept;
 
-    // Empties the write-ahead log into the database file and deletes it, so
-    // the folder copies as one file plus its blobs.
+    // Moves the write-ahead log into the database file and truncates it to
+    // nothing, so the folder copies as one file plus its blobs. The connection
+    // stays open — a project being worked on must be copyable without being
+    // closed — so the empty -wal file stays until the last connection closes.
+    domain::Result<void> checkpoint();
+
     domain::Result<void> checkpointAndClose();
 
 private:

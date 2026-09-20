@@ -39,7 +39,13 @@ public:
     // The schema this build writes. A project carrying an older version is
     // migrated on open; a project carrying a newer one is refused, because
     // guessing what a future column meant is how projects get corrupted.
-    static constexpr std::int64_t schemaVersion = 1;
+    //
+    //   1  the journal, the meta table, the index by command
+    //   2  an index by actor: "what did the copilot change" is the first
+    //      question this journal will be asked, and it is the step that makes
+    //      the migration chain run on a real project instead of only on an
+    //      empty one.
+    static constexpr std::int64_t schemaVersion = 2;
 
     ~ProjectStore() override;
 
@@ -79,6 +85,12 @@ public:
     // and it is the reason close() can say "this project was not fully saved"
     // instead of a silent loss.
     [[nodiscard]] domain::Result<void> status() const;
+
+    // Moves the write-ahead log into the database file without closing
+    // anything, so the folder can be copied while the session runs. It is what
+    // an explicit "save" does: the commands were already written, one
+    // transaction each, and this only moves them out of the -wal.
+    [[nodiscard]] domain::Result<void> save();
 
     // Checkpoints the write-ahead log and closes the connection, so the folder
     // copies as one database file plus its blobs.

@@ -24,7 +24,16 @@
 namespace daw::app
 {
 
-class Application final : public juce::JUCEApplication
+// The timer is the autosave: the commands are already on disk, one
+// transaction each, but they sit in the write-ahead log until a checkpoint
+// moves them into the database file. Without it, a project folder copied while
+// the session runs would carry a -wal the copy cannot be trusted without.
+//
+// The same tick reads back what the store could not write. An observer cannot
+// return a Result, so a failed write is kept by the store; showing it only
+// when the application quits would mean telling the user about a loss they can
+// no longer avoid.
+class Application final : public juce::JUCEApplication, private juce::Timer
 {
 public:
     const juce::String getApplicationName() override { return JUCE_APPLICATION_NAME_STRING; }
@@ -87,10 +96,12 @@ public:
             playDemo(pluginPathFromCommandLine(commandLine));
 
         window_ = std::make_unique<MainWindow>(getApplicationName(), ui::Tokens::builtIn());
+        startTimer(autosaveIntervalMs);
     }
 
     void shutdown() override
     {
+        stopTimer();
         closeProject();
 
         juce::Logger::setCurrentLogger(nullptr);
@@ -102,9 +113,62 @@ public:
         engineHost_.reset();
     }
 
-    void systemRequestedQuit() override { quit(); }
+    void systemRequestedQuit() override
+    {
+        // Quitting is the one moment where a pending write can still be
+        // reported to someone who can act on it.
+        if (store_ != nullptr)
+        {
+            if (const auto saved = store_->save(); !saved)
+                juce::Logger::writeToLog("project not saved: " + juce::String(saved.error().message));
+        }
+
+        quit();
+    }
 
 private:
+    static constexpr int autosaveIntervalMs = 30000;
+
+    void timerCallback() override
+    {
+        if (store_ == nullptr)
+            return;
+
+        const auto saved = store_->save();
+        if (saved)
+        {
+            reportProjectHealthy();
+            return;
+        }
+
+        reportProjectUnsaved(juce::String(saved.error().message));
+    }
+
+    // No panel exists yet to hold a message, so the title bar carries it: it is
+    // the only surface the application has, and a loss the user never sees is
+    // worse than a title that is ugly.
+    void reportProjectUnsaved(const juce::String& reason)
+    {
+        if (unsavedReported_)
+            return;
+
+        unsavedReported_ = true;
+        juce::Logger::writeToLog("project not saved: " + reason);
+
+        if (window_ != nullptr)
+            window_->setName(getApplicationName() + " - projet non enregistre : " + reason);
+    }
+
+    void reportProjectHealthy()
+    {
+        if (!unsavedReported_)
+            return;
+
+        unsavedReported_ = false;
+        if (window_ != nullptr)
+            window_->setName(getApplicationName());
+    }
+
     // --project "<path to a .dawproj folder>". Without it, the application
     // opens the same default project every time, which is what a first launch
     // needs and what --demo relies on.
@@ -324,6 +388,7 @@ private:
     domain::CommandRegistry registry_{domain::CommandRegistry::withBuiltinCommands()};
     domain::CommandBus bus_{state_, registry_};
     std::unique_ptr<persistence::ProjectStore> store_;
+    bool unsavedReported_{false};
     std::unique_ptr<engine::ContentStore> contentStore_;
     std::unique_ptr<engine::EngineHost> engineHost_;
     std::unique_ptr<engine::ProjectProjector> projector_;

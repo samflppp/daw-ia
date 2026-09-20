@@ -59,7 +59,14 @@ CREATE INDEX IF NOT EXISTS journal_by_command ON journal (command_id);
 // There is no blob table here, and there will not be one: the BLAKE3 store in
 // the blobs/ folder already is the content-addressed table. A digest column is
 // plain text with no foreign key, exactly like a digest inside a payload.
-constexpr Migration migrations[] = {{1, schemaV1}};
+
+// Version 2. Asking "what did the copilot change" walks the whole journal
+// without it, and that question is the reason provenance exists.
+constexpr std::string_view schemaV2 = R"sql(
+CREATE INDEX IF NOT EXISTS journal_by_actor ON journal (actor, seq);
+)sql";
+
+constexpr Migration migrations[] = {{1, schemaV1}, {2, schemaV2}};
 
 constexpr std::string_view insertSql =
     "INSERT INTO journal (kind, command_id, at_micros, actor, context_digest, context_bytes, "
@@ -461,6 +468,19 @@ std::size_t ProjectStore::rowCount()
         return 0;
 
     return static_cast<std::size_t>(std::max<std::int64_t>(count.value(), 0));
+}
+
+domain::Result<void> ProjectStore::save()
+{
+    auto written = status();
+    auto emptied = database_.checkpoint();
+
+    // A failed write matters more than a failed checkpoint: the checkpoint can
+    // succeed on a journal that is missing a command.
+    if (!written)
+        return written;
+
+    return emptied;
 }
 
 domain::Result<void> ProjectStore::close()

@@ -82,16 +82,38 @@ donc retenue, et la première est celle qui est rapportée — les suivantes n'e
 sont que les conséquences. `close()` la rend, pour que « ce projet n'a pas été
 entièrement enregistré » soit une phrase et non un silence.
 
-## 5. Migration
+## 5. Enregistrer sans fermer
+
+`ProjectStore::save()` vide le write-ahead log dans le fichier de base sans
+rien fermer. Les commandes y étaient déjà — une transaction chacune, à
+l'exécution — mais tant qu'elles sont dans le `-wal`, un dossier copié pendant
+la session est une copie qu'il faut savoir lire. L'application appelle `save()`
+toutes les 30 s et à la demande de fermeture.
+
+Le fichier `-wal` reste, vide : SQLite ne l'efface qu'à la fermeture de la
+dernière connexion. Sa taille à zéro est la preuve que tout est passé dans la
+base.
+
+Le même battement relit `status()`. Un observateur ne peut pas retourner de
+`Result` ; une écriture ratée est donc retenue par le magasin, et attendre la
+fermeture pour la dire reviendrait à annoncer une perte que l'utilisateur ne
+peut plus éviter. Faute de panneau, le titre de la fenêtre la porte.
+
+## 6. Migration
 
 `meta.schema_version` vaut 1 dès la création, et la chaîne de migration existe
 dès la v1 : un chemin de migration ajouté le jour où la première colonne change
 est un chemin qui n'a jamais tourné, et il casse précisément les projets qu'il
 devait sauver.
 
+| Version | Contenu |
+|---|---|
+| 1 | `journal`, `meta`, index par commande |
+| 2 | index par acteur — « qu'a changé le copilote » est la première question qu'on posera à ce journal |
+
 | Version lue | Ce qui se passe |
 |---|---|
-| aucune / base vide | création, `schema_version = 1` |
+| aucune / base vide | création, toutes les migrations appliquées |
 | < version courante | migrations appliquées une par une, une transaction par pas |
 | = version courante | rien |
 | > version courante | refus explicite, pas d'ouverture dégradée |
@@ -100,7 +122,7 @@ Une base tronquée, un fichier qui n'est pas une base, un payload illisible :
 `Result` en erreur nommant la ligne fautive, jamais de crash, jamais de
 réparation automatique.
 
-## 6. Ce que prouvent les tests
+## 7. Ce que prouvent les tests
 
 Un chargeur appelé deux fois dans le même processus ne prouve rien : le second
 appel peut lire ce que le premier a laissé en mémoire, en cache ou dans une
@@ -117,4 +139,6 @@ enfant** : l'enfant écrit le projet et meurt, le parent rouvre et mesure.
 | Base tronquée, fichier corrompu, schéma du futur | erreur nommée, aucun crash |
 | Enveloppe v1 | rejouée comme `user` |
 | Dossier copié | s'ouvre ailleurs et rend le même état |
+| Projet laissé au schéma 1 | migré en une étape, lignes intactes, `project_id` inchangé |
+| `save()` | `-wal` ramené à zéro octet, magasin toujours ouvert et toujours en train d'enregistrer |
 | **Plugin** (`core/engine`, label `audio`) | le RMS rendu après rechargement est celui d'avant : blob puis paramètres épars, dans cet ordre |

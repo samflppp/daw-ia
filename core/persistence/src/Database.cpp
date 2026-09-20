@@ -271,17 +271,28 @@ std::int64_t Database::lastInsertRowId() const noexcept
     return connection_ == nullptr ? 0 : sqlite3_last_insert_rowid(connection_);
 }
 
-domain::Result<void> Database::checkpointAndClose()
+domain::Result<void> Database::checkpoint()
 {
     if (connection_ == nullptr)
         return {};
 
     // TRUNCATE empties the write-ahead log and removes it. Without it, a
-    // project folder copied right after a session would carry a -wal file
+    // project folder copied while the session runs would carry a -wal file
     // holding commands the database file does not have yet.
     if (sqlite3_wal_checkpoint_v2(connection_, nullptr, SQLITE_CHECKPOINT_TRUNCATE, nullptr, nullptr) !=
         SQLITE_OK)
         return storageFailure(connection_, "cannot checkpoint the journal");
+
+    return {};
+}
+
+domain::Result<void> Database::checkpointAndClose()
+{
+    if (connection_ == nullptr)
+        return {};
+
+    if (auto emptied = checkpoint(); !emptied)
+        return emptied;
 
     if (sqlite3_close(connection_) != SQLITE_OK)
     {

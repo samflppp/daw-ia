@@ -1,9 +1,9 @@
 # Bilan de fin de S5 — DAW IA
 
 **Période :** semaine 5 sur 26 (13 – 19 octobre 2026). Rédigé le 20 septembre 2026.
-**Dépôt :** `samflppp/daw-ia` (privé), branche `main`, 6 commits (`8abfd45` → `8ae89a6`).
+**Dépôt :** `samflppp/daw-ia` (privé), branche `main`, 8 commits (`8abfd45` → HEAD).
 **Volume :** 53 fichiers, +3 700 lignes, −181. Nouveau module : `core/persistence`.
-**Tests :** 104 cas hors audio (90 de domaine, 14 de persistance), 35 cas d'engine sous label `audio`.
+**Tests :** 106 cas hors audio (90 de domaine, 16 de persistance), 35 cas d'engine sous label `audio`.
 
 ## 1. Livrables demandés
 
@@ -14,7 +14,7 @@
 | 3 | Sauvegarde et rechargement à l'identique, plugins réhydratés | Livré, mesuré en samples | RMS 0,424802 écrit / 0,424802 relu, dans deux processus |
 | 4 | Un projet est un dossier copiable d'un bloc | Livré | dossier copié, rouvert, même état et même son |
 | 5 | Version de schéma et chemin de migration dès la v1 | Livré | chaîne de migrations, refus d'un schéma venu du futur |
-| 6 | Tests : aller-retour, undo après rechargement, provenances mêlées, gros projet, base corrompue, enveloppe v1 | Livré | 14 cas de persistance + 2 cas d'engine, tous par processus enfant |
+| 6 | Tests : aller-retour, undo après rechargement, provenances mêlées, gros projet, base corrompue, enveloppe v1 | Livré | 16 cas de persistance + 2 cas d'engine, tous par processus enfant |
 
 ## 2. La décision de la semaine : ce que le journal garde
 
@@ -96,6 +96,7 @@ en cache ou dans une connexion ouverte : il ne prouve rien.
 | Base tronquée à la moitié | `storageError` nommé, aucun crash |
 | Fichier qui n'est pas une base | refusé à l'ouverture |
 | Schéma `99` | « this project was written by a newer version », pas d'ouverture dégradée |
+| Projet remis au schéma 1 | migré vers 2, lignes intactes, `project_id` inchangé |
 | Enveloppe v1 en base | rejouée comme `user` |
 | Dossier copié d'un bloc | s'ouvre ailleurs, même état |
 
@@ -111,12 +112,16 @@ rms written = 0.424802, rms reopened = 0.424802
 Blob d'abord, paramètres épars par-dessus, dans cet ordre, mesuré en samples et
 non déduit de l'état.
 
-**Sur le binaire Windows lui-même.** Lancé une fois avec `--project`, tué de
-force — donc sans fermeture propre, sans checkpoint — puis relancé :
+**Sur le binaire Windows lui-même.** Lancé avec `--project`, tué de force, puis
+relancé :
 
 ```
 project Demo: 5 commands replayed, 0 undone
 ```
+
+Deux fois, et pour deux raisons différentes : la première sans aucun
+checkpoint, le WAL portant tout ; la seconde après le battement d'autosauvegarde
+de 30 s, le `-wal` mesuré à 0 octet pendant que la session tournait encore.
 
 ## 6. Le magasin change de place
 
@@ -139,7 +144,7 @@ identifiant, jamais un littéral — une faute de frappe dans un nom de colonne
 doit échouer) et `SQLITE_OMIT_LOAD_EXTENSION` (un fichier de projet ne peut
 jamais demander de charger une bibliothèque).
 
-`core/persistence` ne lie ni JUCE ni Tracktion : ses 14 cas tournent dans le
+`core/persistence` ne lie ni JUCE ni Tracktion : ses 16 cas tournent dans le
 preset `domain-only`.
 
 ## 8. Périmètre
@@ -160,7 +165,9 @@ suffira plus, la chaîne de migration est là pour ajouter la table.
 | `journal()` n'est pas un log d'audit (question ouverte en S4 §9) | **Tranchée.** Deux objets distincts, §2 |
 | Tempo non modifiable par commande | Aucune commande ne change le tempo aujourd'hui, donc rien n'est perdu au rechargement. À traiter quand une commande de tempo arrivera |
 | Écriture synchrone à chaque commande | Une transaction par commande. Mesuré acceptable (5 002 commandes écrites puis relues sans peine) ; à revoir si une session longue montre le contraire |
-| Fermeture forcée | Le WAL garde tout, vérifié sur le binaire Windows §5. Le checkpoint propre n'a lieu qu'à la fermeture normale |
+| Fermeture forcée | **Payée.** `save()` vide le WAL sans fermer, l'application l'appelle toutes les 30 s et à la demande de fermeture. Vérifié sur le binaire : `-wal` à 0 octet pendant la session, 5 commandes rejouées après un `Stop-Process` |
+| Une écriture ratée n'était visible qu'à la fermeture | **Payée.** Le même battement relit `status()` ; faute de panneau, le titre de la fenêtre porte le message |
+| La chaîne de migration n'avait jamais tourné au-delà de `0→1` | **Payée.** Schéma 2 (index par acteur) et un cas qui remet un projet réel au schéma 1, le rouvre et vérifie lignes, version et identité |
 
 Le portage Linux est hors périmètre du MVP : le job CI Linux reste vert en
 compilation, et rien n'y est validé au runtime.

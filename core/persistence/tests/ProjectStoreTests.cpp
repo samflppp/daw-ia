@@ -1,6 +1,7 @@
 #include "PersistenceTestSupport.h"
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/command/CommandRegistry.h"
+#include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/domain/serialization/Json.h"
 #include "daw/persistence/Database.h"
@@ -390,6 +391,94 @@ TEST_CASE("rows written by a build that knew nothing of provenance replay as use
     auto envelope = CommandEnvelope::fromValue(journal.front());
     REQUIRE(envelope.ok());
     CHECK(envelope.value().origin.actor == Actor::user);
+}
+
+TEST_CASE("a project left at schema 1 is migrated, with its rows intact")
+{
+    TemporaryFolder temporary{"migration"};
+    const auto project = temporary.child("Ancien.dawproj");
+    const auto expectedFile = temporary.child("expected.json");
+    REQUIRE(runChildProcess({"--child", "write", project.string(), expectedFile.string()}) == 0);
+
+    // Put the project back where a build that only knew version 1 would have
+    // left it: the index of version 2 gone, the version number with it.
+    {
+        auto database = Database::open(ProjectFolder{project}.databaseFile());
+        REQUIRE(database.ok());
+        REQUIRE(database.value().execute("DROP INDEX IF EXISTS journal_by_actor").ok());
+        REQUIRE(database.value().execute("UPDATE meta SET value = '1' WHERE key = 'schema_version'").ok());
+        REQUIRE(database.value().checkpointAndClose().ok());
+    }
+
+    // Opening migrates it, in one step, without touching a single row.
+    Reopened session;
+    auto report = reopen(session, project);
+    REQUIRE_MESSAGE(report.ok(), report.error().message);
+    CHECK(session.store->versionOnDisk() == ProjectStore::schemaVersion);
+    CHECK(session.stateJson() == readTextFile(expectedFile));
+
+    auto database = Database::open(ProjectFolder{project}.databaseFile());
+    REQUIRE(database.ok());
+
+    auto version = database.value().queryInt("SELECT CAST(value AS INTEGER) FROM meta "
+                                             "WHERE key = 'schema_version'");
+    REQUIRE(version.ok());
+    CHECK(version.value() == 2);
+
+    auto index = database.value().queryInt("SELECT count(*) FROM sqlite_master "
+                                           "WHERE type = 'index' AND name = 'journal_by_actor'");
+    REQUIRE(index.ok());
+    CHECK(index.value() == 1);
+
+    // And the identity of the project is not re-engendered by a migration: it
+    // is still the same project.
+    auto identity = database.value().prepare("SELECT value FROM meta WHERE key = 'project_id'");
+    REQUIRE(identity.ok());
+    auto row = identity.value().step();
+    REQUIRE(row.ok());
+    REQUIRE(row.value());
+    CHECK(identity.value().columnText(0) == session.store->projectId());
+}
+
+TEST_CASE("saving empties the write-ahead log without closing the project")
+{
+    TemporaryFolder temporary{"save"};
+    const auto project = temporary.child("Projet.dawproj");
+
+    auto store = ProjectStore::open(ProjectFolder{project});
+    REQUIRE(store.ok());
+
+    ProjectState state;
+    const auto registry = CommandRegistry::withBuiltinCommands();
+    CommandBus bus{state, registry};
+    store.value()->startRecording(bus);
+
+    const auto trackId = TrackId::generate();
+    REQUIRE(bus.execute(std::make_unique<AddTrack>(trackId, "Piste", 0.0)).ok());
+
+    const auto walFile = project / "project.db-wal";
+    REQUIRE(std::filesystem::exists(walFile));
+    CHECK(std::filesystem::file_size(walFile) > 0);
+
+    // The log is emptied into the database file, not deleted: the file itself
+    // only goes when the last connection closes.
+    REQUIRE(store.value()->save().ok());
+    CHECK(std::filesystem::file_size(walFile) == 0);
+
+    // Still open, still recording: a save is not a close.
+    REQUIRE(bus.execute(std::make_unique<AddTrack>(TrackId::generate(), "Autre", 0.0)).ok());
+    CHECK(store.value()->rowCount() == 2);
+
+    // And the copy taken right after the save carries both commands once the
+    // second one has been saved too.
+    REQUIRE(store.value()->save().ok());
+    const auto copy = temporary.child("Copie.dawproj");
+    std::filesystem::copy(project, copy, std::filesystem::copy_options::recursive);
+
+    Reopened session;
+    auto report = reopen(session, copy);
+    REQUIRE(report.ok());
+    CHECK(report.value().commands == 2);
 }
 
 TEST_CASE("a coalesced row that follows nothing is a malformed journal, and says so")
