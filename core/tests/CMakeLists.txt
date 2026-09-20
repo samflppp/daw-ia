@@ -15,9 +15,10 @@ add_executable(daw_domain_tests
     ProvenanceTests.cpp
     TrackCommandTests.cpp
     TransportTests.cpp
-    ThreadingTests.cpp)
+    ThreadingTests.cpp
+    WorkspaceLayoutTests.cpp)
 
-target_link_libraries(daw_domain_tests PRIVATE daw::domain doctest::doctest)
+target_link_libraries(daw_domain_tests PRIVATE daw::domain daw::ui_workspace doctest::doctest)
 daw_set_warnings(daw_domain_tests)
 
 # One ctest entry per TEST_CASE, so a failure names the case, not the binary.

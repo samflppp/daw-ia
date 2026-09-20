@@ -58,8 +58,8 @@ void GalleryView::paintSwatches(juce::Graphics& g,
     const auto gap = tokens_.integer("space.sm");
 
     auto row = area.removeFromTop(height);
-    const auto width = (row.getWidth() - gap * static_cast<int>(swatches.size() - 1)) /
-                       static_cast<int>(swatches.size());
+    const auto width =
+        (row.getWidth() - gap * static_cast<int>(swatches.size() - 1)) / static_cast<int>(swatches.size());
 
     for (const auto& swatch : swatches)
     {

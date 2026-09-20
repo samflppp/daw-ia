@@ -36,9 +36,8 @@ public:
     [[nodiscard]] juce::Font caps(juce::StringRef sizePath) const;
 
 private:
-    [[nodiscard]] juce::Font build(const juce::Typeface::Ptr& typeface,
-                                   juce::StringRef sizePath,
-                                   juce::StringRef trackingPath) const;
+    [[nodiscard]] juce::Font
+    build(const juce::Typeface::Ptr& typeface, juce::StringRef sizePath, juce::StringRef trackingPath) const;
 
     [[nodiscard]] const juce::Typeface::Ptr& sansFor(juce::StringRef weightPath) const;
     [[nodiscard]] const juce::Typeface::Ptr& monoFor(juce::StringRef weightPath) const;

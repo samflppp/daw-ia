@@ -12,9 +12,13 @@
 add_subdirectory(domain)
 add_subdirectory(persistence)
 
+# ui/ is always added: the workspace manifests and the layout arithmetic inside
+# it know nothing of JUCE, and they are tested in the fast preset. The targets
+# that do need JUCE are guarded inside that file.
+add_subdirectory(ui)
+
 if(DAW_BUILD_APP)
     add_subdirectory(engine)
-    add_subdirectory(ui)
     add_subdirectory(app)
 endif()
 

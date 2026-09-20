@@ -145,14 +145,14 @@ void DawLookAndFeel::drawToggleButton(juce::Graphics& g,
 {
     juce::ignoreUnused(shouldDrawButtonAsDown);
 
-    const auto box = button.getLocalBounds()
-                         .toFloat()
-                         .withWidth(tokens_.number("metric.track.chipWidth"))
-                         .withHeight(tokens_.number("metric.track.chipHeight"))
-                         .withY((static_cast<float>(button.getHeight()) -
-                                 tokens_.number("metric.track.chipHeight")) *
-                                0.5f)
-                         .reduced(tokens_.number("stroke.hairline") * 0.5f);
+    const auto box =
+        button.getLocalBounds()
+            .toFloat()
+            .withWidth(tokens_.number("metric.track.chipWidth"))
+            .withHeight(tokens_.number("metric.track.chipHeight"))
+            .withY((static_cast<float>(button.getHeight()) - tokens_.number("metric.track.chipHeight")) *
+                   0.5f)
+            .reduced(tokens_.number("stroke.hairline") * 0.5f);
 
     const auto radius = tokens_.number("radius.sm");
 
@@ -202,7 +202,8 @@ void DawLookAndFeel::drawLinearSlider(juce::Graphics& g,
     const auto radius = tokens_.number("radius.sm");
 
     const juce::Rectangle<float> groove{static_cast<float>(x),
-                                        static_cast<float>(y) + (static_cast<float>(height) - thickness) * 0.5f,
+                                        static_cast<float>(y) +
+                                            (static_cast<float>(height) - thickness) * 0.5f,
                                         static_cast<float>(width),
                                         thickness};
 
@@ -244,9 +245,10 @@ void DawLookAndFeel::drawScrollbar(juce::Graphics& g,
         return;
 
     const auto inset = tokens_.integer("space.xs");
-    const auto thumb = isScrollbarVertical
-                           ? juce::Rectangle<int>{x + inset, thumbStartPosition, width - inset * 2, thumbSize}
-                           : juce::Rectangle<int>{thumbStartPosition, y + inset, thumbSize, height - inset * 2};
+    const auto thumb =
+        isScrollbarVertical
+            ? juce::Rectangle<int>{x + inset, thumbStartPosition, width - inset * 2, thumbSize}
+            : juce::Rectangle<int>{thumbStartPosition, y + inset, thumbSize, height - inset * 2};
 
     if (isMouseDown)
         g.setColour(tokens_.colour("color.text.tertiary"));

@@ -16,8 +16,10 @@
 #include "daw/persistence/ProjectStore.h"
 #include "daw/ui/DawLookAndFeel.h"
 #include "daw/ui/GalleryView.h"
-#include "daw/ui/RootView.h"
+#include "daw/ui/PanelRegistry.h"
 #include "daw/ui/Tokens.h"
+#include "daw/ui/WorkspaceView.h"
+#include "daw/ui/Workspaces.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
@@ -144,14 +146,53 @@ private:
     // --gallery shows every token and every control instead of the workspace.
     // The three hygiene rules cannot see ugliness; this is the surface that is
     // looked at when a token changes.
-    [[nodiscard]] std::unique_ptr<juce::Component> makeContent(const juce::String& commandLine) const
+    [[nodiscard]] std::unique_ptr<juce::Component> makeContent(const juce::String& commandLine)
     {
         const auto& tokens = ui::Tokens::builtIn();
 
         if (commandLine.contains("--gallery"))
             return std::make_unique<ui::GalleryView>(tokens, *lookAndFeel_);
 
-        return std::make_unique<ui::RootView>(tokens);
+        const auto& workspaces = ui::Workspaces::builtIn();
+
+        // A manifest the binary carries and this build cannot read is said out
+        // loud at startup, not discovered by a user who asks for that screen.
+        for (const auto& rejected : workspaces.rejected())
+            juce::Logger::writeToLog("workspace not loaded: " + rejected);
+
+        const auto wanted = workspaceFromCommandLine(commandLine);
+        const auto* manifest = workspaces.find(wanted.toStdString());
+
+        if (manifest == nullptr)
+        {
+            juce::Logger::writeToLog("no such workspace: " + wanted);
+            manifest = workspaces.find(ui::Workspaces::defaultId());
+        }
+
+        auto view = std::make_unique<ui::WorkspaceView>(tokens, *lookAndFeel_, panelRegistry_);
+
+        if (manifest != nullptr)
+        {
+            view->show(*manifest);
+            juce::Logger::writeToLog("workspace " + juce::String(manifest->id) + ": " +
+                                     juce::String(static_cast<int>(manifest->placedPanels().size())) +
+                                     " panels");
+        }
+
+        return view;
+    }
+
+    // --workspace <id>. Without it, the default one.
+    [[nodiscard]] static juce::String workspaceFromCommandLine(const juce::String& commandLine)
+    {
+        const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+        for (int index = 0; index < tokens.size() - 1; ++index)
+        {
+            if (tokens[index] == "--workspace")
+                return tokens[index + 1].unquoted();
+        }
+
+        return juce::String(ui::Workspaces::defaultId().data(), ui::Workspaces::defaultId().size());
     }
 
     void timerCallback() override
@@ -420,6 +461,7 @@ private:
     std::unique_ptr<engine::ParameterBridge> bridge_;
     std::unique_ptr<juce::FileLogger> logger_;
     std::unique_ptr<ui::DawLookAndFeel> lookAndFeel_;
+    ui::PanelRegistry panelRegistry_{ui::PanelRegistry::withBuiltinPanels()};
     std::unique_ptr<MainWindow> window_;
     std::unique_ptr<PluginWindow> pluginWindow_;
 };
