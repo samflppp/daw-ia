@@ -65,4 +65,34 @@ private:
     TrackId trackId_;
 };
 
+// track.set_muted — silences a track, or gives it back.
+//
+// A switch, not a movement: it never coalesces, exactly like
+// plugin.set_bypassed. The two are deliberately distinct commands. Mute is a
+// property of the track, used while arranging; bypass is a property of one
+// plugin in a chain, used while mixing. A single command for both would force
+// a choice the moment a user wants a muted track whose reverb still rings on
+// a send, or a bypassed compressor on a track that plays.
+class SetTrackMuted final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "track.set_muted";
+
+    SetTrackMuted(TrackId trackId, bool muted);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+    [[nodiscard]] TrackId trackId() const noexcept { return trackId_; }
+    [[nodiscard]] bool muted() const noexcept { return muted_; }
+
+private:
+    TrackId trackId_;
+    bool muted_;
+};
+
 } // namespace daw::domain

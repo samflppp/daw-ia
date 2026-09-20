@@ -98,3 +98,84 @@ TEST_CASE("a journal of track commands replays into the same project")
     REQUIRE(replayed.undo().ok());
     CHECK(replayedState.findClip(clipId)->notes.empty());
 }
+
+TEST_CASE("muting a track is undoable and says nothing about its volume")
+{
+    Harness harness;
+    const auto trackId = TrackId::generate();
+    REQUIRE(harness.bus.execute(std::make_unique<AddTrack>(trackId, "Nappe", -6.0)).ok());
+    REQUIRE(harness.state.findTrack(trackId)->muted == false);
+
+    REQUIRE(harness.bus.execute(std::make_unique<SetTrackMuted>(trackId, true)).ok());
+    CHECK(harness.state.findTrack(trackId)->muted);
+    CHECK(harness.state.findTrack(trackId)->volumeDb == doctest::Approx(-6.0));
+
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(harness.state.findTrack(trackId)->muted == false);
+    CHECK(harness.state.findTrack(trackId)->volumeDb == doctest::Approx(-6.0));
+
+    REQUIRE(harness.bus.redo().ok());
+    CHECK(harness.state.findTrack(trackId)->muted);
+}
+
+TEST_CASE("mute is a switch, so two of them are two history entries")
+{
+    Harness harness;
+    const auto trackId = TrackId::generate();
+    REQUIRE(harness.bus.execute(std::make_unique<AddTrack>(trackId, "Drums")).ok());
+
+    const auto gesture = harness.bus.beginGesture("mute");
+    ExecuteOptions options{};
+    options.gesture = gesture;
+
+    REQUIRE(harness.bus.execute(std::make_unique<SetTrackMuted>(trackId, true), options).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<SetTrackMuted>(trackId, false), options).ok());
+    REQUIRE(harness.bus.endGesture(gesture).ok());
+
+    // One entry for the track, one per switch: a gesture does not merge them.
+    CHECK(harness.bus.undoDepth() == 3);
+}
+
+TEST_CASE("muting a track that does not exist changes nothing")
+{
+    Harness harness;
+    auto muted = harness.bus.execute(std::make_unique<SetTrackMuted>(TrackId::generate(), true));
+    REQUIRE(!muted.ok());
+    CHECK(muted.error().code == ErrorCode::notFound);
+    CHECK(harness.bus.undoDepth() == 0);
+}
+
+TEST_CASE("a project written before mute existed reads as not muted")
+{
+    // The exact shape of a v1 track: no "muted" key at all.
+    const auto text = std::string{R"({"tempo":120.0,"tracks":[{"id":")"} + TrackId::generate().toString() +
+                      R"(","name":"Voix","volumeDb":-1.5,"clips":[],"plugins":[]}]})";
+
+    auto parsed = json::read(text);
+    REQUIRE(parsed.ok());
+
+    auto state = ProjectState::fromValue(parsed.value());
+    REQUIRE(state.ok());
+    REQUIRE(state.value().tracks().size() == 1);
+    CHECK(state.value().tracks().front().muted == false);
+}
+
+TEST_CASE("mute survives a round trip through the journal")
+{
+    Harness source;
+    const auto trackId = TrackId::generate();
+    REQUIRE(source.bus.execute(std::make_unique<AddTrack>(trackId, "Lead")).ok());
+    REQUIRE(source.bus.execute(std::make_unique<SetTrackMuted>(trackId, true)).ok());
+
+    ProjectState replayedState;
+    const auto registry = CommandRegistry::withBuiltinCommands();
+    CommandBus replayed{replayedState, registry};
+    for (const auto& envelope : source.bus.journal())
+        REQUIRE(replayed.executeSerialized(envelope).ok());
+
+    // The harness seeds a track directly into its own state, so the two
+    // projects are not equal; the replayed track is what this checks.
+    REQUIRE(replayedState.findTrack(trackId) != nullptr);
+    CHECK(replayedState.findTrack(trackId)->muted);
+    CHECK(*replayedState.findTrack(trackId) == *source.state.findTrack(trackId));
+}

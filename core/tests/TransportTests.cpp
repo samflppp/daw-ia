@@ -101,9 +101,9 @@ TEST_CASE("The transport commands survive the round-trip and are registered")
 {
     const auto registry = CommandRegistry::withBuiltinCommands();
 
-    // Two track commands, three clip and volume ones, three transport ones,
-    // five plugin ones.
-    CHECK(registry.types().size() == 13);
+    // Three track commands, two clip and note ones, one volume, three
+    // transport ones, five plugin ones.
+    CHECK(registry.types().size() == 14);
     CHECK(registry.contains("transport.play"));
     CHECK(registry.contains("transport.stop"));
     CHECK(registry.contains("transport.set_position"));

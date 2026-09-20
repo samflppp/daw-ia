@@ -437,6 +437,7 @@ Value Track::toValue() const
     return Value::object({{"id", Value{id.toString()}},
                           {"name", Value{name}},
                           {"volumeDb", Value{volumeDb}},
+                          {"muted", Value{muted}},
                           {"clips", Value::array(std::move(serialisedClips))},
                           {"plugins", Value::array(std::move(serialisedPlugins))}});
 }
@@ -459,6 +460,16 @@ Result<Track> Track::fromValue(const Value& value)
     track.id = id.value();
     track.name = name.value();
     track.volumeDb = volumeDb.value();
+
+    // Absent means "not muted": every project written before mute existed says
+    // exactly that, and a missing key is not a malformed track.
+    if (value.find("muted") != nullptr)
+    {
+        auto muted = value.boolAt("muted");
+        if (!muted)
+            return muted.error();
+        track.muted = muted.value();
+    }
 
     const auto* clipsValue = value.find("clips");
     if (clipsValue != nullptr)
@@ -503,7 +514,7 @@ Result<Track> Track::fromValue(const Value& value)
 bool operator==(const Track& lhs, const Track& rhs)
 {
     return lhs.id == rhs.id && lhs.name == rhs.name && lhs.volumeDb == rhs.volumeDb &&
-           lhs.clips == rhs.clips && lhs.plugins == rhs.plugins;
+           lhs.muted == rhs.muted && lhs.clips == rhs.clips && lhs.plugins == rhs.plugins;
 }
 
 // ---------------------------------------------------------------------------
@@ -644,6 +655,25 @@ Result<void> ProjectState::setTrackVolume(TrackId id, double volumeDb)
         return fail(ErrorCode::notFound, "no such track: " + id.toString());
 
     track->volumeDb = volumeDb;
+    return {};
+}
+
+Result<bool> ProjectState::trackMuted(TrackId id) const
+{
+    const auto* track = findTrack(id);
+    if (track == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    return track->muted;
+}
+
+Result<void> ProjectState::setTrackMuted(TrackId id, bool muted)
+{
+    auto* track = findTrackMutable(id);
+    if (track == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    track->muted = muted;
     return {};
 }
 

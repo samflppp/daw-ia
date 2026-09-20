@@ -145,4 +145,63 @@ Result<void> RemoveTrack::revert(ProjectState& state, const Value& undoRecord) c
     return state.insertTrack(std::move(track).value(), static_cast<std::size_t>(index.value()));
 }
 
+SetTrackMuted::SetTrackMuted(TrackId trackId, bool muted)
+    : trackId_{trackId}
+    , muted_{muted}
+{
+}
+
+Result<std::unique_ptr<Command>> SetTrackMuted::fromPayload(const Value& payload)
+{
+    auto trackText = payload.stringAt("trackId");
+    if (!trackText)
+        return trackText.error();
+
+    auto trackId = TrackId::parse(trackText.value());
+    if (!trackId)
+        return fail(trackId.error().code, "trackId: " + trackId.error().message);
+
+    auto muted = payload.boolAt("muted");
+    if (!muted)
+        return muted.error();
+
+    return std::unique_ptr<Command>{new SetTrackMuted{trackId.value(), muted.value()}};
+}
+
+Value SetTrackMuted::payload() const
+{
+    return Value::object({{"trackId", Value{trackId_.toString()}}, {"muted", Value{muted_}}});
+}
+
+Result<Value> SetTrackMuted::apply(ProjectState& state) const
+{
+    auto previous = state.trackMuted(trackId_);
+    if (!previous)
+        return previous.error();
+
+    auto applied = state.setTrackMuted(trackId_, muted_);
+    if (!applied)
+        return applied.error();
+
+    return Value::object(
+        {{"trackId", Value{trackId_.toString()}}, {"previousMuted", Value{previous.value()}}});
+}
+
+Result<void> SetTrackMuted::revert(ProjectState& state, const Value& undoRecord) const
+{
+    auto trackText = undoRecord.stringAt("trackId");
+    if (!trackText)
+        return trackText.error();
+
+    auto trackId = TrackId::parse(trackText.value());
+    if (!trackId)
+        return fail(trackId.error().code, "trackId: " + trackId.error().message);
+
+    auto previous = undoRecord.boolAt("previousMuted");
+    if (!previous)
+        return previous.error();
+
+    return state.setTrackMuted(trackId.value(), previous.value());
+}
+
 } // namespace daw::domain

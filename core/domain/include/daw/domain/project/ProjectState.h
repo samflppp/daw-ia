@@ -141,6 +141,14 @@ struct Track
     TrackId id{};
     std::string name;
     double volumeDb{0.0};
+
+    // Silences the whole track: its clips and the instrument that plays them.
+    // Not a volume of -100 dB, and not the bypass of a plugin — those are the
+    // two things it is constantly mistaken for. A muted track keeps its fader
+    // where the user left it, and a bypassed chain still lets the instrument
+    // through. Arranging needs the first, mixing needs the second.
+    bool muted{false};
+
     std::vector<Clip> clips;
 
     // Order is the chain order: index 0 is first in the signal path.
@@ -193,6 +201,9 @@ public:
 
     [[nodiscard]] Result<double> trackVolume(TrackId id) const;
     Result<void> setTrackVolume(TrackId id, double volumeDb);
+
+    [[nodiscard]] Result<bool> trackMuted(TrackId id) const;
+    Result<void> setTrackMuted(TrackId id, bool muted);
 
     Result<void> addClip(TrackId trackId, Clip clip);
     Result<void> removeClip(ClipId id);

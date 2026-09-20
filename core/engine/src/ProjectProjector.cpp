@@ -386,6 +386,11 @@ void ProjectProjector::reconcile()
         if (auto* volume = target->getVolumePlugin(); volume != nullptr)
             volume->setVolumeDb(static_cast<float>(source.volumeDb));
 
+        // Tracktion's own mute, not a volume of -100 dB: it silences the clips
+        // and the instrument that plays them, and it leaves the fader alone, so
+        // unmuting gives the track back exactly where the user left it.
+        target->setMute(source.muted);
+
         ensureInstrument(*target, source);
         reconcilePlugins(*target, source);
 
