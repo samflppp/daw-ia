@@ -1,7 +1,9 @@
 #include "daw/ui/PanelRegistry.h"
 
+#include "daw/ui/panels/HistoryPanel.h"
 #include "daw/ui/panels/PianoRollPanel.h"
 #include "daw/ui/panels/PlaceholderPanel.h"
+#include "daw/ui/panels/PluginChainPanel.h"
 #include "daw/ui/panels/TrackListPanel.h"
 #include "daw/ui/panels/TransportPanel.h"
 
@@ -24,6 +26,10 @@ PanelRegistry PanelRegistry::withBuiltinPanels()
                  [](const PanelContext& context) { return std::make_unique<TrackListPanel>(context); });
     registry.add("piano_roll",
                  [](const PanelContext& context) { return std::make_unique<PianoRollPanel>(context); });
+    registry.add("plugin_chain",
+                 [](const PanelContext& context) { return std::make_unique<PluginChainPanel>(context); });
+    registry.add("history",
+                 [](const PanelContext& context) { return std::make_unique<HistoryPanel>(context); });
 
     return registry;
 }

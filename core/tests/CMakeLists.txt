@@ -17,7 +17,8 @@ add_executable(daw_domain_tests
     NoteCommandTests.cpp
     TransportTests.cpp
     ThreadingTests.cpp
-    WorkspaceLayoutTests.cpp)
+    WorkspaceLayoutTests.cpp
+    HistoryLogTests.cpp)
 
 target_link_libraries(daw_domain_tests PRIVATE daw::domain daw::ui_workspace doctest::doctest)
 daw_set_warnings(daw_domain_tests)

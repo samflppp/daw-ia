@@ -1,5 +1,6 @@
 #include "EditClock.h"
 #include "MainWindow.h"
+#include "PluginRack.h"
 #include "PluginWindow.h"
 #include "WorkspaceSwitch.h"
 #include "daw/domain/BuildInfo.h"
@@ -22,6 +23,7 @@
 #include "daw/ui/Tokens.h"
 #include "daw/ui/WorkspaceView.h"
 #include "daw/ui/Workspaces.h"
+#include "daw/ui/model/History.h"
 #include "daw/ui/model/ProjectObserver.h"
 #include "daw/ui/model/Selection.h"
 
@@ -70,6 +72,11 @@ public:
 
         engineHost_ = std::make_unique<engine::EngineHost>(getApplicationName());
 
+        // The history panel is fed by the bus like everything else, and it is
+        // listening before the journal is replayed: a project reopened must
+        // show what was done to it, not an empty list over a full undo stack.
+        bus_.addObserver(history_);
+
         // The project folder comes before everything that touches the project:
         // the content store lives inside it, and the journal is what the state
         // is rebuilt from.
@@ -85,6 +92,8 @@ public:
         // state. No panel is notified of what a command did.
         bus_.addObserver(projectObserver_);
         clock_ = std::make_unique<EditClock>(engineHost_->edit());
+        rack_ = std::make_unique<PluginRack>(
+            engineHost_->edit(), engineHost_->catalogue(), ui::Tokens::builtIn());
 
         // The Edit is a projection, so it is built from the state the journal
         // just rebuilt, in one pass rather than one per replayed command.
@@ -127,7 +136,10 @@ public:
         closeProject();
 
         juce::Logger::setCurrentLogger(nullptr);
-        pluginWindow_.reset();
+
+        // The plugin windows go before the Edit that owns the plugins they
+        // draw: an editor outliving its plugin by one line is a crash.
+        rack_.reset();
         window_.reset();
         juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
         lookAndFeel_.reset();
@@ -184,8 +196,16 @@ private:
         switch_ = std::make_unique<WorkspaceSwitch>(
             workspaces, manifest != nullptr ? manifest->id : std::string{ui::Workspaces::defaultId()});
 
-        const ui::PanelServices services{
-            tokens, *lookAndFeel_, bus_, state_, projectObserver_, selection_, *clock_, *switch_};
+        const ui::PanelServices services{tokens,
+                                         *lookAndFeel_,
+                                         bus_,
+                                         state_,
+                                         projectObserver_,
+                                         selection_,
+                                         *clock_,
+                                         history_,
+                                         *rack_,
+                                         *switch_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         auto* viewPointer = view.get();
@@ -396,41 +416,17 @@ private:
     // thread. The window holds nothing but the plugin's editor.
     void openWindowFor(domain::PluginId pluginId)
     {
-        auto* plugin = findProjectedPlugin(pluginId);
-        if (plugin == nullptr)
+        if (rack_ == nullptr)
             return;
 
-        if (!PluginWindow::hasEditor(*plugin))
+        if (!rack_->hasEditor(pluginId))
         {
             juce::Logger::writeToLog("demo: this plugin has no editor to show");
             return;
         }
 
-        pluginWindow_ = std::make_unique<PluginWindow>(*plugin, ui::Tokens::builtIn());
-        pluginWindow_->onClose = [this] { pluginWindow_.reset(); };
-
-        juce::Logger::writeToLog("demo: plugin window open, " + juce::String(pluginWindow_->getWidth()) +
-                                 " by " + juce::String(pluginWindow_->getHeight()));
-    }
-
-    [[nodiscard]] tracktion::Plugin* findProjectedPlugin(domain::PluginId pluginId) const
-    {
-        const juce::Identifier domainPluginIdProperty{"dawDomainPluginId"};
-        const auto wanted = juce::String(pluginId.toString());
-
-        for (auto* track : tracktion::getAudioTracks(engineHost_->edit()))
-        {
-            if (track == nullptr)
-                continue;
-
-            for (auto plugin : track->pluginList.getPlugins())
-            {
-                if (plugin != nullptr &&
-                    plugin->state.getProperty(domainPluginIdProperty).toString() == wanted)
-                    return plugin;
-            }
-        }
-        return nullptr;
+        rack_->openEditor(pluginId);
+        juce::Logger::writeToLog("demo: plugin window open");
     }
 
     // One track, one MIDI clip, three notes, playback. Everything goes through
@@ -487,10 +483,11 @@ private:
     ui::PanelRegistry panelRegistry_{ui::PanelRegistry::withBuiltinPanels()};
     ui::ProjectObserver projectObserver_;
     ui::Selection selection_;
+    ui::History history_;
     std::unique_ptr<EditClock> clock_;
     std::unique_ptr<WorkspaceSwitch> switch_;
+    std::unique_ptr<PluginRack> rack_;
     std::unique_ptr<MainWindow> window_;
-    std::unique_ptr<PluginWindow> pluginWindow_;
 };
 
 } // namespace daw::app

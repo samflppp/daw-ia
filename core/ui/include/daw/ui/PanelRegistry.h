@@ -4,6 +4,8 @@
 #include "daw/domain/project/ProjectState.h"
 #include "daw/ui/DawLookAndFeel.h"
 #include "daw/ui/Tokens.h"
+#include "daw/ui/model/History.h"
+#include "daw/ui/model/PluginHost.h"
 #include "daw/ui/model/ProjectObserver.h"
 #include "daw/ui/model/Selection.h"
 #include "daw/ui/model/TransportClock.h"
@@ -35,11 +37,14 @@ struct PanelServices
     domain::CommandBus& bus;
     const domain::ProjectState& state;
 
-    // What changed, what is selected, where the playhead is, and which
-    // workspaces exist. None of these is project state.
+    // What changed, what is selected, where the playhead is, what has been
+    // done, which plugins this machine holds, and which workspaces exist. None
+    // of these is project state.
     ProjectObserver& project;
     Selection& selection;
     const TransportClock& clock;
+    History& history;
+    PluginHost& plugins;
     WorkspaceHost& workspaces;
 };
 

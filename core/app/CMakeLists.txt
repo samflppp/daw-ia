@@ -11,6 +11,7 @@ target_sources(daw_app PRIVATE
     src/Main.cpp
     src/MainWindow.cpp
     src/PluginWindow.cpp
+    src/PluginRack.cpp
     src/EditClock.cpp
     src/WorkspaceSwitch.cpp)
 
