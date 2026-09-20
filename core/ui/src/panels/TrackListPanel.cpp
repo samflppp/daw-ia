@@ -55,6 +55,11 @@ public:
 
         addAndMakeVisible(mute_);
         mute_.setButtonText("M");
+
+        // Clicking the row must not put the focus ring on the mute chip: an
+        // outlined M next to a filled M reads as a second kind of mute. Tab
+        // still reaches it.
+        mute_.setMouseClickGrabsKeyboardFocus(false);
         mute_.onClick = [this]
         {
             const auto* track = state_.findTrack(trackId_);
@@ -65,6 +70,7 @@ public:
 
         addAndMakeVisible(bypass_);
         bypass_.setButtonText("B");
+        bypass_.setMouseClickGrabsKeyboardFocus(false);
         bypass_.onClick = [this] { toggleChainBypass(); };
 
         refresh();

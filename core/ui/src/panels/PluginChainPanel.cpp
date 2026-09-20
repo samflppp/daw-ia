@@ -33,6 +33,7 @@ public:
 
         addAndMakeVisible(bypass_);
         bypass_.setButtonText("B");
+        bypass_.setMouseClickGrabsKeyboardFocus(false);
         bypass_.onClick = [this]
         {
             const auto* plugin = instance();
@@ -44,6 +45,7 @@ public:
 
         addAndMakeVisible(remove_);
         remove_.setButtonText("x");
+        remove_.setMouseClickGrabsKeyboardFocus(false);
         remove_.onClick = [this]
         {
             // The editor goes before the plugin does: a window drawing into a
