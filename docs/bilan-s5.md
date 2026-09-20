@@ -172,12 +172,84 @@ suffira plus, la chaîne de migration est là pour ajouter la table.
 Le portage Linux est hors périmètre du MVP : le job CI Linux reste vert en
 compilation, et rien n'y est validé au runtime.
 
-## 10. Où en est le jalon S8
+## 10. Suivi d'avancement
 
-Le jalon du 9 novembre — un binaire **Windows** qui joue de l'audio, charge un
-plugin et accepte des commandes annulables — est atteint sur ses trois membres
-depuis cette semaine, et il gagne une quatrième propriété qui n'était pas
-demandée : ce binaire ouvre un projet, le rejoue et l'écrit.
+### 10.1 Les cinq semaines écoulées
 
-Restent l'UI, les services Python et l'IA. Rien de cela n'est un inconnu
-technique pour le jalon.
+| S | Visait | Livré | Ce qui en restait ouvert | État aujourd'hui |
+|---|---|---|---|---|
+| S1 | Socle : outillage, structure, CI | CI verte deux plateformes, application qui démarre, règles d'hygiène vérifiées | `setup-ubuntu.sh` hors `--ci` jamais lancé | **Reporté post-MVP** (Windows seule cible) |
+| S2 | Command Bus | payload / undoRecord séparés, ULID, registry, coalescing par geste, rejeu depuis journal sérialisé | `journal()` est-il un log d'audit ? | **Tranché en S5 §2** |
+| S3 | Le bus pilote un vrai moteur audio | Projection par réconciliation, son audible, règle de thread vérifiée et non documentée | — | Acquis |
+| S4 | Hébergement VST3 et CLAP | Scan persisté en processus enfant, 5 commandes plugin, pont de paramètres sans allocation, fenêtre d'édition, VST3 et CLAP commerciaux audibles | Plugin sous Linux | **Reporté post-MVP** |
+| S5 | Persistance et provenance | Journal SQLite append-only, dossier de projet, migration, provenance en enveloppe v2 | Aucun | — |
+
+Aucune décision d'architecture n'a été rouverte depuis la S1.
+
+### 10.2 Le jalon du 9 novembre
+
+| Ce qui est demandé | État | Depuis |
+|---|---|---|
+| Un binaire **Windows** | Atteint | S1 |
+| qui joue de l'audio | Atteint, mesuré en RMS | S3 |
+| qui charge un plugin | Atteint, VST3 et CLAP, tiers réels | S4 |
+| et accepte des commandes annulables | Atteint | S2 |
+
+Le jalon est **atteint sur ses quatre membres, trois semaines avant la date**,
+et il porte deux propriétés qui n'étaient pas demandées : le projet survit à la
+fermeture, et chaque commande dit qui l'a demandée.
+
+Ce que cela veut dire concrètement : les trois semaines qui restent avant le
+9 novembre ne servent plus à *atteindre* le jalon, mais à décider ce qu'il
+montre. Un binaire qui joue sans interface ne se démontre pas devant un comité.
+
+### 10.3 Ce qui n'existe toujours pas
+
+| Manquant | Conséquence aujourd'hui |
+|---|---|
+| UI | Une fenêtre vide. Tout passe par `--demo` et par les tests |
+| Services Python JSON-RPC | Le bus n'est pilotable que depuis le processus |
+| IA | Aucune ligne, par périmètre. Le bus et la provenance l'attendent |
+| Automation, tempo variable | Le tempo est un scalaire qu'aucune commande ne change |
+| Branches d'arrangement | Le journal les rend possibles, rien ne les écrit |
+
+### 10.4 Les trois semaines restantes
+
+Proposition, à arbitrer lundi :
+
+| S | Candidat | Pourquoi maintenant | Pourquoi pas |
+|---|---|---|---|
+| S6 | **UI minimale** : les quatre écrans déclarés en S1, pilotés par le bus | Sans elle le jalon n'est pas démontrable devant un comité | Ne découvre aucun inconnu technique |
+| S6 | Branches d'arrangement | Le schéma a été conçu pour, et c'est le différenciateur produit | Invisible sans UI |
+| S7 | Services Python JSON-RPC | Socle du MCP, donc de tout le copilote | La règle de thread du bus devra être rouverte — une commande arrivant d'une socket |
+| S7 | **Tempo en séquence** | Coûte presque rien aujourd'hui (aucun journal n'a de commande de tempo), coûte cher après les clips audio | Ne se voit pas |
+| S8 | Gel, démonstration, bilan de jalon | — | — |
+
+Mon avis, une ligne : **UI en S6**, parce qu'un jalon atteint et non montrable
+est un jalon à moitié atteint ; **tempo en séquence en S7**, parce que c'est la
+seule dette dont le prix augmente avec le temps.
+
+### 10.5 Les risques, classés par ce qu'ils coûteraient
+
+| Risque | Coût s'il se réalise | Ce qui le tient aujourd'hui |
+|---|---|---|
+| La règle de thread du bus face à une socket Python | Moyen : la règle est vérifiée en release, donc l'erreur sera une erreur, pas un crash | `rebindToCurrentThread()` existe pour la passation délibérée |
+| Le tempo scalaire rencontre un clip audio | Élevé : change la forme de payloads déjà écrits sur des projets réels | Rien. C'est la dette à payer tôt |
+| Le rejeu intégral devient lent | Faible : 5 002 commandes en 2,4 s, et la chaîne de migration peut ajouter une table `snapshot` | Mesuré, pas supposé |
+| Une session longue souffre d'une transaction par commande | Faible | Mesuré sur 5 000 écritures |
+| Le portage Linux | Nul avant le MVP | Décision de périmètre, CI de compilation gardée verte |
+
+### 10.6 Ce qui a tenu depuis cinq semaines
+
+Trois méthodes, et chacune a payé la semaine suivante :
+
+1. **Exposer la conception avant d'écrire.** Le modèle d'état des plugins a été
+   corrigé lundi de la S4 avant une ligne de code ; le schéma SQLite de cette
+   semaine a été validé de la même façon.
+2. **Un test qui interroge l'état ne prouve pas l'effet.** Trouvé en S3, payé en
+   S4 (deux bogues de paramètre invisibles autrement), payé encore en S5 : c'est
+   la fermeture du processus, pas la relecture, qui a montré qu'une piste ne
+   venait d'aucune commande.
+3. **Dire quand un choix contredit l'acquis au lieu de l'appliquer.** Le magasin
+   de blobs déplacé dans le projet contredisait un commentaire de S4 ; signalé,
+   validé, puis appliqué.
