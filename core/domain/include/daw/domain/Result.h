@@ -26,6 +26,7 @@ enum class ErrorCode : std::uint8_t
     wrongThread,   // the bus was called from a thread that does not own it
     typeMismatch,  // Value holds another kind than the one asked for
     serialisationError,
+    storageError, // the project on disk refused a read or a write
 };
 
 [[nodiscard]] std::string_view describe(ErrorCode code) noexcept;

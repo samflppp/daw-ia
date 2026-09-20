@@ -33,6 +33,8 @@ std::string_view describe(ErrorCode code) noexcept
         return "typeMismatch";
     case ErrorCode::serialisationError:
         return "serialisationError";
+    case ErrorCode::storageError:
+        return "storageError";
     }
     return "unknown";
 }

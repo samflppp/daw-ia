@@ -142,6 +142,7 @@ Result<Receipt> CommandBus::executeEntry(std::unique_ptr<Command> command,
         receipt.undoDepth = undoStack_.size();
         receipt.redoDepth = redoStack_.size();
         receipt.origin = origin;
+        receipt.policy = HistoryPolicy::transient;
         receipt.payload = command->payload();
 
         notify(&BusObserver::onExecuted, receipt);

@@ -3,6 +3,7 @@
 #include "daw/domain/Ids.h"
 #include "daw/domain/Timestamp.h"
 #include "daw/domain/Value.h"
+#include "daw/domain/command/HistoryPolicy.h"
 #include "daw/domain/command/Provenance.h"
 
 #include <cstddef>
@@ -31,6 +32,11 @@ struct Receipt
     // undo or a redo. The author of an entry is never rewritten by an undo:
     // it stays in the execute record of the journal.
     Provenance origin{};
+
+    // Transient commands are executed and notified like the others, and the
+    // journal must skip them: a project that replayed a transport.play would
+    // start making noise the moment it was reopened.
+    HistoryPolicy policy{HistoryPolicy::undoable};
 
     // The intention, as the journal will store it. Filled for an execution or
     // a coalescing — for a coalescing it is the merged payload, the one that
