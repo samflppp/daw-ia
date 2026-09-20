@@ -595,6 +595,32 @@ void PianoRollPanel::mouseUp(const juce::MouseEvent& event)
     drag_.reset();
 }
 
+// The wheel moves the pitch window by semitones, the keys by octaves.
+//
+// J7 left the wheel out on the grounds that a trackpad sends it by accident.
+// Using the screen says otherwise: thirty-four rows of a hundred and
+// twenty-eight are visible, and reaching the others through a key that needs
+// the keyboard focus first is a piano roll that hides most of the piano. A
+// semitone per notch is small enough that an accidental notch costs a glance,
+// not a lost position.
+void PianoRollPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
+{
+    juce::ignoreUnused(event);
+
+    const auto steps = static_cast<int>(std::round(wheel.deltaY * static_cast<float>(semitonesPerOctave)));
+    if (steps == 0)
+        return;
+
+    const auto wanted = topPitch_ + steps;
+    const auto clamped = std::clamp(wanted, rowsVisible(), highestVisiblePitch);
+
+    if (clamped == topPitch_)
+        return;
+
+    topPitch_ = clamped;
+    repaint();
+}
+
 bool PianoRollPanel::keyPressed(const juce::KeyPress& key)
 {
     if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
@@ -603,8 +629,6 @@ bool PianoRollPanel::keyPressed(const juce::KeyPress& key)
         return true;
     }
 
-    // The wheel would be the obvious way to move the pitch window, but a
-    // trackpad sends it by accident; the keys are deliberate.
     if (key == juce::KeyPress::pageUpKey)
     {
         topPitch_ = std::min(highestVisiblePitch, topPitch_ + semitonesPerOctave);
