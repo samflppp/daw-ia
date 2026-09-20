@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daw/domain/BlobRef.h"
 #include "daw/domain/Ids.h"
 #include "daw/domain/Result.h"
 #include "daw/domain/Value.h"
@@ -93,21 +94,11 @@ struct PluginRef
 
 // Reference to an opaque plugin state, held in the content-addressed store.
 // An empty digest means "no captured state": the plugin keeps its own default.
-struct StateBlobRef
-{
-    static constexpr std::size_t digestLength = 64; // BLAKE3-256, lowercase hex
-
-    std::string digest;
-    std::uint64_t byteCount{0};
-
-    [[nodiscard]] bool isEmpty() const noexcept { return digest.empty(); }
-
-    [[nodiscard]] Result<void> validate() const;
-    [[nodiscard]] Value toValue() const;
-    [[nodiscard]] static Result<StateBlobRef> fromValue(const Value& value);
-
-    friend bool operator==(const StateBlobRef& lhs, const StateBlobRef& rhs);
-};
+//
+// It is a BlobRef and nothing more: naming bytes by digest is not a plugin
+// idea, and the provenance of a command names the context an agent acted upon
+// exactly the same way.
+using StateBlobRef = BlobRef;
 
 // One parameter the user has touched at least once.
 //

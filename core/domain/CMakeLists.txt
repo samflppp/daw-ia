@@ -1,4 +1,5 @@
 add_library(daw_domain STATIC
+    src/BlobRef.cpp
     src/BuildInfo.cpp
     src/Ids.cpp
     src/Result.cpp
