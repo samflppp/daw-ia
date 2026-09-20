@@ -34,13 +34,6 @@ ContentStore::ContentStore(juce::File root)
 {
 }
 
-juce::File ContentStore::defaultRoot(const juce::String& applicationName)
-{
-    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile(applicationName)
-        .getChildFile("plugin-state");
-}
-
 std::string ContentStore::digestOf(const void* data, std::size_t size)
 {
     blake3_hasher hasher;

@@ -37,11 +37,10 @@ namespace daw::engine
 class ContentStore
 {
 public:
-    // root is created on demand, on the first put().
+    // root is created on demand, on the first put(). It is the blobs folder of
+    // a project: the store is project state, not machine state, so that a
+    // project folder copies whole and still plays.
     explicit ContentStore(juce::File root);
-
-    // The directory this store writes to, under the user's application data.
-    [[nodiscard]] static juce::File defaultRoot(const juce::String& applicationName);
 
     [[nodiscard]] const juce::File& root() const noexcept { return root_; }
 

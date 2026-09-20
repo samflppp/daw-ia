@@ -1,6 +1,5 @@
 #pragma once
 
-#include "daw/engine/ContentStore.h"
 #include "daw/engine/PluginCatalogue.h"
 
 #include <tracktion_engine/tracktion_engine.h>
@@ -31,11 +30,13 @@ public:
     [[nodiscard]] tracktion::Engine& engine() noexcept { return *engine_; }
     [[nodiscard]] tracktion::Edit& edit() noexcept { return *edit_; }
 
-    // The plugins installed on this machine, and the store holding their opaque
-    // states. Both are machine state: they outlive a project and they are never
-    // part of one.
+    // The plugins installed on this machine. This one really is machine state:
+    // it outlives a project and it is never part of one.
+    //
+    // The content store used to live here too, and it does not any more: the
+    // blobs of a project belong to the project folder, so the application owns
+    // the store and hands it to the projector.
     [[nodiscard]] PluginCatalogue& catalogue() noexcept { return *catalogue_; }
-    [[nodiscard]] ContentStore& contentStore() noexcept { return *contentStore_; }
 
     // True when a command line asks this process to be a plugin scanner rather
     // than the application. Call it first in main(): the child process must not
@@ -46,7 +47,6 @@ private:
     std::unique_ptr<tracktion::Engine> engine_;
     std::unique_ptr<tracktion::Edit> edit_;
     std::unique_ptr<PluginCatalogue> catalogue_;
-    std::unique_ptr<ContentStore> contentStore_;
 };
 
 } // namespace daw::engine

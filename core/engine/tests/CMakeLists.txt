@@ -14,7 +14,8 @@ target_sources(daw_engine_tests PRIVATE
     EngineHostTests.cpp
     ProjectionTests.cpp
     TransportProjectionTests.cpp
-    PluginHostingTests.cpp)
+    PluginHostingTests.cpp
+    PluginPersistenceTests.cpp)
 
 target_compile_definitions(daw_engine_tests PRIVATE
     JUCE_WEB_BROWSER=0
@@ -27,6 +28,7 @@ target_compile_definitions(daw_engine_tests PRIVATE
 
 target_link_libraries(daw_engine_tests PRIVATE
     daw::engine
+    daw::persistence
     doctest::doctest
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)

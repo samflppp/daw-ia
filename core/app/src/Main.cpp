@@ -9,9 +9,11 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/project/ProjectState.h"
+#include "daw/engine/ContentStore.h"
 #include "daw/engine/EngineHost.h"
 #include "daw/engine/ParameterBridge.h"
 #include "daw/engine/ProjectProjector.h"
+#include "daw/persistence/ProjectStore.h"
 #include "daw/ui/Tokens.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
@@ -49,9 +51,24 @@ public:
         juce::Logger::writeToLog("core domain " + juce::String(domainVersion.data(), domainVersion.size()));
 
         engineHost_ = std::make_unique<engine::EngineHost>(getApplicationName());
+
+        // The project folder comes before everything that touches the project:
+        // the content store lives inside it, and the journal is what the state
+        // is rebuilt from.
+        if (!openProject(projectFolderFromCommandLine(commandLine)))
+            return;
+
         projector_ = std::make_unique<engine::ProjectProjector>(
-            engineHost_->edit(), state_, &engineHost_->catalogue(), &engineHost_->contentStore());
+            engineHost_->edit(), state_, &engineHost_->catalogue(), contentStore_.get());
         bus_.addObserver(*projector_);
+
+        // The Edit is a projection, so it is built from the state the journal
+        // just rebuilt, in one pass rather than one per replayed command.
+        projector_->reconcile();
+
+        // Recording starts only now: the replay above must not be written back
+        // into the journal it came from.
+        store_->startRecording(bus_);
 
         // The bridge hangs on the projector, so a plugin's own knob becomes a
         // command with a gesture around it. It is built after the projector is
@@ -74,17 +91,85 @@ public:
 
     void shutdown() override
     {
+        closeProject();
+
         juce::Logger::setCurrentLogger(nullptr);
         pluginWindow_.reset();
         window_.reset();
         bridge_.reset();
         projector_.reset();
+        contentStore_.reset();
         engineHost_.reset();
     }
 
     void systemRequestedQuit() override { quit(); }
 
 private:
+    // --project "<path to a .dawproj folder>". Without it, the application
+    // opens the same default project every time, which is what a first launch
+    // needs and what --demo relies on.
+    [[nodiscard]] juce::File projectFolderFromCommandLine(const juce::String& commandLine)
+    {
+        const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+        for (int index = 0; index < tokens.size() - 1; ++index)
+        {
+            if (tokens[index] == "--project")
+                return juce::File{tokens[index + 1].unquoted()};
+        }
+
+        return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+            .getChildFile(getApplicationName())
+            .getChildFile("Sans titre.dawproj");
+    }
+
+    // Opens the folder, rebuilds the state from the journal, and reports what
+    // it replayed. A project that fails to open stops the launch: opening a
+    // project half-way and letting the user work on it would write a journal
+    // on top of a state that is not the one on disk.
+    [[nodiscard]] bool openProject(const juce::File& folder)
+    {
+        auto store = persistence::ProjectStore::open(
+            persistence::ProjectFolder{folder.getFullPathName().toStdString()});
+        if (!store)
+        {
+            juce::Logger::writeToLog("project not opened: " + juce::String(store.error().message));
+            setApplicationReturnValue(1);
+            quit();
+            return false;
+        }
+
+        store_ = std::move(store).value();
+        contentStore_ = std::make_unique<engine::ContentStore>(
+            juce::File{juce::String{store_->folder().blobsFolder().string()}});
+
+        auto report = store_->replayInto(bus_);
+        if (!report)
+        {
+            juce::Logger::writeToLog("project not replayed: " + juce::String(report.error().message));
+            setApplicationReturnValue(1);
+            quit();
+            return false;
+        }
+
+        juce::Logger::writeToLog("project " + juce::String(store_->folder().name()) + ": " +
+                                 juce::String(static_cast<int>(report.value().commands)) +
+                                 " commands replayed, " +
+                                 juce::String(static_cast<int>(report.value().undone)) + " undone");
+        return true;
+    }
+
+    void closeProject()
+    {
+        if (store_ == nullptr)
+            return;
+
+        store_->stopRecording();
+        if (const auto closed = store_->close(); !closed)
+            juce::Logger::writeToLog("project not saved: " + juce::String(closed.error().message));
+
+        store_.reset();
+    }
+
     // --demo --plugin "<path to a .vst3 or a .clap>"
     [[nodiscard]] static juce::String pluginPathFromCommandLine(const juce::String& commandLine)
     {
@@ -238,6 +323,8 @@ private:
     domain::ProjectState state_;
     domain::CommandRegistry registry_{domain::CommandRegistry::withBuiltinCommands()};
     domain::CommandBus bus_{state_, registry_};
+    std::unique_ptr<persistence::ProjectStore> store_;
+    std::unique_ptr<engine::ContentStore> contentStore_;
     std::unique_ptr<engine::EngineHost> engineHost_;
     std::unique_ptr<engine::ProjectProjector> projector_;
     std::unique_ptr<engine::ParameterBridge> bridge_;

@@ -42,8 +42,6 @@ EngineHost::EngineHost(const juce::String& applicationName)
         std::make_unique<PluginCatalogue>(*engine_, PluginCatalogue::defaultListFile(applicationName));
     catalogue_->load();
 
-    contentStore_ = std::make_unique<ContentStore>(ContentStore::defaultRoot(applicationName));
-
     edit_ = std::make_unique<tracktion::Edit>(*engine_, tracktion::Edit::forEditing);
 
     // Tracktion has its own UndoManager. It stays unused: undo belongs to the
