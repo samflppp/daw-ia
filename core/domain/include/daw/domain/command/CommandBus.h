@@ -25,6 +25,10 @@ struct ExecuteOptions
     // to merge with the previous one of the same gesture. Left empty, the
     // command always creates its own history entry.
     std::optional<GestureId> gesture;
+
+    // Who is asking. The default is the user, so every call site written
+    // before provenance existed keeps telling the truth.
+    Provenance origin{};
 };
 
 struct BusLimits
@@ -77,8 +81,10 @@ public:
     // --- history -----------------------------------------------------------
     [[nodiscard]] bool canUndo() const noexcept;
     [[nodiscard]] bool canRedo() const noexcept;
-    Result<Receipt> undo();
-    Result<Receipt> redo();
+    // by names who asks for the move, not who wrote the command: a copilot
+    // undoing a user's edit is a fact the journal keeps.
+    Result<Receipt> undo(Provenance by = {});
+    Result<Receipt> redo(Provenance by = {});
     [[nodiscard]] std::size_t undoDepth() const noexcept;
     [[nodiscard]] std::size_t redoDepth() const noexcept;
     void clearHistory() noexcept;
@@ -113,6 +119,7 @@ private:
         CommandId id{};
         Timestamp at{};
         std::optional<GestureId> gesture;
+        Provenance origin{};
         std::unique_ptr<Command> command;
         Value undoRecord;
     };
@@ -127,10 +134,12 @@ private:
                                  CommandId id,
                                  Timestamp at,
                                  std::optional<GestureId> gesture,
+                                 Provenance origin,
                                  bool allowCoalescing);
 
     [[nodiscard]] Result<void> checkThread() const;
     [[nodiscard]] Receipt receiptFor(const Entry& entry, bool coalesced) const;
+    [[nodiscard]] Receipt moveReceiptFor(const Entry& entry, Provenance by) const;
     void notify(void (BusObserver::*callback)(const Receipt&), const Receipt& receipt);
     void notifyTruncated(std::size_t dropped);
 

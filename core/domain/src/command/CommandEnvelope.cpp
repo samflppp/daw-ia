@@ -14,6 +14,7 @@ Value CommandEnvelope::toValue() const
                           {"type", Value{type}},
                           {"at", Value{at.microsSinceEpoch}},
                           {"gesture", std::move(gestureValue)},
+                          {"origin", origin.toValue()},
                           {"payload", payload}});
 }
 
@@ -23,7 +24,7 @@ Result<CommandEnvelope> CommandEnvelope::fromValue(const Value& value)
     if (!version)
         return version.error();
 
-    if (version.value() != currentVersion)
+    if (version.value() < oldestReadableVersion || version.value() > currentVersion)
         return fail(ErrorCode::invalidPayload,
                     "unsupported envelope version: " + std::to_string(version.value()));
 
@@ -55,6 +56,22 @@ Result<CommandEnvelope> CommandEnvelope::fromValue(const Value& value)
     envelope.type = type.value();
     envelope.at = Timestamp{at.value()};
     envelope.payload = *payloadValue;
+
+    // A v1 envelope predates provenance: those commands came from the user,
+    // and saying so is the whole point of a default. A v2 envelope without an
+    // origin is malformed, not old, and is refused.
+    if (version.value() >= 2)
+    {
+        const auto* originValue = value.find("origin");
+        if (originValue == nullptr)
+            return fail(ErrorCode::invalidPayload, "missing key origin");
+
+        auto origin = Provenance::fromValue(*originValue);
+        if (!origin)
+            return fail(origin.error().code, "origin: " + origin.error().message);
+
+        envelope.origin = origin.value();
+    }
 
     const auto* gestureValue = value.find("gesture");
     if (gestureValue != nullptr && !gestureValue->isNull())

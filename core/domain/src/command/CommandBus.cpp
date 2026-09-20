@@ -77,10 +77,14 @@ Result<Receipt> CommandBus::execute(std::unique_ptr<Command> command, ExecuteOpt
                         "gesture " + options.gesture->toString() + " is not the open one");
     }
 
+    if (auto valid = options.origin.validate(); !valid)
+        return valid.error();
+
     return executeEntry(std::move(command),
                         CommandId::generate(),
                         Timestamp::now(),
                         options.gesture,
+                        options.origin,
                         options.gesture.has_value());
 }
 
@@ -103,14 +107,19 @@ Result<Receipt> CommandBus::executeSerialized(const Value& envelope)
     // Identity and date come from the envelope: a replayed history is the same
     // history, not a new one. Coalescing is off — the envelope is already the
     // merged form of its gesture.
-    return executeEntry(
-        std::move(command).value(), parsed.value().id, parsed.value().at, parsed.value().gesture, false);
+    return executeEntry(std::move(command).value(),
+                        parsed.value().id,
+                        parsed.value().at,
+                        parsed.value().gesture,
+                        parsed.value().origin,
+                        false);
 }
 
 Result<Receipt> CommandBus::executeEntry(std::unique_ptr<Command> command,
                                          CommandId id,
                                          Timestamp at,
                                          std::optional<GestureId> gesture,
+                                         Provenance origin,
                                          bool allowCoalescing)
 {
     const MutationScope scope{mutating_};
@@ -132,6 +141,8 @@ Result<Receipt> CommandBus::executeEntry(std::unique_ptr<Command> command,
         receipt.coalesced = false;
         receipt.undoDepth = undoStack_.size();
         receipt.redoDepth = redoStack_.size();
+        receipt.origin = origin;
+        receipt.payload = command->payload();
 
         notify(&BusObserver::onExecuted, receipt);
         return receipt;
@@ -139,8 +150,12 @@ Result<Receipt> CommandBus::executeEntry(std::unique_ptr<Command> command,
 
     // Both halves must agree: the caller asked for this gesture, and the type
     // on top of the history accepts to absorb the newcomer.
+    // Same target, same gesture — and same origin. A copilot does not graft a
+    // parameter onto a gesture a human started: merging the two would make one
+    // history entry whose author is a lie, and undo would give it all back to
+    // whoever the first command happened to belong to.
     const bool coalescing = allowCoalescing && gesture.has_value() && !undoStack_.empty() &&
-                            undoStack_.back().gesture == gesture &&
+                            undoStack_.back().gesture == gesture && undoStack_.back().origin == origin &&
                             undoStack_.back().command->canCoalesceWith(*command);
 
     auto applied = command->apply(state_);
@@ -165,6 +180,7 @@ Result<Receipt> CommandBus::executeEntry(std::unique_ptr<Command> command,
     entry.id = id;
     entry.at = at;
     entry.gesture = gesture;
+    entry.origin = origin;
     entry.command = std::move(command);
     entry.undoRecord = std::move(applied).value();
     undoStack_.push_back(std::move(entry));
@@ -216,7 +232,7 @@ void CommandBus::clearHistory() noexcept
     redoStack_.clear();
 }
 
-Result<Receipt> CommandBus::undo()
+Result<Receipt> CommandBus::undo(Provenance by)
 {
     if (auto owned = checkThread(); !owned)
         return owned.error();
@@ -241,12 +257,12 @@ Result<Receipt> CommandBus::undo()
     redoStack_.push_back(std::move(undoStack_.back()));
     undoStack_.pop_back();
 
-    const auto receipt = receiptFor(redoStack_.back(), false);
+    const auto receipt = moveReceiptFor(redoStack_.back(), by);
     notify(&BusObserver::onUndone, receipt);
     return receipt;
 }
 
-Result<Receipt> CommandBus::redo()
+Result<Receipt> CommandBus::redo(Provenance by)
 {
     if (auto owned = checkThread(); !owned)
         return owned.error();
@@ -268,7 +284,7 @@ Result<Receipt> CommandBus::redo()
     undoStack_.push_back(std::move(redoStack_.back()));
     redoStack_.pop_back();
 
-    const auto receipt = receiptFor(undoStack_.back(), false);
+    const auto receipt = moveReceiptFor(undoStack_.back(), by);
     notify(&BusObserver::onRedone, receipt);
     return receipt;
 }
@@ -380,6 +396,7 @@ std::vector<Value> CommandBus::journal() const
         envelope.type = std::string{entry.command->type()};
         envelope.at = entry.at;
         envelope.gesture = entry.gesture;
+        envelope.origin = entry.origin;
         envelope.payload = entry.command->payload();
         envelopes.push_back(envelope.toValue());
     }
@@ -424,6 +441,24 @@ Receipt CommandBus::receiptFor(const Entry& entry, bool coalesced) const
     receipt.coalesced = coalesced;
     receipt.undoDepth = undoStack_.size();
     receipt.redoDepth = redoStack_.size();
+    receipt.origin = entry.origin;
+    receipt.payload = entry.command->payload();
+    return receipt;
+}
+
+Receipt CommandBus::moveReceiptFor(const Entry& entry, Provenance by) const
+{
+    // An undo or a redo replays nothing, so it carries no payload; and it
+    // reports the actor who asked for the move, not the author of the entry.
+    Receipt receipt{};
+    receipt.id = entry.id;
+    receipt.type = std::string{entry.command->type()};
+    receipt.at = entry.at;
+    receipt.gesture = entry.gesture;
+    receipt.coalesced = false;
+    receipt.undoDepth = undoStack_.size();
+    receipt.redoDepth = redoStack_.size();
+    receipt.origin = std::move(by);
     return receipt;
 }
 

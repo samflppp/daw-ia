@@ -8,6 +8,7 @@ add_library(daw_domain STATIC
     src/command/CommandBus.cpp
     src/command/CommandEnvelope.cpp
     src/command/CommandRegistry.cpp
+    src/command/Provenance.cpp
     src/commands/AddNote.cpp
     src/commands/CreateMidiClip.cpp
     src/commands/PluginCommands.cpp

@@ -2,6 +2,8 @@
 
 #include "daw/domain/Ids.h"
 #include "daw/domain/Timestamp.h"
+#include "daw/domain/Value.h"
+#include "daw/domain/command/Provenance.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -23,6 +25,18 @@ struct Receipt
     bool coalesced{false}; // merged into the entry on top, no new entry created
     std::size_t undoDepth{0};
     std::size_t redoDepth{0};
+
+    // Who asked for *this operation*: the author of the command when it is
+    // executed or coalesced, the actor who asked for the move when it is an
+    // undo or a redo. The author of an entry is never rewritten by an undo:
+    // it stays in the execute record of the journal.
+    Provenance origin{};
+
+    // The intention, as the journal will store it. Filled for an execution or
+    // a coalescing — for a coalescing it is the merged payload, the one that
+    // must be replayed — and left null for an undo or a redo, which replay
+    // nothing and only move a pointer in the history.
+    Value payload{};
 };
 
 // Observers are notified after the state has changed and before execute(),
