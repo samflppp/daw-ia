@@ -1,7 +1,7 @@
 #pragma once
 
+#include "daw/engine/ContentStore.h"
 #include "daw/engine/PluginCatalogue.h"
-#include "daw/engine/PluginStateStore.h"
 
 #include <tracktion_engine/tracktion_engine.h>
 
@@ -35,7 +35,7 @@ public:
     // states. Both are machine state: they outlive a project and they are never
     // part of one.
     [[nodiscard]] PluginCatalogue& catalogue() noexcept { return *catalogue_; }
-    [[nodiscard]] PluginStateStore& stateStore() noexcept { return *stateStore_; }
+    [[nodiscard]] ContentStore& contentStore() noexcept { return *contentStore_; }
 
     // True when a command line asks this process to be a plugin scanner rather
     // than the application. Call it first in main(): the child process must not
@@ -46,7 +46,7 @@ private:
     std::unique_ptr<tracktion::Engine> engine_;
     std::unique_ptr<tracktion::Edit> edit_;
     std::unique_ptr<PluginCatalogue> catalogue_;
-    std::unique_ptr<PluginStateStore> stateStore_;
+    std::unique_ptr<ContentStore> contentStore_;
 };
 
 } // namespace daw::engine

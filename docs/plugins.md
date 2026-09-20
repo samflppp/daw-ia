@@ -30,7 +30,7 @@ par-dessus**.
 ## 2. Le magasin adressé par contenu
 
 Les octets ne voyagent jamais dans un payload. Ils vont dans
-`PluginStateStore`, sous le dossier utilisateur, nommés par leur digest
+`ContentStore`, sous le dossier utilisateur, nommés par leur digest
 BLAKE3-256. Trois propriétés, et le modèle dépend des trois :
 
 - **déduplication** : deux instances au même état ne sont stockées qu'une fois ;

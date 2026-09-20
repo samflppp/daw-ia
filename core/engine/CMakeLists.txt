@@ -16,7 +16,7 @@ target_sources(daw_engine INTERFACE
     src/HostedParameters.cpp
     src/ParameterBridge.cpp
     src/PluginCatalogue.cpp
-    src/PluginStateStore.cpp
+    src/ContentStore.cpp
     src/ProjectProjector.cpp
     src/TransportController.cpp
     src/clap/ClapPluginEditor.cpp

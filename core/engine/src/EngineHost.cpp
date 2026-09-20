@@ -42,7 +42,7 @@ EngineHost::EngineHost(const juce::String& applicationName)
         std::make_unique<PluginCatalogue>(*engine_, PluginCatalogue::defaultListFile(applicationName));
     catalogue_->load();
 
-    stateStore_ = std::make_unique<PluginStateStore>(PluginStateStore::defaultRoot(applicationName));
+    contentStore_ = std::make_unique<ContentStore>(ContentStore::defaultRoot(applicationName));
 
     edit_ = std::make_unique<tracktion::Edit>(*engine_, tracktion::Edit::forEditing);
 

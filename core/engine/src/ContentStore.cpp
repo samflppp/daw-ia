@@ -1,4 +1,4 @@
-#include "daw/engine/PluginStateStore.h"
+#include "daw/engine/ContentStore.h"
 
 #include <array>
 #include <cstdint>
@@ -29,19 +29,19 @@ std::string toHex(const std::array<std::uint8_t, digestBytes>& bytes)
 
 } // namespace
 
-PluginStateStore::PluginStateStore(juce::File root)
+ContentStore::ContentStore(juce::File root)
     : root_{std::move(root)}
 {
 }
 
-juce::File PluginStateStore::defaultRoot(const juce::String& applicationName)
+juce::File ContentStore::defaultRoot(const juce::String& applicationName)
 {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
         .getChildFile(applicationName)
         .getChildFile("plugin-state");
 }
 
-std::string PluginStateStore::digestOf(const void* data, std::size_t size)
+std::string ContentStore::digestOf(const void* data, std::size_t size)
 {
     blake3_hasher hasher;
     blake3_hasher_init(&hasher);
@@ -53,7 +53,7 @@ std::string PluginStateStore::digestOf(const void* data, std::size_t size)
     return toHex(output);
 }
 
-juce::File PluginStateStore::fileFor(const std::string& digest) const
+juce::File ContentStore::fileFor(const std::string& digest) const
 {
     // Two characters of fan-out: a project with thousands of captures does not
     // put thousands of entries in one directory.
@@ -61,7 +61,7 @@ juce::File PluginStateStore::fileFor(const std::string& digest) const
     return root_.getChildFile(name.substring(0, 2)).getChildFile(name);
 }
 
-domain::Result<domain::StateBlobRef> PluginStateStore::put(const void* data, std::size_t size)
+domain::Result<domain::StateBlobRef> ContentStore::put(const void* data, std::size_t size)
 {
     if (data == nullptr || size == 0)
         return domain::StateBlobRef{}; // no captured state, and that is legal
@@ -77,8 +77,7 @@ domain::Result<domain::StateBlobRef> PluginStateStore::put(const void* data, std
     const auto directory = target.getParentDirectory();
     if (const auto created = directory.createDirectory(); created.failed())
         return domain::fail(domain::ErrorCode::serialisationError,
-                            "cannot create the plugin state directory: " +
-                                created.getErrorMessage().toStdString());
+                            "cannot create the blob directory: " + created.getErrorMessage().toStdString());
 
     // Written aside then moved: a crash mid-write must not leave a file whose
     // name claims a digest its content does not have.
@@ -89,11 +88,10 @@ domain::Result<domain::StateBlobRef> PluginStateStore::put(const void* data, std
         juce::FileOutputStream out{temporary};
         if (out.getStatus().failed())
             return domain::fail(domain::ErrorCode::serialisationError,
-                                "cannot write the plugin state: " +
-                                    temporary.getFullPathName().toStdString());
+                                "cannot write the blob: " + temporary.getFullPathName().toStdString());
 
         if (!out.write(data, size))
-            return domain::fail(domain::ErrorCode::serialisationError, "short write of a plugin state");
+            return domain::fail(domain::ErrorCode::serialisationError, "short write of a blob");
     }
 
     target.deleteFile();
@@ -101,40 +99,40 @@ domain::Result<domain::StateBlobRef> PluginStateStore::put(const void* data, std
     {
         temporary.deleteFile();
         return domain::fail(domain::ErrorCode::serialisationError,
-                            "cannot commit the plugin state: " + target.getFullPathName().toStdString());
+                            "cannot commit the blob: " + target.getFullPathName().toStdString());
     }
 
     return reference;
 }
 
-domain::Result<juce::MemoryBlock> PluginStateStore::get(const domain::StateBlobRef& reference) const
+domain::Result<juce::MemoryBlock> ContentStore::get(const domain::StateBlobRef& reference) const
 {
     if (reference.isEmpty())
         return juce::MemoryBlock{};
 
     const auto source = fileFor(reference.digest);
     if (!source.existsAsFile())
-        return domain::fail(domain::ErrorCode::notFound, "no stored plugin state for " + reference.digest);
+        return domain::fail(domain::ErrorCode::notFound, "no stored blob for " + reference.digest);
 
     juce::MemoryBlock bytes;
     if (!source.loadFileAsData(bytes))
         return domain::fail(domain::ErrorCode::serialisationError,
-                            "cannot read the plugin state " + reference.digest);
+                            "cannot read the blob " + reference.digest);
 
     if (bytes.getSize() != reference.byteCount)
         return domain::fail(domain::ErrorCode::serialisationError,
-                            "stored plugin state has the wrong size: " + reference.digest);
+                            "stored blob has the wrong size: " + reference.digest);
 
     // The digest is the name of the file, so recomputing it is the only way to
     // notice a damaged blob before it reaches a plugin.
     if (digestOf(bytes.getData(), bytes.getSize()) != reference.digest)
         return domain::fail(domain::ErrorCode::serialisationError,
-                            "stored plugin state is damaged: " + reference.digest);
+                            "stored blob is damaged: " + reference.digest);
 
     return bytes;
 }
 
-bool PluginStateStore::contains(const domain::StateBlobRef& reference) const
+bool ContentStore::contains(const domain::StateBlobRef& reference) const
 {
     return reference.isEmpty() || fileFor(reference.digest).existsAsFile();
 }

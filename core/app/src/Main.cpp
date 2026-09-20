@@ -49,7 +49,7 @@ public:
 
         engineHost_ = std::make_unique<engine::EngineHost>(getApplicationName());
         projector_ = std::make_unique<engine::ProjectProjector>(
-            engineHost_->edit(), state_, &engineHost_->catalogue(), &engineHost_->stateStore());
+            engineHost_->edit(), state_, &engineHost_->catalogue(), &engineHost_->contentStore());
         bus_.addObserver(*projector_);
 
         // The bridge hangs on the projector, so a plugin's own knob becomes a

@@ -3,8 +3,8 @@
 #include "daw/domain/Value.h"
 #include "daw/domain/command/BusObserver.h"
 #include "daw/domain/project/ProjectState.h"
+#include "daw/engine/ContentStore.h"
 #include "daw/engine/PluginCatalogue.h"
-#include "daw/engine/PluginStateStore.h"
 #include "daw/engine/TransportController.h"
 
 #include <tracktion_engine/tracktion_engine.h>
@@ -43,7 +43,7 @@ public:
     ProjectProjector(tracktion::Edit& edit,
                      const domain::ProjectState& state,
                      PluginCatalogue* catalogue = nullptr,
-                     PluginStateStore* stateStore = nullptr);
+                     ContentStore* contentStore = nullptr);
 
     // True while reconcile() is writing into the Edit.
     //
@@ -95,7 +95,7 @@ private:
     tracktion::Edit& edit_;
     const domain::ProjectState& state_;
     PluginCatalogue* catalogue_{nullptr};
-    PluginStateStore* stateStore_{nullptr};
+    ContentStore* contentStore_{nullptr};
     TransportController transport_;
     bool projecting_{false};
     std::vector<std::string> missing_;

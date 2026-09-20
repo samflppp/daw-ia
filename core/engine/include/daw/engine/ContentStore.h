@@ -10,12 +10,20 @@
 namespace daw::engine
 {
 
-// Content-addressed store for the opaque state of hosted plugins.
+// Content-addressed store: the bytes the project names by digest but never
+// carries by value.
 //
-// A plugin chunk can reach tens of megabytes, so it never travels inside a
-// command payload nor inside ProjectState: the bytes land here, and the project
-// keeps the BLAKE3 digest. Three properties follow from addressing by content,
-// and the plugin model depends on all three:
+// The opaque state of a hosted plugin was the first user, and it set the
+// shape: a chunk can reach tens of megabytes, so it never travels inside a
+// command payload nor inside ProjectState. The bytes land here, and the
+// project keeps the BLAKE3 digest. The context an agent acted upon — a prompt,
+// a state extract, a model answer — is stored exactly the same way, by the
+// same calls. The store is blind to provenance on purpose: an audio render
+// produced by the generative engine and a take recorded by the user are the
+// same thing here, a sequence of bytes named by its digest.
+//
+// Three properties follow from addressing by content, and the plugin model
+// depends on all three:
 //
 //   deduplication  two instances carrying the same state are stored once.
 //   immutability   a digest never designates other bytes, so undoing a capture
@@ -24,12 +32,13 @@ namespace daw::engine
 //                  instead of handing them to a plugin.
 //
 // Nothing is ever deleted. Reclaiming unreferenced blobs needs the whole
-// history to be known, which is what the versioning layer of S5 will bring.
-class PluginStateStore
+// history to be known, which the journal now brings; the collector itself is
+// not written, and the store is designed so that it can be.
+class ContentStore
 {
 public:
     // root is created on demand, on the first put().
-    explicit PluginStateStore(juce::File root);
+    explicit ContentStore(juce::File root);
 
     // The directory this store writes to, under the user's application data.
     [[nodiscard]] static juce::File defaultRoot(const juce::String& applicationName);

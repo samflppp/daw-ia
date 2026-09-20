@@ -30,11 +30,11 @@ juce::String toJuce(const std::string& text)
 ProjectProjector::ProjectProjector(tracktion::Edit& edit,
                                    const domain::ProjectState& state,
                                    PluginCatalogue* catalogue,
-                                   PluginStateStore* stateStore)
+                                   ContentStore* contentStore)
     : edit_{edit}
     , state_{state}
     , catalogue_{catalogue}
-    , stateStore_{stateStore}
+    , contentStore_{contentStore}
     , transport_{edit}
 {
 }
@@ -217,7 +217,7 @@ void ProjectProjector::removeUnknownPlugins(tracktion::AudioTrack& track, const 
 
 void ProjectProjector::applyPluginState(tracktion::Plugin& target, const domain::PluginInstance& source)
 {
-    if (stateStore_ == nullptr)
+    if (contentStore_ == nullptr)
         return;
 
     const auto previous = std::find_if(projectedStates_.begin(),
@@ -230,7 +230,7 @@ void ProjectProjector::applyPluginState(tracktion::Plugin& target, const domain:
 
     if (!source.state.isEmpty())
     {
-        auto bytes = stateStore_->get(source.state);
+        auto bytes = contentStore_->get(source.state);
         if (!bytes)
             return; // a missing or damaged blob leaves the plugin as it is
 

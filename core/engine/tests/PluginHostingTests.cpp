@@ -2,9 +2,9 @@
 #include "HostedParameters.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/engine/ClapPluginFormat.h"
+#include "daw/engine/ContentStore.h"
 #include "daw/engine/ParameterBridge.h"
 #include "daw/engine/PluginCatalogue.h"
-#include "daw/engine/PluginStateStore.h"
 
 #include <tracktion_engine/utilities/tracktion_TestUtilities.h>
 
@@ -15,8 +15,8 @@
 #include <doctest/doctest.h>
 
 using namespace daw::domain;
+using daw::engine::ContentStore;
 using daw::engine::PluginCatalogue;
-using daw::engine::PluginStateStore;
 
 namespace
 {
@@ -158,7 +158,7 @@ struct PluginHarness
     CommandBus bus;
     daw::engine::EngineHost host;
     PluginCatalogue catalogue;
-    PluginStateStore store;
+    ContentStore store;
     daw::engine::ProjectProjector projector;
     daw::engine::ParameterBridge bridge;
     TrackId trackId{TrackId::generate()};
@@ -173,7 +173,7 @@ struct PluginHarness
 TEST_CASE("A plugin state comes back out of the store byte for byte")
 {
     TemporaryDirectory temporary;
-    PluginStateStore store{temporary.directory};
+    ContentStore store{temporary.directory};
 
     std::vector<std::byte> blob(64 * 1024);
     for (std::size_t index = 0; index < blob.size(); ++index)
@@ -194,7 +194,7 @@ TEST_CASE("A plugin state comes back out of the store byte for byte")
 TEST_CASE("The same state stored twice is one file, and an empty state is no file")
 {
     TemporaryDirectory temporary;
-    PluginStateStore store{temporary.directory};
+    ContentStore store{temporary.directory};
 
     const std::string blob = "the same bytes, twice";
 
@@ -217,7 +217,7 @@ TEST_CASE("The same state stored twice is one file, and an empty state is no fil
 TEST_CASE("A damaged state is refused instead of being handed to a plugin")
 {
     TemporaryDirectory temporary;
-    PluginStateStore store{temporary.directory};
+    ContentStore store{temporary.directory};
 
     const std::string blob = "bytes that will be tampered with";
     auto reference = store.put(blob.data(), blob.size());
