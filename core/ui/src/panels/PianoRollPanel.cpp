@@ -1,0 +1,581 @@
+#include "daw/ui/panels/PianoRollPanel.h"
+
+#include "daw/domain/commands/AddNote.h"
+#include "daw/domain/commands/CreateMidiClip.h"
+#include "daw/domain/commands/NoteCommands.h"
+
+#include <algorithm>
+#include <cmath>
+
+namespace daw::ui
+{
+namespace
+{
+
+constexpr int playheadRefreshMs = 33;
+
+constexpr int semitonesPerOctave = 12;
+constexpr int beatsPerBar = 4;
+
+// One sixteenth. The grid the beatmaker workspace draws is the grid it snaps
+// to: a note that lands between two lines it can see is a note the user has to
+// fight.
+constexpr double gridStepBeats = 0.25;
+
+constexpr int defaultVelocity = 100;
+constexpr int lowestVisiblePitch = 0;
+constexpr int highestVisiblePitch = 127;
+
+// The clip a new track gets when the user draws in an empty piano roll: four
+// bars, from the start.
+constexpr double newClipStartBeats = 0.0;
+constexpr double newClipLengthBeats = 16.0;
+
+[[nodiscard]] bool isBlackKey(int pitch)
+{
+    switch (((pitch % semitonesPerOctave) + semitonesPerOctave) % semitonesPerOctave)
+    {
+        case 1:
+        case 3:
+        case 6:
+        case 8:
+        case 10:
+            return true;
+        default:
+            return false;
+    }
+}
+
+[[nodiscard]] juce::String pitchName(int pitch)
+{
+    return juce::String("C") + juce::String(pitch / semitonesPerOctave - 1);
+}
+
+} // namespace
+
+PianoRollPanel::PianoRollPanel(const PanelContext& context)
+    : tokens_(context.tokens)
+    , lookAndFeel_(context.lookAndFeel)
+    , bus_(context.bus)
+    , state_(context.state)
+    , project_(context.project)
+    , selection_(context.selection)
+    , clock_(context.clock)
+{
+    setLookAndFeel(&lookAndFeel_);
+    setWantsKeyboardFocus(true);
+
+    project_.addChangeListener(this);
+    selection_.addChangeListener(this);
+    startTimer(playheadRefreshMs);
+}
+
+PianoRollPanel::~PianoRollPanel()
+{
+    stopTimer();
+    selection_.removeChangeListener(this);
+    project_.removeChangeListener(this);
+    setLookAndFeel(nullptr);
+}
+
+void PianoRollPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
+{
+    juce::ignoreUnused(source);
+    repaint();
+}
+
+void PianoRollPanel::timerCallback()
+{
+    // Only the playhead moves on its own, so only its column is repainted. A
+    // full repaint thirty times a second would redraw a grid that has not
+    // changed since the project was opened.
+    const auto area = gridArea();
+    const auto x = xForBeat(clock_.positionBeats());
+    repaint(x - tokens_.integer("space.xs"),
+            area.getY(),
+            tokens_.integer("space.sm"),
+            area.getHeight() + tokens_.integer("metric.pianoRoll.rulerHeight"));
+}
+
+const domain::Track* PianoRollPanel::track() const
+{
+    return state_.findTrack(selection_.track());
+}
+
+const domain::Clip* PianoRollPanel::clip() const
+{
+    const auto* selected = track();
+    if (selected == nullptr || selected->clips.empty())
+        return nullptr;
+
+    // The selected clip when there is one, the first otherwise: a track with a
+    // single clip must not need a click before it can be edited.
+    if (const auto* named = state_.findClip(selection_.clip()); named != nullptr)
+        return named;
+
+    return &selected->clips.front();
+}
+
+// --- geometry --------------------------------------------------------------
+
+juce::Rectangle<int> PianoRollPanel::gridArea() const
+{
+    auto area = getLocalBounds();
+    area.removeFromTop(tokens_.integer("metric.panel.headerHeight"));
+    area.removeFromLeft(tokens_.integer("metric.pianoRoll.keyboardWidth"));
+    area.removeFromTop(tokens_.integer("metric.pianoRoll.rulerHeight"));
+    return area;
+}
+
+int PianoRollPanel::rowsVisible() const
+{
+    const auto keyHeight = tokens_.integer("metric.pianoRoll.keyHeight");
+    return std::max(1, gridArea().getHeight() / keyHeight);
+}
+
+int PianoRollPanel::yForPitch(int pitch) const
+{
+    const auto keyHeight = tokens_.integer("metric.pianoRoll.keyHeight");
+    return gridArea().getY() + (topPitch_ - pitch) * keyHeight;
+}
+
+int PianoRollPanel::pitchAtY(int y) const
+{
+    const auto keyHeight = tokens_.integer("metric.pianoRoll.keyHeight");
+    const auto row = (y - gridArea().getY()) / keyHeight;
+    return std::clamp(topPitch_ - row, lowestVisiblePitch, highestVisiblePitch);
+}
+
+double PianoRollPanel::beatAtX(int x) const
+{
+    const auto* edited = clip();
+    const auto area = gridArea();
+    if (edited == nullptr || area.getWidth() <= 0)
+        return 0.0;
+
+    const auto fraction = static_cast<double>(x - area.getX()) / static_cast<double>(area.getWidth());
+    return std::clamp(fraction, 0.0, 1.0) * edited->lengthBeats;
+}
+
+int PianoRollPanel::xForBeat(double beats) const
+{
+    const auto* edited = clip();
+    const auto area = gridArea();
+    if (edited == nullptr || edited->lengthBeats <= 0.0)
+        return area.getX();
+
+    const auto fraction = std::clamp(beats / edited->lengthBeats, 0.0, 1.0);
+    return area.getX() + static_cast<int>(std::llround(fraction * static_cast<double>(area.getWidth())));
+}
+
+double PianoRollPanel::quantise(double beats) const
+{
+    return std::max(0.0, std::floor(beats / gridStepBeats) * gridStepBeats);
+}
+
+const domain::Note* PianoRollPanel::noteAt(juce::Point<int> point) const
+{
+    const auto* edited = clip();
+    if (edited == nullptr)
+        return nullptr;
+
+    const auto pitch = pitchAtY(point.getY());
+    const auto beats = beatAtX(point.getX());
+
+    for (const auto& note : edited->notes)
+    {
+        if (note.pitch == pitch && beats >= note.startBeats && beats < note.startBeats + note.lengthBeats)
+            return &note;
+    }
+
+    return nullptr;
+}
+
+// --- painting --------------------------------------------------------------
+
+void PianoRollPanel::paint(juce::Graphics& g)
+{
+    g.fillAll(tokens_.colour("color.surface.sunken"));
+
+    auto header = getLocalBounds().removeFromTop(tokens_.integer("metric.panel.headerHeight"));
+    g.setColour(tokens_.colour("color.surface.panel"));
+    g.fillRect(header);
+    g.setColour(tokens_.colour("color.border.hairline"));
+    g.fillRect(header.removeFromBottom(tokens_.integer("stroke.hairline")));
+
+    header.removeFromLeft(tokens_.integer("space.md"));
+    g.setColour(tokens_.colour("color.text.tertiary"));
+    g.setFont(lookAndFeel_.typography().caps("font.size.micro"));
+    // Twice the keyboard, because the title does not fit in one: a header
+    // clipped to "PIANO-ROL" is the kind of detail a jury reads before it reads
+    // anything else.
+    g.drawText("PIANO-ROLL",
+               header.removeFromLeft(tokens_.integer("metric.pianoRoll.keyboardWidth") * 2),
+               juce::Justification::centredLeft,
+               false);
+
+    const auto* edited = clip();
+    if (edited == nullptr)
+    {
+        paintEmpty(g);
+        return;
+    }
+
+    const auto* owner = track();
+    g.setColour(tokens_.colour("color.text.secondary"));
+    g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
+    const auto count = static_cast<int>(edited->notes.size());
+    g.drawText(juce::String(owner != nullptr ? owner->name : std::string{}) + "  ·  " +
+                   juce::String(count) + (count > 1 ? " notes" : " note"),
+               header,
+               juce::Justification::centredLeft,
+               false);
+
+    const auto area = gridArea();
+
+    auto keyboard = juce::Rectangle<int>{0,
+                                         area.getY(),
+                                         tokens_.integer("metric.pianoRoll.keyboardWidth"),
+                                         area.getHeight()};
+
+    auto ruler = juce::Rectangle<int>{area.getX(),
+                                      area.getY() - tokens_.integer("metric.pianoRoll.rulerHeight"),
+                                      area.getWidth(),
+                                      tokens_.integer("metric.pianoRoll.rulerHeight")};
+
+    paintGrid(g, area);
+    paintNotes(g, area);
+    paintKeyboard(g, keyboard);
+    paintRuler(g, ruler);
+    paintPlayhead(g, area);
+}
+
+void PianoRollPanel::paintEmpty(juce::Graphics& g) const
+{
+    g.setColour(tokens_.colour("color.text.disabled"));
+    g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
+
+    const auto message = track() == nullptr ? "selectionnez une piste"
+                                            : "cliquez pour creer un clip et poser une note";
+
+    g.drawText(message, getLocalBounds(), juce::Justification::centred, false);
+}
+
+void PianoRollPanel::paintGrid(juce::Graphics& g, juce::Rectangle<int> area) const
+{
+    const auto keyHeight = tokens_.integer("metric.pianoRoll.keyHeight");
+    const auto hairline = tokens_.integer("stroke.hairline");
+
+    for (int row = 0; row < rowsVisible(); ++row)
+    {
+        const auto pitch = topPitch_ - row;
+        const auto y = area.getY() + row * keyHeight;
+
+        g.setColour(isBlackKey(pitch) ? tokens_.colour("color.grid.rowBlack")
+                                      : tokens_.colour("color.grid.rowWhite"));
+        g.fillRect(area.getX(), y, area.getWidth(), keyHeight);
+
+        g.setColour(tokens_.colour("color.grid.subdivision"));
+        g.fillRect(area.getX(), y + keyHeight - hairline, area.getWidth(), hairline);
+    }
+
+    const auto* edited = clip();
+    if (edited == nullptr)
+        return;
+
+    for (double beat = 0.0; beat <= edited->lengthBeats; beat += gridStepBeats)
+    {
+        const auto onBar = std::fmod(beat, static_cast<double>(beatsPerBar)) < gridStepBeats / 2.0;
+        const auto onBeat = std::fmod(beat, 1.0) < gridStepBeats / 2.0;
+
+        g.setColour(onBar ? tokens_.colour("color.grid.bar")
+                          : (onBeat ? tokens_.colour("color.grid.beat")
+                                    : tokens_.colour("color.grid.subdivision")));
+
+        g.fillRect(xForBeat(beat), area.getY(), hairline, area.getHeight());
+    }
+}
+
+void PianoRollPanel::paintNotes(juce::Graphics& g, juce::Rectangle<int> area) const
+{
+    const auto* edited = clip();
+    if (edited == nullptr)
+        return;
+
+    const auto keyHeight = tokens_.integer("metric.pianoRoll.keyHeight");
+    const auto inset = tokens_.integer("metric.pianoRoll.noteInset");
+    const auto radius = tokens_.number("radius.sm");
+
+    for (const auto& note : edited->notes)
+    {
+        const auto y = yForPitch(note.pitch);
+        if (y < area.getY() || y >= area.getBottom())
+            continue;
+
+        const auto x = xForBeat(note.startBeats);
+        const auto right = xForBeat(note.startBeats + note.lengthBeats);
+
+        const juce::Rectangle<float> bounds{static_cast<float>(x),
+                                            static_cast<float>(y + inset),
+                                            static_cast<float>(std::max(right - x, inset * 2)),
+                                            static_cast<float>(keyHeight - inset * 2)};
+
+        // Velocity is the fill, not a number: the eye reads a shade faster than
+        // it reads 0 to 127, and the exact value belongs to an editor nobody
+        // needs while sketching.
+        const auto soft = tokens_.colour("color.note.fillSoft");
+        const auto full = tokens_.colour("color.note.fill");
+        const auto amount = static_cast<float>(note.velocity - domain::Note::lowestVelocity) /
+                            static_cast<float>(domain::Note::highestVelocity - domain::Note::lowestVelocity);
+
+        g.setColour(soft.interpolatedWith(full, amount));
+        g.fillRoundedRectangle(bounds, radius);
+
+        if (note.id == selectedNote_)
+        {
+            g.setColour(tokens_.colour("color.note.selected"));
+            g.drawRoundedRectangle(bounds, radius, tokens_.number("stroke.focus"));
+        }
+    }
+}
+
+void PianoRollPanel::paintKeyboard(juce::Graphics& g, juce::Rectangle<int> area) const
+{
+    const auto keyHeight = tokens_.integer("metric.pianoRoll.keyHeight");
+    const auto hairline = tokens_.integer("stroke.hairline");
+
+    g.setColour(tokens_.colour("color.surface.panel"));
+    g.fillRect(area);
+
+    for (int row = 0; row < rowsVisible(); ++row)
+    {
+        const auto pitch = topPitch_ - row;
+        const auto y = area.getY() + row * keyHeight;
+
+        if (isBlackKey(pitch))
+        {
+            g.setColour(tokens_.colour("color.surface.base"));
+            g.fillRect(area.getX(), y, area.getWidth(), keyHeight);
+        }
+
+        g.setColour(tokens_.colour("color.surface.sunken"));
+        g.fillRect(area.getX(), y + keyHeight - hairline, area.getWidth(), hairline);
+
+        // Only the C's are named. A label on every key is a column of noise
+        // next to the thing the user is actually looking at.
+        if (pitch % semitonesPerOctave == 0)
+        {
+            g.setColour(tokens_.colour("color.text.tertiary"));
+            g.setFont(lookAndFeel_.typography().mono("font.size.micro", "font.weight.regular"));
+            g.drawText(pitchName(pitch),
+                       area.withY(y).withHeight(keyHeight).withTrimmedRight(tokens_.integer("space.sm")),
+                       juce::Justification::centredRight,
+                       false);
+        }
+    }
+
+    g.setColour(tokens_.colour("color.border.hairline"));
+    g.fillRect(area.getRight() - hairline, area.getY(), hairline, area.getHeight());
+}
+
+void PianoRollPanel::paintRuler(juce::Graphics& g, juce::Rectangle<int> area) const
+{
+    const auto* edited = clip();
+    if (edited == nullptr)
+        return;
+
+    g.setColour(tokens_.colour("color.surface.panel"));
+    g.fillRect(area);
+
+    g.setColour(tokens_.colour("color.border.hairline"));
+    g.fillRect(area.getX(), area.getBottom() - tokens_.integer("stroke.hairline"), area.getWidth(),
+               tokens_.integer("stroke.hairline"));
+
+    g.setFont(lookAndFeel_.typography().mono("font.size.micro", "font.weight.regular"));
+
+    for (double beat = 0.0; beat < edited->lengthBeats; beat += static_cast<double>(beatsPerBar))
+    {
+        const auto x = xForBeat(beat);
+        g.setColour(tokens_.colour("color.border.hairline"));
+        g.fillRect(x, area.getY(), tokens_.integer("stroke.hairline"), area.getHeight());
+
+        g.setColour(tokens_.colour("color.text.disabled"));
+        g.drawText(juce::String(static_cast<int>(beat) / beatsPerBar + 1),
+                   area.withX(x + tokens_.integer("space.xs")).withWidth(tokens_.integer("space.xl")),
+                   juce::Justification::centredLeft,
+                   false);
+    }
+}
+
+void PianoRollPanel::paintPlayhead(juce::Graphics& g, juce::Rectangle<int> area) const
+{
+    const auto position = clock_.positionBeats();
+    const auto* edited = clip();
+    if (edited == nullptr || position < 0.0 || position > edited->lengthBeats)
+        return;
+
+    g.setColour(tokens_.colour("color.accent.live"));
+    g.fillRect(xForBeat(position),
+               area.getY() - tokens_.integer("metric.pianoRoll.rulerHeight"),
+               tokens_.integer("stroke.playhead"),
+               area.getHeight() + tokens_.integer("metric.pianoRoll.rulerHeight"));
+}
+
+// --- editing ---------------------------------------------------------------
+
+void PianoRollPanel::addNoteAt(juce::Point<int> point)
+{
+    const auto* owner = track();
+    if (owner == nullptr)
+        return;
+
+    auto clipId = clip() != nullptr ? clip()->id : domain::ClipId{};
+
+    // Drawing in a track that has no clip creates the clip first. Two commands,
+    // therefore two history entries: they are two decisions, and undoing the
+    // note must not take the clip away with it.
+    if (clipId.isNil())
+    {
+        clipId = domain::ClipId::generate();
+        if (!bus_.execute(std::make_unique<domain::CreateMidiClip>(
+                              owner->id, clipId, newClipStartBeats, newClipLengthBeats))
+                 .ok())
+            return;
+
+        selection_.selectClip(owner->id, clipId);
+    }
+
+    domain::Note note{};
+    note.id = domain::NoteId::generate();
+    note.pitch = pitchAtY(point.getY());
+    note.velocity = defaultVelocity;
+    note.startBeats = quantise(beatAtX(point.getX()));
+    note.lengthBeats = gridStepBeats;
+
+    if (bus_.execute(std::make_unique<domain::AddNote>(clipId, note)).ok())
+    {
+        selectedNote_ = note.id;
+        repaint();
+    }
+}
+
+void PianoRollPanel::removeNote(domain::NoteId noteId)
+{
+    const auto* edited = clip();
+    if (edited == nullptr || noteId.isNil())
+        return;
+
+    if (bus_.execute(std::make_unique<domain::RemoveNote>(edited->id, noteId)).ok())
+    {
+        selectedNote_ = {};
+        repaint();
+    }
+}
+
+void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
+{
+    grabKeyboardFocus();
+
+    const auto* hit = noteAt(event.getPosition());
+
+    if (event.mods.isRightButtonDown())
+    {
+        if (hit != nullptr)
+            removeNote(hit->id);
+        return;
+    }
+
+    if (hit == nullptr)
+    {
+        addNoteAt(event.getPosition());
+        return;
+    }
+
+    selectedNote_ = hit->id;
+
+    // The grab offset is what keeps a note from jumping under the cursor: the
+    // user moves the note, not the point they clicked on.
+    Drag drag{};
+    drag.noteId = hit->id;
+    drag.grabOffsetBeats = beatAtX(event.getPosition().getX()) - hit->startBeats;
+    drag.grabPitch = hit->pitch;
+    drag.gesture = bus_.beginGesture("deplacer une note");
+    drag_ = drag;
+
+    repaint();
+}
+
+void PianoRollPanel::mouseDrag(const juce::MouseEvent& event)
+{
+    if (!drag_.has_value())
+        return;
+
+    const auto* edited = clip();
+    if (edited == nullptr)
+        return;
+
+    const auto start = quantise(beatAtX(event.getPosition().getX()) - drag_->grabOffsetBeats);
+    const auto pitch = pitchAtY(event.getPosition().getY());
+
+    const auto found = std::find_if(edited->notes.begin(),
+                                    edited->notes.end(),
+                                    [this](const domain::Note& candidate)
+                                    { return candidate.id == drag_->noteId; });
+
+    if (found == edited->notes.end())
+        return;
+
+    const auto* note = &(*found);
+
+    // Nothing changed at this pixel: no command, no history, no projection.
+    // A drag emits one command per quantised step, not one per mouse move.
+    if (note->pitch == pitch && std::abs(note->startBeats - start) < gridStepBeats / 2.0)
+        return;
+
+    domain::ExecuteOptions options{};
+    options.gesture = drag_->gesture;
+
+    if (bus_.execute(std::make_unique<domain::MoveNote>(edited->id, drag_->noteId, pitch, start), options)
+            .ok())
+        drag_->moved = true;
+}
+
+void PianoRollPanel::mouseUp(const juce::MouseEvent& event)
+{
+    juce::ignoreUnused(event);
+
+    if (!drag_.has_value())
+        return;
+
+    static_cast<void>(bus_.endGesture(drag_->gesture));
+    drag_.reset();
+}
+
+bool PianoRollPanel::keyPressed(const juce::KeyPress& key)
+{
+    if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
+    {
+        removeNote(selectedNote_);
+        return true;
+    }
+
+    // The wheel would be the obvious way to move the pitch window, but a
+    // trackpad sends it by accident; the keys are deliberate.
+    if (key == juce::KeyPress::pageUpKey)
+    {
+        topPitch_ = std::min(highestVisiblePitch, topPitch_ + semitonesPerOctave);
+        repaint();
+        return true;
+    }
+
+    if (key == juce::KeyPress::pageDownKey)
+    {
+        topPitch_ = std::max(rowsVisible(), topPitch_ - semitonesPerOctave);
+        repaint();
+        return true;
+    }
+
+    return false;
+}
+
+} // namespace daw::ui

@@ -18,7 +18,6 @@ constexpr int sixteenthsPerBeat = 4;
 
 } // namespace
 
-
 // A transport button. The shape is a path, built from the button's own size, so
 // it stays sharp whatever the metric token says.
 class TransportPanel::IconButton final : public juce::Button
@@ -82,57 +81,53 @@ private:
 
         switch (icon_)
         {
-            case Icon::play:
-                path.addTriangle(area.getX(),
-                                 area.getY(),
-                                 area.getX(),
-                                 area.getBottom(),
-                                 area.getRight(),
-                                 area.getCentreY());
-                break;
+        case Icon::play:
+            path.addTriangle(
+                area.getX(), area.getY(), area.getX(), area.getBottom(), area.getRight(), area.getCentreY());
+            break;
 
-            case Icon::stop:
-                path.addRectangle(area);
-                break;
+        case Icon::stop:
+            path.addRectangle(area);
+            break;
 
-            case Icon::rewind:
-                path.addRectangle(area.getX(), area.getY(), stroke, area.getHeight());
-                path.addTriangle(area.getRight(),
-                                 area.getY(),
-                                 area.getRight(),
-                                 area.getBottom(),
-                                 area.getX() + stroke * 2.0f,
-                                 area.getCentreY());
-                break;
+        case Icon::rewind:
+            path.addRectangle(area.getX(), area.getY(), stroke, area.getHeight());
+            path.addTriangle(area.getRight(),
+                             area.getY(),
+                             area.getRight(),
+                             area.getBottom(),
+                             area.getX() + stroke * 2.0f,
+                             area.getCentreY());
+            break;
 
-            case Icon::undo:
-            case Icon::redo:
-            {
-                // An arrow that turns back on itself: the arc says "again", the
-                // head says which way.
-                const auto mirrored = icon_ == Icon::redo;
-                const auto inset = tokens_.number("metric.icon.arcInset");
-                const auto lift = tokens_.number("metric.icon.arcLift");
-                const auto head = tokens_.number("metric.icon.arrowHead");
+        case Icon::undo:
+        case Icon::redo:
+        {
+            // An arrow that turns back on itself: the arc says "again", the
+            // head says which way.
+            const auto mirrored = icon_ == Icon::redo;
+            const auto inset = tokens_.number("metric.icon.arcInset");
+            const auto lift = tokens_.number("metric.icon.arcLift");
+            const auto head = tokens_.number("metric.icon.arrowHead");
 
-                auto arc = area.withTrimmedTop(inset).withTrimmedBottom(inset);
+            auto arc = area.withTrimmedTop(inset).withTrimmedBottom(inset);
 
-                juce::Path curve;
-                curve.startNewSubPath(arc.getX(), arc.getBottom());
-                curve.quadraticTo(arc.getCentreX(), arc.getY() - lift, arc.getRight(), arc.getBottom());
+            juce::Path curve;
+            curve.startNewSubPath(arc.getX(), arc.getBottom());
+            curve.quadraticTo(arc.getCentreX(), arc.getY() - lift, arc.getRight(), arc.getBottom());
 
-                juce::PathStrokeType{stroke}.createStrokedPath(path, curve);
+            juce::PathStrokeType{stroke}.createStrokedPath(path, curve);
 
-                const auto tipX = mirrored ? arc.getRight() : arc.getX();
-                const auto direction = mirrored ? -1.0f : 1.0f;
-                path.addTriangle(tipX,
-                                 arc.getBottom() + inset,
-                                 tipX + direction * head,
-                                 arc.getBottom() - inset,
-                                 tipX + direction * head,
-                                 arc.getBottom() + head);
-                break;
-            }
+            const auto tipX = mirrored ? arc.getRight() : arc.getX();
+            const auto direction = mirrored ? -1.0f : 1.0f;
+            path.addTriangle(tipX,
+                             arc.getBottom() + inset,
+                             tipX + direction * head,
+                             arc.getBottom() - inset,
+                             tipX + direction * head,
+                             arc.getBottom() + head);
+            break;
+        }
         }
 
         return path;
@@ -162,9 +157,8 @@ TransportPanel::TransportPanel(const PanelContext& context)
     for (auto* button : {rewind_.get(), play_.get(), stop_.get(), undo_.get(), redo_.get()})
         addAndMakeVisible(*button);
 
-    rewind_->onClick = [this] {
-        static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.0)));
-    };
+    rewind_->onClick = [this]
+    { static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.0))); };
 
     play_->onClick = [this] { static_cast<void>(bus_.execute(std::make_unique<domain::TransportPlay>())); };
     stop_->onClick = [this] { static_cast<void>(bus_.execute(std::make_unique<domain::TransportStop>())); };
@@ -284,7 +278,8 @@ void TransportPanel::paint(juce::Graphics& g)
     // The buttons sit on the left; the readouts start after them. The panel
     // arranges its own children, so it knows where they are — it just does not
     // know where itself is.
-    const auto buttonsWidth = (tokens_.integer("metric.transport.buttonSize") + tokens_.integer("space.xs")) * 5;
+    const auto buttonsWidth =
+        (tokens_.integer("metric.transport.buttonSize") + tokens_.integer("space.xs")) * 5;
     area.removeFromLeft(buttonsWidth + tokens_.integer("space.xl"));
 
     const auto readoutWidth = tokens_.integer("metric.transport.buttonSize") * 4;

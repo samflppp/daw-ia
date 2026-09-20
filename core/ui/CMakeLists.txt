@@ -69,7 +69,8 @@ target_sources(daw_ui INTERFACE
     src/model/Selection.cpp
     src/panels/PlaceholderPanel.cpp
     src/panels/TransportPanel.cpp
-    src/panels/TrackListPanel.cpp)
+    src/panels/TrackListPanel.cpp
+    src/panels/PianoRollPanel.cpp)
 
 target_include_directories(daw_ui INTERFACE include)
 

@@ -21,9 +21,7 @@ namespace daw::ui
 // The playhead is the exception, and a deliberate one. It does not come from
 // the project: it comes from the clock, sixty times a second, because that is
 // where it actually is.
-class TransportPanel final : public juce::Component,
-                             private juce::ChangeListener,
-                             private juce::Timer
+class TransportPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
 {
 public:
     // What a transport button draws. Glyphs would have been cheaper and wrong:

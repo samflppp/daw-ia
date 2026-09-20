@@ -38,14 +38,16 @@ public:
         // without it a fader sweep would need sixty undos to come back.
         volume_.onDragStart = [this] { gesture_ = bus_.beginGesture("volume de piste"); };
 
-        volume_.onValueChange = [this] {
+        volume_.onValueChange = [this]
+        {
             domain::ExecuteOptions options{};
             options.gesture = gesture_;
-            static_cast<void>(
-                bus_.execute(std::make_unique<domain::SetTrackVolume>(trackId_, volume_.getValue()), options));
+            static_cast<void>(bus_.execute(
+                std::make_unique<domain::SetTrackVolume>(trackId_, volume_.getValue()), options));
         };
 
-        volume_.onDragEnd = [this] {
+        volume_.onDragEnd = [this]
+        {
             if (gesture_.has_value())
                 static_cast<void>(bus_.endGesture(*gesture_));
             gesture_.reset();
@@ -53,12 +55,12 @@ public:
 
         addAndMakeVisible(mute_);
         mute_.setButtonText("M");
-        mute_.onClick = [this] {
+        mute_.onClick = [this]
+        {
             const auto* track = state_.findTrack(trackId_);
             if (track == nullptr)
                 return;
-            static_cast<void>(
-                bus_.execute(std::make_unique<domain::SetTrackMuted>(trackId_, !track->muted)));
+            static_cast<void>(bus_.execute(std::make_unique<domain::SetTrackMuted>(trackId_, !track->muted)));
         };
 
         addAndMakeVisible(bypass_);
@@ -148,8 +150,8 @@ public:
 
         auto switches = area.removeFromRight(tokens_.integer("metric.track.chipWidth") * 2 +
                                              tokens_.integer("space.sm") * 2);
-        switches = switches.withSizeKeepingCentre(switches.getWidth(),
-                                                  tokens_.integer("metric.track.chipHeight"));
+        switches =
+            switches.withSizeKeepingCentre(switches.getWidth(), tokens_.integer("metric.track.chipHeight"));
         switches.removeFromLeft(tokens_.integer("space.sm"));
         mute_.setBounds(switches.removeFromLeft(tokens_.integer("metric.track.chipWidth")));
         switches.removeFromLeft(tokens_.integer("space.sm"));
@@ -298,8 +300,8 @@ void TrackListPanel::rebuild()
     int position = 0;
     for (const auto& track : state_.tracks())
     {
-        auto row = std::make_unique<Row>(
-            tokens_, lookAndFeel_, bus_, state_, selection_, track.id, position++);
+        auto row =
+            std::make_unique<Row>(tokens_, lookAndFeel_, bus_, state_, selection_, track.id, position++);
 
         rows_.push_back(row.get());
         rowHolder_->addAndMakeVisible(row.release());
