@@ -14,6 +14,9 @@
 #include "daw/engine/ParameterBridge.h"
 #include "daw/engine/ProjectProjector.h"
 #include "daw/persistence/ProjectStore.h"
+#include "daw/ui/DawLookAndFeel.h"
+#include "daw/ui/GalleryView.h"
+#include "daw/ui/RootView.h"
 #include "daw/ui/Tokens.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
@@ -95,7 +98,14 @@ public:
         if (commandLine.contains("--demo"))
             playDemo(pluginPathFromCommandLine(commandLine));
 
-        window_ = std::make_unique<MainWindow>(getApplicationName(), ui::Tokens::builtIn());
+        // One look for the whole process, plugin windows included: a JUCE
+        // component built anywhere asks the default look and feel, so setting
+        // it here is what keeps a dialog from arriving in JUCE grey.
+        lookAndFeel_ = std::make_unique<ui::DawLookAndFeel>(ui::Tokens::builtIn());
+        juce::LookAndFeel::setDefaultLookAndFeel(lookAndFeel_.get());
+
+        window_ = std::make_unique<MainWindow>(
+            getApplicationName(), ui::Tokens::builtIn(), makeContent(commandLine));
         startTimer(autosaveIntervalMs);
     }
 
@@ -107,6 +117,8 @@ public:
         juce::Logger::setCurrentLogger(nullptr);
         pluginWindow_.reset();
         window_.reset();
+        juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
+        lookAndFeel_.reset();
         bridge_.reset();
         projector_.reset();
         contentStore_.reset();
@@ -128,6 +140,19 @@ public:
 
 private:
     static constexpr int autosaveIntervalMs = 30000;
+
+    // --gallery shows every token and every control instead of the workspace.
+    // The three hygiene rules cannot see ugliness; this is the surface that is
+    // looked at when a token changes.
+    [[nodiscard]] std::unique_ptr<juce::Component> makeContent(const juce::String& commandLine) const
+    {
+        const auto& tokens = ui::Tokens::builtIn();
+
+        if (commandLine.contains("--gallery"))
+            return std::make_unique<ui::GalleryView>(tokens, *lookAndFeel_);
+
+        return std::make_unique<ui::RootView>(tokens);
+    }
 
     void timerCallback() override
     {
@@ -394,6 +419,7 @@ private:
     std::unique_ptr<engine::ProjectProjector> projector_;
     std::unique_ptr<engine::ParameterBridge> bridge_;
     std::unique_ptr<juce::FileLogger> logger_;
+    std::unique_ptr<ui::DawLookAndFeel> lookAndFeel_;
     std::unique_ptr<MainWindow> window_;
     std::unique_ptr<PluginWindow> pluginWindow_;
 };

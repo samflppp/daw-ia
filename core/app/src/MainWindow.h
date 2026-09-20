@@ -4,13 +4,17 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <memory>
+
 namespace daw::app
 {
 
 class MainWindow final : public juce::DocumentWindow
 {
 public:
-    MainWindow(const juce::String& title, const ui::Tokens& tokens);
+    // The window owns what it shows and knows nothing else about it: the
+    // application decides whether that is the workspace or the style gallery.
+    MainWindow(const juce::String& title, const ui::Tokens& tokens, std::unique_ptr<juce::Component> content);
 
     void closeButtonPressed() override;
 
