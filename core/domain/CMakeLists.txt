@@ -10,6 +10,7 @@ add_library(daw_domain STATIC
     src/command/CommandRegistry.cpp
     src/command/Provenance.cpp
     src/commands/AddNote.cpp
+    src/commands/NoteCommands.cpp
     src/commands/CreateMidiClip.cpp
     src/commands/PluginCommands.cpp
     src/commands/SetTrackVolume.cpp

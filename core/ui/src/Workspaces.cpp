@@ -1,8 +1,8 @@
 #include "daw/ui/Workspaces.h"
 
-#include <DawWorkspacesData.h>
-
 #include <algorithm>
+
+#include <DawWorkspacesData.h>
 
 namespace daw::ui
 {

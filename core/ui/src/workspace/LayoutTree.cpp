@@ -42,8 +42,8 @@ std::vector<int> divide(const std::vector<double>& weights, int extent)
         consumed += weights[index];
 
         const bool last = index + 1 == weights.size();
-        const int edge = last ? extent
-                              : static_cast<int>(std::llround(consumed / total * static_cast<double>(extent)));
+        const int edge =
+            last ? extent : static_cast<int>(std::llround(consumed / total * static_cast<double>(extent)));
 
         sizes.push_back(std::max(0, edge - placed));
         placed = edge;
@@ -76,8 +76,8 @@ void placeChildren(const LayoutNode& node, Rect area, Collector& into)
     {
         const auto size = sizes[index];
 
-        const Rect childArea = vertical ? Rect{area.x, offset, area.width, size}
-                                        : Rect{offset, area.y, size, area.height};
+        const Rect childArea =
+            vertical ? Rect{area.x, offset, area.width, size} : Rect{offset, area.y, size, area.height};
 
         place(node.children[index], childArea, into);
         offset += size;

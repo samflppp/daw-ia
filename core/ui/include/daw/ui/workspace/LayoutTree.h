@@ -53,15 +53,13 @@ struct LayoutOptions
 // panels covers the surface exactly instead of leaving a one-pixel gap at the
 // far end. A surface too small for its separators yields empty rectangles, and
 // an empty rectangle is a panel that is not shown — never a negative size.
-[[nodiscard]] std::vector<PanelBounds> layoutPanels(const LayoutNode& root,
-                                                    Rect surface,
-                                                    LayoutOptions options = {});
+[[nodiscard]] std::vector<PanelBounds>
+layoutPanels(const LayoutNode& root, Rect surface, LayoutOptions options = {});
 
 // The separator rules, so the layout host can paint them. They belong to the
 // host, like the positions: a panel that drew its own border would be a panel
 // that knows it has a neighbour.
-[[nodiscard]] std::vector<Rect> layoutSeparators(const LayoutNode& root,
-                                                 Rect surface,
-                                                 LayoutOptions options = {});
+[[nodiscard]] std::vector<Rect>
+layoutSeparators(const LayoutNode& root, Rect surface, LayoutOptions options = {});
 
 } // namespace daw::ui

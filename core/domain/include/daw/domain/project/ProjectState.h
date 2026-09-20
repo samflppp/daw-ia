@@ -211,6 +211,19 @@ public:
     Result<void> addNote(ClipId clipId, Note note);
     Result<void> removeNote(ClipId clipId, NoteId noteId);
 
+    // Undoing a removal has to put the note back where it was. Order carries
+    // no musical meaning — a clip sounds the same whatever order its notes are
+    // stored in — but it carries an equality: two projects that differ only by
+    // the order of a vector are two different serialized forms, and a test that
+    // undoes a session back to its start would see them as unequal.
+    [[nodiscard]] Result<std::size_t> noteIndex(ClipId clipId, NoteId noteId) const;
+    Result<void> insertNote(ClipId clipId, Note note, std::size_t index);
+
+    // Moves a note in time and pitch. Length is untouched on purpose: dragging
+    // a note and stretching it are two gestures, and merging them into one
+    // command would make an undo give back a note the user never had.
+    Result<void> moveNote(ClipId clipId, NoteId noteId, int pitch, double startBeats);
+
     // --- plugins
     [[nodiscard]] const PluginInstance* findPlugin(PluginId id) const noexcept;
 

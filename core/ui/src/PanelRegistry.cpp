@@ -25,8 +25,7 @@ void PanelRegistry::add(std::string id, Factory factory)
 
 bool PanelRegistry::contains(std::string_view id) const noexcept
 {
-    return std::any_of(
-        entries_.begin(), entries_.end(), [id](const Entry& entry) { return entry.id == id; });
+    return std::any_of(entries_.begin(), entries_.end(), [id](const Entry& entry) { return entry.id == id; });
 }
 
 std::unique_ptr<juce::Component> PanelRegistry::create(const PanelContext& context) const

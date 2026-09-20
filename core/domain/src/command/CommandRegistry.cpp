@@ -2,6 +2,7 @@
 
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/CreateMidiClip.h"
+#include "daw/domain/commands/NoteCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
@@ -19,6 +20,8 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<RemoveTrack>());
     static_cast<void>(registry.add<CreateMidiClip>());
     static_cast<void>(registry.add<AddNote>());
+    static_cast<void>(registry.add<RemoveNote>());
+    static_cast<void>(registry.add<MoveNote>());
     static_cast<void>(registry.add<SetTrackVolume>());
     static_cast<void>(registry.add<SetTrackMuted>());
     static_cast<void>(registry.add<TransportPlay>());

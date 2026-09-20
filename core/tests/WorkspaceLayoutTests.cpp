@@ -107,8 +107,7 @@ TEST_CASE("a manifest from a schema this build does not know is refused whole")
 
 TEST_CASE("weights divide the surface, and the parts cover it exactly")
 {
-    const auto root = split(LayoutNode::Split::horizontal,
-                            {leaf("a", 1.0), leaf("b", 1.0), leaf("c", 1.0)});
+    const auto root = split(LayoutNode::Split::horizontal, {leaf("a", 1.0), leaf("b", 1.0), leaf("c", 1.0)});
 
     // 1000 over three is not an integer, which is exactly the case that leaves
     // a gap when each part is rounded on its own.

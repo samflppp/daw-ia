@@ -728,6 +728,69 @@ Result<void> ProjectState::addNote(ClipId clipId, Note note)
     return {};
 }
 
+Result<std::size_t> ProjectState::noteIndex(ClipId clipId, NoteId noteId) const
+{
+    const auto* clip = findClip(clipId);
+    if (clip == nullptr)
+        return fail(ErrorCode::notFound, "no such clip: " + clipId.toString());
+
+    for (std::size_t index = 0; index < clip->notes.size(); ++index)
+    {
+        if (clip->notes[index].id == noteId)
+            return index;
+    }
+
+    return fail(ErrorCode::notFound, "no such note: " + noteId.toString());
+}
+
+Result<void> ProjectState::insertNote(ClipId clipId, Note note, std::size_t index)
+{
+    auto valid = note.validate();
+    if (!valid)
+        return valid;
+
+    auto* clip = findClipMutable(clipId);
+    if (clip == nullptr)
+        return fail(ErrorCode::notFound, "no such clip: " + clipId.toString());
+
+    const auto existing = std::find_if(
+        clip->notes.begin(), clip->notes.end(), [&note](const Note& other) { return other.id == note.id; });
+    if (existing != clip->notes.end())
+        return fail(ErrorCode::conflict, "note already exists: " + note.id.toString());
+
+    // Beyond the current count it appends, like insertPlugin and insertTrack: a
+    // replayed payload must not fail on a clip that grew differently.
+    const auto at = std::min(index, clip->notes.size());
+    clip->notes.insert(clip->notes.begin() + static_cast<std::ptrdiff_t>(at), note);
+    return {};
+}
+
+Result<void> ProjectState::moveNote(ClipId clipId, NoteId noteId, int pitch, double startBeats)
+{
+    auto* clip = findClipMutable(clipId);
+    if (clip == nullptr)
+        return fail(ErrorCode::notFound, "no such clip: " + clipId.toString());
+
+    const auto position = std::find_if(
+        clip->notes.begin(), clip->notes.end(), [noteId](const Note& note) { return note.id == noteId; });
+    if (position == clip->notes.end())
+        return fail(ErrorCode::notFound, "no such note: " + noteId.toString());
+
+    // Validated before anything is written, on a copy: a refused move leaves
+    // the note exactly as it was, which is what the bus relies on to promise
+    // that a failed command creates no history entry.
+    Note moved = *position;
+    moved.pitch = pitch;
+    moved.startBeats = startBeats;
+
+    auto valid = moved.validate();
+    if (!valid)
+        return valid;
+
+    *position = moved;
+    return {};
+}
+
 Result<void> ProjectState::removeNote(ClipId clipId, NoteId noteId)
 {
     auto* clip = findClipMutable(clipId);
