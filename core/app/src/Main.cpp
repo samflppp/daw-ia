@@ -6,6 +6,7 @@
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/CreateMidiClip.h"
 #include "daw/domain/commands/PluginCommands.h"
+#include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/engine/EngineHost.h"
@@ -199,15 +200,9 @@ private:
     // notes are played by the user's own plugin instead of the built-in synth.
     void playDemo(const juce::String& pluginPath)
     {
-        domain::Track track{};
-        track.id = domain::TrackId::generate();
-        track.name = "Demo";
-
-        const auto trackId = track.id;
-        if (!state_.addTrack(std::move(track)))
+        const auto trackId = domain::TrackId::generate();
+        if (!bus_.execute(std::make_unique<domain::AddTrack>(trackId, "Demo")))
             return;
-
-        projector_->reconcile();
 
         if (pluginPath.isNotEmpty())
             static_cast<void>(insertPlugin(trackId, pluginPath));

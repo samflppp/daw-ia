@@ -584,6 +584,36 @@ Result<void> ProjectState::addTrack(Track track)
     return {};
 }
 
+Result<std::size_t> ProjectState::trackIndex(TrackId id) const
+{
+    const auto position =
+        std::find_if(tracks_.begin(), tracks_.end(), [id](const Track& track) { return track.id == id; });
+    if (position == tracks_.end())
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    return static_cast<std::size_t>(std::distance(tracks_.begin(), position));
+}
+
+Result<void> ProjectState::insertTrack(Track track, std::size_t index)
+{
+    auto valid = track.validate();
+    if (!valid)
+        return valid;
+
+    if (findTrack(track.id) != nullptr)
+        return fail(ErrorCode::conflict, "track already exists: " + track.id.toString());
+
+    for (const auto& clip : track.clips)
+    {
+        if (findClip(clip.id) != nullptr)
+            return fail(ErrorCode::conflict, "clip already exists: " + clip.id.toString());
+    }
+
+    const auto position = std::min(index, tracks_.size());
+    tracks_.insert(tracks_.begin() + static_cast<std::ptrdiff_t>(position), std::move(track));
+    return {};
+}
+
 Result<void> ProjectState::removeTrack(TrackId id)
 {
     const auto position =

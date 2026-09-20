@@ -4,6 +4,7 @@
 #include "daw/domain/commands/CreateMidiClip.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
+#include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 
 #include <algorithm>
@@ -14,6 +15,8 @@ namespace daw::domain
 CommandRegistry CommandRegistry::withBuiltinCommands()
 {
     CommandRegistry registry;
+    static_cast<void>(registry.add<AddTrack>());
+    static_cast<void>(registry.add<RemoveTrack>());
     static_cast<void>(registry.add<CreateMidiClip>());
     static_cast<void>(registry.add<AddNote>());
     static_cast<void>(registry.add<SetTrackVolume>());

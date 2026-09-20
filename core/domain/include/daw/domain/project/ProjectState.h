@@ -181,8 +181,15 @@ public:
     [[nodiscard]] const Track* findTrack(TrackId id) const noexcept;
     [[nodiscard]] const Clip* findClip(ClipId id) const noexcept;
 
-    Result<void> addTrack(Track track);
+    Result<void> addTrack(Track track); // appends
     Result<void> removeTrack(TrackId id);
+
+    // Undoing a removal has to put the track back where it was, so the index
+    // is readable and writable. Beyond the current count it appends, exactly
+    // like insertPlugin: a replayed payload never fails on a project that grew
+    // differently.
+    [[nodiscard]] Result<std::size_t> trackIndex(TrackId id) const;
+    Result<void> insertTrack(Track track, std::size_t index);
 
     [[nodiscard]] Result<double> trackVolume(TrackId id) const;
     Result<void> setTrackVolume(TrackId id, double volumeDb);

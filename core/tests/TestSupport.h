@@ -5,6 +5,7 @@
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/CreateMidiClip.h"
 #include "daw/domain/commands/SetTrackVolume.h"
+#include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/project/ProjectState.h"
 
 // <ostream> before doctest: doctest prints a failed comparison through

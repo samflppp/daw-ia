@@ -13,6 +13,7 @@ add_library(daw_domain STATIC
     src/commands/CreateMidiClip.cpp
     src/commands/PluginCommands.cpp
     src/commands/SetTrackVolume.cpp
+    src/commands/TrackCommands.cpp
     src/commands/TransportCommands.cpp
     src/project/ProjectState.cpp
     src/serialization/Json.cpp)
