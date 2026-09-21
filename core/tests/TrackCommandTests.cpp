@@ -179,3 +179,76 @@ TEST_CASE("mute survives a round trip through the journal")
     CHECK(replayedState.findTrack(trackId)->muted);
     CHECK(*replayedState.findTrack(trackId) == *source.state.findTrack(trackId));
 }
+
+TEST_CASE("a pan is a position, and it comes back where it was")
+{
+    Harness harness;
+
+    REQUIRE(harness.bus.execute(std::make_unique<SetTrackPan>(harness.trackId, -0.5)).ok());
+    CHECK(harness.state.trackPan(harness.trackId).value() == doctest::Approx(-0.5));
+
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(harness.state.trackPan(harness.trackId).value() == doctest::Approx(0.0));
+}
+
+TEST_CASE("a pan sweep is one history entry, and volume is not dragged with it")
+{
+    Harness harness;
+    REQUIRE(harness.bus.execute(harness.setVolume(-6.0)).ok());
+
+    const auto before = harness.bus.undoDepth();
+
+    const auto gesture = harness.bus.beginGesture("panoramique");
+    for (int frame = 1; frame <= 20; ++frame)
+        REQUIRE(
+            harness.bus
+                .execute(std::make_unique<SetTrackPan>(harness.trackId, static_cast<double>(frame) / 20.0),
+                         ExecuteOptions{gesture})
+                .ok());
+    REQUIRE(harness.bus.endGesture(gesture).ok());
+
+    CHECK(harness.bus.undoDepth() == before + 1);
+    CHECK(harness.state.trackPan(harness.trackId).value() == doctest::Approx(1.0));
+
+    // Pan and volume are two commands: undoing the sweep leaves the fader where
+    // it was, which is the whole reason they are not one command with two
+    // fields.
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(harness.state.trackPan(harness.trackId).value() == doctest::Approx(0.0));
+    CHECK(harness.state.trackVolume(harness.trackId).value() == doctest::Approx(-6.0));
+
+    // And a volume change does not absorb a pan change, nor the other way round.
+    const auto mixed = harness.bus.beginGesture("melange");
+    REQUIRE(harness.bus.execute(harness.setVolume(-3.0), ExecuteOptions{mixed}).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<SetTrackPan>(harness.trackId, 0.25), ExecuteOptions{mixed})
+                .ok());
+    REQUIRE(harness.bus.endGesture(mixed).ok());
+    CHECK(harness.bus.undoDepth() == before + 2);
+}
+
+TEST_CASE("a pan outside the field is refused, and leaves no history")
+{
+    Harness harness;
+
+    CHECK(harness.bus.execute(std::make_unique<SetTrackPan>(harness.trackId, 1.01)).error().code ==
+          ErrorCode::invalidArgument);
+    CHECK(harness.bus.execute(std::make_unique<SetTrackPan>(harness.trackId, -1.01)).error().code ==
+          ErrorCode::invalidArgument);
+    CHECK(harness.bus.execute(std::make_unique<SetTrackPan>(TrackId::generate(), 0.5)).error().code ==
+          ErrorCode::notFound);
+
+    CHECK(harness.bus.undoDepth() == 0);
+    CHECK(harness.state.trackPan(harness.trackId).value() == doctest::Approx(0.0));
+}
+
+TEST_CASE("a track written before pan existed reads as centred")
+{
+    // Exactly what S5 and S6 wrote on disk: no pan key at all.
+    const auto legacy = Value::object({{"id", Value{TrackId::generate().toString()}},
+                                       {"name", Value{std::string{"Basse"}}},
+                                       {"volumeDb", Value{-3.0}}});
+
+    const auto track = Track::fromValue(legacy);
+    REQUIRE(track.ok());
+    CHECK(track.value().pan == doctest::Approx(0.0));
+}

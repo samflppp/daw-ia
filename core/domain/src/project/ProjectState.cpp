@@ -459,6 +459,8 @@ Result<void> Track::validate() const
         return fail(ErrorCode::invalidArgument, "track identifier is nil");
     if (volumeDb < ProjectState::minVolumeDb || volumeDb > ProjectState::maxVolumeDb)
         return fail(ErrorCode::invalidArgument, "volume out of range: " + std::to_string(volumeDb));
+    if (pan < ProjectState::minPan || pan > ProjectState::maxPan)
+        return fail(ErrorCode::invalidArgument, "pan out of range: " + std::to_string(pan));
 
     for (const auto& clip : clips)
     {
@@ -492,6 +494,7 @@ Value Track::toValue() const
                           {"name", Value{name}},
                           {"volumeDb", Value{volumeDb}},
                           {"muted", Value{muted}},
+                          {"pan", Value{pan}},
                           {"clips", Value::array(std::move(serialisedClips))},
                           {"plugins", Value::array(std::move(serialisedPlugins))}});
 }
@@ -523,6 +526,16 @@ Result<Track> Track::fromValue(const Value& value)
         if (!muted)
             return muted.error();
         track.muted = muted.value();
+    }
+
+    // Same reading for pan: absent means centred, which is where every project
+    // written before pan existed actually sat.
+    if (value.find("pan") != nullptr)
+    {
+        auto pan = value.doubleAt("pan");
+        if (!pan)
+            return pan.error();
+        track.pan = pan.value();
     }
 
     const auto* clipsValue = value.find("clips");
@@ -567,7 +580,7 @@ Result<Track> Track::fromValue(const Value& value)
 
 bool operator==(const Track& lhs, const Track& rhs)
 {
-    return lhs.id == rhs.id && lhs.name == rhs.name && lhs.volumeDb == rhs.volumeDb &&
+    return lhs.id == rhs.id && lhs.name == rhs.name && lhs.volumeDb == rhs.volumeDb && lhs.pan == rhs.pan &&
            lhs.muted == rhs.muted && lhs.clips == rhs.clips && lhs.plugins == rhs.plugins;
 }
 
@@ -868,6 +881,28 @@ Result<void> ProjectState::setTrackVolume(TrackId id, double volumeDb)
         return fail(ErrorCode::notFound, "no such track: " + id.toString());
 
     track->volumeDb = volumeDb;
+    return {};
+}
+
+Result<double> ProjectState::trackPan(TrackId id) const
+{
+    const auto* track = findTrack(id);
+    if (track == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    return track->pan;
+}
+
+Result<void> ProjectState::setTrackPan(TrackId id, double pan)
+{
+    if (pan < minPan || pan > maxPan)
+        return fail(ErrorCode::invalidArgument, "pan out of range: " + std::to_string(pan));
+
+    auto* track = findTrackMutable(id);
+    if (track == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    track->pan = pan;
     return {};
 }
 

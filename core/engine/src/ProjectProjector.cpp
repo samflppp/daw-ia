@@ -430,7 +430,16 @@ void ProjectProjector::reconcile()
         target->setName(toJuce(source.name));
 
         if (auto* volume = target->getVolumePlugin(); volume != nullptr)
+        {
             volume->setVolumeDb(static_cast<float>(source.volumeDb));
+
+            // The law is written before the position, and on every projection:
+            // an Edit built elsewhere, or a Tracktion default moved by another
+            // part of the process, would otherwise decide the stereo image of
+            // this project.
+            volume->setPanLaw(panLaw);
+            volume->setPan(static_cast<float>(source.pan));
+        }
 
         // Tracktion's own mute, not a volume of -100 dB: it silences the clips
         // and the instrument that plays them, and it leaves the fader alone, so

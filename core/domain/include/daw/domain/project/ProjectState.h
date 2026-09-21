@@ -165,6 +165,13 @@ struct Track
     std::string name;
     double volumeDb{0.0};
 
+    // Where the track sits in the stereo field: -1 hard left, 0 centre,
+    // +1 hard right. A number, not a law: how that number becomes two gains is
+    // a decision of the projection, and it is written down in
+    // engine/ProjectProjector.h. A track without pan is not mixable, and the
+    // mix is the first ground a copilot works on.
+    double pan{0.0};
+
     // Silences the whole track: its clips and the instrument that plays them.
     // Not a volume of -100 dB, and not the bypass of a plugin — those are the
     // two things it is constantly mistaken for. A muted track keeps its fader
@@ -200,6 +207,9 @@ public:
     //   volume: volumeFaderPositionToDB() maps the fader onto [-100, +6] dB;
     //           above +6 the value is clamped, below -100 it is silence.
     //   tempo:  TempoSetting::minBPM and maxBPM.
+    static constexpr double minPan = -1.0;
+    static constexpr double maxPan = 1.0;
+
     static constexpr double minVolumeDb = -100.0;
     static constexpr double maxVolumeDb = 6.0;
     static constexpr double minTempo = 20.0;
@@ -246,6 +256,9 @@ public:
 
     [[nodiscard]] Result<double> trackVolume(TrackId id) const;
     Result<void> setTrackVolume(TrackId id, double volumeDb);
+
+    [[nodiscard]] Result<double> trackPan(TrackId id) const;
+    Result<void> setTrackPan(TrackId id, double pan);
 
     [[nodiscard]] Result<bool> trackMuted(TrackId id) const;
     Result<void> setTrackMuted(TrackId id, bool muted);

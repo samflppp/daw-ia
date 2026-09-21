@@ -204,4 +204,71 @@ Result<void> SetTrackMuted::revert(ProjectState& state, const Value& undoRecord)
     return state.setTrackMuted(trackId.value(), previous.value());
 }
 
+// ---------------------------------------------------------------------------
+// track.set_pan
+// ---------------------------------------------------------------------------
+
+SetTrackPan::SetTrackPan(TrackId trackId, double pan)
+    : trackId_{trackId}
+    , pan_{pan}
+{
+}
+
+Result<std::unique_ptr<Command>> SetTrackPan::fromPayload(const Value& payload)
+{
+    auto trackText = payload.stringAt("trackId");
+    if (!trackText)
+        return trackText.error();
+
+    auto trackId = TrackId::parse(trackText.value());
+    if (!trackId)
+        return fail(trackId.error().code, "trackId: " + trackId.error().message);
+
+    auto pan = payload.doubleAt("pan");
+    if (!pan)
+        return pan.error();
+
+    return std::unique_ptr<Command>{new SetTrackPan{trackId.value(), pan.value()}};
+}
+
+Value SetTrackPan::payload() const
+{
+    return Value::object({{"trackId", Value{trackId_.toString()}}, {"pan", Value{pan_}}});
+}
+
+Result<Value> SetTrackPan::apply(ProjectState& state) const
+{
+    auto previous = state.trackPan(trackId_);
+    if (!previous)
+        return previous.error();
+
+    if (auto applied = state.setTrackPan(trackId_, pan_); !applied)
+        return applied.error();
+
+    return Value::object({{"trackId", Value{trackId_.toString()}}, {"previousPan", Value{previous.value()}}});
+}
+
+Result<void> SetTrackPan::revert(ProjectState& state, const Value& undoRecord) const
+{
+    auto trackText = undoRecord.stringAt("trackId");
+    if (!trackText)
+        return trackText.error();
+
+    auto trackId = TrackId::parse(trackText.value());
+    if (!trackId)
+        return fail(trackId.error().code, "trackId: " + trackId.error().message);
+
+    auto previous = undoRecord.doubleAt("previousPan");
+    if (!previous)
+        return previous.error();
+
+    return state.setTrackPan(trackId.value(), previous.value());
+}
+
+bool SetTrackPan::canCoalesceWith(const Command& newer) const noexcept
+{
+    const auto* other = dynamic_cast<const SetTrackPan*>(&newer);
+    return other != nullptr && other->trackId_ == trackId_;
+}
+
 } // namespace daw::domain

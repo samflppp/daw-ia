@@ -36,6 +36,26 @@ namespace daw::engine
 class ProjectProjector final : public domain::BusObserver
 {
 public:
+    // The pan law: how a position between -1 and +1 becomes a left gain and a
+    // right gain. The domain carries the position and never the gains, so this
+    // is the one place the question is answered.
+    //
+    // It is one of Tracktion's five, not one invented here. It is *not* the one
+    // Tracktion returns by default, and that is deliberate, twice over:
+    //
+    //   - getDefaultPanLaw() is a mutable global of the process. A project
+    //     whose stereo image depended on it would not render the same on two
+    //     machines, for the same reason a chain bound by index would not
+    //     reload the same. The law is therefore written onto every volume
+    //     plugin explicitly, never left at PanLawDefault.
+    //
+    //   - that factory default is PanLawLinear, which computes
+    //     L = g - pan*g and R = g + pan*g: hard right gives R = 2g, a track
+    //     made 6 dB louder by being panned. PanLaw3dBCenter is constant power:
+    //     -3 dB at the centre, unity at either extreme, and equal loudness all
+    //     the way across.
+    static constexpr tracktion::PanLaw panLaw = tracktion::PanLaw3dBCenter;
+
     // The catalogue resolves a PluginRef into an installed plugin, and the store
     // holds the opaque states. Both are optional: a projection without them
     // still does tracks, clips, notes and volume, which is all a test that

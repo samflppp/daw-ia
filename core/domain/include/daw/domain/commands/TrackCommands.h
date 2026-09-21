@@ -65,6 +65,43 @@ private:
     TrackId trackId_;
 };
 
+// track.set_pan — places a track in the stereo field, from -1 to +1.
+//
+// A continuous gesture, so it coalesces per track, exactly like
+// track.set_volume: a pan knob dragged across the field is one history entry.
+//
+// It is its own command and not a second field of track.set_volume. The two
+// are moved by two different controls, and merging them would make undoing a
+// volume drag also move the track back across the stereo field.
+//
+// The command carries a position, never a pair of gains. How -0.5 becomes a
+// left gain and a right gain is a decision of the projection, written down in
+// engine/ProjectProjector.h: a payload that carried gains would freeze that
+// law into every journal ever written.
+class SetTrackPan final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "track.set_pan";
+
+    SetTrackPan(TrackId trackId, double pan);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+    [[nodiscard]] bool canCoalesceWith(const Command& newer) const noexcept override;
+
+    [[nodiscard]] TrackId trackId() const noexcept { return trackId_; }
+    [[nodiscard]] double pan() const noexcept { return pan_; }
+
+private:
+    TrackId trackId_;
+    double pan_;
+};
+
 // track.set_muted — silences a track, or gives it back.
 //
 // A switch, not a movement: it never coalesces, exactly like

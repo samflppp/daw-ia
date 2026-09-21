@@ -15,6 +15,7 @@ target_sources(daw_engine_tests PRIVATE
     ProjectionTests.cpp
     TransportProjectionTests.cpp
     TempoProjectionTests.cpp
+    PanProjectionTests.cpp
     PluginHostingTests.cpp
     PluginPersistenceTests.cpp)
 

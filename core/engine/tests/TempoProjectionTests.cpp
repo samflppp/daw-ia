@@ -58,8 +58,7 @@ TEST_CASE("The tempo of the origin changes how long the music lasts")
     MESSAGE("8 beats at 120 BPM = " << atDefault << " s");
     CHECK(atDefault == doctest::Approx(4.0).epsilon(0.02));
 
-    REQUIRE(harness.bus
-                .execute(std::make_unique<SetTempoPointBpm>(ProjectState::originTempoPointId(), 240.0))
+    REQUIRE(harness.bus.execute(std::make_unique<SetTempoPointBpm>(ProjectState::originTempoPointId(), 240.0))
                 .ok());
 
     const auto twiceAsFast = renderedSeconds(harness.host.edit());
