@@ -26,6 +26,9 @@ int runChildScenario(int argc, char** argv)
     if (scenario == "write" && argc >= 5)
         return daw::testing::scenarios::writeSession(argv[3], argv[4]);
 
+    if (scenario == "write-group" && argc >= 4)
+        return daw::testing::scenarios::writeGroupSession(argv[3]);
+
     if (scenario == "write-large" && argc >= 6)
         return daw::testing::scenarios::writeLargeSession(argv[3], argv[4], std::atoi(argv[5]));
 

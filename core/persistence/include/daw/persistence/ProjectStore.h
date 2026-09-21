@@ -45,7 +45,11 @@ public:
     //      question this journal will be asked, and it is the step that makes
     //      the migration chain run on a real project instead of only on an
     //      empty one.
-    static constexpr std::int64_t schemaVersion = 2;
+    //   3  the group: which history entry a command belongs to, and the label
+    //      that entry shows. Two columns and not a rewriting of anything —
+    //      each command keeps its own row, and the group is what tells a
+    //      reopened project that three rows were one Ctrl+Z.
+    static constexpr std::int64_t schemaVersion = 3;
 
     ~ProjectStore() override;
 
@@ -110,6 +114,11 @@ private:
     [[nodiscard]] domain::Result<void> append(std::string_view kind, const domain::Receipt& receipt);
 
     [[nodiscard]] domain::Result<void> migrate();
+
+    // Adds the two group columns unless they are already there. SQLite cannot
+    // say "if not exists" about a column, and a migration that refuses to run
+    // twice is one that breaks a project someone has already repaired.
+    [[nodiscard]] domain::Result<void> addGroupColumns();
     [[nodiscard]] domain::Result<void> readIdentity();
     [[nodiscard]] domain::Result<std::int64_t> readSchemaVersion();
     [[nodiscard]] domain::Result<std::string> readMeta(std::string_view key);

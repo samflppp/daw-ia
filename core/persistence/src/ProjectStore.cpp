@@ -66,15 +66,32 @@ constexpr std::string_view schemaV2 = R"sql(
 CREATE INDEX IF NOT EXISTS journal_by_actor ON journal (actor, seq);
 )sql";
 
-constexpr Migration migrations[] = {{1, schemaV1}, {2, schemaV2}};
+// Version 3. A group is what makes several commands one history entry. It
+// lives in two columns rather than inside the payload because the journal is
+// read as a table as often as it is replayed: "what did that request change"
+// has to be one SELECT.
+//
+// Both columns are nullable, and that is the whole migration: every row
+// written before this version belonged to no group, which is exactly what a
+// null says.
+//
+// The two columns are added in code rather than here, because SQLite has no
+// ADD COLUMN IF NOT EXISTS and a migration that cannot be run twice is a
+// migration that turns a repaired project into a broken one.
+constexpr std::string_view schemaV3 = R"sql(
+CREATE INDEX IF NOT EXISTS journal_by_group ON journal (group_id, seq);
+)sql";
+
+constexpr Migration migrations[] = {{1, schemaV1}, {2, schemaV2}, {3, schemaV3}};
 
 constexpr std::string_view insertSql =
     "INSERT INTO journal (kind, command_id, at_micros, actor, context_digest, context_bytes, "
-    "type, gesture_id, payload, envelope_version) VALUES (?,?,?,?,?,?,?,?,?,?)";
+    "type, gesture_id, payload, envelope_version, group_id, group_label) "
+    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
 
 constexpr std::string_view selectSql =
     "SELECT seq, kind, command_id, at_micros, actor, context_digest, context_bytes, type, "
-    "gesture_id, payload, envelope_version FROM journal ORDER BY seq";
+    "gesture_id, payload, envelope_version, group_id, group_label FROM journal ORDER BY seq";
 
 struct Row
 {
@@ -90,6 +107,8 @@ struct Row
     std::string gestureId;
     std::string payload;
     std::int64_t envelopeVersion{domain::CommandEnvelope::currentVersion};
+    std::string groupId;
+    std::string groupLabel;
 };
 
 [[nodiscard]] domain::Result<domain::Provenance> provenanceOf(const Row& row)
@@ -148,6 +167,17 @@ struct Row
                         "row " + std::to_string(row.seq) + ": gesture: " + gesture.error().message);
 
         envelope.gesture = gesture.value();
+    }
+
+    if (!row.groupId.empty())
+    {
+        auto group = domain::GroupRef::fromValue(domain::Value::object(
+            {{"id", domain::Value{row.groupId}}, {"label", domain::Value{row.groupLabel}}}));
+        if (!group)
+            return fail(group.error().code,
+                        "row " + std::to_string(row.seq) + ": group: " + group.error().message);
+
+        envelope.group = std::move(group).value();
     }
 
     return envelope.toValue();
@@ -242,6 +272,13 @@ domain::Result<void> ProjectStore::migrate()
         if (auto begun = transaction.begin(); !begun)
             return begun;
 
+        // The columns come before the index that reads them.
+        if (migration.to == 3)
+        {
+            if (auto added = addGroupColumns(); !added)
+                return added;
+        }
+
         if (auto applied = database_.execute(migration.sql); !applied)
             return applied;
 
@@ -264,6 +301,27 @@ domain::Result<void> ProjectStore::migrate()
     }
 
     versionOnDisk_ = schemaVersion;
+    return {};
+}
+
+domain::Result<void> ProjectStore::addGroupColumns()
+{
+    for (const auto* column : {"group_id", "group_label"})
+    {
+        auto present = database_.queryInt("SELECT count(*) FROM pragma_table_info('journal') "
+                                          "WHERE name = '" +
+                                          std::string{column} + "'");
+        if (!present)
+            return present.error();
+
+        if (present.value() > 0)
+            continue;
+
+        if (auto added = database_.execute("ALTER TABLE journal ADD COLUMN " + std::string{column} + " TEXT");
+            !added)
+            return added;
+    }
+
     return {};
 }
 
@@ -442,6 +500,21 @@ domain::Result<void> ProjectStore::append(std::string_view kind, const domain::R
     if (auto bound = insert.bind(10, domain::CommandEnvelope::currentVersion); !bound)
         return bound;
 
+    if (receipt.group.has_value())
+    {
+        if (auto bound = insert.bind(11, receipt.group->id.toString()); !bound)
+            return bound;
+        if (auto bound = insert.bind(12, receipt.group->label); !bound)
+            return bound;
+    }
+    else
+    {
+        if (auto bound = insert.bindNull(11); !bound)
+            return bound;
+        if (auto bound = insert.bindNull(12); !bound)
+            return bound;
+    }
+
     Transaction transaction{database_};
     if (auto begun = transaction.begin(); !begun)
         return begun;
@@ -531,6 +604,8 @@ domain::Result<ProjectStore::ReplayReport> ProjectStore::replayInto(domain::Comm
         row.gestureId = select.columnText(8);
         row.payload = select.columnText(9);
         row.envelopeVersion = select.columnInt(10);
+        row.groupId = select.columnText(11);
+        row.groupLabel = select.columnText(12);
         rows.push_back(std::move(row));
     }
 
@@ -563,27 +638,63 @@ domain::Result<ProjectStore::ReplayReport> ProjectStore::replayInto(domain::Comm
     const bool wasRecording = recording_;
     recording_ = false;
 
-    for (const auto& event : events)
+    for (std::size_t index = 0; index < events.size(); ++index)
     {
+        const auto& event = events[index];
+
         if (event.kind == "execute")
         {
-            auto envelope = envelopeOf(event);
-            if (!envelope)
+            // The rows of a group are consecutive, because the bus applies its
+            // commands back to back. They are replayed together or the project
+            // would come back with the right state and a history of three
+            // entries where the user left one.
+            std::size_t last = index;
+            if (!event.groupId.empty())
             {
-                recording_ = wasRecording;
-                return envelope.error();
+                while (last + 1 < events.size() && events[last + 1].kind == "execute" &&
+                       events[last + 1].groupId == event.groupId)
+                    ++last;
             }
 
-            auto executed = bus.executeSerialized(envelope.value());
-            if (!executed)
+            std::vector<domain::Value> envelopes;
+            envelopes.reserve(last - index + 1);
+            for (std::size_t step = index; step <= last; ++step)
             {
-                recording_ = wasRecording;
-                return fail(executed.error().code,
-                            "row " + std::to_string(event.seq) + " (" + event.type +
-                                "): " + executed.error().message);
+                auto envelope = envelopeOf(events[step]);
+                if (!envelope)
+                {
+                    recording_ = wasRecording;
+                    return envelope.error();
+                }
+
+                envelopes.push_back(std::move(envelope).value());
             }
 
-            ++report.commands;
+            if (event.groupId.empty())
+            {
+                auto replayed = bus.executeSerialized(envelopes.front());
+                if (!replayed)
+                {
+                    recording_ = wasRecording;
+                    return fail(replayed.error().code,
+                                "row " + std::to_string(event.seq) + " (" + event.type +
+                                    "): " + replayed.error().message);
+                }
+            }
+            else
+            {
+                auto replayed = bus.executeSerializedGroup(envelopes);
+                if (!replayed)
+                {
+                    recording_ = wasRecording;
+                    return fail(replayed.error().code,
+                                "row " + std::to_string(event.seq) + " (" + event.type +
+                                    "): " + replayed.error().message);
+                }
+            }
+
+            report.commands += last - index + 1;
+            index = last;
             continue;
         }
 

@@ -1,4 +1,6 @@
 #include "TestSupport.h"
+#include "daw/domain/commands/PluginCommands.h"
+#include "daw/domain/commands/TempoCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/ui/history/HistoryLog.h"
 
@@ -142,4 +144,60 @@ TEST_CASE("a command type has a label, and an unknown one keeps its name")
     CHECK(HistoryLog::describe("track.add") == "Nouvelle piste");
     CHECK(HistoryLog::describe("note.move") == "Note déplacée");
     CHECK(HistoryLog::describe("mystere.inconnu") == "mystere.inconnu");
+}
+
+TEST_CASE("a group is one line, holding the sentence that was asked")
+{
+    Logged fixture;
+
+    const auto trackId = TrackId::generate();
+
+    PluginInstance vital{};
+    vital.id = PluginId::generate();
+    vital.ref.format = std::string{PluginRef::clapFormat};
+    vital.ref.identifier = "audio.vital.synth";
+    vital.ref.name = "Vital";
+
+    std::vector<std::unique_ptr<Command>> commands;
+    commands.push_back(std::make_unique<AddTrack>(trackId, "Basse"));
+    commands.push_back(std::make_unique<InsertPlugin>(trackId, vital, 0));
+
+    GroupOptions options{};
+    options.label = "ajoute une piste Basse et mets-y Vital";
+    options.origin.actor = Actor::copilot;
+
+    REQUIRE(fixture.harness.bus.executeGroup(std::move(commands), options).ok());
+
+    // Two commands, two notifications, one line — and the line says what was
+    // asked, not what the first command was called.
+    REQUIRE(fixture.log.entries().size() == 1);
+    CHECK(fixture.log.entries().front().merged == 2);
+    CHECK(fixture.log.entries().front().label() == "ajoute une piste Basse et mets-y Vital");
+    CHECK(fixture.log.entries().front().actor == Actor::copilot);
+    CHECK(fixture.log.cursor() == 1);
+    CHECK(fixture.log.cursor() == fixture.harness.bus.undoDepth());
+
+    // And one undo takes the line back, as it takes the whole group back.
+    REQUIRE(fixture.harness.bus.undo().ok());
+    CHECK(fixture.log.cursor() == 0);
+    CHECK(fixture.log.entries().size() == 1);
+}
+
+TEST_CASE("the transport of a group leaves no line behind")
+{
+    Logged fixture;
+
+    std::vector<std::unique_ptr<Command>> commands;
+    commands.push_back(std::make_unique<SetTempoPointBpm>(ProjectState::originTempoPointId(), 140.0));
+    commands.push_back(std::make_unique<TransportSetLoop>(true, 0.0, 4.0));
+
+    GroupOptions options{};
+    options.label = "passe le tempo a 140 et fais boucler la lecture";
+    options.origin.actor = Actor::copilot;
+
+    REQUIRE(fixture.harness.bus.executeGroup(std::move(commands), options).ok());
+
+    REQUIRE(fixture.log.entries().size() == 1);
+    CHECK(fixture.log.entries().front().merged == 1);
+    CHECK(fixture.log.entries().front().label() == "passe le tempo a 140 et fais boucler la lecture");
 }

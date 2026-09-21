@@ -53,6 +53,11 @@ namespace scenarios
 [[nodiscard]] int writeSession(const std::filesystem::path& projectFolder,
                                const std::filesystem::path& stateFile);
 
+// Writes a project whose last action is a copilot group: one track and one
+// plugin on it, asked for in one sentence. What the reopening has to rebuild
+// is not only the state but the history — one entry, one Ctrl+Z.
+[[nodiscard]] int writeGroupSession(const std::filesystem::path& projectFolder);
+
 // Writes a project with `commands` note commands, for the volume test.
 [[nodiscard]] int writeLargeSession(const std::filesystem::path& projectFolder,
                                     const std::filesystem::path& stateFile,

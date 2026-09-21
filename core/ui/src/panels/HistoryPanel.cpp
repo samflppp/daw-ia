@@ -239,7 +239,7 @@ void HistoryPanel::paint(juce::Graphics& g)
         g.setFont(lookAndFeel_.typography().sans("font.size.micro", "font.weight.regular"));
         g.drawText(actorLabel(entry.actor), author, juce::Justification::centredRight, false);
 
-        const auto label = History::describe(entry.type);
+        const auto label = entry.label();
         g.setColour(applied ? tokens_.colour("color.text.secondary") : tokens_.colour("color.text.disabled"));
         g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
         // fromUTF8 and not the two-argument constructor: that one decodes

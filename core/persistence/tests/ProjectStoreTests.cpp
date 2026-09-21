@@ -423,7 +423,7 @@ TEST_CASE("a project left at schema 1 is migrated, with its rows intact")
     auto version = database.value().queryInt("SELECT CAST(value AS INTEGER) FROM meta "
                                              "WHERE key = 'schema_version'");
     REQUIRE(version.ok());
-    CHECK(version.value() == 2);
+    CHECK(version.value() == ProjectStore::schemaVersion);
 
     auto index = database.value().queryInt("SELECT count(*) FROM sqlite_master "
                                            "WHERE type = 'index' AND name = 'journal_by_actor'");
@@ -506,4 +506,62 @@ TEST_CASE("a coalesced row that follows nothing is a malformed journal, and says
     auto report = reopen(session, project);
     REQUIRE(!report.ok());
     CHECK(report.error().code == ErrorCode::storageError);
+}
+
+TEST_CASE("a group reopens as one entry, and one Ctrl+Z")
+{
+    TemporaryFolder temporary{"group"};
+    const auto project = temporary.child("Projet.dawproj");
+    REQUIRE(runChildProcess({"--child", "write-group", project.string()}) == 0);
+
+    // Three commands were written, and the last two shared a group.
+    auto database = Database::open(ProjectFolder{project}.databaseFile());
+    REQUIRE(database.ok());
+
+    auto rows = database.value().queryInt("SELECT count(*) FROM journal WHERE kind = 'execute'");
+    REQUIRE(rows.ok());
+    CHECK(rows.value() == 3);
+
+    auto grouped = database.value().queryInt("SELECT count(*) FROM journal WHERE group_id IS NOT NULL");
+    REQUIRE(grouped.ok());
+    CHECK(grouped.value() == 2);
+
+    auto distinctGroups =
+        database.value().queryInt("SELECT count(DISTINCT group_id) FROM journal WHERE group_id IS NOT NULL");
+    REQUIRE(distinctGroups.ok());
+    CHECK(distinctGroups.value() == 1);
+    REQUIRE(database.value().checkpointAndClose().ok());
+
+    Reopened session;
+    auto report = reopen(session, project);
+    REQUIRE_MESSAGE(report.ok(), report.error().message);
+    CHECK(report.value().commands == 3);
+
+    const auto groupedTrack = TrackId::parse("01JBWQ7Z000000000000TRACK4");
+    REQUIRE(groupedTrack.ok());
+    const auto pluginId = PluginId::parse("01JBWQ7Z00000000000PG1N000");
+    REQUIRE(pluginId.ok());
+    REQUIRE(session.state.findTrack(groupedTrack.value()) != nullptr);
+    REQUIRE(session.state.findPlugin(pluginId.value()) != nullptr);
+
+    // Two entries, not three: the group came back as one.
+    CHECK(session.bus.undoDepth() == 2);
+
+    REQUIRE(session.bus.undo().ok());
+    CHECK(session.state.findTrack(groupedTrack.value()) == nullptr);
+    CHECK(session.state.findPlugin(pluginId.value()) == nullptr);
+    CHECK(session.bus.undoDepth() == 1);
+
+    // And the label the user's sentence left is still there, in the journal
+    // the panel is rebuilt from.
+    const auto journal = session.bus.journal();
+    REQUIRE(journal.size() == 1);
+    REQUIRE(session.bus.redo().ok());
+
+    const auto restored = session.bus.journal();
+    REQUIRE(restored.size() == 3);
+    auto envelope = CommandEnvelope::fromValue(restored.back());
+    REQUIRE(envelope.ok());
+    REQUIRE(envelope.value().group.has_value());
+    CHECK(envelope.value().group->label == "ajoute une piste Basse et mets-y Vital");
 }

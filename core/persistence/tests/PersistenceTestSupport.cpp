@@ -4,6 +4,7 @@
 #include "daw/domain/command/CommandRegistry.h"
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/CreateMidiClip.h"
+#include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/project/ProjectState.h"
@@ -133,6 +134,45 @@ struct Session
 }
 
 } // namespace
+
+int writeGroupSession(const std::filesystem::path& projectFolder)
+{
+    auto store = persistence::ProjectStore::open(persistence::ProjectFolder{projectFolder});
+    if (!store)
+        return 2;
+
+    Session session;
+    store.value()->startRecording(session.bus);
+
+    const auto trackId = fixedTrackId();
+    if (!session.bus.execute(std::make_unique<AddTrack>(trackId, "Basse", 0.0)))
+        return 3;
+
+    const auto groupedTrack = TrackId::parse("01JBWQ7Z000000000000TRACK4").value();
+
+    PluginInstance vital{};
+    vital.id = PluginId::parse("01JBWQ7Z00000000000PG1N000").value();
+    vital.ref.format = std::string{PluginRef::clapFormat};
+    vital.ref.identifier = "audio.vital.synth";
+    vital.ref.name = "Vital";
+
+    std::vector<std::unique_ptr<Command>> commands;
+    commands.push_back(std::make_unique<AddTrack>(groupedTrack, "Copilote", 0.0));
+    commands.push_back(std::make_unique<InsertPlugin>(groupedTrack, vital, 0));
+
+    GroupOptions options{};
+    options.label = "ajoute une piste Basse et mets-y Vital";
+    options.origin.actor = Actor::copilot;
+
+    if (!session.bus.executeGroup(std::move(commands), std::move(options)))
+        return 4;
+
+    store.value()->stopRecording();
+    if (!store.value()->close())
+        return 5;
+
+    return 0;
+}
 
 int writeSession(const std::filesystem::path& projectFolder, const std::filesystem::path& stateFile)
 {

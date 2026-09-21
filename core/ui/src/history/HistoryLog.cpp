@@ -34,6 +34,17 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 17> labels{{
 
 } // namespace
 
+std::string_view HistoryLog::Entry::label() const noexcept
+{
+    // The group label is the sentence that was asked; the type is what the
+    // command was called. When both exist the first one is the one that tells
+    // the user what they can undo.
+    if (group.has_value())
+        return group->label;
+
+    return HistoryLog::describe(type);
+}
+
 std::string_view HistoryLog::describe(std::string_view type) noexcept
 {
     const auto found =
@@ -56,6 +67,19 @@ void HistoryLog::onExecuted(const domain::Receipt& receipt)
     if (receipt.policy == domain::HistoryPolicy::transient)
         return;
 
+    // The commands of a group are notified one by one, because the journal
+    // needs every payload. Here they are one line: the second command of a
+    // group joins the entry the first one opened.
+    if (receipt.group.has_value() && cursor_ > 0)
+    {
+        auto& top = entries_[cursor_ - 1];
+        if (top.group.has_value() && top.group->id == receipt.group->id)
+        {
+            ++top.merged;
+            return;
+        }
+    }
+
     // Executing after an undo kills the redo branch, in the bus and here.
     entries_.erase(entries_.begin() + static_cast<std::ptrdiff_t>(cursor_), entries_.end());
 
@@ -64,6 +88,7 @@ void HistoryLog::onExecuted(const domain::Receipt& receipt)
     entry.type = receipt.type;
     entry.at = receipt.at;
     entry.actor = receipt.origin.actor;
+    entry.group = receipt.group;
     entries_.push_back(std::move(entry));
     cursor_ = entries_.size();
 }

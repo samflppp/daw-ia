@@ -3,6 +3,7 @@
 #include "daw/domain/command/BusObserver.h"
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -39,8 +40,17 @@ public:
         domain::Actor actor{domain::Actor::user};
 
         // How many commands the entry holds. One, unless a gesture merged a
-        // sweep into it.
+        // sweep into it, or a group made several commands one action.
         std::size_t merged{1};
+
+        // The group this entry was built from, when it was built from one.
+        // Its label is what the panel shows instead of the type of whichever
+        // command happened to come first: "track.add" says nothing about a
+        // request that asked for a track and a plugin on it.
+        std::optional<domain::GroupRef> group;
+
+        // What a reader of the panel should see on this line.
+        [[nodiscard]] std::string_view label() const noexcept;
     };
 
     [[nodiscard]] const std::vector<Entry>& entries() const noexcept { return entries_; }
