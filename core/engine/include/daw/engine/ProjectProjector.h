@@ -75,6 +75,12 @@ public:
     void onRedone(const domain::Receipt& receipt) override;
 
 private:
+    // Brings the Edit's tempo sequence into agreement with the domain's, and
+    // says whether anything moved. It did, every clip has to be laid out
+    // again: a clip is inserted into the Edit as a time range, and the beats
+    // it came from now map onto other seconds.
+    [[nodiscard]] bool reconcileTempo();
+
     [[nodiscard]] tracktion::AudioTrack* findTrack(const domain::TrackId& id) const;
     [[nodiscard]] tracktion::AudioTrack* createTrackFor(const domain::TrackId& id);
     void removeUnknownTracks();
@@ -108,6 +114,10 @@ private:
     // Last projected form, keyed by domain identifier. Lets an unchanged track
     // be skipped without ever binding by position.
     std::vector<std::pair<domain::TrackId, domain::Value>> projected_;
+
+    // Last projected tempo sequence. Rebuilding it costs little, but rebuilding
+    // it for nothing would drag every clip of the Edit with it.
+    domain::Value projectedTempo_;
 };
 
 } // namespace daw::engine

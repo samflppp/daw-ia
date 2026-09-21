@@ -341,6 +341,46 @@ void ProjectProjector::rebuildClips(tracktion::AudioTrack& target, const domain:
     }
 }
 
+bool ProjectProjector::reconcileTempo()
+{
+    domain::Value::Array snapshot;
+    snapshot.reserve(state_.tempoPoints().size());
+    for (const auto& point : state_.tempoPoints())
+        snapshot.push_back(point.toValue());
+
+    auto wanted = domain::Value::array(std::move(snapshot));
+    if (wanted == projectedTempo_)
+        return false;
+
+    auto& sequence = edit_.tempoSequence;
+
+    // Rebuilt whole rather than diffed. A tempo sequence holds a handful of
+    // points, and matching them one by one would mean binding by index — the
+    // very thing the track and plugin projections refuse to do.
+    while (sequence.getNumTempos() > 1)
+        sequence.removeTempo(sequence.getNumTempos() - 1, false);
+
+    const auto& points = state_.tempoPoints();
+
+    // The first Tracktion tempo is the one a new Edit already has, and it sits
+    // at beat 0 like the domain's own origin point. They are the same object,
+    // so it is set and never inserted.
+    if (auto* first = sequence.getTempo(0); first != nullptr)
+        first->setBpm(points.front().beatsPerMinute);
+
+    for (std::size_t index = 1; index < points.size(); ++index)
+    {
+        // remapEdit is false throughout, and insertTempo takes beats: the
+        // domain anchors its points in beats, so a tempo change moves no
+        // musical content. Nothing to remap, by construction.
+        sequence.insertTempo(
+            tracktion::BeatPosition::fromBeats(points[index].startBeats), points[index].beatsPerMinute, 0.0f);
+    }
+
+    projectedTempo_ = std::move(wanted);
+    return true;
+}
+
 void ProjectProjector::reconcile()
 {
     // Everything written into the Edit from here on is a projection, not a user
@@ -352,8 +392,14 @@ void ProjectProjector::reconcile()
         ~Guard() { flag = false; }
     } guard{projecting_};
 
-    if (auto* tempo = edit_.tempoSequence.getTempo(0); tempo != nullptr)
-        tempo->setBpm(state_.tempoAt(0.0));
+    if (reconcileTempo())
+    {
+        // Every clip was placed in seconds computed from the old sequence, so
+        // every track has to be laid out again. Forgetting the last projected
+        // form of each track is enough: the loop below rebuilds what it no
+        // longer recognises.
+        projected_.clear();
+    }
 
     removeUnknownTracks();
 

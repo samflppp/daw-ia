@@ -93,9 +93,9 @@ TEST_CASE("a tempo drag is one history entry, and two points stay two")
     for (int frame = 0; frame < 20; ++frame)
     {
         const auto bpm = 120.0 + static_cast<double>(frame);
-        REQUIRE(harness.bus.execute(std::make_unique<SetTempoPointBpm>(origin(), bpm),
-                                    ExecuteOptions{gesture})
-                    .ok());
+        REQUIRE(
+            harness.bus.execute(std::make_unique<SetTempoPointBpm>(origin(), bpm), ExecuteOptions{gesture})
+                .ok());
     }
 
     // Another point inside the same gesture: undoing one must not move the
@@ -220,9 +220,9 @@ TEST_CASE("a tempo payload is refused rather than guessed at")
     ProjectState state;
     const auto registry2 = CommandRegistry::withBuiltinCommands();
     CommandBus bus{state, registry2};
-    CHECK(bus.execute(std::make_unique<InsertTempoPoint>(TempoPointId::generate(), 8.0, 301.0))
-              .error()
-              .code == ErrorCode::invalidArgument);
+    CHECK(
+        bus.execute(std::make_unique<InsertTempoPoint>(TempoPointId::generate(), 8.0, 301.0)).error().code ==
+        ErrorCode::invalidArgument);
 }
 
 TEST_CASE("the four tempo verbs are in the registry, under the names a caller sees")
