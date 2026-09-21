@@ -128,6 +128,61 @@ elles-mêmes. Voir `docs/persistence.md`.
 | `note.add` | mutation imbriquée, échec propre si le clip n'existe pas |
 | `track.set_volume` | mutation continue, seule des trois à accepter le coalescing |
 
+## Le tempo est une séquence
+
+Depuis la S7 le projet ne porte plus un tempo scalaire mais une suite de
+`TempoPoint`, triée, jamais vide, et dont le premier point est toujours à
+l'origine.
+
+| Décision | Raison |
+|---|---|
+| ancrage en **beats**, jamais en secondes | clips et notes sont en beats ; changer un tempo ne déplace donc aucun contenu musical, et il n'y a rien à remapper |
+| **identité** et non position | `tempo.move` change la position d'un point ; un payload qui le désignerait par son beat viserait un autre point dès qu'une commande l'aurait déplacé |
+| identifiant **constant** pour le point à l'origine | personne ne le crée, donc personne ne peut fournir son identifiant ; un ULID engendré rendrait deux projets vides différents |
+| pas de champ `curve` | Tracktion en a un, c'est une forme d'automation, hors périmètre ; un champ que rien ne change ment. L'ajouter est additif |
+
+Les bornes sont celles de Tracktion : `TempoSetting::minBPM` et `maxBPM`,
+soit `[20, 300]`.
+
+| Type | Ce qu'elle valide | Fusion |
+|---|---|---|
+| `tempo.insert` | ajout d'un changement, identifiant fourni par l'appelant | non |
+| `tempo.remove` | retrait ; l'undoRecord porte le point entier, pas son identifiant | non |
+| `tempo.set_bpm` | mutation continue, un tempo se tire comme un fader | par point |
+| `tempo.move` | déplacement sur la timeline, sans toucher au bpm | par point |
+
+Le point à l'origine refuse `tempo.remove` et `tempo.move` : la séquence doit
+rester non vide et commencer à l'origine. Son bpm change comme celui de
+n'importe quel autre point.
+
+Deux points ne peuvent pas partager un beat, sinon le tempo en vigueur
+dépendrait de l'ordre d'insertion, que le rejeu n'a aucune raison de
+reproduire.
+
+### Lire un projet écrit avant la séquence
+
+`ProjectState::fromValue` accepte les deux formes : un `"tempo"` nombre vaut une
+séquence d'un seul point à l'origine, et le projet obtenu est **égal** à un
+projet construit aujourd'hui au même tempo. Aucun payload déjà écrit n'est
+réécrit — aucun journal n'a jamais porté de commande de tempo, et c'est
+précisément ce qui rendait la dette bon marché avant les clips audio.
+
+### La preuve est une durée, pas un champ
+
+Relire `edit.tempoSequence` prouverait qu'un nombre a été rangé là où on l'a
+mis. Un tempo est une vitesse : ce qu'il change, c'est la durée de huit beats.
+`core/engine/tests/TempoProjectionTests.cpp` mesure le rendu hors ligne.
+
+| Séquence | Durée rendue |
+|---|---|
+| 8 beats à 120 BPM | 4 s |
+| 8 beats à 240 BPM | 2 s |
+| 4 beats à 120 puis 4 à 240 | 3 s |
+| le même changement deux beats plus loin | 3,5 s |
+
+Trois quarts et non la moitié : un point ne gouverne que les beats qui le
+suivent. Une séquence projetée comme un tempo unique aurait rendu 2 s.
+
 ## Ce que le domaine ne lie pas
 
 `core/domain` ne lie ni JUCE, ni Tracktion, ni `core/ui`. `cmake/DawGuards.cmake`
