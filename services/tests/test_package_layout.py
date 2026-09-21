@@ -5,7 +5,7 @@ import pytest
 import daw_services
 from daw_services.__main__ import main
 
-SUBPACKAGES = ["rpc", "mcp", "harmony", "conditioning", "ia_provider"]
+SUBPACKAGES = ["rpc", "mcp", "harmony", "conditioning", "ia_provider", "copilot"]
 
 
 @pytest.mark.parametrize("name", SUBPACKAGES)
