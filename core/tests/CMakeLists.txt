@@ -12,6 +12,7 @@ add_executable(daw_domain_tests
     UndoRedoTests.cpp
     CoalescingTests.cpp
     GroupTests.cpp
+    CommandQueueTests.cpp
     ReplayTests.cpp
     ProvenanceTests.cpp
     TrackCommandTests.cpp
