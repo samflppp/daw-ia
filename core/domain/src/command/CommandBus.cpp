@@ -151,13 +151,18 @@ Result<Receipt> CommandBus::executeEntry(std::unique_ptr<Command> command,
 
     // Both halves must agree: the caller asked for this gesture, and the type
     // on top of the history accepts to absorb the newcomer.
-    // Same target, same gesture — and same origin. A copilot does not graft a
+    // Same target, same gesture -- and same origin. A copilot does not graft a
     // parameter onto a gesture a human started: merging the two would make one
     // history entry whose author is a lie, and undo would give it all back to
     // whoever the first command happened to belong to.
+    //
+    // A grouped entry absorbs nothing. Its commands are several by definition,
+    // and merging a fader move into "add a Bass track and put Vital on it"
+    // would make one line that undoes two unrelated things.
     const bool coalescing = allowCoalescing && gesture.has_value() && !undoStack_.empty() &&
+                            undoStack_.back().steps.size() == 1 && !undoStack_.back().group.has_value() &&
                             undoStack_.back().gesture == gesture && undoStack_.back().origin == origin &&
-                            undoStack_.back().command->canCoalesceWith(*command);
+                            undoStack_.back().first().command->canCoalesceWith(*command);
 
     auto applied = command->apply(state_);
     if (!applied)
@@ -168,24 +173,215 @@ Result<Receipt> CommandBus::executeEntry(std::unique_ptr<Command> command,
         // Keep the undo record of the *first* command of the gesture: undoing
         // must go back to before the gesture, not one frame back.
         auto& entry = undoStack_.back();
-        entry.command = std::move(command);
+        entry.steps.front().command = std::move(command);
 
-        const auto receipt = receiptFor(entry, true);
+        const auto receipt = receiptFor(entry, entry.first(), true);
         notify(&BusObserver::onCoalesced, receipt);
         return receipt;
     }
 
     redoStack_.clear();
 
+    Step step{};
+    step.id = id;
+    step.at = at;
+    step.command = std::move(command);
+    step.undoRecord = std::move(applied).value();
+
     Entry entry{};
-    entry.id = id;
-    entry.at = at;
     entry.gesture = gesture;
     entry.origin = origin;
-    entry.command = std::move(command);
-    entry.undoRecord = std::move(applied).value();
+    entry.steps.push_back(std::move(step));
     undoStack_.push_back(std::move(entry));
 
+    const auto dropped = trimToLimit();
+
+    const auto receipt = receiptFor(undoStack_.back(), undoStack_.back().first(), false);
+    notify(&BusObserver::onExecuted, receipt);
+    if (dropped > 0)
+        notifyTruncated(dropped);
+
+    return receipt;
+}
+
+// ---------------------------------------------------------------------------
+// Groups
+// ---------------------------------------------------------------------------
+
+Result<std::vector<Receipt>> CommandBus::executeGroup(std::vector<std::unique_ptr<Command>> commands,
+                                                      GroupOptions options)
+{
+    if (auto owned = checkThread(); !owned)
+        return owned.error();
+
+    if (mutating_)
+        return reentrant();
+
+    if (auto valid = options.origin.validate(); !valid)
+        return valid.error();
+
+    GroupRef group{};
+    group.id = GroupId::generate();
+    group.label = std::move(options.label);
+    if (auto valid = group.validate(); !valid)
+        return valid.error();
+
+    std::vector<GroupCommand> steps;
+    steps.reserve(commands.size());
+    for (auto& command : commands)
+    {
+        GroupCommand step{};
+        step.id = CommandId::generate();
+        step.at = Timestamp::now();
+        step.command = std::move(command);
+        steps.push_back(std::move(step));
+    }
+
+    return executeGroupEntry(std::move(steps), std::move(group), options.origin);
+}
+
+Result<std::vector<Receipt>> CommandBus::executeSerializedGroup(const std::vector<Value>& envelopes)
+{
+    if (auto owned = checkThread(); !owned)
+        return owned.error();
+
+    if (mutating_)
+        return reentrant();
+
+    if (envelopes.empty())
+        return fail(ErrorCode::invalidArgument, "a group holds at least one command");
+
+    std::optional<GroupRef> group;
+    Provenance origin{};
+    std::vector<GroupCommand> steps;
+    steps.reserve(envelopes.size());
+
+    for (const auto& value : envelopes)
+    {
+        auto parsed = CommandEnvelope::fromValue(value);
+        if (!parsed)
+            return parsed.error();
+
+        auto& envelope = parsed.value();
+        if (!envelope.group.has_value())
+            return fail(ErrorCode::invalidPayload, "an envelope of the group names no group");
+
+        if (!group.has_value())
+        {
+            group = envelope.group;
+            origin = envelope.origin;
+        }
+        else if (*group != *envelope.group)
+        {
+            return fail(ErrorCode::invalidPayload, "the envelopes name two different groups");
+        }
+
+        auto command = registry_.create(envelope.type, envelope.payload);
+        if (!command)
+            return command.error();
+
+        GroupCommand step{};
+        step.id = envelope.id;
+        step.at = envelope.at;
+        step.command = std::move(command).value();
+        steps.push_back(std::move(step));
+    }
+
+    return executeGroupEntry(std::move(steps), *group, origin);
+}
+
+Result<std::vector<Receipt>>
+CommandBus::executeGroupEntry(std::vector<GroupCommand> commands, GroupRef group, Provenance origin)
+{
+    if (commands.empty())
+        return fail(ErrorCode::invalidArgument, "a group holds at least one command");
+
+    for (const auto& command : commands)
+    {
+        if (command.command == nullptr)
+            return fail(ErrorCode::invalidArgument, "no command given");
+    }
+
+    const MutationScope scope{mutating_};
+
+    Entry entry{};
+    entry.group = group;
+    entry.origin = origin;
+
+    std::vector<Receipt> receipts;
+    receipts.reserve(commands.size());
+
+    // What a failure gives back, in the reverse order of what was applied. The
+    // transient commands are not in here on purpose: they carry no undo record
+    // and reverting a transport would invent a position nobody asked for.
+    const auto rollback = [this, &entry]()
+    {
+        for (auto step = entry.steps.rbegin(); step != entry.steps.rend(); ++step)
+            static_cast<void>(step->command->revert(state_, step->undoRecord));
+
+        entry.steps.clear();
+    };
+
+    for (auto& command : commands)
+    {
+        const bool transient = command.command->historyPolicy() == HistoryPolicy::transient;
+
+        auto applied = command.command->apply(state_);
+        if (!applied)
+        {
+            rollback();
+            return applied.error();
+        }
+
+        Receipt receipt{};
+        receipt.id = command.id;
+        receipt.type = std::string{command.command->type()};
+        receipt.at = command.at;
+        receipt.group = group;
+        receipt.coalesced = false;
+        receipt.origin = origin;
+        receipt.policy = command.command->historyPolicy();
+        receipt.payload = command.command->payload();
+        receipts.push_back(std::move(receipt));
+
+        if (transient)
+            continue;
+
+        Step step{};
+        step.id = command.id;
+        step.at = command.at;
+        step.command = std::move(command.command);
+        step.undoRecord = std::move(applied).value();
+        entry.steps.push_back(std::move(step));
+    }
+
+    std::size_t dropped = 0;
+
+    // A group of nothing but transient commands changed no project state, so
+    // it leaves no entry and does not kill the redo branch: asking for a loop
+    // must not cost the user the redo they still had.
+    if (!entry.steps.empty())
+    {
+        redoStack_.clear();
+        undoStack_.push_back(std::move(entry));
+        dropped = trimToLimit();
+    }
+
+    for (auto& receipt : receipts)
+    {
+        receipt.undoDepth = undoStack_.size();
+        receipt.redoDepth = redoStack_.size();
+        notify(&BusObserver::onExecuted, receipt);
+    }
+
+    if (dropped > 0)
+        notifyTruncated(dropped);
+
+    return receipts;
+}
+
+std::size_t CommandBus::trimToLimit()
+{
     std::size_t dropped = 0;
     while (undoStack_.size() > limits_.maxUndoDepth)
     {
@@ -193,12 +389,7 @@ Result<Receipt> CommandBus::executeEntry(std::unique_ptr<Command> command,
         ++dropped;
     }
 
-    const auto receipt = receiptFor(undoStack_.back(), false);
-    notify(&BusObserver::onExecuted, receipt);
-    if (dropped > 0)
-        notifyTruncated(dropped);
-
-    return receipt;
+    return dropped;
 }
 
 // ---------------------------------------------------------------------------
@@ -247,9 +438,19 @@ Result<Receipt> CommandBus::undo(Provenance by)
     const MutationScope scope{mutating_};
 
     auto& entry = undoStack_.back();
-    auto reverted = entry.command->revert(state_, entry.undoRecord);
-    if (!reverted)
-        return reverted.error();
+
+    // The steps of a group go back in the reverse order they were applied: the
+    // plugin leaves the track before the track leaves the project.
+    //
+    // A revert that fails in the middle is the one case this bus cannot make
+    // clean by itself, because the earlier steps are already back. It stops
+    // there and says so: the entry stays on the undo stack, so the user can
+    // ask again once whatever refused has been dealt with.
+    for (auto step = entry.steps.rbegin(); step != entry.steps.rend(); ++step)
+    {
+        if (auto reverted = step->command->revert(state_, step->undoRecord); !reverted)
+            return reverted.error();
+    }
 
     // A gesture cannot survive an undo: the entry it was feeding is gone.
     openGesture_.reset();
@@ -277,11 +478,32 @@ Result<Receipt> CommandBus::redo(Provenance by)
     const MutationScope scope{mutating_};
 
     auto& entry = redoStack_.back();
-    auto applied = entry.command->apply(state_);
-    if (!applied)
-        return applied.error();
 
-    entry.undoRecord = std::move(applied).value();
+    // Forward order this time, and every step is applied before any of them is
+    // kept: the undo records have to describe states that really existed.
+    std::vector<Value> undoRecords;
+    undoRecords.reserve(entry.steps.size());
+
+    for (auto& step : entry.steps)
+    {
+        auto applied = step.command->apply(state_);
+        if (!applied)
+        {
+            // Give back what this redo already applied, so a refusal in the
+            // middle leaves the project where the user left it.
+            for (std::size_t done = undoRecords.size(); done > 0; --done)
+            {
+                static_cast<void>(entry.steps[done - 1].command->revert(state_, undoRecords[done - 1]));
+            }
+
+            return applied.error();
+        }
+
+        undoRecords.push_back(std::move(applied).value());
+    }
+
+    for (std::size_t index = 0; index < entry.steps.size(); ++index)
+        entry.steps[index].undoRecord = std::move(undoRecords[index]);
     undoStack_.push_back(std::move(redoStack_.back()));
     redoStack_.pop_back();
 
@@ -390,16 +612,23 @@ std::vector<Value> CommandBus::journal() const
     std::vector<Value> envelopes;
     envelopes.reserve(undoStack_.size());
 
+    // One envelope per command, never one per entry: a group is several
+    // commands that share a history entry, and a journal that wrote one row
+    // for the lot would lose the payloads it needs to replay them.
     for (const auto& entry : undoStack_)
     {
-        CommandEnvelope envelope{};
-        envelope.id = entry.id;
-        envelope.type = std::string{entry.command->type()};
-        envelope.at = entry.at;
-        envelope.gesture = entry.gesture;
-        envelope.origin = entry.origin;
-        envelope.payload = entry.command->payload();
-        envelopes.push_back(envelope.toValue());
+        for (const auto& step : entry.steps)
+        {
+            CommandEnvelope envelope{};
+            envelope.id = step.id;
+            envelope.type = std::string{step.command->type()};
+            envelope.at = step.at;
+            envelope.gesture = entry.gesture;
+            envelope.group = entry.group;
+            envelope.origin = entry.origin;
+            envelope.payload = step.command->payload();
+            envelopes.push_back(envelope.toValue());
+        }
     }
 
     return envelopes;
@@ -432,18 +661,19 @@ Result<void> CommandBus::rebindToCurrentThread()
     return {};
 }
 
-Receipt CommandBus::receiptFor(const Entry& entry, bool coalesced) const
+Receipt CommandBus::receiptFor(const Entry& entry, const Step& step, bool coalesced) const
 {
     Receipt receipt{};
-    receipt.id = entry.id;
-    receipt.type = std::string{entry.command->type()};
-    receipt.at = entry.at;
+    receipt.id = step.id;
+    receipt.type = std::string{step.command->type()};
+    receipt.at = step.at;
     receipt.gesture = entry.gesture;
+    receipt.group = entry.group;
     receipt.coalesced = coalesced;
     receipt.undoDepth = undoStack_.size();
     receipt.redoDepth = redoStack_.size();
     receipt.origin = entry.origin;
-    receipt.payload = entry.command->payload();
+    receipt.payload = step.command->payload();
     return receipt;
 }
 
@@ -451,11 +681,14 @@ Receipt CommandBus::moveReceiptFor(const Entry& entry, Provenance by) const
 {
     // An undo or a redo replays nothing, so it carries no payload; and it
     // reports the actor who asked for the move, not the author of the entry.
+    // An entry is the unit that moves, so the receipt names the entry: the
+    // identifier of its first command, and the group when it has one.
     Receipt receipt{};
-    receipt.id = entry.id;
-    receipt.type = std::string{entry.command->type()};
-    receipt.at = entry.at;
+    receipt.id = entry.first().id;
+    receipt.type = std::string{entry.first().command->type()};
+    receipt.at = entry.first().at;
     receipt.gesture = entry.gesture;
+    receipt.group = entry.group;
     receipt.coalesced = false;
     receipt.undoDepth = undoStack_.size();
     receipt.redoDepth = redoStack_.size();

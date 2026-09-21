@@ -86,6 +86,7 @@ private:
 
 struct CommandIdTag;
 struct GestureIdTag;
+struct GroupIdTag;
 struct TrackIdTag;
 struct ClipIdTag;
 struct NoteIdTag;
@@ -94,6 +95,12 @@ struct TempoPointIdTag;
 
 using CommandId = EntityId<CommandIdTag>;
 using GestureId = EntityId<GestureIdTag>;
+
+// Identifies one history entry built from several commands: "add a Bass track
+// and put Vital on it" is two commands and one thing the user did. A gesture
+// is not the same idea and does not replace it — a gesture merges commands
+// that are compatible, a group holds commands that are not.
+using GroupId = EntityId<GroupIdTag>;
 using TrackId = EntityId<TrackIdTag>;
 using ClipId = EntityId<ClipIdTag>;
 using NoteId = EntityId<NoteIdTag>;

@@ -7,6 +7,7 @@ add_library(daw_domain STATIC
     src/Value.cpp
     src/command/CommandBus.cpp
     src/command/CommandEnvelope.cpp
+    src/command/CommandGroup.cpp
     src/command/CommandRegistry.cpp
     src/command/Provenance.cpp
     src/commands/AddNote.cpp

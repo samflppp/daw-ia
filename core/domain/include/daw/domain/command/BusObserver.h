@@ -3,6 +3,7 @@
 #include "daw/domain/Ids.h"
 #include "daw/domain/Timestamp.h"
 #include "daw/domain/Value.h"
+#include "daw/domain/command/CommandGroup.h"
 #include "daw/domain/command/HistoryPolicy.h"
 #include "daw/domain/command/Provenance.h"
 
@@ -23,6 +24,12 @@ struct Receipt
     std::string type;
     Timestamp at{};
     std::optional<GestureId> gesture;
+
+    // The history entry this command shares with the others of its group. One
+    // notification is still sent per command — the journal needs every payload
+    // — and it is the group that tells a reader they are one entry.
+    std::optional<GroupRef> group;
+
     bool coalesced{false}; // merged into the entry on top, no new entry created
     std::size_t undoDepth{0};
     std::size_t redoDepth{0};

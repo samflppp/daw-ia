@@ -70,7 +70,7 @@ TEST_CASE("the origin travels in the envelope, not only in the receipt")
 
     auto version = parsed.value().intAt("v");
     REQUIRE(version.ok());
-    CHECK(version.value() == 2);
+    CHECK(version.value() == CommandEnvelope::currentVersion);
 }
 
 TEST_CASE("a replayed journal keeps every provenance it mixed")

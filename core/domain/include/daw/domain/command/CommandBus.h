@@ -31,6 +31,22 @@ struct ExecuteOptions
     Provenance origin{};
 };
 
+// What a group needs to exist: a label for the history, and an author.
+//
+// The bus mints the group identifier, exactly as it mints the identifier of a
+// command. That is not the rule about identifiers being broken: the rule
+// forbids a *command* from engendering an identifier the project state depends
+// on, because a replayed payload would then build a different project. A group
+// names a history entry, never a thing in the project, and a replay reads it
+// from the journal instead of inventing it.
+struct GroupOptions
+{
+    // Shown in the history panel. For the copilot, the request the user typed.
+    std::string label;
+
+    Provenance origin{};
+};
+
 struct BusLimits
 {
     // Beyond this depth the oldest entry is dropped and observers are told.
@@ -73,10 +89,41 @@ public:
     // --- execution ---------------------------------------------------------
     Result<Receipt> execute(std::unique_ptr<Command> command, ExecuteOptions options = {});
 
+    // Runs several commands as one history entry: one line in the panel, one
+    // Ctrl+Z, whatever their types. This is what a copilot request needs —
+    // "add a Bass track and put Vital on it" is two commands and one thing
+    // asked — and what a user macro will need later.
+    //
+    // All or nothing. Every command is applied before a single observer is
+    // told; if one fails, the ones already applied are reverted in reverse
+    // order, no notification is sent, no journal row is written, and the error
+    // of the failing command is returned. The project is never left half
+    // modified.
+    //
+    // One receipt per command is returned and notified, all carrying the same
+    // group: the journal keeps a row per command, append-only, each replayable
+    // on its own, and the history folds them into one entry.
+    //
+    // Transient commands may sit in a group — "set the tempo to 140 and loop
+    // the clip" is one request — and they enter no history entry, exactly as
+    // they do alone. A group of nothing but transient commands leaves no entry
+    // at all. One consequence is written down rather than hidden: a transient
+    // command that already ran when a later one fails stays applied, because
+    // the transport is not project state and reverting it would invent a
+    // position the user never asked for.
+    Result<std::vector<Receipt>> executeGroup(std::vector<std::unique_ptr<Command>> commands,
+                                              GroupOptions options);
+
     // Replay path: rebuilds the command from the registry and keeps the
     // identifier and the date of the envelope, so a replayed history is the
     // same history. Never coalesces: an envelope already is the merged form.
     Result<Receipt> executeSerialized(const Value& envelope);
+
+    // Replay path for a group: the envelopes rebuild one history entry, with
+    // the group they carry. Every envelope must name the same group, because a
+    // replay that silently split a group would give back a project with the
+    // right state and the wrong history.
+    Result<std::vector<Receipt>> executeSerializedGroup(const std::vector<Value>& envelopes);
 
     // --- history -----------------------------------------------------------
     [[nodiscard]] bool canUndo() const noexcept;
@@ -114,14 +161,26 @@ public:
     [[nodiscard]] std::vector<Value> journal() const;
 
 private:
-    struct Entry
+    // One command that ran, with what it overwrote. An entry holds one of
+    // these, or several when a group made them one action.
+    struct Step
     {
         CommandId id{};
         Timestamp at{};
-        std::optional<GestureId> gesture;
-        Provenance origin{};
         std::unique_ptr<Command> command;
         Value undoRecord;
+    };
+
+    // One history entry: what a single Ctrl+Z gives back. Never empty — an
+    // entry with no step would be a line in the panel that undoes nothing.
+    struct Entry
+    {
+        std::optional<GestureId> gesture;
+        std::optional<GroupRef> group;
+        Provenance origin{};
+        std::vector<Step> steps;
+
+        [[nodiscard]] const Step& first() const noexcept { return steps.front(); }
     };
 
     struct Registration
@@ -137,8 +196,25 @@ private:
                                  Provenance origin,
                                  bool allowCoalescing);
 
+    // The shared body of executeGroup and executeSerializedGroup: the
+    // identifiers and dates are given, so a replayed group is the same group.
+    struct GroupCommand
+    {
+        CommandId id{};
+        Timestamp at{};
+        std::unique_ptr<Command> command;
+    };
+
+    Result<std::vector<Receipt>>
+    executeGroupEntry(std::vector<GroupCommand> commands, GroupRef group, Provenance origin);
+
+    // Drops the oldest entries when the stack grew past the limit, and says
+    // how many went. Observers are told separately, once the entry that caused
+    // it is in place.
+    std::size_t trimToLimit();
+
     [[nodiscard]] Result<void> checkThread() const;
-    [[nodiscard]] Receipt receiptFor(const Entry& entry, bool coalesced) const;
+    [[nodiscard]] Receipt receiptFor(const Entry& entry, const Step& step, bool coalesced) const;
     [[nodiscard]] Receipt moveReceiptFor(const Entry& entry, Provenance by) const;
     void notify(void (BusObserver::*callback)(const Receipt&), const Receipt& receipt);
     void notifyTruncated(std::size_t dropped);

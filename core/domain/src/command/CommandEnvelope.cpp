@@ -9,11 +9,16 @@ Value CommandEnvelope::toValue() const
     if (gesture.has_value())
         gestureValue = Value{gesture->toString()};
 
+    Value groupValue{};
+    if (group.has_value())
+        groupValue = group->toValue();
+
     return Value::object({{"v", Value{currentVersion}},
                           {"id", Value{id.toString()}},
                           {"type", Value{type}},
                           {"at", Value{at.microsSinceEpoch}},
                           {"gesture", std::move(gestureValue)},
+                          {"group", std::move(groupValue)},
                           {"origin", origin.toValue()},
                           {"payload", payload}});
 }
@@ -85,6 +90,19 @@ Result<CommandEnvelope> CommandEnvelope::fromValue(const Value& value)
             return fail(gestureId.error().code, "gesture: " + gestureId.error().message);
 
         envelope.gesture = gestureId.value();
+    }
+
+    // A v1 or v2 envelope carries no group, and that is not a hole to fill:
+    // those commands each were their own history entry, which is exactly what
+    // an absent group means.
+    const auto* groupValue = value.find("group");
+    if (groupValue != nullptr && !groupValue->isNull())
+    {
+        auto group = GroupRef::fromValue(*groupValue);
+        if (!group)
+            return fail(group.error().code, "group: " + group.error().message);
+
+        envelope.group = std::move(group).value();
     }
 
     return envelope;
