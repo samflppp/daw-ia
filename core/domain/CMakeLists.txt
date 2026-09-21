@@ -11,6 +11,8 @@ add_library(daw_domain STATIC
     src/command/CommandQueue.cpp
     src/command/CommandRegistry.cpp
     src/command/Provenance.cpp
+    src/copilot/StateView.cpp
+    src/copilot/Tools.cpp
     src/commands/AddNote.cpp
     src/commands/NoteCommands.cpp
     src/commands/NoteEditCommands.cpp

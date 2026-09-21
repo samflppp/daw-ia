@@ -13,6 +13,7 @@ add_executable(daw_domain_tests
     CoalescingTests.cpp
     GroupTests.cpp
     CommandQueueTests.cpp
+    CopilotViewTests.cpp
     ReplayTests.cpp
     ProvenanceTests.cpp
     TrackCommandTests.cpp
