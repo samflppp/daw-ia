@@ -18,6 +18,20 @@ void TransportController::stop()
     edit_.getTransport().stop(false, false);
 }
 
+void TransportController::setLoop(bool looping, double startBeats, double endBeats)
+{
+    auto& control = edit_.getTransport();
+
+    if (looping)
+    {
+        const tracktion::BeatRange beats{tracktion::BeatPosition::fromBeats(startBeats),
+                                         tracktion::BeatPosition::fromBeats(endBeats)};
+        control.setLoopRange(edit_.tempoSequence.toTime(beats));
+    }
+
+    control.looping = looping;
+}
+
 void TransportController::setPosition(double positionBeats)
 {
     const auto beats = tracktion::BeatPosition::fromBeats(positionBeats);

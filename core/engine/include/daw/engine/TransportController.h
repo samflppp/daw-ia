@@ -33,6 +33,10 @@ public:
     // without moving the beat.
     void setPosition(double positionBeats);
 
+    // Enables or disables the loop, and sets its range. In beats, converted
+    // through the tempo sequence like every other position.
+    void setLoop(bool looping, double startBeats, double endBeats);
+
 private:
     tracktion::Edit& edit_;
 };

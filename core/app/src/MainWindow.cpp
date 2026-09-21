@@ -36,6 +36,17 @@ MainWindow::MainWindow(const juce::String& title,
     setVisible(true);
 }
 
+void MainWindow::minimisationStateChanged(bool isNowMinimised)
+{
+    if (isNowMinimised)
+        return;
+
+    repaint();
+
+    if (auto* content = getContentComponent(); content != nullptr)
+        content->repaint();
+}
+
 void MainWindow::closeButtonPressed()
 {
     juce::JUCEApplication::getInstance()->systemRequestedQuit();

@@ -36,6 +36,7 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<TransportPlay>());
     static_cast<void>(registry.add<TransportStop>());
     static_cast<void>(registry.add<TransportSetPosition>());
+    static_cast<void>(registry.add<TransportSetLoop>());
     static_cast<void>(registry.add<InsertPlugin>());
     static_cast<void>(registry.add<RemovePlugin>());
     static_cast<void>(registry.add<SetPluginBypassed>());

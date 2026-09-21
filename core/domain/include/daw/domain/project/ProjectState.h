@@ -198,6 +198,17 @@ struct TransportState
 {
     bool playing{false};
     double positionBeats{0.0};
+
+    // The loop, in beats like everything else on the timeline. Disabled means
+    // playback runs past the material and stops where the engine stops it.
+    //
+    // It belongs here and not in the project for the same reason the playhead
+    // does: it is not journalled, not undone, and two windows on the same
+    // project would each have their own. A copilot still reads it and still
+    // sets it, because it goes through a command like everything else.
+    bool looping{false};
+    double loopStartBeats{0.0};
+    double loopEndBeats{0.0};
 };
 
 class ProjectState
@@ -330,6 +341,10 @@ public:
     [[nodiscard]] const TransportState& transport() const noexcept { return transport_; }
     Result<void> setPlaying(bool playing);
     Result<void> setPositionBeats(double positionBeats);
+
+    // An empty or backwards range is refused rather than silently disabled: a
+    // loop of length zero would be a transport that never advances.
+    Result<void> setLoop(bool looping, double startBeats, double endBeats);
 
     // Whole-state serialization. Tests compare two states through it, and the
     // versioning layer of a later week will hash it. Transport is excluded on

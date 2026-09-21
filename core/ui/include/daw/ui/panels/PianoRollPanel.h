@@ -94,6 +94,10 @@ private:
     void rebuildClipChooser();
     void addClip();
 
+    // Plays the clip on screen over and over. Called when the user picks or
+    // creates a clip, which is the only moment the pattern changes.
+    void loopOverEditedClip();
+
     const Tokens& tokens_;
     DawLookAndFeel& lookAndFeel_;
     domain::CommandBus& bus_;

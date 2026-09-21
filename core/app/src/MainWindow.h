@@ -18,6 +18,14 @@ public:
 
     void closeButtonPressed() override;
 
+    // Restoring from the taskbar was reported as coming back to a white, frozen
+    // window. It could not be reproduced here in nine cycles, with and without
+    // a plugin window open, so this is not a fix for a diagnosed cause: it is
+    // the one thing a host can do about a window that came back without being
+    // asked to paint. If the report survives it, the next suspect is the
+    // Direct2D renderer JUCE 8 uses by default on Windows.
+    void minimisationStateChanged(bool isNowMinimised) override;
+
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainWindow)
 };

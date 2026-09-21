@@ -108,3 +108,33 @@ TEST_CASE("A project change while playing does not restart playback")
     // nothing, because nothing about it changed.
     CHECK(harness.host.edit().getTransport().isPlaying());
 }
+
+TEST_CASE("transport.set_loop reaches the engine, in beats")
+{
+    EngineHarness harness;
+
+    REQUIRE(harness.state.setTempoPointBpm(ProjectState::originTempoPointId(), 120.0).ok());
+    harness.projector.reconcile();
+
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetLoop>(true, 4.0, 8.0)).ok());
+
+    // At 120 BPM a beat lasts half a second: beats 4 to 8 are seconds 2 to 4.
+    CHECK(harness.host.edit().getTransport().looping.get());
+    CHECK(harness.host.edit().getTransport().getLoopRange().getStart().inSeconds() == doctest::Approx(2.0));
+    CHECK(harness.host.edit().getTransport().getLoopRange().getEnd().inSeconds() == doctest::Approx(4.0));
+
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetLoop>(false, 0.0, 0.0)).ok());
+    CHECK_FALSE(harness.host.edit().getTransport().looping.get());
+}
+
+TEST_CASE("A loop that ends where it starts is refused, and the engine is untouched")
+{
+    EngineHarness harness;
+
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetLoop>(true, 4.0, 8.0)).ok());
+
+    CHECK(harness.bus.execute(std::make_unique<TransportSetLoop>(true, 4.0, 4.0)).error().code ==
+          ErrorCode::invalidArgument);
+
+    CHECK(harness.host.edit().getTransport().getLoopRange().getLength().inSeconds() > 0.0);
+}

@@ -58,6 +58,52 @@ Value TransportStop::payload() const
     return Value::object({});
 }
 
+TransportSetLoop::TransportSetLoop(bool looping, double startBeats, double endBeats)
+    : looping_{looping}
+    , startBeats_{startBeats}
+    , endBeats_{endBeats}
+{
+}
+
+Result<std::unique_ptr<Command>> TransportSetLoop::fromPayload(const Value& payload)
+{
+    auto looping = payload.boolAt("looping");
+    if (!looping)
+        return looping.error();
+
+    auto startBeats = payload.doubleAt("startBeats");
+    if (!startBeats)
+        return startBeats.error();
+
+    auto endBeats = payload.doubleAt("endBeats");
+    if (!endBeats)
+        return endBeats.error();
+
+    return std::unique_ptr<Command>{
+        new TransportSetLoop{looping.value(), startBeats.value(), endBeats.value()}};
+}
+
+Value TransportSetLoop::payload() const
+{
+    return Value::object(
+        {{"looping", Value{looping_}}, {"startBeats", Value{startBeats_}}, {"endBeats", Value{endBeats_}}});
+}
+
+Result<Value> TransportSetLoop::apply(ProjectState& state) const
+{
+    if (auto applied = state.setLoop(looping_, startBeats_, endBeats_); !applied)
+        return applied.error();
+
+    return Value{};
+}
+
+Result<void> TransportSetLoop::revert(ProjectState& state, const Value& undoRecord) const
+{
+    static_cast<void>(state);
+    static_cast<void>(undoRecord);
+    return fail(ErrorCode::invalidArgument, "transport.set_loop is transient and is never reverted");
+}
+
 Result<Value> TransportStop::apply(ProjectState& state) const
 {
     auto applied = state.setPlaying(false);

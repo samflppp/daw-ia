@@ -76,6 +76,13 @@ bool ProjectProjector::applyTransport(const domain::Receipt& receipt)
         return true;
     }
 
+    if (receipt.type == domain::TransportSetLoop::commandType)
+    {
+        const auto& transport = state_.transport();
+        transport_.setLoop(transport.looping, transport.loopStartBeats, transport.loopEndBeats);
+        return true;
+    }
+
     return false;
 }
 

@@ -85,7 +85,10 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
 
         const auto& chosen = owner->clips[static_cast<std::size_t>(index)];
         if (chosen.id != selection_.clip())
+        {
             selection_.selectClip(owner->id, chosen.id);
+            loopOverEditedClip();
+        }
     };
 
     addAndMakeVisible(addClip_);
@@ -166,6 +169,7 @@ void PianoRollPanel::addClip()
             .ok())
     {
         selection_.selectClip(owner->id, clipId);
+        loopOverEditedClip();
     }
 }
 
@@ -566,6 +570,22 @@ void PianoRollPanel::paintPlayhead(juce::Graphics& g, juce::Rectangle<int> area)
 
 // --- editing ---------------------------------------------------------------
 
+void PianoRollPanel::loopOverEditedClip()
+{
+    // The beatmaker plays a pattern over and over, and the pattern is the clip
+    // on screen. The loop is set when the user chooses a clip and never from
+    // inside a bus notification: an observer may not call back into the bus.
+    const auto* edited = clip();
+    if (edited == nullptr)
+    {
+        static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(false, 0.0, 0.0)));
+        return;
+    }
+
+    static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(
+        true, edited->startBeats, edited->startBeats + edited->lengthBeats)));
+}
+
 void PianoRollPanel::movePlayheadTo(int x)
 {
     const auto* edited = clip();
@@ -600,6 +620,7 @@ void PianoRollPanel::addNoteAt(juce::Point<int> point)
             return;
 
         selection_.selectClip(owner->id, clipId);
+        loopOverEditedClip();
     }
 
     domain::Note note{};

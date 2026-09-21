@@ -1286,6 +1286,23 @@ Result<void> ProjectState::setPositionBeats(double positionBeats)
     return {};
 }
 
+Result<void> ProjectState::setLoop(bool looping, double startBeats, double endBeats)
+{
+    if (looping)
+    {
+        if (startBeats < 0.0)
+            return fail(ErrorCode::invalidArgument, "a loop cannot start before the timeline origin");
+
+        if (!(endBeats > startBeats))
+            return fail(ErrorCode::invalidArgument, "a loop ends after it starts");
+    }
+
+    transport_.looping = looping;
+    transport_.loopStartBeats = startBeats;
+    transport_.loopEndBeats = endBeats;
+    return {};
+}
+
 Value ProjectState::toValue() const
 {
     Value::Array serialisedTracks;

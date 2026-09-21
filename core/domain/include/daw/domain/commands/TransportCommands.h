@@ -48,6 +48,32 @@ public:
 
 // Moves the playhead. Separate from stop on purpose: stop returns to the
 // start, this goes anywhere -- including to the start while playback runs on.
+// transport.set_loop — plays a range over and over, or stops looping.
+//
+// Transient like the rest of the transport: a loop is not something a project
+// remembers, and replaying one from a journal would start a beat looping the
+// moment the project was reopened.
+class TransportSetLoop final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "transport.set_loop";
+
+    TransportSetLoop(bool looping, double startBeats, double endBeats);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] HistoryPolicy historyPolicy() const noexcept override { return HistoryPolicy::transient; }
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+private:
+    bool looping_;
+    double startBeats_;
+    double endBeats_;
+};
+
 class TransportSetPosition final : public Command
 {
 public:
