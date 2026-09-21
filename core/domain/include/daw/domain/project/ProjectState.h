@@ -254,6 +254,13 @@ public:
     [[nodiscard]] Result<std::size_t> trackIndex(TrackId id) const;
     Result<void> insertTrack(Track track, std::size_t index);
 
+    Result<void> setTrackName(TrackId id, std::string name);
+
+    // Moves a track to another place in the list. An index beyond the last
+    // track puts it at the end rather than failing, exactly like insertTrack:
+    // a replayed payload must not fail on a project that grew differently.
+    Result<void> moveTrack(TrackId id, std::size_t index);
+
     [[nodiscard]] Result<double> trackVolume(TrackId id) const;
     Result<void> setTrackVolume(TrackId id, double volumeDb);
 
@@ -276,6 +283,10 @@ public:
     // undoes a session back to its start would see them as unequal.
     [[nodiscard]] Result<std::size_t> noteIndex(ClipId clipId, NoteId noteId) const;
     Result<void> insertNote(ClipId clipId, Note note, std::size_t index);
+
+    // Changes how hard a note is struck, and nothing else. It is read in the
+    // piano roll as the shade of the note; until now it could only be read.
+    Result<void> setNoteVelocity(ClipId clipId, NoteId noteId, int velocity);
 
     // Moves a note in time and pitch. Length is untouched on purpose: dragging
     // a note and stretching it are two gestures, and merging them into one

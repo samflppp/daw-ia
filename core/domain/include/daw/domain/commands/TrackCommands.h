@@ -4,6 +4,7 @@
 #include "daw/domain/command/Command.h"
 #include "daw/domain/project/ProjectState.h"
 
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -63,6 +64,60 @@ public:
 
 private:
     TrackId trackId_;
+};
+
+// track.rename — gives a track another name.
+//
+// A name is not decoration: it is what a copilot is told to act upon ("mets la
+// basse plus bas"), so being able to set one is being able to be understood.
+class RenameTrack final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "track.rename";
+
+    RenameTrack(TrackId trackId, std::string name);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+    [[nodiscard]] TrackId trackId() const noexcept { return trackId_; }
+
+private:
+    TrackId trackId_;
+    std::string name_;
+};
+
+// track.reorder — moves a track to another place in the list.
+//
+// An index and not "up" or "down": a relative verb depends on where the track
+// currently is, and a payload whose meaning depends on the state it is replayed
+// against is a payload that replays differently.
+//
+// An index past the end puts the track last rather than failing, exactly like
+// insertTrack.
+class ReorderTrack final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "track.reorder";
+
+    ReorderTrack(TrackId trackId, std::size_t index);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+    [[nodiscard]] TrackId trackId() const noexcept { return trackId_; }
+
+private:
+    TrackId trackId_;
+    std::size_t index_;
 };
 
 // track.set_pan — places a track in the stereo field, from -1 to +1.

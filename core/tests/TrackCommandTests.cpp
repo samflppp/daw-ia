@@ -252,3 +252,50 @@ TEST_CASE("a track written before pan existed reads as centred")
     REQUIRE(track.ok());
     CHECK(track.value().pan == doctest::Approx(0.0));
 }
+
+TEST_CASE("a track is renamed, and the old name comes back")
+{
+    Harness harness;
+
+    REQUIRE(harness.bus.execute(std::make_unique<RenameTrack>(harness.trackId, "Basse")).ok());
+    CHECK(harness.state.findTrack(harness.trackId)->name == "Basse");
+
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(harness.state.findTrack(harness.trackId)->name == "Piste 1");
+
+    CHECK(harness.bus.execute(std::make_unique<RenameTrack>(TrackId::generate(), "Basse")).error().code ==
+          ErrorCode::notFound);
+}
+
+TEST_CASE("a track changes place, and undo puts it back at its own index")
+{
+    Harness harness;
+    const auto second = TrackId::generate();
+    const auto third = TrackId::generate();
+    REQUIRE(harness.bus.execute(std::make_unique<AddTrack>(second, "Deux")).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<AddTrack>(third, "Trois")).ok());
+
+    REQUIRE(harness.bus.execute(std::make_unique<ReorderTrack>(third, 0)).ok());
+    CHECK(harness.state.trackIndex(third).value() == 0);
+    CHECK(harness.state.trackIndex(harness.trackId).value() == 1);
+    CHECK(harness.state.trackIndex(second).value() == 2);
+
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(harness.state.trackIndex(third).value() == 2);
+    CHECK(harness.state.trackIndex(harness.trackId).value() == 0);
+}
+
+TEST_CASE("an index past the end puts the track last, it does not fail")
+{
+    Harness harness;
+    const auto second = TrackId::generate();
+    REQUIRE(harness.bus.execute(std::make_unique<AddTrack>(second, "Deux")).ok());
+
+    // A replayed payload must not fail on a project that grew differently,
+    // which is the same rule insertPlugin and insertTrack already follow.
+    REQUIRE(harness.bus.execute(std::make_unique<ReorderTrack>(harness.trackId, 99)).ok());
+    CHECK(harness.state.trackIndex(harness.trackId).value() == 1);
+
+    CHECK(harness.bus.execute(std::make_unique<ReorderTrack>(TrackId::generate(), 0)).error().code ==
+          ErrorCode::notFound);
+}

@@ -862,6 +862,32 @@ Result<void> ProjectState::removeTrack(TrackId id)
     return {};
 }
 
+Result<void> ProjectState::setTrackName(TrackId id, std::string name)
+{
+    auto* track = findTrackMutable(id);
+    if (track == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    track->name = std::move(name);
+    return {};
+}
+
+Result<void> ProjectState::moveTrack(TrackId id, std::size_t index)
+{
+    auto current = trackIndex(id);
+    if (!current)
+        return current.error();
+
+    const auto target = std::min(index, tracks_.size() - 1);
+    if (target == current.value())
+        return {};
+
+    auto track = std::move(tracks_[current.value()]);
+    tracks_.erase(tracks_.begin() + static_cast<std::ptrdiff_t>(current.value()));
+    tracks_.insert(tracks_.begin() + static_cast<std::ptrdiff_t>(target), std::move(track));
+    return {};
+}
+
 Result<double> ProjectState::trackVolume(TrackId id) const
 {
     const auto* track = findTrack(id);
@@ -1011,6 +1037,27 @@ Result<void> ProjectState::insertNote(ClipId clipId, Note note, std::size_t inde
     const auto at = std::min(index, clip->notes.size());
     clip->notes.insert(clip->notes.begin() + static_cast<std::ptrdiff_t>(at), note);
     return {};
+}
+
+Result<void> ProjectState::setNoteVelocity(ClipId clipId, NoteId noteId, int velocity)
+{
+    if (velocity < Note::lowestVelocity || velocity > Note::highestVelocity)
+        return fail(ErrorCode::invalidArgument, "velocity out of range: " + std::to_string(velocity));
+
+    auto* clip = findClipMutable(clipId);
+    if (clip == nullptr)
+        return fail(ErrorCode::notFound, "no such clip: " + clipId.toString());
+
+    for (auto& note : clip->notes)
+    {
+        if (note.id == noteId)
+        {
+            note.velocity = velocity;
+            return {};
+        }
+    }
+
+    return fail(ErrorCode::notFound, "no such note: " + noteId.toString());
 }
 
 Result<void> ProjectState::moveNote(ClipId clipId, NoteId noteId, int pitch, double startBeats)

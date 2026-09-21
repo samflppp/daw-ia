@@ -3,6 +3,7 @@
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/CreateMidiClip.h"
 #include "daw/domain/commands/NoteCommands.h"
+#include "daw/domain/commands/NoteEditCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TempoCommands.h"
@@ -19,11 +20,16 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     CommandRegistry registry;
     static_cast<void>(registry.add<AddTrack>());
     static_cast<void>(registry.add<RemoveTrack>());
+    static_cast<void>(registry.add<RenameTrack>());
+    static_cast<void>(registry.add<ReorderTrack>());
     static_cast<void>(registry.add<CreateMidiClip>());
     static_cast<void>(registry.add<AddNote>());
     static_cast<void>(registry.add<RemoveNote>());
     static_cast<void>(registry.add<MoveNote>());
     static_cast<void>(registry.add<ResizeNote>());
+    static_cast<void>(registry.add<SetNoteVelocity>());
+    static_cast<void>(registry.add<QuantizeNotes>());
+    static_cast<void>(registry.add<TransposeNotes>());
     static_cast<void>(registry.add<SetTrackVolume>());
     static_cast<void>(registry.add<SetTrackPan>());
     static_cast<void>(registry.add<SetTrackMuted>());

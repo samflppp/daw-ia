@@ -153,13 +153,9 @@ SetTrackMuted::SetTrackMuted(TrackId trackId, bool muted)
 
 Result<std::unique_ptr<Command>> SetTrackMuted::fromPayload(const Value& payload)
 {
-    auto trackText = payload.stringAt("trackId");
-    if (!trackText)
-        return trackText.error();
-
-    auto trackId = TrackId::parse(trackText.value());
+    auto trackId = trackIdAt(payload, "trackId");
     if (!trackId)
-        return fail(trackId.error().code, "trackId: " + trackId.error().message);
+        return trackId.error();
 
     auto muted = payload.boolAt("muted");
     if (!muted)
@@ -189,13 +185,9 @@ Result<Value> SetTrackMuted::apply(ProjectState& state) const
 
 Result<void> SetTrackMuted::revert(ProjectState& state, const Value& undoRecord) const
 {
-    auto trackText = undoRecord.stringAt("trackId");
-    if (!trackText)
-        return trackText.error();
-
-    auto trackId = TrackId::parse(trackText.value());
+    auto trackId = trackIdAt(undoRecord, "trackId");
     if (!trackId)
-        return fail(trackId.error().code, "trackId: " + trackId.error().message);
+        return trackId.error();
 
     auto previous = undoRecord.boolAt("previousMuted");
     if (!previous)
@@ -216,13 +208,9 @@ SetTrackPan::SetTrackPan(TrackId trackId, double pan)
 
 Result<std::unique_ptr<Command>> SetTrackPan::fromPayload(const Value& payload)
 {
-    auto trackText = payload.stringAt("trackId");
-    if (!trackText)
-        return trackText.error();
-
-    auto trackId = TrackId::parse(trackText.value());
+    auto trackId = trackIdAt(payload, "trackId");
     if (!trackId)
-        return fail(trackId.error().code, "trackId: " + trackId.error().message);
+        return trackId.error();
 
     auto pan = payload.doubleAt("pan");
     if (!pan)
@@ -250,13 +238,9 @@ Result<Value> SetTrackPan::apply(ProjectState& state) const
 
 Result<void> SetTrackPan::revert(ProjectState& state, const Value& undoRecord) const
 {
-    auto trackText = undoRecord.stringAt("trackId");
-    if (!trackText)
-        return trackText.error();
-
-    auto trackId = TrackId::parse(trackText.value());
+    auto trackId = trackIdAt(undoRecord, "trackId");
     if (!trackId)
-        return fail(trackId.error().code, "trackId: " + trackId.error().message);
+        return trackId.error();
 
     auto previous = undoRecord.doubleAt("previousPan");
     if (!previous)
@@ -269,6 +253,125 @@ bool SetTrackPan::canCoalesceWith(const Command& newer) const noexcept
 {
     const auto* other = dynamic_cast<const SetTrackPan*>(&newer);
     return other != nullptr && other->trackId_ == trackId_;
+}
+
+// ---------------------------------------------------------------------------
+// track.rename
+// ---------------------------------------------------------------------------
+
+RenameTrack::RenameTrack(TrackId trackId, std::string name)
+    : trackId_{trackId}
+    , name_{std::move(name)}
+{
+}
+
+Result<std::unique_ptr<Command>> RenameTrack::fromPayload(const Value& payload)
+{
+    auto trackId = trackIdAt(payload, "trackId");
+    if (!trackId)
+        return trackId.error();
+
+    auto name = payload.stringAt("name");
+    if (!name)
+        return name.error();
+
+    return std::unique_ptr<Command>{new RenameTrack{trackId.value(), name.value()}};
+}
+
+Value RenameTrack::payload() const
+{
+    return Value::object({{"trackId", Value{trackId_.toString()}}, {"name", Value{name_}}});
+}
+
+Result<Value> RenameTrack::apply(ProjectState& state) const
+{
+    const auto* track = state.findTrack(trackId_);
+    if (track == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + trackId_.toString());
+
+    const auto previous = track->name;
+
+    if (auto applied = state.setTrackName(trackId_, name_); !applied)
+        return applied.error();
+
+    return Value::object({{"trackId", Value{trackId_.toString()}}, {"previousName", Value{previous}}});
+}
+
+Result<void> RenameTrack::revert(ProjectState& state, const Value& undoRecord) const
+{
+    auto trackId = trackIdAt(undoRecord, "trackId");
+    if (!trackId)
+        return trackId.error();
+
+    auto previous = undoRecord.stringAt("previousName");
+    if (!previous)
+        return previous.error();
+
+    return state.setTrackName(trackId.value(), previous.value());
+}
+
+// ---------------------------------------------------------------------------
+// track.reorder
+// ---------------------------------------------------------------------------
+
+ReorderTrack::ReorderTrack(TrackId trackId, std::size_t index)
+    : trackId_{trackId}
+    , index_{index}
+{
+}
+
+Result<std::unique_ptr<Command>> ReorderTrack::fromPayload(const Value& payload)
+{
+    auto trackId = trackIdAt(payload, "trackId");
+    if (!trackId)
+        return trackId.error();
+
+    auto index = payload.intAt("index");
+    if (!index)
+        return index.error();
+
+    if (index.value() < 0)
+        return fail(ErrorCode::invalidPayload, "index cannot be negative");
+
+    return std::unique_ptr<Command>{
+        new ReorderTrack{trackId.value(), static_cast<std::size_t>(index.value())}};
+}
+
+Value ReorderTrack::payload() const
+{
+    return Value::object(
+        {{"trackId", Value{trackId_.toString()}}, {"index", Value{static_cast<std::int64_t>(index_)}}});
+}
+
+Result<Value> ReorderTrack::apply(ProjectState& state) const
+{
+    // Read before moving: the index the track is leaving is what the undo has
+    // to put it back at, and it is gone once the move has run.
+    auto previous = state.trackIndex(trackId_);
+    if (!previous)
+        return previous.error();
+
+    if (auto moved = state.moveTrack(trackId_, index_); !moved)
+        return moved.error();
+
+    return Value::object({{"trackId", Value{trackId_.toString()}},
+                          {"previousIndex", Value{static_cast<std::int64_t>(previous.value())}}});
+}
+
+Result<void> ReorderTrack::revert(ProjectState& state, const Value& undoRecord) const
+{
+    auto trackId = trackIdAt(undoRecord, "trackId");
+    if (!trackId)
+        return trackId.error();
+
+    auto previous = undoRecord.intAt("previousIndex");
+    if (!previous)
+        return previous.error();
+
+    if (previous.value() < 0)
+        return fail(ErrorCode::invalidPayload, "index cannot be negative");
+
+    return state.moveTrack(trackId.value(), static_cast<std::size_t>(previous.value()));
 }
 
 } // namespace daw::domain
