@@ -148,11 +148,11 @@ TransportPanel::TransportPanel(const PanelContext& context)
 {
     setLookAndFeel(&lookAndFeel_);
 
-    rewind_ = std::make_unique<IconButton>(tokens_, Icon::rewind, "Retour au debut");
+    rewind_ = std::make_unique<IconButton>(tokens_, Icon::rewind, u8"Retour au début");
     play_ = std::make_unique<IconButton>(tokens_, Icon::play, "Lecture");
-    stop_ = std::make_unique<IconButton>(tokens_, Icon::stop, "Arret");
+    stop_ = std::make_unique<IconButton>(tokens_, Icon::stop, u8"Arrêt");
     undo_ = std::make_unique<IconButton>(tokens_, Icon::undo, "Annuler");
-    redo_ = std::make_unique<IconButton>(tokens_, Icon::redo, "Retablir");
+    redo_ = std::make_unique<IconButton>(tokens_, Icon::redo, u8"Rétablir");
 
     for (auto* button : {rewind_.get(), play_.get(), stop_.get(), undo_.get(), redo_.get()})
         addAndMakeVisible(*button);

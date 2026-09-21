@@ -44,9 +44,9 @@ private:
     DawLookAndFeel& lookAndFeel_;
 
     juce::TextButton play_{"Lecture"};
-    juce::TextButton stop_{"Arret"};
+    juce::TextButton stop_{u8"Arrêt"};
     juce::TextButton record_{"Enregistrer"};
-    juce::TextButton disabled_{"Retablir"};
+    juce::TextButton disabled_{u8"Rétablir"};
     juce::ToggleButton mute_{"M"};
     juce::ToggleButton bypass_{"B"};
     juce::Slider volume_{juce::Slider::LinearHorizontal, juce::Slider::NoTextBox};

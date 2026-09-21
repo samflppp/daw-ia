@@ -50,3 +50,6 @@ target_link_libraries(daw_app PRIVATE
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(daw_app PRIVATE atomic)
 endif()
+
+# Our own sources are UTF-8; see cmake/DawWarnings.cmake.
+daw_use_utf8_sources(daw_app)

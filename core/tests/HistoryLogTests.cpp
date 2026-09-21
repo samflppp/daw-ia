@@ -140,6 +140,6 @@ TEST_CASE("the oldest entries go when the bus drops them")
 TEST_CASE("a command type has a label, and an unknown one keeps its name")
 {
     CHECK(HistoryLog::describe("track.add") == "Nouvelle piste");
-    CHECK(HistoryLog::describe("note.move") == "Note deplacee");
+    CHECK(HistoryLog::describe("note.move") == "Note déplacée");
     CHECK(HistoryLog::describe("mystere.inconnu") == "mystere.inconnu");
 }

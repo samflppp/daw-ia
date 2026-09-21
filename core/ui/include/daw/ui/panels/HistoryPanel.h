@@ -46,7 +46,7 @@ private:
     History& history_;
 
     juce::TextButton undo_{"Annuler"};
-    juce::TextButton redo_{"Retablir"};
+    juce::TextButton redo_{u8"Rétablir"};
     int hovered_{-1};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(HistoryPanel)

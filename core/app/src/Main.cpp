@@ -285,7 +285,7 @@ private:
         juce::Logger::writeToLog("project not saved: " + reason);
 
         if (window_ != nullptr)
-            window_->setName(getApplicationName() + " - projet non enregistre : " + reason);
+            window_->setName(getApplicationName() + juce::String(u8" - projet non enregistré : ") + reason);
     }
 
     void reportProjectHealthy()

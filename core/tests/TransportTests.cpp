@@ -46,7 +46,7 @@ TEST_CASE("A transient command leaves the redo stack alone")
     CHECK(harness.bus.undoDepth() == 1);
 }
 
-TEST_CASE("Stopping keeps the playhead, moving it is a separate command")
+TEST_CASE("Stopping returns the playhead to the start")
 {
     Harness harness;
 
@@ -56,8 +56,12 @@ TEST_CASE("Stopping keeps the playhead, moving it is a separate command")
     REQUIRE(harness.bus.execute(std::make_unique<TransportPlay>()).ok());
     REQUIRE(harness.bus.execute(std::make_unique<TransportStop>()).ok());
 
+    // Changed in S7bis, and it contradicts the comment written in S2: a
+    // beatmaker uses stop to go back to the top of the pattern, and
+    // transport.set_position is what moves the playhead anywhere else --
+    // including back to the start without stopping.
     CHECK_FALSE(harness.state.transport().playing);
-    CHECK(harness.state.transport().positionBeats == doctest::Approx(8.0));
+    CHECK(harness.state.transport().positionBeats == doctest::Approx(0.0));
 }
 
 TEST_CASE("A negative playhead position is refused")

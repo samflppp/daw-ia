@@ -141,8 +141,8 @@ void PianoRollPanel::rebuildClipChooser()
         // Bars from one, like the transport readout: a clip that starts at
         // beat 16 starts at bar 5, and that is what a musician looks for.
         const auto bar = static_cast<int>(candidate.startBeats) / beatsPerBar + 1;
-        clipChooser_.addItem("Clip " + juce::String(static_cast<int>(index) + 1) + "  ·  mes. " +
-                                 juce::String(bar),
+        clipChooser_.addItem("Clip " + juce::String(static_cast<int>(index) + 1) +
+                                 juce::String(u8"  ·  mes. ") + juce::String(bar),
                              static_cast<int>(index) + 1);
 
         if (edited != nullptr && candidate.id == edited->id)
@@ -356,8 +356,8 @@ void PianoRollPanel::paint(juce::Graphics& g)
                            tokens_.integer("space.sm") + tokens_.integer("space.md"));
 
     const auto count = static_cast<int>(edited->notes.size());
-    g.drawText(juce::String(owner != nullptr ? owner->name : std::string{}) + "  ·  " + juce::String(count) +
-                   (count > 1 ? " notes" : " note"),
+    g.drawText(juce::String(owner != nullptr ? owner->name : std::string{}) + juce::String(u8"  ·  ") +
+                   juce::String(count) + (count > 1 ? " notes" : " note"),
                header,
                juce::Justification::centredLeft,
                false);
@@ -385,7 +385,7 @@ void PianoRollPanel::paintEmpty(juce::Graphics& g) const
     g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
 
     const auto message =
-        track() == nullptr ? "selectionnez une piste" : "cliquez pour creer un clip et poser une note";
+        track() == nullptr ? u8"sélectionnez une piste" : u8"cliquez pour créer un clip et poser une note";
 
     g.drawText(message, getLocalBounds(), juce::Justification::centred, false);
 }
@@ -685,11 +685,13 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
     drag.grabY = event.getPosition().getY();
     drag.grabVelocity = hit->velocity;
 
-    const auto* label = "deplacer une note";
+    // Plain char and not u8: a gesture label is a std::string_view for the
+    // domain, which carries UTF-8 bytes and never decodes them itself.
+    const auto* label = "déplacer une note";
     if (drag.mode == DragMode::resize)
         label = "allonger une note";
     else if (drag.mode == DragMode::velocity)
-        label = "velocite d'une note";
+        label = "vélocité d'une note";
 
     drag.gesture = bus_.beginGesture(label);
     drag_ = drag;

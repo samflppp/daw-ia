@@ -242,7 +242,12 @@ void HistoryPanel::paint(juce::Graphics& g)
         const auto label = History::describe(entry.type);
         g.setColour(applied ? tokens_.colour("color.text.secondary") : tokens_.colour("color.text.disabled"));
         g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
-        g.drawText(juce::String(label.data(), label.size()), line, juce::Justification::centredLeft, true);
+        // fromUTF8 and not the two-argument constructor: that one decodes
+        // ASCII, so an accented label would arrive double-decoded.
+        g.drawText(juce::String::fromUTF8(label.data(), static_cast<int>(label.size())),
+                   line,
+                   juce::Justification::centredLeft,
+                   true);
     }
 }
 

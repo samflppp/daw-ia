@@ -67,3 +67,6 @@ daw_set_warnings(daw_test_clap)
 add_dependencies(daw_engine_tests daw_test_clap)
 target_compile_definitions(daw_engine_tests PRIVATE
     DAW_TEST_CLAP_FIXTURE="$<TARGET_FILE:daw_test_clap>")
+
+# Our own sources are UTF-8; see cmake/DawWarnings.cmake.
+daw_use_utf8_sources(daw_engine_tests)

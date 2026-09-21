@@ -115,7 +115,7 @@ TEST_CASE("a drag is one history entry, and undoing it gives back the note as it
     Clip3 fixture;
     const auto depth = fixture.harness.bus.undoDepth();
 
-    const auto gesture = fixture.harness.bus.beginGesture("deplacer une note");
+    const auto gesture = fixture.harness.bus.beginGesture("déplacer une note");
     ExecuteOptions options{};
     options.gesture = gesture;
 

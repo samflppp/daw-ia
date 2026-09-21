@@ -337,7 +337,7 @@ void PluginChainPanel::showInsertMenu()
         menu.addItem(noneItemId, "Aucun plugin connu", false, false);
 
     menu.addSeparator();
-    menu.addItem(rescanItemId, "Rechercher les plugins installes");
+    menu.addItem(rescanItemId, u8"Rechercher les plugins installés");
 
     menu.showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(add_),
                        [this, installed](int choice)
@@ -387,7 +387,7 @@ void PluginChainPanel::paint(juce::Graphics& g)
 
     g.setColour(tokens_.colour("color.text.tertiary"));
     g.setFont(lookAndFeel_.typography().caps("font.size.micro"));
-    g.drawText("CHAINE", header, juce::Justification::centredLeft, false);
+    g.drawText(u8"CHAÎNE", header, juce::Justification::centredLeft, false);
 
     g.setColour(tokens_.colour("color.text.disabled"));
     g.setFont(lookAndFeel_.typography().sans("font.size.micro", "font.weight.regular"));
@@ -405,7 +405,7 @@ void PluginChainPanel::paint(juce::Graphics& g)
 
     g.setColour(tokens_.colour("color.text.disabled"));
     g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
-    g.drawText(selected != nullptr ? "Chaine vide" : "Selectionne une piste",
+    g.drawText(selected != nullptr ? u8"Chaîne vide" : u8"Sélectionnez une piste",
                area,
                juce::Justification::centred,
                false);

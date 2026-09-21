@@ -94,7 +94,7 @@ void GalleryView::paintTypeScale(juce::Graphics& g, juce::Rectangle<int>& area)
         {"font.size.display", "font.weight.medium", true, "005.3.02"},
         {"font.size.title", "font.weight.semibold", false, "Piano-roll"},
         {"font.size.label", "font.weight.medium", false, "Bass 808"},
-        {"font.size.body", "font.weight.regular", false, "Chaine de plugins de la piste"},
+        {"font.size.body", "font.weight.regular", false, u8"Chaîne de plugins de la piste"},
         {"font.size.caption", "font.weight.regular", true, "-6.2 dB"},
         {"font.size.micro", "font.weight.regular", true, "track.set_volume"},
     };
@@ -155,12 +155,12 @@ void GalleryView::paint(juce::Graphics& g)
                    {"color.grid.subdivision", "sub"},
                    {"color.grid.rowWhite", "blanche"},
                    {"color.grid.rowBlack", "noire"},
-                   {"color.note.fillSoft", "velocite"}});
+                   {"color.note.fillSoft", u8"vélocité"}});
 
-    paintSection(g, right, "Echelle typographique");
+    paintSection(g, right, u8"Échelle typographique");
     paintTypeScale(g, right);
 
-    paintSection(g, right, "Controles");
+    paintSection(g, right, u8"Contrôles");
 }
 
 void GalleryView::resized()

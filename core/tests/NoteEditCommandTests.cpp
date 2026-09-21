@@ -77,7 +77,7 @@ TEST_CASE("a velocity drag is one entry, and two notes stay two")
 
     const auto before = harness.bus.undoDepth();
 
-    const auto gesture = harness.bus.beginGesture("velocite");
+    const auto gesture = harness.bus.beginGesture("vélocité");
     for (int step = 100; step > 60; --step)
         REQUIRE(harness.bus
                     .execute(std::make_unique<SetNoteVelocity>(phrase.clipId, phrase.noteIds[0], step),
