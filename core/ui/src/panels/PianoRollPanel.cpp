@@ -4,6 +4,7 @@
 #include "daw/domain/commands/CreateMidiClip.h"
 #include "daw/domain/commands/NoteCommands.h"
 #include "daw/domain/commands/NoteEditCommands.h"
+#include "daw/domain/commands/TransportCommands.h"
 
 #include <algorithm>
 #include <cmath>
@@ -173,12 +174,30 @@ void PianoRollPanel::timerCallback()
     // Only the playhead moves on its own, so only its column is repainted. A
     // full repaint thirty times a second would redraw a grid that has not
     // changed since the project was opened.
+    //
+    // Two columns, not one: the one the playhead is moving to, and the one it
+    // is leaving. Repainting only the first is what left a white line behind
+    // at every frame until the panel was striped with them.
+    const auto wanted = playheadX();
+    if (wanted == paintedPlayheadX_)
+        return;
+
     const auto area = gridArea();
-    const auto x = xForBeat(clock_.positionBeats());
-    repaint(x - tokens_.integer("space.xs"),
-            area.getY(),
-            tokens_.integer("space.sm"),
-            area.getHeight() + tokens_.integer("metric.pianoRoll.rulerHeight"));
+    const auto column = [this, area](int x)
+    {
+        repaint(x - tokens_.integer("space.xs"),
+                area.getY() - tokens_.integer("metric.pianoRoll.rulerHeight"),
+                tokens_.integer("space.sm"),
+                area.getHeight() + tokens_.integer("metric.pianoRoll.rulerHeight"));
+    };
+
+    if (paintedPlayheadX_.has_value())
+        column(*paintedPlayheadX_);
+
+    if (wanted.has_value())
+        column(*wanted);
+
+    paintedPlayheadX_ = wanted;
 }
 
 const domain::Track* PianoRollPanel::track() const
@@ -201,6 +220,15 @@ const domain::Clip* PianoRollPanel::clip() const
 }
 
 // --- geometry --------------------------------------------------------------
+
+juce::Rectangle<int> PianoRollPanel::rulerArea() const
+{
+    const auto grid = gridArea();
+    return {grid.getX(),
+            grid.getY() - tokens_.integer("metric.pianoRoll.rulerHeight"),
+            grid.getWidth(),
+            tokens_.integer("metric.pianoRoll.rulerHeight")};
+}
 
 juce::Rectangle<int> PianoRollPanel::gridArea() const
 {
@@ -510,21 +538,47 @@ void PianoRollPanel::paintRuler(juce::Graphics& g, juce::Rectangle<int> area) co
     }
 }
 
+std::optional<int> PianoRollPanel::playheadX() const
+{
+    const auto* edited = clip();
+    if (edited == nullptr)
+        return {};
+
+    const auto local = clock_.positionBeats() - edited->startBeats;
+    if (local < 0.0 || local > edited->lengthBeats)
+        return {};
+
+    return xForBeat(local);
+}
+
 void PianoRollPanel::paintPlayhead(juce::Graphics& g, juce::Rectangle<int> area) const
 {
-    const auto position = clock_.positionBeats();
-    const auto* edited = clip();
-    if (edited == nullptr || position < 0.0 || position > edited->lengthBeats)
+    const auto x = playheadX();
+    if (!x.has_value())
         return;
 
     g.setColour(tokens_.colour("color.accent.live"));
-    g.fillRect(xForBeat(position),
+    g.fillRect(*x,
                area.getY() - tokens_.integer("metric.pianoRoll.rulerHeight"),
                tokens_.integer("stroke.playhead"),
                area.getHeight() + tokens_.integer("metric.pianoRoll.rulerHeight"));
 }
 
 // --- editing ---------------------------------------------------------------
+
+void PianoRollPanel::movePlayheadTo(int x)
+{
+    const auto* edited = clip();
+    if (edited == nullptr)
+        return;
+
+    // The axis of this panel is the span of the clip being edited, so what the
+    // pixel says has to have the clip's own start added back before it means
+    // anything on the timeline.
+    const auto beats = edited->startBeats + beatAtX(x);
+
+    static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(beats)));
+}
 
 void PianoRollPanel::addNoteAt(juce::Point<int> point)
 {
@@ -578,6 +632,16 @@ void PianoRollPanel::removeNote(domain::NoteId noteId)
 void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
 {
     grabKeyboardFocus();
+
+    // The ruler is where the playhead is moved, by click or by drag. It is a
+    // transport command like any other: transient, projected, and visible to
+    // anything else watching the bus.
+    if (rulerArea().contains(event.getPosition()))
+    {
+        draggingPlayhead_ = true;
+        movePlayheadTo(event.getPosition().getX());
+        return;
+    }
 
     // Outside the grid there is no music to edit. Without this, a click in the
     // header landed on a pitch clamped to 127 and wrote a note nobody asked
@@ -635,6 +699,12 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
 
 void PianoRollPanel::mouseDrag(const juce::MouseEvent& event)
 {
+    if (draggingPlayhead_)
+    {
+        movePlayheadTo(event.getPosition().getX());
+        return;
+    }
+
     if (!drag_.has_value())
         return;
 
@@ -723,6 +793,8 @@ void PianoRollPanel::mouseMove(const juce::MouseEvent& event)
 void PianoRollPanel::mouseUp(const juce::MouseEvent& event)
 {
     juce::ignoreUnused(event);
+
+    draggingPlayhead_ = false;
 
     if (!drag_.has_value())
         return;

@@ -52,6 +52,19 @@ private:
 
     // --- geometry. The one place pixels and music meet.
     [[nodiscard]] juce::Rectangle<int> gridArea() const;
+
+    // The bar numbers, above the grid. Clicking there moves the playhead, so
+    // it is a rectangle this panel has to be able to name.
+    [[nodiscard]] juce::Rectangle<int> rulerArea() const;
+
+    // Where the playhead sits on this panel's axis, or nothing when the
+    // playhead is outside the clip being edited. The axis is the span of that
+    // clip, so a clip that does not start at bar one needs its own offset
+    // taken off -- without it the playhead of a second clip was drawn at the
+    // wrong place, and dragging it would have written the wrong beat.
+    [[nodiscard]] std::optional<int> playheadX() const;
+
+    void movePlayheadTo(int x);
     [[nodiscard]] int rowsVisible() const;
     [[nodiscard]] int yForPitch(int pitch) const;
     [[nodiscard]] int pitchAtY(int y) const;
@@ -95,6 +108,14 @@ private:
     int topPitch_{84};
 
     domain::NoteId selectedNote_{};
+
+    // Where the playhead was last painted. Without it the timer invalidated
+    // the column the playhead is moving to and never the one it is leaving, so
+    // every frame left a line behind and the panel filled up with them.
+    std::optional<int> paintedPlayheadX_;
+
+    // True while the playhead is being dragged along the ruler.
+    bool draggingPlayhead_{false};
 
     // A drag in progress: what it does to the note, the grab offset in beats,
     // and the gesture that makes the whole movement one history entry.
