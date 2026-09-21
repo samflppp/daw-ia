@@ -79,8 +79,17 @@ void PluginRack::openEditor(domain::PluginId pluginId)
     }
 
     auto* plugin = find(pluginId);
-    if (plugin == nullptr || !PluginWindow::hasEditor(*plugin))
+    if (plugin == nullptr)
+    {
+        juce::Logger::writeToLog("plugin window: no plugin " + juce::String(key) + " in the Edit");
         return;
+    }
+
+    if (!PluginWindow::hasEditor(*plugin))
+    {
+        juce::Logger::writeToLog("plugin window: " + plugin->getName() + " reports no editor");
+        return;
+    }
 
     auto window = std::make_unique<PluginWindow>(*plugin, tokens_);
 

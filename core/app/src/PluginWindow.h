@@ -30,12 +30,17 @@ public:
     std::function<void()> onClose;
 
     void closeButtonPressed() override;
+    void childBoundsChanged(juce::Component* child) override;
 
     // True when the plugin gave an editor to show. A plugin without one is not
     // an error: the window simply does not open.
     [[nodiscard]] static bool hasEditor(tracktion::Plugin& plugin);
 
 private:
+    // Puts the window inside the usable area of the display, whatever size the
+    // plugin asked for.
+    void placeOnScreen();
+
     tracktion::Plugin::Ptr plugin_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginWindow)

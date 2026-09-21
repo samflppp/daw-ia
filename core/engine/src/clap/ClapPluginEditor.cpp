@@ -2,6 +2,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 namespace daw::engine::clap_host
@@ -27,22 +29,45 @@ public:
         if (gui == nullptr)
             return;
 
-        created_ = gui->create(owner_.plugin(), PluginInstance::nativeWindowApi(), owner_.isGuiFloating());
-        if (!created_)
-            return;
+        // A size before anything else, and always. A failed create() used to
+        // leave this component at zero by zero: the window then opened tiny and
+        // black, which is what a plugin reopened twice looked like.
+        setSize(fallbackWidth, fallbackHeight);
 
-        owner_.setGuiCreated(true);
+        // Created once per plugin instance, never once per window.
+        //
+        // Closing the window used to destroy the plugin's GUI and opening it
+        // again used to build a new one. CLAP allows it, but a plugin is
+        // entitled to come back from a second create() in another state -- and
+        // Vital came back drawing smaller than the window it had just asked
+        // for, which is the black band around its interface. Hiding and
+        // showing the same GUI asks the plugin for nothing it has to redo.
+        //
+        // The GUI is destroyed with the plugin instance, which is where it has
+        // to happen anyway: a GUI outliving its plugin is a crash.
+        if (!owner_.isGuiCreated())
+        {
+            if (!gui->create(owner_.plugin(), PluginInstance::nativeWindowApi(), owner_.isGuiFloating()))
+            {
+                juce::Logger::writeToLog("plugin editor: " + owner_.getName() +
+                                         " refused to create its window");
+                return;
+            }
 
-        if (gui->set_scale != nullptr)
-            gui->set_scale(owner_.plugin(), juce::Desktop::getInstance().getGlobalScaleFactor());
+            owner_.setGuiCreated(true);
 
-        std::uint32_t width = 0;
-        std::uint32_t height = 0;
-        if (gui->get_size != nullptr && gui->get_size(owner_.plugin(), &width, &height) && width > 0 &&
-            height > 0)
-            setSize(static_cast<int>(width), static_cast<int>(height));
-        else
-            setSize(fallbackWidth, fallbackHeight);
+            // The scale of the display, not juce::Desktop::getGlobalScaleFactor().
+            // That one is a user setting on JUCE's own zoom and is 1 here; the
+            // display is at 1.5. Telling the plugin 1 while Windows draws at
+            // 1.5 is what left a black band around Vital: it reported a size
+            // in the pixels of one scale and drew in the pixels of another.
+            if (gui->set_scale != nullptr)
+                gui->set_scale(owner_.plugin(), displayScale());
+        }
+
+        created_ = true;
+
+        readSizeFromPlugin();
 
         if (gui->can_resize != nullptr)
             setResizable(gui->can_resize(owner_.plugin()), false);
@@ -57,15 +82,10 @@ public:
 
     ~Editor() override
     {
-        if (const auto* gui = owner_.gui(); gui != nullptr && created_)
-        {
-            if (gui->hide != nullptr)
-                gui->hide(owner_.plugin());
-            if (gui->destroy != nullptr)
-                gui->destroy(owner_.plugin());
-
-            owner_.setGuiCreated(false);
-        }
+        // Hidden, not destroyed: see the constructor. The plugin instance owns
+        // the GUI and destroys it when it goes.
+        if (const auto* gui = owner_.gui(); gui != nullptr && created_ && gui->hide != nullptr)
+            gui->hide(owner_.plugin());
     }
 
     void parentHierarchyChanged() override
@@ -84,9 +104,10 @@ public:
         if (gui->can_resize != nullptr && !gui->can_resize(owner_.plugin()))
             return;
 
+        const auto scale = displayScale();
         gui->set_size(owner_.plugin(),
-                      static_cast<std::uint32_t>(std::max(1, getWidth())),
-                      static_cast<std::uint32_t>(std::max(1, getHeight())));
+                      static_cast<std::uint32_t>(std::max(1.0, std::round(getWidth() * scale))),
+                      static_cast<std::uint32_t>(std::max(1.0, std::round(getHeight() * scale))));
     }
 
     void paint(juce::Graphics& g) override
@@ -99,6 +120,31 @@ public:
 private:
     static constexpr int fallbackWidth = 480;
     static constexpr int fallbackHeight = 320;
+
+    // CLAP speaks in the pixels of the display; a JUCE component is measured
+    // before the display scale is applied. The two differ by exactly this
+    // factor, and forgetting it is a window that does not fit its plugin.
+    [[nodiscard]] static double displayScale()
+    {
+        const auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay();
+        return display != nullptr && display->scale > 0.0 ? display->scale : 1.0;
+    }
+
+    void readSizeFromPlugin()
+    {
+        const auto* gui = owner_.gui();
+        if (gui == nullptr || gui->get_size == nullptr)
+            return;
+
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        if (!gui->get_size(owner_.plugin(), &width, &height) || width == 0 || height == 0)
+            return;
+
+        const auto scale = displayScale();
+        setSize(static_cast<int>(std::round(static_cast<double>(width) / scale)),
+                static_cast<int>(std::round(static_cast<double>(height) / scale)));
+    }
 
     void attachToNativeWindow()
     {
@@ -127,6 +173,13 @@ private:
 
             if (gui->show != nullptr)
                 gui->show(owner_.plugin());
+
+            // Asked again, and this is the time that counts: a plugin knows how
+            // big it wants to be once it has a parent and has been shown, not
+            // at create(). Reading it only before was why a reopened editor
+            // came back with a black band around it -- the window kept the
+            // first answer and the plugin drew to the second.
+            readSizeFromPlugin();
         }
     }
 

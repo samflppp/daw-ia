@@ -1235,8 +1235,17 @@ bool PluginInstance::hostGuiRequestResize(const clap_host_t* host, std::uint32_t
     auto& self = from(host);
     if (auto* editor = self.getActiveEditor(); editor != nullptr)
     {
+        // A SafePointer and not the raw pointer: the call is deferred to the
+        // message thread, and an editor closed in between would be written to
+        // after it had been deleted.
+        juce::Component::SafePointer<juce::AudioProcessorEditor> safe{editor};
+
         juce::MessageManager::callAsync(
-            [editor, width, height] { editor->setSize(static_cast<int>(width), static_cast<int>(height)); });
+            [safe, width, height]
+            {
+                if (auto* target = safe.getComponent(); target != nullptr)
+                    target->setSize(static_cast<int>(width), static_cast<int>(height));
+            });
         return true;
     }
     return false;
