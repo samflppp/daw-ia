@@ -59,7 +59,11 @@ public:
         // renames the track, which is the gesture every list in every DAW uses.
         addAndMakeVisible(name_);
         name_.setEditable(false, true, false);
-        name_.setInterceptsMouseClicks(true, false);
+
+        // The label keeps the double-click that starts an edit, and forwards
+        // everything else to the row: clicking a track's name has always
+        // selected that track, and a rename must not cost that.
+        name_.addMouseListener(this, false);
         name_.onTextChange = [this]
         {
             const auto* track = state_.findTrack(trackId_);

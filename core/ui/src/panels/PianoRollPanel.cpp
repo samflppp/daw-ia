@@ -579,6 +579,13 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
 {
     grabKeyboardFocus();
 
+    // Outside the grid there is no music to edit. Without this, a click in the
+    // header landed on a pitch clamped to 127 and wrote a note nobody asked
+    // for -- and the header now holds two controls, so it is clicked on
+    // purpose.
+    if (!gridArea().contains(event.getPosition()))
+        return;
+
     const auto* hit = noteAt(event.getPosition());
 
     if (event.mods.isRightButtonDown())
