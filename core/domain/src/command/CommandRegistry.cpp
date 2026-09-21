@@ -5,6 +5,7 @@
 #include "daw/domain/commands/NoteCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
+#include "daw/domain/commands/TempoCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 
@@ -32,6 +33,10 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<RemovePlugin>());
     static_cast<void>(registry.add<SetPluginBypassed>());
     static_cast<void>(registry.add<SetPluginParameter>());
+    static_cast<void>(registry.add<InsertTempoPoint>());
+    static_cast<void>(registry.add<RemoveTempoPoint>());
+    static_cast<void>(registry.add<SetTempoPointBpm>());
+    static_cast<void>(registry.add<MoveTempoPoint>());
     static_cast<void>(registry.add<CapturePluginState>());
     return registry;
 }

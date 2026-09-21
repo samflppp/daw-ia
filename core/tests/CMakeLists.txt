@@ -15,6 +15,7 @@ add_executable(daw_domain_tests
     ProvenanceTests.cpp
     TrackCommandTests.cpp
     NoteCommandTests.cpp
+    TempoCommandTests.cpp
     TransportTests.cpp
     ThreadingTests.cpp
     WorkspaceLayoutTests.cpp
