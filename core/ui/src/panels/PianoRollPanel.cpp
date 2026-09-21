@@ -3,6 +3,7 @@
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/CreateMidiClip.h"
 #include "daw/domain/commands/NoteCommands.h"
+#include "daw/domain/commands/NoteEditCommands.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,6 +31,10 @@ constexpr int highestVisiblePitch = 127;
 // bars, from the start.
 constexpr double newClipStartBeats = 0.0;
 constexpr double newClipLengthBeats = 16.0;
+
+// How far the hand travels for the whole velocity range. Three pixels per step
+// would make 1 to 127 a four-hundred-pixel drag; a panel is not that tall.
+constexpr double pixelsPerVelocityStep = 1.5;
 
 [[nodiscard]] bool isBlackKey(int pitch)
 {
@@ -65,9 +70,30 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
     setLookAndFeel(&lookAndFeel_);
     setWantsKeyboardFocus(true);
 
+    addAndMakeVisible(clipChooser_);
+    clipChooser_.setTextWhenNothingSelected("aucun clip");
+
+    // Selecting a clip is not an edit: it goes to the Selection, never to the
+    // bus, and undoing a note must not undo a click.
+    clipChooser_.onChange = [this]
+    {
+        const auto* owner = track();
+        const auto index = clipChooser_.getSelectedId() - 1;
+        if (owner == nullptr || index < 0 || index >= static_cast<int>(owner->clips.size()))
+            return;
+
+        const auto& chosen = owner->clips[static_cast<std::size_t>(index)];
+        if (chosen.id != selection_.clip())
+            selection_.selectClip(owner->id, chosen.id);
+    };
+
+    addAndMakeVisible(addClip_);
+    addClip_.onClick = [this] { addClip(); };
+
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
     startTimer(playheadRefreshMs);
+    rebuildClipChooser();
 }
 
 PianoRollPanel::~PianoRollPanel()
@@ -81,7 +107,65 @@ PianoRollPanel::~PianoRollPanel()
 void PianoRollPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
     juce::ignoreUnused(source);
+    rebuildClipChooser();
     repaint();
+}
+
+void PianoRollPanel::resized()
+{
+    auto header = getLocalBounds().removeFromTop(tokens_.integer("metric.panel.headerHeight"));
+    header = header.reduced(tokens_.integer("space.md"), tokens_.integer("space.xs"));
+
+    addClip_.setBounds(header.removeFromRight(tokens_.integer("metric.pianoRoll.keyboardWidth")));
+    header.removeFromRight(tokens_.integer("space.sm"));
+    clipChooser_.setBounds(header.removeFromRight(tokens_.integer("metric.pianoRoll.keyboardWidth") * 2));
+}
+
+void PianoRollPanel::rebuildClipChooser()
+{
+    const auto* owner = track();
+    const auto* edited = clip();
+
+    clipChooser_.clear(juce::dontSendNotification);
+    clipChooser_.setEnabled(owner != nullptr);
+    addClip_.setEnabled(owner != nullptr);
+
+    if (owner == nullptr)
+        return;
+
+    for (std::size_t index = 0; index < owner->clips.size(); ++index)
+    {
+        const auto& candidate = owner->clips[index];
+
+        // Bars from one, like the transport readout: a clip that starts at
+        // beat 16 starts at bar 5, and that is what a musician looks for.
+        const auto bar = static_cast<int>(candidate.startBeats) / beatsPerBar + 1;
+        clipChooser_.addItem("Clip " + juce::String(static_cast<int>(index) + 1) + "  ·  mes. " +
+                                 juce::String(bar),
+                             static_cast<int>(index) + 1);
+
+        if (edited != nullptr && candidate.id == edited->id)
+            clipChooser_.setSelectedId(static_cast<int>(index) + 1, juce::dontSendNotification);
+    }
+}
+
+void PianoRollPanel::addClip()
+{
+    const auto* owner = track();
+    if (owner == nullptr)
+        return;
+
+    // After the last one, so a new clip never lands on top of an existing one.
+    auto start = newClipStartBeats;
+    for (const auto& existing : owner->clips)
+        start = std::max(start, existing.startBeats + existing.lengthBeats);
+
+    const auto clipId = domain::ClipId::generate();
+    if (bus_.execute(std::make_unique<domain::CreateMidiClip>(owner->id, clipId, start, newClipLengthBeats))
+            .ok())
+    {
+        selection_.selectClip(owner->id, clipId);
+    }
 }
 
 void PianoRollPanel::timerCallback()
@@ -237,6 +321,12 @@ void PianoRollPanel::paint(juce::Graphics& g)
     const auto* owner = track();
     g.setColour(tokens_.colour("color.text.secondary"));
     g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
+
+    // The chooser and the button live on the right of the header; the name
+    // stops before them rather than being drawn underneath.
+    header.removeFromRight(tokens_.integer("metric.pianoRoll.keyboardWidth") * 3 +
+                           tokens_.integer("space.sm") + tokens_.integer("space.md"));
+
     const auto count = static_cast<int>(edited->notes.size());
     g.drawText(juce::String(owner != nullptr ? owner->name : std::string{}) + "  ·  " + juce::String(count) +
                    (count > 1 ? " notes" : " note"),
@@ -510,11 +600,27 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
     // user moves the note, not the point they clicked on.
     Drag drag{};
     drag.noteId = hit->id;
-    drag.mode = isOnResizeGrip(*hit, event.getPosition()) ? DragMode::resize : DragMode::move;
+
+    // Alt turns the drag into a velocity drag. Velocity is read in the shade of
+    // the note, so it is changed where it is read, on the note itself, rather
+    // than in a lane underneath that would cost a third of the panel.
+    if (event.mods.isAltDown())
+        drag.mode = DragMode::velocity;
+    else
+        drag.mode = isOnResizeGrip(*hit, event.getPosition()) ? DragMode::resize : DragMode::move;
+
     drag.grabOffsetBeats = beatAtX(event.getPosition().getX()) - hit->startBeats;
     drag.grabPitch = hit->pitch;
-    drag.gesture =
-        bus_.beginGesture(drag.mode == DragMode::resize ? "allonger une note" : "deplacer une note");
+    drag.grabY = event.getPosition().getY();
+    drag.grabVelocity = hit->velocity;
+
+    const auto* label = "deplacer une note";
+    if (drag.mode == DragMode::resize)
+        label = "allonger une note";
+    else if (drag.mode == DragMode::velocity)
+        label = "velocite d'une note";
+
+    drag.gesture = bus_.beginGesture(label);
     drag_ = drag;
 
     repaint();
@@ -544,6 +650,29 @@ void PianoRollPanel::mouseDrag(const juce::MouseEvent& event)
 
     domain::ExecuteOptions options{};
     options.gesture = drag_->gesture;
+
+    if (drag_->mode == DragMode::velocity)
+    {
+        // Up is louder, and the movement is relative to where the note was.
+        const auto travelled = static_cast<double>(drag_->grabY - event.getPosition().getY());
+        const auto wanted = std::clamp(drag_->grabVelocity +
+                                           static_cast<int>(std::llround(travelled / pixelsPerVelocityStep)),
+                                       domain::Note::lowestVelocity,
+                                       domain::Note::highestVelocity);
+
+        if (wanted == note->velocity)
+            return;
+
+        if (bus_.execute(std::make_unique<domain::SetNoteVelocity>(edited->id, drag_->noteId, wanted),
+                         options)
+                .ok())
+        {
+            drag_->moved = true;
+            repaint();
+        }
+
+        return;
+    }
 
     if (drag_->mode == DragMode::resize)
     {

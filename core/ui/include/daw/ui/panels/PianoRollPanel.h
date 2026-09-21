@@ -26,6 +26,7 @@ public:
     ~PianoRollPanel() override;
 
     void paint(juce::Graphics& g) override;
+    void resized() override;
 
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
@@ -38,8 +39,14 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void timerCallback() override;
 
-    // The clip being edited: the first of the selected track. Null when no
-    // track is selected, or when the track holds no clip yet.
+    // The clip being edited: the selected one, or the first of the track. Null
+    // when no track is selected, or when the track holds no clip yet.
+    //
+    // One clip at a time is what this panel is: its horizontal axis is the
+    // span of that clip, not the timeline. Showing several at once would be an
+    // arrangement view, which is a different panel. What was wrong until now
+    // is that the other clips were unreachable, not that they were off screen:
+    // the chooser in the header names every clip the track holds.
     [[nodiscard]] const domain::Clip* clip() const;
     [[nodiscard]] const domain::Track* track() const;
 
@@ -68,6 +75,12 @@ private:
     void addNoteAt(juce::Point<int> point);
     void removeNote(domain::NoteId noteId);
 
+    // Fills the chooser from the track, and marks the edited clip. Called on
+    // every project change, so a clip created by a replay or by a copilot
+    // appears here with no code of its own.
+    void rebuildClipChooser();
+    void addClip();
+
     const Tokens& tokens_;
     DawLookAndFeel& lookAndFeel_;
     domain::CommandBus& bus_;
@@ -92,7 +105,8 @@ private:
     enum class DragMode
     {
         move,
-        resize
+        resize,
+        velocity
     };
 
     struct Drag
@@ -101,11 +115,20 @@ private:
         DragMode mode{DragMode::move};
         double grabOffsetBeats{0.0};
         int grabPitch{0};
+
+        // Where the velocity drag started, in pixels and in velocity. A
+        // velocity is dragged relative to what it was, so a note at 20 and a
+        // note at 120 both follow the hand instead of jumping to it.
+        int grabY{0};
+        int grabVelocity{0};
         domain::GestureId gesture{};
         bool moved{false};
     };
 
     std::optional<Drag> drag_;
+
+    juce::ComboBox clipChooser_;
+    juce::TextButton addClip_{"+ Clip"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PianoRollPanel)
 };

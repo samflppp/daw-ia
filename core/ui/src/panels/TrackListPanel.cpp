@@ -55,6 +55,31 @@ public:
             gesture_.reset();
         };
 
+        // The name is a label and no longer a painted string: double-clicking it
+        // renames the track, which is the gesture every list in every DAW uses.
+        addAndMakeVisible(name_);
+        name_.setEditable(false, true, false);
+        name_.setInterceptsMouseClicks(true, false);
+        name_.onTextChange = [this]
+        {
+            const auto* track = state_.findTrack(trackId_);
+            if (track == nullptr)
+                return;
+
+            const auto wanted = name_.getText().trim();
+
+            // An empty name would leave a row nothing can be said about, and a
+            // name that did not change is not an edit: neither reaches the bus.
+            if (wanted.isEmpty() || wanted.toStdString() == track->name)
+            {
+                name_.setText(juce::String(track->name), juce::dontSendNotification);
+                return;
+            }
+
+            static_cast<void>(
+                bus_.execute(std::make_unique<domain::RenameTrack>(trackId_, wanted.toStdString())));
+        };
+
         addAndMakeVisible(pan_);
         pan_.setSliderStyle(juce::Slider::LinearHorizontal);
         pan_.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -103,6 +128,15 @@ public:
         bypass_.setMouseClickGrabsKeyboardFocus(false);
         bypass_.onClick = [this] { toggleChainBypass(); };
 
+        // track.remove has existed since S5 and nothing called it. A removal
+        // takes clips, notes and plugins with it, so it is one undo away and
+        // not one confirmation dialog away: the history is the safety net.
+        addAndMakeVisible(remove_);
+        remove_.setButtonText("x");
+        remove_.setMouseClickGrabsKeyboardFocus(false);
+        remove_.onClick = [this]
+        { static_cast<void>(bus_.execute(std::make_unique<domain::RemoveTrack>(trackId_))); };
+
         refresh();
     }
 
@@ -118,7 +152,14 @@ public:
         if (track == nullptr)
             return;
 
-        name_ = juce::String(track->name);
+        // Not while it is being typed into: writing the state back under the
+        // cursor would fight the user's own keystrokes.
+        if (!name_.isBeingEdited())
+            name_.setText(juce::String(track->name), juce::dontSendNotification);
+
+        name_.setColour(juce::Label::textColourId,
+                        track->muted ? tokens_.colour("color.text.disabled")
+                                     : tokens_.colour("color.text.primary"));
 
         // dontSendNotification: setting the slider from the state must not send
         // a command back, or a projection would fight the user's own movement.
@@ -161,7 +202,7 @@ public:
 
         // The switches and the reading sit on the right; the name takes what is
         // left, and the fader lives under it.
-        area.removeFromRight(tokens_.integer("metric.track.chipWidth") * 2 + tokens_.integer("space.sm") * 2);
+        area.removeFromRight(tokens_.integer("metric.track.chipWidth") * 3 + tokens_.integer("space.sm") * 3);
 
         auto decibels = area.removeFromRight(tokens_.integer("metric.transport.buttonSize") * 2);
         g.setColour(tokens_.colour("color.text.tertiary"));
@@ -178,14 +219,6 @@ public:
                        .withTrimmedBottom(tokens_.integer("space.xs")),
                    juce::Justification::centredRight,
                    false);
-
-        g.setColour(track->muted ? tokens_.colour("color.text.disabled")
-                                 : tokens_.colour("color.text.primary"));
-        g.setFont(lookAndFeel_.typography().sans("font.size.body", "font.weight.medium"));
-        g.drawText(name_,
-                   area.withTrimmedBottom(tokens_.integer("space.md")),
-                   juce::Justification::centredLeft,
-                   true);
     }
 
     void resized() override
@@ -193,16 +226,20 @@ public:
         auto area = getLocalBounds().reduced(tokens_.integer("space.md"), 0);
         area.removeFromLeft(tokens_.integer("space.lg"));
 
-        auto switches = area.removeFromRight(tokens_.integer("metric.track.chipWidth") * 2 +
-                                             tokens_.integer("space.sm") * 2);
+        auto switches = area.removeFromRight(tokens_.integer("metric.track.chipWidth") * 3 +
+                                             tokens_.integer("space.sm") * 3);
         switches =
             switches.withSizeKeepingCentre(switches.getWidth(), tokens_.integer("metric.track.chipHeight"));
         switches.removeFromLeft(tokens_.integer("space.sm"));
         mute_.setBounds(switches.removeFromLeft(tokens_.integer("metric.track.chipWidth")));
         switches.removeFromLeft(tokens_.integer("space.sm"));
         bypass_.setBounds(switches.removeFromLeft(tokens_.integer("metric.track.chipWidth")));
+        switches.removeFromLeft(tokens_.integer("space.sm"));
+        remove_.setBounds(switches.removeFromLeft(tokens_.integer("metric.track.chipWidth")));
 
         area.removeFromRight(tokens_.integer("metric.transport.buttonSize") * 2);
+
+        name_.setBounds(area.withTrimmedBottom(tokens_.integer("space.md")));
 
         auto fader = area.removeFromBottom(tokens_.integer("space.lg"));
         fader = fader.withTrimmedBottom(tokens_.integer("space.xs"));
@@ -292,13 +329,14 @@ private:
     domain::TrackId trackId_;
     int position_;
 
-    juce::String name_;
+    juce::Label name_;
     bool selected_{false};
 
     juce::Slider volume_;
     juce::Slider pan_;
     juce::ToggleButton mute_;
     juce::ToggleButton bypass_;
+    juce::TextButton remove_;
     std::optional<domain::GestureId> gesture_;
     std::optional<domain::GestureId> panGesture_;
 
