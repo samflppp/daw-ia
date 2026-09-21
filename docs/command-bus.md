@@ -120,13 +120,84 @@ elles-mêmes. Voir `docs/persistence.md`.
 
 ## Les commandes de structure
 
-| Type | Ce qu'elle valide |
-|---|---|
-| `track.add` | création d'une piste ; sans elle, une piste ne viendrait d'aucune commande et un rechargement la perdrait |
-| `track.remove` | suppression ; l'undoRecord porte la piste entière et son index |
-| `clip.create_midi` | création structurelle, identifiant fourni par l'appelant, rejeu déterministe |
-| `note.add` | mutation imbriquée, échec propre si le clip n'existe pas |
-| `track.set_volume` | mutation continue, seule des trois à accepter le coalescing |
+| Type | Ce qu'elle valide | Fusion |
+|---|---|---|
+| `track.add` | création d'une piste ; sans elle, une piste ne viendrait d'aucune commande et un rechargement la perdrait | non |
+| `track.remove` | suppression ; l'undoRecord porte la piste entière et son index | non |
+| `track.rename` | le nom est ce sur quoi un copilote reçoit un ordre ; l'undoRecord porte l'ancien | non |
+| `track.reorder` | un index, jamais « monter » : un verbe relatif se rejoue autrement selon l'état | non |
+| `track.set_volume` | mutation continue | par piste |
+| `track.set_pan` | position dans le champ stéréo, jamais deux gains | par piste |
+| `track.set_muted` | interrupteur, distinct du bypass de plugin | non |
+| `clip.create_midi` | création structurelle, identifiant fourni par l'appelant, rejeu déterministe | non |
+| `note.add` | mutation imbriquée, échec propre si le clip n'existe pas | non |
+| `note.remove` | l'undoRecord porte la note entière et son index | non |
+| `note.move` | hauteur et départ, jamais la longueur | par note |
+| `note.resize` | longueur, jamais le départ | par note |
+| `note.set_velocity` | la vélocité se lisait, elle se change | par note |
+| `note.quantize` | départs sur une grille en beats, longueurs intactes | non |
+| `note.transpose` | un intervalle, refusé entier s'il sort de `[0, 127]` | non |
+
+### Les verbes qui portent une liste
+
+`note.quantize` et `note.transpose` prennent une liste d'identifiants de notes,
+jamais « la sélection ». Une sélection vit dans l'interface : elle n'est ni
+journalisée ni annulable, et deux fenêtres sur le même projet en auraient deux.
+Une commande dont le sens en dépendrait ne se rejouerait pas, ne passerait pas
+en JSON-RPC, et ne serait pas émissible par un copilote qui n'a pas de
+sélection. L'interface lit la sienne et met les identifiants dans le payload ;
+tout autre appelant fait exactement pareil.
+
+Les deux sont **tout ou rien**. Chaque note est lue et vérifiée avant qu'une
+seule bouge : une quantification qui en déplacerait la moitié avant de refuser
+l'autre laisserait un undoRecord décrivant un état qui n'a jamais existé.
+
+`note.transpose` refuse plutôt que de ramener dans les bornes : en ramenant,
+descendre de douze demi-tons puis remonter rendrait un autre accord, et l'undo
+cesserait d'être l'inverse de la commande. Son undoRecord porte l'intervalle et
+non les hauteurs absolues, pour la même raison.
+
+### Le panoramique et sa loi
+
+`track.set_pan` porte une position dans `[-1, +1]` et jamais un couple de gains.
+Transformer `-0,5` en un gain gauche et un gain droit est une décision de la
+projection : un payload qui porterait des gains figerait la loi dans tous les
+journaux déjà écrits.
+
+La loi est `PanLaw3dBCenter`, l'une des cinq de Tracktion, écrite explicitement
+sur chaque plugin de volume à chaque projection. Deux raisons, et aucune n'est
+esthétique :
+
+- `getDefaultPanLaw()` est une **globale mutable du processus**. Un projet dont
+  l'image stéréo en dépendrait ne rendrait pas pareil sur deux machines, pour
+  la même raison qu'une chaîne liée par index ne rechargerait pas pareil.
+- ce défaut d'usine est `PanLawLinear`, qui calcule `R = g + pan·g` : à fond à
+  droite, `R` vaut `2g`, soit une piste rendue **6 dB plus forte parce qu'elle
+  est panoramiquée**. À puissance constante, le centre est 3 dB sous les
+  extrêmes et traverser le champ ne change pas le niveau.
+
+Mesuré sur rendu hors ligne, RMS par canal :
+
+| Position | Gauche | Droite |
+|---|---|---|
+| `pan 0` | 0,110272 | 0,110272 |
+| `pan -1` | 0,155863 | 0 |
+| `pan +1` | 0 | 0,155490 |
+| `pan +0,5` | rapport L/R mesuré **0,414214** | la loi dit **0,414214** |
+
+Le rapport attendu est recalculé dans le test depuis la définition de la loi et
+jamais demandé à Tracktion : un test qui demande à Tracktion ce que fait
+Tracktion serait d'accord avec n'importe quelle loi.
+
+**Largeur stéréo :** Tracktion n'offre pas de plugin de largeur — `width`
+n'existe que comme paramètre interne du Chorus et du Reverb. Écartée plutôt
+qu'écrite à la main.
+
+**Mono :** le modèle n'a pas de clip audio, donc toute source est un instrument
+MIDI et sort en stéréo. `VolumeAndPanPlugin` n'applique son gain droit que si
+le tampon a deux canaux : un tampon mono serait **atténué et non déplacé**. Le
+test affirme le nombre de canaux rendus, pour que ce soit un test rouge le jour
+des clips audio et pas une surprise.
 
 ## Le tempo est une séquence
 
