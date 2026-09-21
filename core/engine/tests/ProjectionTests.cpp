@@ -167,7 +167,7 @@ TEST_CASE("The tempo of the domain is the tempo of the Edit")
 {
     EngineHarness harness;
 
-    REQUIRE(harness.state.setTempo(93.0).ok());
+    REQUIRE(harness.state.setTempoPointBpm(ProjectState::originTempoPointId(), 93.0).ok());
     harness.projector.reconcile();
 
     CHECK(harness.host.edit().tempoSequence.getTempo(0)->getBpm() == doctest::Approx(93.0));

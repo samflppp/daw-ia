@@ -1,6 +1,8 @@
 #include "daw/domain/project/ProjectState.h"
 
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <string>
 
 namespace daw::domain
@@ -30,6 +32,58 @@ Result<void> requireFinitePositive(double length, std::string_view what)
 }
 
 } // namespace
+
+// ---------------------------------------------------------------------------
+// TempoPoint
+// ---------------------------------------------------------------------------
+
+Result<void> TempoPoint::validate() const
+{
+    if (id.isNil())
+        return fail(ErrorCode::invalidArgument, "tempo point identifier is nil");
+    if (startBeats < 0.0)
+        return fail(ErrorCode::invalidArgument, "a tempo point cannot start before the timeline origin");
+    if (beatsPerMinute < ProjectState::minTempo || beatsPerMinute > ProjectState::maxTempo)
+        return fail(ErrorCode::invalidArgument, "tempo out of range: " + std::to_string(beatsPerMinute));
+    return {};
+}
+
+Value TempoPoint::toValue() const
+{
+    return Value::object({{"id", Value{id.toString()}},
+                          {"startBeats", Value{startBeats}},
+                          {"beatsPerMinute", Value{beatsPerMinute}}});
+}
+
+Result<TempoPoint> TempoPoint::fromValue(const Value& value)
+{
+    auto id = idAt<TempoPointId>(value, "id");
+    if (!id)
+        return id.error();
+
+    auto startBeats = value.doubleAt("startBeats");
+    if (!startBeats)
+        return startBeats.error();
+
+    auto beatsPerMinute = value.doubleAt("beatsPerMinute");
+    if (!beatsPerMinute)
+        return beatsPerMinute.error();
+
+    TempoPoint point{};
+    point.id = id.value();
+    point.startBeats = startBeats.value();
+    point.beatsPerMinute = beatsPerMinute.value();
+
+    if (auto valid = point.validate(); !valid)
+        return valid.error();
+
+    return point;
+}
+
+bool operator==(const TempoPoint& lhs, const TempoPoint& rhs)
+{
+    return lhs.id == rhs.id && lhs.startBeats == rhs.startBeats && lhs.beatsPerMinute == rhs.beatsPerMinute;
+}
 
 // ---------------------------------------------------------------------------
 // Note
@@ -521,12 +575,171 @@ bool operator==(const Track& lhs, const Track& rhs)
 // ProjectState
 // ---------------------------------------------------------------------------
 
-Result<void> ProjectState::setTempo(double beatsPerMinute)
+TempoPointId ProjectState::originTempoPointId() noexcept
+{
+    // Not nil, because a nil identifier is how every other entity says "not
+    // set". The value itself carries no meaning beyond being the same in every
+    // project, on every machine, forever.
+    std::array<std::uint8_t, 16> bytes{};
+    bytes[15] = 1;
+    return TempoPointId{Ulid{bytes}};
+}
+
+const TempoPoint* ProjectState::findTempoPoint(TempoPointId id) const noexcept
+{
+    for (const auto& point : tempo_)
+    {
+        if (point.id == id)
+            return &point;
+    }
+    return nullptr;
+}
+
+TempoPoint* ProjectState::findTempoPointMutable(TempoPointId id) noexcept
+{
+    for (auto& point : tempo_)
+    {
+        if (point.id == id)
+            return &point;
+    }
+    return nullptr;
+}
+
+Result<TempoPoint> ProjectState::tempoPoint(TempoPointId id) const
+{
+    const auto* point = findTempoPoint(id);
+    if (point == nullptr)
+        return fail(ErrorCode::notFound, "no tempo point " + id.toString());
+    return *point;
+}
+
+void ProjectState::sortTempoPoints()
+{
+    std::stable_sort(tempo_.begin(),
+                     tempo_.end(),
+                     [](const TempoPoint& lhs, const TempoPoint& rhs)
+                     { return lhs.startBeats < rhs.startBeats; });
+}
+
+double ProjectState::tempoAt(double beats) const noexcept
+{
+    // The sequence is sorted and starts at beat 0, so the first point always
+    // answers and the loop needs no fallback of its own. A tempo is held until
+    // the next point: there is nothing to interpolate.
+    double beatsPerMinute = tempo_.front().beatsPerMinute;
+    for (const auto& point : tempo_)
+    {
+        if (point.startBeats > beats)
+            break;
+        beatsPerMinute = point.beatsPerMinute;
+    }
+    return beatsPerMinute;
+}
+
+Result<void> ProjectState::insertTempoPoint(TempoPoint point)
+{
+    if (auto valid = point.validate(); !valid)
+        return valid.error();
+
+    if (findTempoPoint(point.id) != nullptr)
+        return fail(ErrorCode::conflict, "tempo point already exists: " + point.id.toString());
+
+    // Two points on the same beat would make tempoAt() depend on the order they
+    // were inserted in, which a replay has no reason to reproduce.
+    for (const auto& existing : tempo_)
+    {
+        if (existing.startBeats == point.startBeats)
+            return fail(ErrorCode::conflict,
+                        "a tempo point already starts at beat " + std::to_string(point.startBeats));
+    }
+
+    tempo_.push_back(point);
+    sortTempoPoints();
+    return {};
+}
+
+Result<void> ProjectState::removeTempoPoint(TempoPointId id)
+{
+    if (id == originTempoPointId())
+        return fail(ErrorCode::invalidArgument, "the tempo point at the origin cannot be removed");
+
+    const auto found =
+        std::find_if(tempo_.begin(), tempo_.end(), [id](const TempoPoint& point) { return point.id == id; });
+    if (found == tempo_.end())
+        return fail(ErrorCode::notFound, "no tempo point " + id.toString());
+
+    tempo_.erase(found);
+    return {};
+}
+
+Result<void> ProjectState::setTempoPointBpm(TempoPointId id, double beatsPerMinute)
 {
     if (beatsPerMinute < minTempo || beatsPerMinute > maxTempo)
         return fail(ErrorCode::invalidArgument, "tempo out of range: " + std::to_string(beatsPerMinute));
 
-    tempo_ = beatsPerMinute;
+    auto* point = findTempoPointMutable(id);
+    if (point == nullptr)
+        return fail(ErrorCode::notFound, "no tempo point " + id.toString());
+
+    point->beatsPerMinute = beatsPerMinute;
+    return {};
+}
+
+Result<void> ProjectState::moveTempoPoint(TempoPointId id, double startBeats)
+{
+    if (id == originTempoPointId())
+        return fail(ErrorCode::invalidArgument, "the tempo point at the origin cannot be moved");
+
+    if (!(startBeats > 0.0))
+        return fail(ErrorCode::invalidArgument, "only the point at the origin can start at beat 0");
+
+    auto* point = findTempoPointMutable(id);
+    if (point == nullptr)
+        return fail(ErrorCode::notFound, "no tempo point " + id.toString());
+
+    for (const auto& existing : tempo_)
+    {
+        if (existing.id != id && existing.startBeats == startBeats)
+            return fail(ErrorCode::conflict,
+                        "a tempo point already starts at beat " + std::to_string(startBeats));
+    }
+
+    point->startBeats = startBeats;
+    sortTempoPoints();
+    return {};
+}
+
+Result<void> ProjectState::readTempoSequence(const Value::Array& points)
+{
+    // Read into a state that already holds its origin point: the sequence on
+    // disk holds it too, so the origin is updated and the others are added.
+    // That keeps one single invariant instead of two code paths.
+    bool sawOrigin = false;
+
+    for (const auto& item : points)
+    {
+        auto point = TempoPoint::fromValue(item);
+        if (!point)
+            return point.error();
+
+        if (point.value().id == originTempoPointId())
+        {
+            if (point.value().startBeats != 0.0)
+                return fail(ErrorCode::invalidPayload, "the tempo point at the origin must start at beat 0");
+
+            tempo_.front() = point.value();
+            sawOrigin = true;
+            continue;
+        }
+
+        auto inserted = insertTempoPoint(point.value());
+        if (!inserted)
+            return inserted.error();
+    }
+
+    if (!sawOrigin)
+        return fail(ErrorCode::invalidPayload, "the tempo sequence has no point at the origin");
+
     return {};
 }
 
@@ -998,19 +1211,44 @@ Value ProjectState::toValue() const
     for (const auto& track : tracks_)
         serialisedTracks.push_back(track.toValue());
 
-    return Value::object({{"tempo", Value{tempo_}}, {"tracks", Value::array(std::move(serialisedTracks))}});
+    Value::Array serialisedTempo;
+    serialisedTempo.reserve(tempo_.size());
+    for (const auto& point : tempo_)
+        serialisedTempo.push_back(point.toValue());
+
+    return Value::object({{"tempo", Value::array(std::move(serialisedTempo))},
+                          {"tracks", Value::array(std::move(serialisedTracks))}});
 }
 
 Result<ProjectState> ProjectState::fromValue(const Value& value)
 {
-    auto tempo = value.doubleAt("tempo");
-    if (!tempo)
-        return tempo.error();
+    const auto* tempoValue = value.find("tempo");
+    if (tempoValue == nullptr)
+        return fail(ErrorCode::invalidPayload, "missing key: tempo");
 
     ProjectState state;
-    auto applied = state.setTempo(tempo.value());
-    if (!applied)
-        return applied.error();
+
+    if (const auto* points = tempoValue->asArray(); points != nullptr)
+    {
+        auto read = state.readTempoSequence(*points);
+        if (!read)
+            return read.error();
+    }
+    else
+    {
+        // A project written before the sequence existed carries a single
+        // number. It is worth a sequence of one point at the origin, which is
+        // exactly what an empty project already holds, so only the value
+        // moves. Nothing already on disk is rewritten: no journal has ever
+        // held a tempo command, which is the whole reason this is cheap today.
+        auto scalar = tempoValue->asDouble();
+        if (!scalar)
+            return fail(scalar.error().code, "tempo: " + scalar.error().message);
+
+        auto applied = state.setTempoPointBpm(originTempoPointId(), scalar.value());
+        if (!applied)
+            return applied.error();
+    }
 
     const auto* tracksValue = value.find("tracks");
     if (tracksValue != nullptr)

@@ -247,7 +247,9 @@ juce::String TransportPanel::positionText() const
 
 juce::String TransportPanel::tempoText() const
 {
-    return juce::String(state_.tempo(), 1);
+    // The tempo where the playhead is, not the tempo of the project: with a
+    // sequence there is no single project tempo any more.
+    return juce::String(state_.tempoAt(std::max(0.0, clock_.positionBeats())), 1);
 }
 
 void TransportPanel::paintReadout(juce::Graphics& g,

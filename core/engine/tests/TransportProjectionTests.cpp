@@ -20,7 +20,7 @@ TEST_CASE("transport.set_position moves the playhead, in beats")
 {
     EngineHarness harness;
 
-    REQUIRE(harness.state.setTempo(120.0).ok());
+    REQUIRE(harness.state.setTempoPointBpm(ProjectState::originTempoPointId(), 120.0).ok());
     harness.projector.reconcile();
 
     // At 120 BPM a beat lasts half a second, so beat 8 is second 4.
@@ -33,7 +33,7 @@ TEST_CASE("Stopping keeps the playhead where it was")
 {
     EngineHarness harness;
 
-    REQUIRE(harness.state.setTempo(120.0).ok());
+    REQUIRE(harness.state.setTempoPointBpm(ProjectState::originTempoPointId(), 120.0).ok());
     harness.projector.reconcile();
 
     REQUIRE(harness.bus.execute(std::make_unique<TransportSetPosition>(4.0)).ok());

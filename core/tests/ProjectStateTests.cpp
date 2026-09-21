@@ -106,10 +106,162 @@ TEST_CASE("Nested lookups find clips and notes across tracks")
     CHECK(state.findClip(clipId)->notes.empty());
 }
 
+namespace
+{
+
+TempoPoint makeTempoPoint(TempoPointId id, double startBeats, double beatsPerMinute)
+{
+    TempoPoint point{};
+    point.id = id;
+    point.startBeats = startBeats;
+    point.beatsPerMinute = beatsPerMinute;
+    return point;
+}
+
+} // namespace
+
+TEST_CASE("An empty project already holds a tempo sequence, and two of them are equal")
+{
+    const ProjectState first;
+    const ProjectState second;
+
+    REQUIRE(first.tempoPoints().size() == 1);
+    CHECK(first.tempoPoints().front().id == ProjectState::originTempoPointId());
+    CHECK(first.tempoPoints().front().startBeats == 0.0);
+    CHECK(first.tempoAt(0.0) == doctest::Approx(120.0));
+
+    // The origin point is not generated, so two empty projects are the same
+    // project. A generated identifier would already make them differ here.
+    CHECK(first == second);
+}
+
+TEST_CASE("The tempo in force is the last point at or before the beat")
+{
+    ProjectState state;
+    const auto second = TempoPointId::generate();
+    const auto third = TempoPointId::generate();
+
+    REQUIRE(state.insertTempoPoint(makeTempoPoint(third, 16.0, 90.0)).ok());
+    REQUIRE(state.insertTempoPoint(makeTempoPoint(second, 8.0, 140.0)).ok());
+
+    // Inserted out of order, kept in order.
+    REQUIRE(state.tempoPoints().size() == 3);
+    CHECK(state.tempoPoints()[1].id == second);
+    CHECK(state.tempoPoints()[2].id == third);
+
+    CHECK(state.tempoAt(0.0) == doctest::Approx(120.0));
+    CHECK(state.tempoAt(7.99) == doctest::Approx(120.0));
+    CHECK(state.tempoAt(8.0) == doctest::Approx(140.0));
+    CHECK(state.tempoAt(15.5) == doctest::Approx(140.0));
+    CHECK(state.tempoAt(1000.0) == doctest::Approx(90.0));
+}
+
+TEST_CASE("The sequence keeps its invariants, and says which one was broken")
+{
+    ProjectState state;
+    const auto point = TempoPointId::generate();
+    REQUIRE(state.insertTempoPoint(makeTempoPoint(point, 8.0, 140.0)).ok());
+
+    SUBCASE("two points cannot share a beat")
+    {
+        CHECK(state.insertTempoPoint(makeTempoPoint(TempoPointId::generate(), 8.0, 90.0)).code() ==
+              ErrorCode::conflict);
+        CHECK(state.moveTempoPoint(point, 0.0).code() == ErrorCode::invalidArgument);
+    }
+
+    SUBCASE("the same identifier cannot be inserted twice")
+    {
+        CHECK(state.insertTempoPoint(makeTempoPoint(point, 12.0, 90.0)).code() == ErrorCode::conflict);
+    }
+
+    SUBCASE("the origin point stays, and stays at the origin")
+    {
+        CHECK(state.removeTempoPoint(ProjectState::originTempoPointId()).code() ==
+              ErrorCode::invalidArgument);
+        CHECK(state.moveTempoPoint(ProjectState::originTempoPointId(), 4.0).code() ==
+              ErrorCode::invalidArgument);
+        CHECK(state.tempoPoints().front().id == ProjectState::originTempoPointId());
+    }
+
+    SUBCASE("the bounds are Tracktion's own")
+    {
+        CHECK(state.setTempoPointBpm(point, 19.9).code() == ErrorCode::invalidArgument);
+        CHECK(state.setTempoPointBpm(point, 300.1).code() == ErrorCode::invalidArgument);
+        REQUIRE(state.setTempoPointBpm(point, 300.0).ok());
+        CHECK(state.tempoAt(8.0) == doctest::Approx(300.0));
+    }
+
+    SUBCASE("an unknown point is not found")
+    {
+        const auto absent = TempoPointId::generate();
+        CHECK(state.setTempoPointBpm(absent, 90.0).code() == ErrorCode::notFound);
+        CHECK(state.moveTempoPoint(absent, 4.0).code() == ErrorCode::notFound);
+        CHECK(state.removeTempoPoint(absent).code() == ErrorCode::notFound);
+    }
+
+    // Every refusal above left the sequence exactly as it was.
+    CHECK(state.tempoPoints().size() == 2);
+}
+
+TEST_CASE("Moving a point re-sorts the sequence")
+{
+    ProjectState state;
+    const auto early = TempoPointId::generate();
+    const auto late = TempoPointId::generate();
+
+    REQUIRE(state.insertTempoPoint(makeTempoPoint(early, 4.0, 140.0)).ok());
+    REQUIRE(state.insertTempoPoint(makeTempoPoint(late, 8.0, 90.0)).ok());
+
+    REQUIRE(state.moveTempoPoint(early, 12.0).ok());
+    CHECK(state.tempoPoints()[1].id == late);
+    CHECK(state.tempoPoints()[2].id == early);
+    CHECK(state.tempoAt(9.0) == doctest::Approx(90.0));
+    CHECK(state.tempoAt(12.0) == doctest::Approx(140.0));
+}
+
+TEST_CASE("A project written with a scalar tempo reads as a sequence of one point")
+{
+    // Exactly what S5 and S6 wrote on disk. Nothing rewrites it: it is read.
+    const auto legacy = Value::object({{"tempo", Value{93.0}}, {"tracks", Value::array({})}});
+
+    const auto state = ProjectState::fromValue(legacy);
+    REQUIRE(state.ok());
+    REQUIRE(state.value().tempoPoints().size() == 1);
+    CHECK(state.value().tempoPoints().front().id == ProjectState::originTempoPointId());
+    CHECK(state.value().tempoAt(0.0) == doctest::Approx(93.0));
+
+    // And it is the same project as one built today at that tempo, which is
+    // what makes the migration invisible to every comparison in the suite.
+    ProjectState built;
+    REQUIRE(built.setTempoPointBpm(ProjectState::originTempoPointId(), 93.0).ok());
+    CHECK(state.value() == built);
+}
+
+TEST_CASE("A tempo sequence survives a serialization round-trip")
+{
+    ProjectState state;
+    REQUIRE(state.setTempoPointBpm(ProjectState::originTempoPointId(), 93.0).ok());
+    REQUIRE(state.insertTempoPoint(makeTempoPoint(TempoPointId::generate(), 8.0, 140.0)).ok());
+    REQUIRE(state.insertTempoPoint(makeTempoPoint(TempoPointId::generate(), 16.0, 60.0)).ok());
+
+    const auto restored = ProjectState::fromValue(state.toValue());
+    REQUIRE(restored.ok());
+    CHECK(restored.value() == state);
+}
+
+TEST_CASE("A tempo sequence without its origin point is refused")
+{
+    const auto orphan = Value::object(
+        {{"tempo", Value::array({makeTempoPoint(TempoPointId::generate(), 4.0, 140.0).toValue()})},
+         {"tracks", Value::array({})}});
+
+    CHECK(ProjectState::fromValue(orphan).error().code == ErrorCode::invalidPayload);
+}
+
 TEST_CASE("A project survives a serialization round-trip")
 {
     ProjectState state;
-    REQUIRE(state.setTempo(93.0).ok());
+    REQUIRE(state.setTempoPointBpm(ProjectState::originTempoPointId(), 93.0).ok());
 
     const auto trackId = TrackId::generate();
     const auto clipId = ClipId::generate();

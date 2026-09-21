@@ -41,6 +41,29 @@ struct Note
     friend bool operator==(const Note& lhs, const Note& rhs);
 };
 
+// One tempo change on the timeline.
+//
+// Anchored in beats, never in seconds, and that is the whole reason the
+// sequence is cheap today: clips and notes are in beats too, so changing a
+// tempo moves no musical content. A sequence anchored in time would have to
+// remap every clip on every edit.
+//
+// No curve. Tracktion's TempoSetting carries one (log, linear, exponential),
+// and it is an automation shape: automation is out of scope, and a field
+// nothing can change is a field that lies. Adding it later is additive.
+struct TempoPoint
+{
+    TempoPointId id{};
+    double startBeats{0.0};
+    double beatsPerMinute{120.0};
+
+    [[nodiscard]] Result<void> validate() const;
+    [[nodiscard]] Value toValue() const;
+    [[nodiscard]] static Result<TempoPoint> fromValue(const Value& value);
+
+    friend bool operator==(const TempoPoint& lhs, const TempoPoint& rhs);
+};
+
 struct Clip
 {
     ClipId id{};
@@ -182,8 +205,30 @@ public:
     static constexpr double minTempo = 20.0;
     static constexpr double maxTempo = 300.0;
 
-    [[nodiscard]] double tempo() const noexcept { return tempo_; }
-    Result<void> setTempo(double beatsPerMinute);
+    // The tempo point at the origin exists in every project by construction:
+    // nobody creates it, so nobody can be asked for its identifier. It is
+    // therefore a constant and not a generated ULID — two projects built by
+    // the same commands have to be equal, and a generated identifier would
+    // already make two empty projects differ.
+    [[nodiscard]] static TempoPointId originTempoPointId() noexcept;
+
+    // Sorted by startBeats, never empty, and the first point is always the
+    // origin one at beat 0. Those three properties are what let tempoAt()
+    // answer without a special case.
+    [[nodiscard]] const std::vector<TempoPoint>& tempoPoints() const noexcept { return tempo_; }
+    [[nodiscard]] const TempoPoint* findTempoPoint(TempoPointId id) const noexcept;
+    [[nodiscard]] Result<TempoPoint> tempoPoint(TempoPointId id) const;
+
+    // The tempo in force at that beat: the last point at or before it. A
+    // tempo is held until the next point, so there is no interpolation to do.
+    [[nodiscard]] double tempoAt(double beats) const noexcept;
+
+    // The origin point refuses to be removed or moved: the sequence has to
+    // stay non-empty and has to start at the timeline origin.
+    Result<void> insertTempoPoint(TempoPoint point);
+    Result<void> removeTempoPoint(TempoPointId id);
+    Result<void> setTempoPointBpm(TempoPointId id, double beatsPerMinute);
+    Result<void> moveTempoPoint(TempoPointId id, double startBeats);
 
     [[nodiscard]] const std::vector<Track>& tracks() const noexcept { return tracks_; }
     [[nodiscard]] const Track* findTrack(TrackId id) const noexcept;
@@ -275,7 +320,11 @@ private:
     [[nodiscard]] Clip* findClipMutable(ClipId id) noexcept;
     [[nodiscard]] PluginInstance* findPluginMutable(PluginId id) noexcept;
 
-    double tempo_{120.0};
+    [[nodiscard]] TempoPoint* findTempoPointMutable(TempoPointId id) noexcept;
+    void sortTempoPoints();
+    Result<void> readTempoSequence(const Value::Array& points);
+
+    std::vector<TempoPoint> tempo_{TempoPoint{originTempoPointId(), 0.0, 120.0}};
     std::vector<Track> tracks_;
     TransportState transport_;
 };

@@ -353,7 +353,7 @@ void ProjectProjector::reconcile()
     } guard{projecting_};
 
     if (auto* tempo = edit_.tempoSequence.getTempo(0); tempo != nullptr)
-        tempo->setBpm(state_.tempo());
+        tempo->setBpm(state_.tempoAt(0.0));
 
     removeUnknownTracks();
 

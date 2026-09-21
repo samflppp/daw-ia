@@ -90,6 +90,7 @@ struct TrackIdTag;
 struct ClipIdTag;
 struct NoteIdTag;
 struct PluginIdTag;
+struct TempoPointIdTag;
 
 using CommandId = EntityId<CommandIdTag>;
 using GestureId = EntityId<GestureIdTag>;
@@ -101,5 +102,10 @@ using NoteId = EntityId<NoteIdTag>;
 // copies of the same synth on the same track are two PluginIds. The binary is
 // named by PluginRef, which is not an identity the project engenders.
 using PluginId = EntityId<PluginIdTag>;
+
+// Identifies one tempo change on the timeline. A point is named rather than
+// located because it moves: a payload that designated a point by its position
+// in beats would aim at a different point as soon as another command moved it.
+using TempoPointId = EntityId<TempoPointIdTag>;
 
 } // namespace daw::domain
