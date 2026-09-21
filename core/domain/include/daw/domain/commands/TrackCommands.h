@@ -113,6 +113,12 @@ public:
     [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
     [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
 
+    // Absorbs another move of the same track. Dragging a row across a list
+    // crosses several places, and the history keeps one entry for the whole
+    // drag -- the undo record of the first one, so undoing goes back to where
+    // the row started and not one row up.
+    [[nodiscard]] bool canCoalesceWith(const Command& newer) const noexcept override;
+
     [[nodiscard]] TrackId trackId() const noexcept { return trackId_; }
 
 private:

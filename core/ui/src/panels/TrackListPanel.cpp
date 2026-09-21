@@ -4,7 +4,10 @@
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <vector>
 
 namespace daw::ui
 {
@@ -138,8 +141,15 @@ public:
         addAndMakeVisible(remove_);
         remove_.setButtonText("x");
         remove_.setMouseClickGrabsKeyboardFocus(false);
-        remove_.onClick = [this]
-        { static_cast<void>(bus_.execute(std::make_unique<domain::RemoveTrack>(trackId_))); };
+        remove_.onClick = [bus = &bus_, trackId = trackId_]
+        {
+            // Asynchronous on purpose: removing the track rebuilds the list,
+            // which deletes this very row, and a callback must not return into
+            // an object its own command has destroyed.
+            juce::MessageManager::callAsync(
+                [bus, trackId]
+                { static_cast<void>(bus->execute(std::make_unique<domain::RemoveTrack>(trackId))); });
+        };
 
         refresh();
     }
@@ -147,6 +157,17 @@ public:
     ~Row() override { setLookAndFeel(nullptr); }
 
     [[nodiscard]] domain::TrackId trackId() const noexcept { return trackId_; }
+
+    // The number painted on the left. It is a place in the list, so it changes
+    // when the list is reordered and the row itself does not.
+    void setPosition(int position)
+    {
+        if (position == position_)
+            return;
+
+        position_ = position;
+        repaint();
+    }
 
     // Reads the project again. Called after every change the bus reports, so a
     // volume set by a copilot moves this fader exactly like a drag would.
@@ -261,6 +282,59 @@ public:
     {
         juce::ignoreUnused(event);
         selection_.selectTrack(trackId_);
+
+        // Where the drag starts from, read once: the list moves while the row
+        // is held, so the place it left is the only fixed reference.
+        if (const auto index = state_.trackIndex(trackId_); index)
+            reorderFrom_ = index.value();
+    }
+
+    // Dragging a row up or down changes the order of the tracks.
+    //
+    // The command goes out as soon as the row crosses a place, not at the end:
+    // the list is rebuilt from the project, so the row the user is holding
+    // moves under the cursor and the drag shows what it does. The whole drag is
+    // one gesture, therefore one history entry.
+    void mouseDrag(const juce::MouseEvent& event) override
+    {
+        if (getHeight() <= 0 || !reorderFrom_.has_value())
+            return;
+
+        if (!reorder_.has_value())
+            reorder_ = bus_.beginGesture("ordre des pistes");
+
+        // How far the hand has travelled, in rows. The row itself is not asked
+        // where it sits: it started at a known place and the distance says the
+        // rest, which is also the only reading that survives the list moving
+        // under the cursor.
+        const auto rows = std::llround(static_cast<double>(event.getDistanceFromDragStartY()) /
+                                       static_cast<double>(getHeight()));
+
+        const auto last = static_cast<int>(state_.tracks().size()) - 1;
+        const auto wanted =
+            std::clamp(static_cast<int>(*reorderFrom_) + static_cast<int>(rows), 0, std::max(0, last));
+
+        const auto current = state_.trackIndex(trackId_);
+        if (!current || wanted == static_cast<int>(current.value()))
+            return;
+
+        domain::ExecuteOptions options{};
+        options.gesture = reorder_;
+        static_cast<void>(bus_.execute(
+            std::make_unique<domain::ReorderTrack>(trackId_, static_cast<std::size_t>(wanted)), options));
+    }
+
+    void mouseUp(const juce::MouseEvent& event) override
+    {
+        juce::ignoreUnused(event);
+
+        reorderFrom_.reset();
+
+        if (!reorder_.has_value())
+            return;
+
+        static_cast<void>(bus_.endGesture(*reorder_));
+        reorder_.reset();
     }
 
     void mouseEnter(const juce::MouseEvent& event) override
@@ -343,6 +417,8 @@ private:
     juce::TextButton remove_;
     std::optional<domain::GestureId> gesture_;
     std::optional<domain::GestureId> panGesture_;
+    std::optional<domain::GestureId> reorder_;
+    std::optional<std::size_t> reorderFrom_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Row)
 };
@@ -386,18 +462,44 @@ void TrackListPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     // reads the project again, which is cheaper than building components.
     const auto& tracks = state_.tracks();
 
-    bool sameTracks = tracks.size() == rows_.size();
-    for (std::size_t index = 0; sameTracks && index < tracks.size(); ++index)
-        sameTracks = rows_[index]->trackId() == tracks[index].id;
-
-    if (!sameTracks)
+    // The same tracks in another order is a reorder, not a new list: the rows
+    // are moved rather than built again. Building them again would delete the
+    // row the user is dragging, in the middle of their drag, and would throw
+    // away a name being typed into.
+    if (tracks.size() == rows_.size())
     {
-        rebuild();
-        return;
+        std::vector<Row*> ordered;
+        ordered.reserve(rows_.size());
+
+        for (const auto& track : tracks)
+        {
+            const auto found = std::find_if(
+                rows_.begin(), rows_.end(), [&track](const Row* row) { return row->trackId() == track.id; });
+            if (found == rows_.end())
+                break;
+
+            ordered.push_back(*found);
+        }
+
+        if (ordered.size() == rows_.size())
+        {
+            const bool moved = ordered != rows_;
+            rows_ = std::move(ordered);
+
+            for (int position = 0; position < static_cast<int>(rows_.size()); ++position)
+                rows_[static_cast<std::size_t>(position)]->setPosition(position);
+
+            for (auto* row : rows_)
+                row->refresh();
+
+            if (moved)
+                resized();
+
+            return;
+        }
     }
 
-    for (auto* row : rows_)
-        row->refresh();
+    rebuild();
 }
 
 void TrackListPanel::rebuild()

@@ -299,3 +299,29 @@ TEST_CASE("an index past the end puts the track last, it does not fail")
     CHECK(harness.bus.execute(std::make_unique<ReorderTrack>(TrackId::generate(), 0)).error().code ==
           ErrorCode::notFound);
 }
+
+TEST_CASE("a row dragged across the list is one history entry")
+{
+    Harness harness;
+    const auto second = TrackId::generate();
+    const auto third = TrackId::generate();
+    REQUIRE(harness.bus.execute(std::make_unique<AddTrack>(second, "Deux")).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<AddTrack>(third, "Trois")).ok());
+
+    const auto before = harness.bus.undoDepth();
+
+    // A drag crosses every place on its way, exactly as the mouse does.
+    const auto gesture = harness.bus.beginGesture("ordre des pistes");
+    for (std::size_t index = 1; index <= 2; ++index)
+        REQUIRE(harness.bus
+                    .execute(std::make_unique<ReorderTrack>(harness.trackId, index), ExecuteOptions{gesture})
+                    .ok());
+    REQUIRE(harness.bus.endGesture(gesture).ok());
+
+    CHECK(harness.bus.undoDepth() == before + 1);
+    CHECK(harness.state.trackIndex(harness.trackId).value() == 2);
+
+    // And the undo goes back to where the row started, not one place up.
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(harness.state.trackIndex(harness.trackId).value() == 0);
+}

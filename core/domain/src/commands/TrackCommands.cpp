@@ -374,4 +374,10 @@ Result<void> ReorderTrack::revert(ProjectState& state, const Value& undoRecord) 
     return state.moveTrack(trackId.value(), static_cast<std::size_t>(previous.value()));
 }
 
+bool ReorderTrack::canCoalesceWith(const Command& newer) const noexcept
+{
+    const auto* other = dynamic_cast<const ReorderTrack*>(&newer);
+    return other != nullptr && other->trackId_ == trackId_;
+}
+
 } // namespace daw::domain
