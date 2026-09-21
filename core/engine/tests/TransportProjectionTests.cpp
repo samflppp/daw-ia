@@ -29,7 +29,7 @@ TEST_CASE("transport.set_position moves the playhead, in beats")
     CHECK(harness.host.edit().getTransport().getPosition().inSeconds() == doctest::Approx(4.0));
 }
 
-TEST_CASE("Stopping keeps the playhead where it was")
+TEST_CASE("Stopping returns the playhead to the start")
 {
     EngineHarness harness;
 
@@ -41,7 +41,45 @@ TEST_CASE("Stopping keeps the playhead where it was")
     REQUIRE(harness.bus.execute(std::make_unique<TransportStop>()).ok());
 
     CHECK_FALSE(harness.host.edit().getTransport().isPlaying());
-    CHECK(harness.host.edit().getTransport().getPosition().inSeconds() == doctest::Approx(2.0));
+    CHECK(harness.host.edit().getTransport().getPosition().inSeconds() == doctest::Approx(0.0));
+    CHECK(harness.state.transport().positionBeats == doctest::Approx(0.0));
+}
+
+TEST_CASE("Play reaches the engine even when the domain already said playing")
+{
+    EngineHarness harness;
+
+    REQUIRE(harness.bus.execute(std::make_unique<TransportPlay>()).ok());
+    REQUIRE(harness.host.edit().getTransport().isPlaying());
+
+    // Exactly what happens in use: playback runs off the end of the material
+    // and Tracktion stops by itself. Nothing tells the domain, so it still
+    // says "playing" -- and the next press of the button used to change
+    // nothing, therefore reach nothing.
+    harness.host.edit().getTransport().stop(false, false);
+    REQUIRE_FALSE(harness.host.edit().getTransport().isPlaying());
+    REQUIRE(harness.state.transport().playing);
+
+    REQUIRE(harness.bus.execute(std::make_unique<TransportPlay>()).ok());
+    CHECK(harness.host.edit().getTransport().isPlaying());
+}
+
+TEST_CASE("Rewinding reaches the engine even when the domain already held zero")
+{
+    EngineHarness harness;
+
+    REQUIRE(harness.state.setTempoPointBpm(ProjectState::originTempoPointId(), 120.0).ok());
+    harness.projector.reconcile();
+
+    // The domain has never been asked to move the playhead, so it holds 0.
+    REQUIRE(harness.state.transport().positionBeats == doctest::Approx(0.0));
+
+    // The engine has moved on its own, the way playback does.
+    harness.host.edit().getTransport().setPosition(tracktion::TimePosition::fromSeconds(3.0));
+    REQUIRE(harness.host.edit().getTransport().getPosition().inSeconds() == doctest::Approx(3.0));
+
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetPosition>(0.0)).ok());
+    CHECK(harness.host.edit().getTransport().getPosition().inSeconds() == doctest::Approx(0.0));
 }
 
 TEST_CASE("A transient command projects without touching the history")

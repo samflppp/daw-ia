@@ -99,6 +99,10 @@ private:
     // says whether anything moved. It did, every clip has to be laid out
     // again: a clip is inserted into the Edit as a time range, and the beats
     // it came from now map onto other seconds.
+    // Carries out a transport command, and says whether the receipt was one.
+    // Anything else is a change to the project, and goes through reconcile().
+    [[nodiscard]] bool applyTransport(const domain::Receipt& receipt);
+
     [[nodiscard]] bool reconcileTempo();
 
     [[nodiscard]] tracktion::AudioTrack* findTrack(const domain::TrackId& id) const;

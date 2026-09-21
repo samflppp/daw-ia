@@ -46,8 +46,8 @@ public:
     [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
 };
 
-// Moves the playhead. Separate from stop on purpose: stopping keeps the
-// position, the way every DAW behaves.
+// Moves the playhead. Separate from stop on purpose: stop returns to the
+// start, this goes anywhere -- including to the start while playback runs on.
 class TransportSetPosition final : public Command
 {
 public:

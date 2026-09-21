@@ -2,6 +2,7 @@
 #include "MainWindow.h"
 #include "PluginRack.h"
 #include "PluginWindow.h"
+#include "TransportSync.h"
 #include "WorkspaceSwitch.h"
 #include "daw/domain/BuildInfo.h"
 #include "daw/domain/command/CommandBus.h"
@@ -99,6 +100,20 @@ public:
         // just rebuilt, in one pass rather than one per replayed command.
         projector_->reconcile();
 
+        // The playback graph and the audio device are built here rather than on
+        // the first press of play. Measured on this machine, the first play()
+        // held the message thread for 3.2 seconds and every later one for
+        // 0.3 ms: the cost is real, it happens once, and the only question is
+        // whether the user pays it while the window is opening or in the
+        // middle of a beat.
+        {
+            const auto before = juce::Time::getMillisecondCounterHiRes();
+            engineHost_->edit().getTransport().ensureContextAllocated();
+            juce::Logger::writeToLog("engine: playback context ready in " +
+                                     juce::String(juce::Time::getMillisecondCounterHiRes() - before, 1) +
+                                     " ms");
+        }
+
         // Recording starts only now: the replay above must not be written back
         // into the journal it came from.
         store_->startRecording(bus_);
@@ -108,6 +123,10 @@ public:
         // observing the bus, because it only has work to do once a projection
         // has created the plugins.
         bridge_ = std::make_unique<engine::ParameterBridge>(bus_, state_, engineHost_->edit(), *projector_);
+
+        // The engine stops on its own at the end of the material; without this
+        // the domain would go on saying "playing" over a silent engine.
+        transportSync_ = std::make_unique<TransportSync>(bus_, state_, engineHost_->edit());
 
         // The bus is called from the message thread and only from there: the
         // projector mutates the Edit, and Tracktion expects that on this
@@ -139,6 +158,7 @@ public:
 
         // The plugin windows go before the Edit that owns the plugins they
         // draw: an editor outliving its plugin by one line is a crash.
+        transportSync_.reset();
         rack_.reset();
         window_.reset();
         juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
@@ -487,6 +507,7 @@ private:
     std::unique_ptr<EditClock> clock_;
     std::unique_ptr<WorkspaceSwitch> switch_;
     std::unique_ptr<PluginRack> rack_;
+    std::unique_ptr<TransportSync> transportSync_;
     std::unique_ptr<MainWindow> window_;
 };
 

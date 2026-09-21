@@ -8,30 +8,20 @@ TransportController::TransportController(tracktion::Edit& edit) noexcept
 {
 }
 
-void TransportController::apply(const domain::TransportState& transport)
+void TransportController::play()
 {
-    auto& control = edit_.getTransport();
+    edit_.getTransport().play(false);
+}
 
-    const bool positionChanged = !everApplied_ || transport.positionBeats != positionBeats_;
-    const bool playingChanged = !everApplied_ || transport.playing != playing_;
+void TransportController::stop()
+{
+    edit_.getTransport().stop(false, false);
+}
 
-    if (positionChanged)
-    {
-        const auto beats = tracktion::BeatPosition::fromBeats(transport.positionBeats);
-        control.setPosition(edit_.tempoSequence.toTime(beats));
-    }
-
-    if (playingChanged)
-    {
-        if (transport.playing)
-            control.play(false);
-        else
-            control.stop(false, false);
-    }
-
-    playing_ = transport.playing;
-    positionBeats_ = transport.positionBeats;
-    everApplied_ = true;
+void TransportController::setPosition(double positionBeats)
+{
+    const auto beats = tracktion::BeatPosition::fromBeats(positionBeats);
+    edit_.getTransport().setPosition(edit_.tempoSequence.toTime(beats));
 }
 
 } // namespace daw::engine

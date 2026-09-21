@@ -60,10 +60,17 @@ Value TransportStop::payload() const
 
 Result<Value> TransportStop::apply(ProjectState& state) const
 {
-    // Stopping keeps the playhead where it is. Moving it is transport.set_position.
     auto applied = state.setPlaying(false);
     if (!applied)
         return applied.error();
+
+    // Stopping returns the playhead to the start. This contradicts the comment
+    // written in S2 ("stopping keeps the position, the way every DAW behaves"):
+    // it is not what a beatmaker expects, where stop is how you go back to the
+    // top of the pattern, and the rewind button exists for the other case --
+    // going back to the start without stopping.
+    if (auto moved = state.setPositionBeats(0.0); !moved)
+        return moved.error();
 
     return Value{};
 }

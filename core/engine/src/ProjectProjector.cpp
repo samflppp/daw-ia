@@ -1,6 +1,7 @@
 #include "daw/engine/ProjectProjector.h"
 
 #include "HostedParameters.h"
+#include "daw/domain/commands/TransportCommands.h"
 
 #include <algorithm>
 
@@ -39,15 +40,58 @@ ProjectProjector::ProjectProjector(tracktion::Edit& edit,
 {
 }
 
+bool ProjectProjector::applyTransport(const domain::Receipt& receipt)
+{
+    // The transport is not project state: it is never serialized, never
+    // undone, and the engine moves it on its own. It is therefore driven by
+    // the commands themselves and never by a reconciliation, which is also
+    // what keeps an edit made while playing from restarting playback.
+    if (receipt.type == domain::TransportPlay::commandType)
+    {
+        // Timed, and the number is written down: starting playback builds the
+        // playback graph on this thread, so whatever it costs is time the
+        // interface is frozen and the user reads as latency.
+        const auto before = juce::Time::getMillisecondCounterHiRes();
+        transport_.play();
+        const auto cost = juce::Time::getMillisecondCounterHiRes() - before;
+
+        juce::Logger::writeToLog("transport: play() held the message thread for " + juce::String(cost, 1) +
+                                 " ms");
+        return true;
+    }
+
+    if (receipt.type == domain::TransportStop::commandType)
+    {
+        transport_.stop();
+
+        // The command has already moved the domain's playhead back to the
+        // start; the engine follows it rather than deciding on its own.
+        transport_.setPosition(state_.transport().positionBeats);
+        return true;
+    }
+
+    if (receipt.type == domain::TransportSetPosition::commandType)
+    {
+        transport_.setPosition(state_.transport().positionBeats);
+        return true;
+    }
+
+    return false;
+}
+
 void ProjectProjector::onExecuted(const domain::Receipt& receipt)
 {
-    static_cast<void>(receipt);
+    if (applyTransport(receipt))
+        return;
+
     reconcile();
 }
 
 void ProjectProjector::onCoalesced(const domain::Receipt& receipt)
 {
-    static_cast<void>(receipt);
+    if (applyTransport(receipt))
+        return;
+
     reconcile();
 }
 
@@ -463,8 +507,6 @@ void ProjectProjector::reconcile()
     }
 
     projected_ = std::move(stillProjected);
-
-    transport_.apply(state_.transport());
 
     projecting_ = false;
     if (onProjected)
