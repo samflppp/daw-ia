@@ -98,6 +98,10 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
     selection_.addChangeListener(this);
     startTimer(playheadRefreshMs);
     rebuildClipChooser();
+
+    // The pattern on screen loops from the first frame, without waiting for
+    // the user to pick a clip they have already got.
+    loopOverEditedClip();
 }
 
 PianoRollPanel::~PianoRollPanel()
@@ -110,8 +114,15 @@ PianoRollPanel::~PianoRollPanel()
 
 void PianoRollPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
-    juce::ignoreUnused(source);
     rebuildClipChooser();
+
+    // Only on a selection change, and the distinction matters: the project
+    // observer is broadcast from inside a bus notification, and an observer
+    // may not call back into the bus. A selection is changed by a click, never
+    // by a command, so it is the one source it is safe to answer with one.
+    if (source == &selection_)
+        loopOverEditedClip();
+
     repaint();
 }
 
