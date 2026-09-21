@@ -4,6 +4,7 @@
 #include "daw/domain/project/ProjectState.h"
 #include "daw/ui/DawLookAndFeel.h"
 #include "daw/ui/Tokens.h"
+#include "daw/ui/model/CopilotHost.h"
 #include "daw/ui/model/History.h"
 #include "daw/ui/model/PluginHost.h"
 #include "daw/ui/model/ProjectObserver.h"
@@ -46,6 +47,11 @@ struct PanelServices
     History& history;
     PluginHost& plugins;
     WorkspaceHost& workspaces;
+
+    // The copilot, as a panel is allowed to see it: a state, a conversation,
+    // and a way to ask. The process and the socket behind it stop at the
+    // application.
+    CopilotHost& copilot;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

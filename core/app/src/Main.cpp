@@ -1,3 +1,4 @@
+#include "CopilotBridge.h"
 #include "EditClock.h"
 #include "MainWindow.h"
 #include "PluginRack.h"
@@ -147,11 +148,22 @@ public:
         window_ = std::make_unique<MainWindow>(
             getApplicationName(), ui::Tokens::builtIn(), makeContent(commandLine));
         startTimer(autosaveIntervalMs);
+
+        // --no-copilot exists for the runs where a child process would be in
+        // the way: the plugin scan, the demo, and a machine with no key.
+        if (copilot_ != nullptr && !commandLine.contains("--no-copilot"))
+            copilot_->start();
     }
 
     void shutdown() override
     {
         stopTimer();
+
+        // The copilot goes first: it holds a thread that answers through the
+        // bus, and the bus is about to be taken apart.
+        if (copilot_ != nullptr)
+            copilot_->stop();
+
         closeProject();
 
         juce::Logger::setCurrentLogger(nullptr);
@@ -164,6 +176,7 @@ public:
         juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
         lookAndFeel_.reset();
         switch_.reset();
+        copilot_.reset();
         clock_.reset();
         bridge_.reset();
         projector_.reset();
@@ -216,6 +229,12 @@ private:
         switch_ = std::make_unique<WorkspaceSwitch>(
             workspaces, manifest != nullptr ? manifest->id : std::string{ui::Workspaces::defaultId()});
 
+        // The copilot is built before the panels, because one of them reads
+        // it, and started after: a process that answers before there is a
+        // panel to show the answer has nowhere to put it.
+        copilot_ = std::make_unique<CopilotBridge>(
+            CopilotBridge::Wiring{bus_, state_, registry_, [this] { return rack_->available(); }});
+
         const ui::PanelServices services{tokens,
                                          *lookAndFeel_,
                                          bus_,
@@ -225,7 +244,8 @@ private:
                                          *clock_,
                                          history_,
                                          *rack_,
-                                         *switch_};
+                                         *switch_,
+                                         *copilot_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         auto* viewPointer = view.get();
@@ -506,6 +526,7 @@ private:
     ui::History history_;
     std::unique_ptr<EditClock> clock_;
     std::unique_ptr<WorkspaceSwitch> switch_;
+    std::unique_ptr<CopilotBridge> copilot_;
     std::unique_ptr<PluginRack> rack_;
     std::unique_ptr<TransportSync> transportSync_;
     std::unique_ptr<MainWindow> window_;

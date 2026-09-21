@@ -1,5 +1,6 @@
 #include "daw/ui/PanelRegistry.h"
 
+#include "daw/ui/panels/CopilotPanel.h"
 #include "daw/ui/panels/HistoryPanel.h"
 #include "daw/ui/panels/PianoRollPanel.h"
 #include "daw/ui/panels/PlaceholderPanel.h"
@@ -28,6 +29,8 @@ PanelRegistry PanelRegistry::withBuiltinPanels()
                  [](const PanelContext& context) { return std::make_unique<PianoRollPanel>(context); });
     registry.add("plugin_chain",
                  [](const PanelContext& context) { return std::make_unique<PluginChainPanel>(context); });
+    registry.add("copilot",
+                 [](const PanelContext& context) { return std::make_unique<CopilotPanel>(context); });
     registry.add("history",
                  [](const PanelContext& context) { return std::make_unique<HistoryPanel>(context); });
 

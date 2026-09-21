@@ -75,7 +75,8 @@ target_sources(daw_ui INTERFACE
     src/panels/TrackListPanel.cpp
     src/panels/PianoRollPanel.cpp
     src/panels/PluginChainPanel.cpp
-    src/panels/HistoryPanel.cpp)
+    src/panels/HistoryPanel.cpp
+    src/panels/CopilotPanel.cpp)
 
 target_include_directories(daw_ui INTERFACE include)
 

@@ -25,6 +25,29 @@ Value identifier(std::string description)
                           {"maxLength", Value{static_cast<std::int64_t>(Ulid::textLength)}}});
 }
 
+// The identifier of something the caller is about to create.
+//
+// A ULID is twenty-six characters of Crockford base32, and asking a language
+// model to invent one is asking for payloads the domain will refuse: the
+// alphabet leaves out I, L, O and U, and nothing in a sentence says which
+// twenty-six characters to pick. So the model writes a name it chose —
+// "$new:basse" — and the copilot process mints the ULID before the payload
+// reaches the bus.
+//
+// The rule is untouched: the caller still supplies the identifier, and the bus
+// still engenders none. What changed is which part of the caller writes it.
+// The same token used twice in one request names the same thing, which is what
+// makes "add a Bass track and put Vital on it" work at all.
+Value newIdentifier(std::string description)
+{
+    return Value::object(
+        {{"type", Value{std::string{"string"}}},
+         {"description",
+          Value{std::move(description) + " Écrivez un nom court précédé de $new:, par exemple $new:basse. "
+                                         "Le même nom dans la même requête désigne la même chose."}},
+         {"pattern", Value{std::string{"^\\$new:[a-z0-9_-]{1,32}$|^[0-9A-HJKMNP-TV-Z]{26}$"}}}});
+}
+
 Value number(std::string description, double minimum, double maximum)
 {
     return Value::object({{"type", Value{std::string{"number"}}},
@@ -68,7 +91,7 @@ Value pluginSchema()
         {{"type", Value{std::string{"object"}}},
          {"properties",
           Value::object(
-              {{"id", identifier("Identifiant de cette instance de plugin, fourni par l'appelant.")},
+              {{"id", newIdentifier("Identifiant de cette instance de plugin.")},
                {"ref",
                 Value::object({{"type", Value{std::string{"object"}}},
                                {"properties",
@@ -139,9 +162,7 @@ std::vector<Tool> builtinTools()
         "track.add",
         "Ajoute une piste vide à la fin de la liste.",
         schema(
-            {{"trackId",
-              identifier("Identifiant de la piste à créer, fourni par "
-                         "l'appelant.")},
+            {{"trackId", newIdentifier("Identifiant de la piste à créer.")},
              {"name", field("string", "Nom de la piste.")},
              {"volumeDb",
               number("Volume initial en décibels.", ProjectState::minVolumeDb, ProjectState::maxVolumeDb)}},
@@ -190,9 +211,7 @@ std::vector<Tool> builtinTools()
     tools.push_back(make("clip.create_midi",
                          "Crée un clip MIDI vide sur une piste.",
                          schema({{"trackId", trackId},
-                                 {"clipId",
-                                  identifier("Identifiant du clip à créer, fourni par "
-                                             "l'appelant.")},
+                                 {"clipId", newIdentifier("Identifiant du clip à créer.")},
                                  {"startBeats", field("number", "Début du clip sur la timeline, en temps.")},
                                  {"lengthBeats", field("number", "Durée du clip, en temps.")}},
                                 {"trackId", "clipId", "startBeats", "lengthBeats"})));
@@ -201,9 +220,7 @@ std::vector<Tool> builtinTools()
         "note.add",
         "Ajoute une note dans un clip. Le payload porte le clip et la note à plat.",
         schema({{"clipId", clipId},
-                {"id",
-                 identifier("Identifiant de la note à créer, fourni par "
-                            "l'appelant.")},
+                {"id", newIdentifier("Identifiant de la note à créer.")},
                 {"pitch", integer("Hauteur MIDI, 60 = do central.", Note::lowestPitch, Note::highestPitch)},
                 {"velocity", integer("Force de frappe.", Note::lowestVelocity, Note::highestVelocity)},
                 {"startBeats", field("number", "Début dans le clip, en temps.")},
@@ -303,7 +320,7 @@ std::vector<Tool> builtinTools()
     tools.push_back(
         make("tempo.insert",
              "Ajoute un changement de tempo sur la timeline.",
-             schema({{"pointId", identifier("Identifiant du point à créer, fourni par l'appelant.")},
+             schema({{"pointId", newIdentifier("Identifiant du point à créer.")},
                      {"startBeats", field("number", "Position du changement, en temps.")},
                      {"beatsPerMinute",
                       number("Tempo à partir de ce point.", ProjectState::minTempo, ProjectState::maxTempo)}},
