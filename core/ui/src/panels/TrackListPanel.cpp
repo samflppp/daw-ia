@@ -4,6 +4,8 @@
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
 
+#include <cmath>
+
 namespace daw::ui
 {
 
@@ -53,6 +55,34 @@ public:
             gesture_.reset();
         };
 
+        addAndMakeVisible(pan_);
+        pan_.setSliderStyle(juce::Slider::LinearHorizontal);
+        pan_.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        pan_.setRange(domain::ProjectState::minPan, domain::ProjectState::maxPan);
+
+        // The centre is the one position a user needs to reach exactly, and no
+        // drag lands on it reliably. A double click does.
+        pan_.setDoubleClickReturnValue(true, 0.0);
+
+        // Its own gesture, and its own command: a pan sweep is one history
+        // entry, and undoing it must not move the fader too.
+        pan_.onDragStart = [this] { panGesture_ = bus_.beginGesture("panoramique de piste"); };
+
+        pan_.onValueChange = [this]
+        {
+            domain::ExecuteOptions options{};
+            options.gesture = panGesture_;
+            static_cast<void>(
+                bus_.execute(std::make_unique<domain::SetTrackPan>(trackId_, pan_.getValue()), options));
+        };
+
+        pan_.onDragEnd = [this]
+        {
+            if (panGesture_.has_value())
+                static_cast<void>(bus_.endGesture(*panGesture_));
+            panGesture_.reset();
+        };
+
         addAndMakeVisible(mute_);
         mute_.setButtonText("M");
 
@@ -93,6 +123,7 @@ public:
         // dontSendNotification: setting the slider from the state must not send
         // a command back, or a projection would fight the user's own movement.
         volume_.setValue(track->volumeDb, juce::dontSendNotification);
+        pan_.setValue(track->pan, juce::dontSendNotification);
         mute_.setToggleState(track->muted, juce::dontSendNotification);
         bypass_.setToggleState(chainIsBypassed(*track), juce::dontSendNotification);
         bypass_.setEnabled(!track->plugins.empty());
@@ -140,6 +171,14 @@ public:
                    juce::Justification::centredRight,
                    false);
 
+        // Read in the vocabulary of a mixing desk, not as a number between
+        // -1 and 1: "G31" is a position, "-0.31" is an implementation detail.
+        g.drawText(panText(track->pan),
+                   decibels.removeFromBottom(tokens_.integer("space.lg"))
+                       .withTrimmedBottom(tokens_.integer("space.xs")),
+                   juce::Justification::centredRight,
+                   false);
+
         g.setColour(track->muted ? tokens_.colour("color.text.disabled")
                                  : tokens_.colour("color.text.primary"));
         g.setFont(lookAndFeel_.typography().sans("font.size.body", "font.weight.medium"));
@@ -166,7 +205,15 @@ public:
         area.removeFromRight(tokens_.integer("metric.transport.buttonSize") * 2);
 
         auto fader = area.removeFromBottom(tokens_.integer("space.lg"));
-        volume_.setBounds(fader.withTrimmedBottom(tokens_.integer("space.xs")));
+        fader = fader.withTrimmedBottom(tokens_.integer("space.xs"));
+
+        // The pan takes the right third of the strip the fader used to fill
+        // whole: two continuous controls on one line, the loudest one widest.
+        auto panArea = fader.removeFromRight(fader.getWidth() / 3);
+        fader.removeFromRight(tokens_.integer("space.sm"));
+
+        volume_.setBounds(fader);
+        pan_.setBounds(panArea);
     }
 
     void mouseDown(const juce::MouseEvent& event) override
@@ -188,6 +235,17 @@ public:
     }
 
 private:
+    // G for gauche, D for droite, C for centre: the panel is in French, and a
+    // mixing desk says which side, not which sign.
+    [[nodiscard]] static juce::String panText(double pan)
+    {
+        const auto percent = juce::roundToInt(std::abs(pan) * 100.0);
+        if (percent == 0)
+            return "C";
+
+        return (pan < 0.0 ? "G" : "D") + juce::String(percent);
+    }
+
     [[nodiscard]] static bool chainIsBypassed(const domain::Track& track)
     {
         if (track.plugins.empty())
@@ -238,9 +296,11 @@ private:
     bool selected_{false};
 
     juce::Slider volume_;
+    juce::Slider pan_;
     juce::ToggleButton mute_;
     juce::ToggleButton bypass_;
     std::optional<domain::GestureId> gesture_;
+    std::optional<domain::GestureId> panGesture_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Row)
 };
