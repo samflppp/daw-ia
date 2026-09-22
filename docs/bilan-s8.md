@@ -20,7 +20,7 @@ Le logiciel s'appelait DAW IA et ne contenait aucune ligne d'IA. Il en contient.
 | 5 | Outils : chaque commande avec schéma et description | Livré | 28 décrites, 27 offertes, §6 |
 | 6 | Modèle derrière `IAProvider`, clé en variable d'environnement, coût journalisé | Livré | §8 ; coûts mesurés §9 |
 | 7 | Panneau copilote déclaré au manifeste, interface jamais gelée | Livré | §10 |
-| 8 | **La preuve** : les quatre phrases, une entrée par requête, Ctrl+Z | Livré sauf le Ctrl+Z à l'écran | §7 ; réserve §12 |
+| 8 | **La preuve** : les quatre phrases, une entrée par requête, Ctrl+Z | Livré | §7 ; Ctrl+Z §12 |
 | 9 | Échecs propres | Livré, six cas | §11 |
 
 ## 2. Décision 1 — le thread : une file, jamais une passation
@@ -251,12 +251,23 @@ Aucun ne laisse le projet à moitié modifié.
 
 ## 12. Ce qui n'a pas été vérifié
 
-**Le Ctrl+Z n'a pas été vu à l'écran par moi.** L'accès à l'écran m'a été refusé pendant cette
-session, et l'annulation n'est volontairement pas exposée par JSON-RPC : le panneau et le clavier
-sont les seules surfaces qui l'offrent, et je ne vais pas ouvrir une méthode RPC pour me faciliter un
-test. Ce qui est prouvé : qu'un groupe écrit par ce chemin, rouvert depuis le disque, rend **une**
-entrée et qu'un seul undo lui reprend la piste **et** le plugin — c'est le test de persistance
-« a group reopens as one entry, and one Ctrl+Z ». Ce qui reste à faire : appuyer, §14.
+**Le Ctrl+Z n'existait pas, et le bouton « Annuler » l'a caché pendant huit semaines.** Aucun
+raccourci clavier n'avait jamais été posé dans ce projet : seul le piano roll écoutait des touches,
+pour Suppr et les octaves. Le défaut n'est apparu qu'au moment de vérifier le §8 à l'écran — aucun
+test ne l'aurait trouvé, puisque la commande d'annulation, elle, marchait.
+
+Le raccourci vit maintenant dans `WorkspaceView` et non dans un panneau, pour la raison qui fait
+exister la règle d'hygiène 2 : annuler appartient au projet, pas à ce qui a le focus. JUCE fait
+remonter une touche non traitée le long de la chaîne des parents, donc la vue est le dernier
+composant à la voir. Un champ de texte qui gère son propre Ctrl+Z le garde : annuler un mot tapé au
+copilote ne doit pas annuler une édition du projet. `Ctrl+Y` et `Ctrl+Maj+Z` rétablissent.
+
+**Vérifié à l'écran par l'utilisateur** sur le projet de la preuve : trois Ctrl+Z rendent le tempo,
+puis la quantification **et** la transposition ensemble, puis la piste Basse **et** Vital ensemble.
+
+L'annulation reste volontairement absente de JSON-RPC : le panneau et le clavier sont les seules
+surfaces qui l'offrent, et une méthode RPC ouverte pour faciliter un test est une surface de plus à
+tenir.
 
 **Rien n'a été entendu.** Comme en S7bis : je vois, je ne peux pas écouter. Que la boucle reboucle et
 que Vital sonne restent des vérifications à l'oreille.
@@ -286,8 +297,8 @@ Projet bac à sable, jamais le tien. Lance le binaire avec la clé posée, puis 
    le libellé est ta phrase — pas « Volume de piste ».
 4. **Deux commandes, une ligne.** `ajoute une piste Basse et mets-y Vital` : la piste apparaît avec
    Vital dans sa chaîne, et l'historique gagne **une** ligne marquée `x2`.
-5. **Le Ctrl+Z, le point qui me manque.** Appuie une fois. La piste Basse **et** Vital doivent partir
-   ensemble. Ctrl+Y les ramène ensemble.
+5. **Le Ctrl+Z.** Appuie une fois. La piste Basse **et** Vital doivent partir ensemble. Ctrl+Y les
+   ramène ensemble. *(Vérifié le 22 septembre.)*
 6. **Le transport n'écrit pas d'histoire.** `passe le tempo à 140 et fais boucler la lecture sur le
    clip` : le tempo passe à 140, la lecture reboucle, et l'historique ne gagne **qu'une** ligne —
    celle du tempo.
