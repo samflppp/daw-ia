@@ -356,7 +356,57 @@ void ProjectProjector::reconcilePlugins(tracktion::AudioTrack& target, const dom
     }
 }
 
-void ProjectProjector::rebuildClips(tracktion::AudioTrack& target, const domain::Track& source)
+namespace
+{
+
+// Every (placement, row) pair a track plays, in a fixed order.
+//
+// A pattern says what a track plays and how long the material is; a placement
+// says where. Neither alone is a clip on a timeline, and walking them together
+// is the only way to get one. The order is the patterns' own, then the
+// placements' by beat, so two runs on the same state lay the same thing down.
+template <typename Fn>
+void forEachLaidOutRow(const domain::ProjectState& state, domain::TrackId trackId, Fn&& visit)
+{
+    for (const auto& pattern : state.patterns())
+    {
+        const auto* row = pattern.findClipForTrack(trackId);
+        if (row == nullptr)
+            continue;
+
+        for (const auto* placement : state.placementsOf(pattern.id))
+            visit(*placement, pattern, *row);
+    }
+}
+
+} // namespace
+
+domain::Value ProjectProjector::playedValue(domain::TrackId trackId) const
+{
+    domain::Value::Array entries;
+
+    forEachLaidOutRow(
+        state_,
+        trackId,
+        [&entries](
+            const domain::Placement& placement, const domain::Pattern& pattern, const domain::Clip& row)
+        {
+            domain::Value::Array notes;
+            notes.reserve(row.notes.size());
+            for (const auto& note : row.notes)
+                notes.push_back(note.toValue());
+
+            entries.push_back(domain::Value::object({{"placementId", domain::Value{placement.id.toString()}},
+                                                     {"clipId", domain::Value{row.id.toString()}},
+                                                     {"startBeats", domain::Value{placement.startBeats}},
+                                                     {"lengthBeats", domain::Value{pattern.lengthBeats}},
+                                                     {"notes", domain::Value::array(std::move(notes))}}));
+        });
+
+    return domain::Value::array(std::move(entries));
+}
+
+void ProjectProjector::rebuildClips(tracktion::AudioTrack& target, domain::TrackId trackId)
 {
     const auto existing = target.getClips();
     for (auto* clip : existing)
@@ -365,31 +415,40 @@ void ProjectProjector::rebuildClips(tracktion::AudioTrack& target, const domain:
             clip->removeFromParent();
     }
 
-    for (const auto& clip : source.clips)
-    {
-        const tracktion::BeatRange beats{tracktion::BeatPosition::fromBeats(clip.startBeats),
-                                         tracktion::BeatDuration::fromBeats(clip.lengthBeats)};
-
-        auto midiClip =
-            target.insertMIDIClip(toJuce(clip.id.toString()), edit_.tempoSequence.toTime(beats), nullptr);
-        if (midiClip == nullptr)
-            continue;
-
-        auto& sequence = midiClip->getSequence();
-        sequence.clear(nullptr);
-
-        // Note positions are relative to the clip, the way Tracktion stores
-        // them and the way the domain defines them.
-        for (const auto& note : clip.notes)
+    forEachLaidOutRow(
+        state_,
+        trackId,
+        [this,
+         &target](const domain::Placement& placement, const domain::Pattern& pattern, const domain::Clip& row)
         {
-            sequence.addNote(note.pitch,
-                             tracktion::BeatPosition::fromBeats(note.startBeats),
-                             tracktion::BeatDuration::fromBeats(note.lengthBeats),
-                             note.velocity,
-                             0,
-                             nullptr);
-        }
-    }
+            const tracktion::BeatRange beats{tracktion::BeatPosition::fromBeats(placement.startBeats),
+                                             tracktion::BeatDuration::fromBeats(pattern.lengthBeats)};
+
+            // The name carries both identifiers: the same row laid twice is two
+            // Tracktion clips, and two clips of the same name would be two
+            // things nothing could tell apart.
+            const auto name = placement.id.toString() + ":" + row.id.toString();
+
+            auto midiClip = target.insertMIDIClip(toJuce(name), edit_.tempoSequence.toTime(beats), nullptr);
+            if (midiClip == nullptr)
+                return;
+
+            auto& sequence = midiClip->getSequence();
+            sequence.clear(nullptr);
+
+            // Note positions are relative to the clip, the way Tracktion stores
+            // them and the way the domain defines them: a note is written once
+            // in the pattern and lands at every placement of it.
+            for (const auto& note : row.notes)
+            {
+                sequence.addNote(note.pitch,
+                                 tracktion::BeatPosition::fromBeats(note.startBeats),
+                                 tracktion::BeatDuration::fromBeats(note.lengthBeats),
+                                 note.velocity,
+                                 0,
+                                 nullptr);
+            }
+        });
 }
 
 bool ProjectProjector::reconcileTempo()
@@ -465,7 +524,12 @@ void ProjectProjector::reconcile()
         if (target == nullptr)
             continue;
 
-        const auto snapshot = source.toValue();
+        // The track's own form, and what it plays. The second is not a
+        // property of the track any more — the notes live in the patterns —
+        // so a snapshot made of the track alone would miss every edit made to
+        // a pattern and leave the Edit silent.
+        const auto snapshot =
+            domain::Value::object({{"track", source.toValue()}, {"played", playedValue(source.id)}});
 
         const auto previous = std::find_if(projected_.begin(),
                                            projected_.end(),
@@ -500,15 +564,17 @@ void ProjectProjector::reconcile()
         ensureInstrument(*target, source);
         reconcilePlugins(*target, source);
 
-        // Clips are the expensive part, so they are rebuilt only when they
-        // actually changed. Dragging a fader touches the volume and nothing else.
-        const auto* previousClips = isNew ? nullptr : previous->second.find("clips");
-        const auto* currentClips = snapshot.find("clips");
-        const bool clipsChanged =
-            previousClips == nullptr || currentClips == nullptr || !(*previousClips == *currentClips);
+        // Clips are the expensive part, so they are laid out again only when
+        // what the track plays actually changed. Dragging a fader touches the
+        // volume and nothing else; adding a note to a pattern laid eight times
+        // rebuilds the eight clips of that track, and no other track.
+        const auto* previousPlayed = isNew ? nullptr : previous->second.find("played");
+        const auto* currentPlayed = snapshot.find("played");
+        const bool playedChanged =
+            previousPlayed == nullptr || currentPlayed == nullptr || !(*previousPlayed == *currentPlayed);
 
-        if (clipsChanged)
-            rebuildClips(*target, source);
+        if (playedChanged)
+            rebuildClips(*target, source.id);
 
         stillProjected.emplace_back(source.id, snapshot);
     }

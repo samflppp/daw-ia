@@ -28,7 +28,7 @@ namespace daw::engine
 //
 // The price is that reconciling is more work than one direct call. It is paid
 // on purpose, and it is bounded: a track whose serialized form has not changed
-// is skipped entirely, and its clips are rebuilt only when the clips changed.
+// is skipped entirely, and what it plays is rebuilt only when that changed.
 //
 // Binding is by identity, never by position: each Tracktion track carries the
 // domain TrackId in its state tree, so reordering or deleting a track in the
@@ -109,7 +109,21 @@ private:
     [[nodiscard]] tracktion::AudioTrack* createTrackFor(const domain::TrackId& id);
     void removeUnknownTracks();
     void ensureInstrument(tracktion::AudioTrack& track, const domain::Track& source);
-    void rebuildClips(tracktion::AudioTrack& target, const domain::Track& source);
+
+    // What one track actually plays, laid out on the timeline: one Tracktion
+    // clip per (placement, pattern row) pair.
+    //
+    // This is the one place where content and position meet, and it is a
+    // projection and not a state: the domain holds the notes once, in the
+    // pattern, whatever the number of placements. A pattern laid eight times
+    // becomes eight Tracktion clips here and stays one row over there, which
+    // is why editing it is one command.
+    void rebuildClips(tracktion::AudioTrack& target, domain::TrackId trackId);
+
+    // The serialized form of what that track plays. Compared against the last
+    // projection to decide whether the clips have to be laid out again: a
+    // fader drag must not rebuild them, and a note added to a pattern must.
+    [[nodiscard]] domain::Value playedValue(domain::TrackId trackId) const;
 
     // --- plugins
     void reconcilePlugins(tracktion::AudioTrack& target, const domain::Track& source);

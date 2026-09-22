@@ -49,7 +49,13 @@ public:
     //      that entry shows. Two columns and not a rewriting of anything —
     //      each command keeps its own row, and the group is what tells a
     //      reopened project that three rows were one Ctrl+Z.
-    static constexpr std::int64_t schemaVersion = 3;
+    //   4  no column at all: the pattern model of the S9 changed what
+    //      clip.create_midi means and not what it writes, so an older project
+    //      opens by replaying, untouched. The number exists for the other
+    //      direction — a project where a pattern is laid twice would replay
+    //      into an older build as two patterns it cannot tell apart, and this
+    //      is what makes that build refuse instead of lie.
+    static constexpr std::int64_t schemaVersion = 4;
 
     ~ProjectStore() override;
 

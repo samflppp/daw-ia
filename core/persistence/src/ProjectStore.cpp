@@ -82,7 +82,24 @@ constexpr std::string_view schemaV3 = R"sql(
 CREATE INDEX IF NOT EXISTS journal_by_group ON journal (group_id, seq);
 )sql";
 
-constexpr Migration migrations[] = {{1, schemaV1}, {2, schemaV2}, {3, schemaV3}};
+// Version 4. Nothing to change, and that is the point.
+//
+// The S9 model split what a clip held into a pattern and a placement. Not one
+// column moved: this journal stores command payloads, and the payloads kept
+// their shape — clip.create_midi still names a track, a clip, a start and a
+// length, and only what it means changed. An older project therefore needs no
+// conversion at all, and this build opens it by replaying it.
+//
+// What does change is the other direction. A project where a pattern is laid
+// twice replays into a build of the S8 era as two patterns it cannot tell
+// apart, silently. Nothing in a payload says otherwise, so the version number
+// has to say it: the store already refuses a schema newer than itself, and
+// this step is what makes that refusal happen instead of a wrong project.
+constexpr std::string_view schemaV4 = R"sql(
+SELECT 1;
+)sql";
+
+constexpr Migration migrations[] = {{1, schemaV1}, {2, schemaV2}, {3, schemaV3}, {4, schemaV4}};
 
 constexpr std::string_view insertSql =
     "INSERT INTO journal (kind, command_id, at_micros, actor, context_digest, context_bytes, "
