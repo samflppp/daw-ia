@@ -96,6 +96,7 @@ void CopilotBridge::start()
 
     process_ = std::make_unique<juce::ChildProcess>();
     const auto command = childCommand(port_);
+    juce::Logger::writeToLog("copilot: launching " + command.joinIntoString(" "));
     if (!process_->start(command, juce::ChildProcess::wantStdOut | juce::ChildProcess::wantStdErr))
     {
         process_.reset();
@@ -155,7 +156,13 @@ juce::StringArray CopilotBridge::childCommand(int port) const
     const auto override = juce::SystemStats::getEnvironmentVariable("DAW_IA_COPILOT_COMMAND", {});
     if (override.isNotEmpty())
     {
+        // fromTokens keeps the quotes it split on, and a path handed to a
+        // process with its quotes still attached is a path that does not
+        // exist.
         auto command = juce::StringArray::fromTokens(override, true);
+        for (auto& argument : command)
+            argument = argument.unquoted();
+
         command.add("--port");
         command.add(juce::String{port});
         return command;
@@ -532,6 +539,12 @@ void CopilotBridge::ask(std::string_view request)
 
 void CopilotBridge::setStatus(Status status, std::string message)
 {
+    // The log, as well as the panel. A copilot that never appears is diagnosed
+    // from the log file, and the panel is gone by the time anyone asks.
+    if (!message.empty())
+        juce::Logger::writeToLog("copilot: " +
+                                 juce::String::fromUTF8(message.data(), static_cast<int>(message.size())));
+
     {
         const std::lock_guard<std::mutex> lock{mutex_};
         status_ = status;

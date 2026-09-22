@@ -87,25 +87,34 @@ Value schema(Value::Object properties, std::vector<std::string> required)
 
 Value pluginSchema()
 {
+    // The whole instance, because that is what plugin.insert reads. bypassed
+    // is required and not defaulted: a command whose payload leaves a field to
+    // the reader is a command that means two things.
     return Value::object(
         {{"type", Value{std::string{"object"}}},
          {"properties",
           Value::object(
               {{"id", newIdentifier("Identifiant de cette instance de plugin.")},
+               {"bypassed", field("boolean", "Faux pour un plugin qui joue. Mettez faux par défaut.")},
                {"ref",
-                Value::object({{"type", Value{std::string{"object"}}},
-                               {"properties",
-                                Value::object({{"format", field("string", "VST3 ou CLAP.")},
-                                               {"identifier",
-                                                field("string",
-                                                      "Identifiant stable du plugin, tel que la machine "
-                                                      "le déclare. Jamais un chemin de fichier.")},
-                                               {"name", field("string", "Nom lisible du plugin.")}})},
-                               {"required",
-                                Value::array({Value{std::string{"format"}},
-                                              Value{std::string{"identifier"}},
-                                              Value{std::string{"name"}}})}})}})},
-         {"required", Value::array({Value{std::string{"id"}}, Value{std::string{"ref"}}})}});
+                Value::object(
+                    {{"type", Value{std::string{"object"}}},
+                     {"properties",
+                      Value::object({{"format", field("string", "VST3 ou CLAP, tel que l'état le donne.")},
+                                     {"identifier",
+                                      field("string",
+                                            "Identifiant stable du plugin, tel que la "
+                                            "machine le déclare. Jamais un chemin.")},
+                                     {"name", field("string", "Nom lisible du plugin.")}})},
+                     {"required",
+                      Value::array({Value{std::string{"format"}},
+                                    Value{std::string{"identifier"}},
+                                    Value{std::string{"name"}}})},
+                     {"additionalProperties", Value{false}}})}})},
+         {"required",
+          Value::array(
+              {Value{std::string{"id"}}, Value{std::string{"ref"}}, Value{std::string{"bypassed"}}})},
+         {"additionalProperties", Value{false}}});
 }
 
 Tool make(std::string name, std::string summary, Value payloadSchema)
