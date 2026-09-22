@@ -140,5 +140,6 @@ enfant** : l'enfant écrit le projet et meurt, le parent rouvre et mesure.
 | Enveloppe v1 | rejouée comme `user` |
 | Dossier copié | s'ouvre ailleurs et rend le même état |
 | Projet laissé au schéma 1 | migré en une étape, lignes intactes, `project_id` inchangé |
+| Projet laissé au schéma 3 (avant les patterns) | migré en une étape **vide** : aucune colonne ne bouge, parce que le journal stocke des payloads et que les payloads n'ont pas changé. Le numéro 4 existe pour l'autre sens — un projet où un pattern est posé deux fois se rejouerait dans un build de la S8 comme deux patterns qu'il ne sait pas distinguer, et la version est ce qui le fait refuser au lieu de mentir |
 | `save()` | `-wal` ramené à zéro octet, magasin toujours ouvert et toujours en train d'enregistrer |
 | **Plugin** (`core/engine`, label `audio`) | le RMS rendu après rechargement est celui d'avant : blob puis paramètres épars, dans cet ordre |

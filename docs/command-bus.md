@@ -129,8 +129,13 @@ elles-mêmes. Voir `docs/persistence.md`.
 | `track.set_volume` | mutation continue | par piste |
 | `track.set_pan` | position dans le champ stéréo, jamais deux gains | par piste |
 | `track.set_muted` | interrupteur, distinct du bypass de plugin | non |
-| `clip.create_midi` | création structurelle, identifiant fourni par l'appelant, rejeu déterministe | non |
-| `note.add` | mutation imbriquée, échec propre si le clip n'existe pas | non |
+| `track.set_channel_pitch` | la hauteur qu'un canal joue quand un pas s'allume ; ne touche aucune note déjà écrite | par piste |
+| `pattern.create` | un pattern vide : du contenu, sans position | non |
+| `pattern.place` | pose un pattern sur la timeline ; aucune note n'est copiée | non |
+| `pattern.add_track` | ouvre la ligne d'une piste dans un pattern | non |
+| `pattern.set_length` | longueur du pattern ; les notes au-delà sont gardées, jamais coupées | par pattern |
+| `clip.create_midi` | S9 : un pattern d'une ligne **et** son placement, en une commande. Le payload n'a pas bougé, son sens oui — voir §modèle de pattern | non |
+| `note.add` | mutation imbriquée, échec propre si la ligne n'existe pas | non |
 | `note.remove` | l'undoRecord porte la note entière et son index | non |
 | `note.move` | hauteur et départ, jamais la longueur | par note |
 | `note.resize` | longueur, jamais le départ | par note |
@@ -264,3 +269,32 @@ nlohmann/json est utilisé **uniquement** dans `src/serialization/Json.cpp`, li�
 en `PRIVATE`, et n'apparaît dans aucun en-tête : le reste du projet ne l'hérite
 pas, et il est remplaçable sans toucher une seule commande. Les commandes ne
 manipulent que `daw::domain::Value`.
+
+
+## Le modèle de pattern (S9)
+
+Le contenu et le placement sont deux choses, et la séparation est ce qui rend
+la playlist possible.
+
+| Entité | Ce qu'elle porte | Ce qu'elle ne porte pas |
+|---|---|---|
+| `Clip` | une piste et ses notes. C'est la **ligne** qu'une piste joue dans un pattern | ni début ni longueur |
+| `Pattern` | un nom, une longueur, au plus une ligne par piste | aucune position |
+| `Placement` | un pattern et un beat | ni piste ni longueur |
+
+Un pattern posé huit fois se modifie en **une** commande : les huit placements
+ne portent aucune note. La projection, elle, pose un clip Tracktion par paire
+(placement, ligne) — c'est le seul endroit où contenu et position se
+rencontrent.
+
+`clip.create_midi` garde exactement le payload qu'il a toujours eu
+(`trackId`, `clipId`, `startBeats`, `lengthBeats`) et signifie désormais : un
+pattern d'une ligne, plus un placement. Les identifiants du pattern et du
+placement sont **dérivés des octets du clip**, jamais tirés — la règle « aucune
+commande n'engendre d'identifiant » est intacte, et huit semaines de journaux
+se rejouent sans une ligne de compatibilité.
+
+`track.remove` emporte les lignes de la piste dans chaque pattern et les rend à
+l'annulation ; son undoRecord porte désormais `rows`. Un enregistrement écrit
+avant la S9 porte ses clips dans la piste et se relit comme un pattern d'une
+ligne par clip.
