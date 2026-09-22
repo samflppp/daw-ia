@@ -272,3 +272,15 @@ def test_a_peer_reports_a_broken_link_instead_of_hanging() -> None:
 
     with pytest.raises(RpcError):
         peer.request("state.get", timeout=2.0)
+
+
+def test_a_command_name_survives_the_vendor_rule() -> None:
+    """The API refuses a dot in a tool name; the DAW names every command with one."""
+    from daw_services.ia_provider import _original_tool_name, _safe_tool_name
+
+    assert _safe_tool_name("track.set_volume") == "track__set_volume"
+    assert _original_tool_name("track__set_volume", {}) == "track.set_volume"
+
+    # And the map wins over the guess, so a name that already held two
+    # underscores comes back as it left.
+    assert _original_tool_name("odd__name", {"odd__name": "odd__name"}) == "odd__name"

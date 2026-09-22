@@ -25,6 +25,22 @@ DEFAULT_MODEL = "claude-sonnet-5"
 DEFAULT_ENDPOINT = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 
+# The API refuses a tool name that is not ^[a-zA-Z0-9_-]{1,128}$, and every
+# command of the DAW is named with a dot: "track.add". The dot is the DAW's
+# name and it stays the DAW's name — renaming the commands to please one
+# vendor would put that vendor's rule in the domain. So the dot is swapped for
+# a colon-free separator on the way out and swapped back on the way in, here,
+# in the one place that knows which vendor is being talked to.
+TOOL_NAME_SEPARATOR = "__"
+
+
+def _safe_tool_name(name: str) -> str:
+    return name.replace(".", TOOL_NAME_SEPARATOR)
+
+
+def _original_tool_name(name: str, known: dict[str, str]) -> str:
+    return known.get(name, name.replace(TOOL_NAME_SEPARATOR, "."))
+
 
 class ProviderUnavailable(Exception):
     """No key, no network, or a model that refused. Said in French to the user."""
@@ -124,13 +140,22 @@ class AnthropicProvider:
                 f"Aucune clé d'API. Posez {API_KEY_VARIABLE} dans l'environnement, puis relancez le copilote."
             )
 
+        sent_tools = []
+        known: dict[str, str] = {}
+        for tool in tools:
+            renamed = dict(tool)
+            original = str(renamed.get("name", ""))
+            renamed["name"] = _safe_tool_name(original)
+            known[renamed["name"]] = original
+            sent_tools.append(renamed)
+
         body = json.dumps(
             {
                 "model": self._model,
                 "max_tokens": 2048,
                 "system": system,
                 "messages": list(messages),
-                "tools": list(tools),
+                "tools": sent_tools,
             },
             ensure_ascii=False,
         ).encode("utf-8")
@@ -159,10 +184,10 @@ class AnthropicProvider:
         except json.JSONDecodeError as failure:
             raise ProviderUnavailable("Le modèle a répondu quelque chose d'illisible.") from failure
 
-        return _turn_from(payload)
+        return _turn_from(payload, known)
 
 
-def _turn_from(payload: dict[str, Any]) -> Turn:
+def _turn_from(payload: dict[str, Any], known: dict[str, str] | None = None) -> Turn:
     turn = Turn(stop_reason=payload.get("stop_reason", "end_turn"))
 
     for block in payload.get("content", []):
@@ -177,7 +202,7 @@ def _turn_from(payload: dict[str, Any]) -> Turn:
             turn.tool_calls.append(
                 ToolCall(
                     call_id=str(block.get("id", "")),
-                    name=str(block.get("name", "")),
+                    name=_original_tool_name(str(block.get("name", "")), known or {}),
                     arguments=dict(block.get("input") or {}),
                 )
             )
