@@ -9,13 +9,18 @@
 namespace daw::ui
 {
 
-// The notes of the selected track's clip, and the four ways to change them:
-// click to add, drag to move, Delete or right-click to remove.
+// The notes the selected track plays in the current pattern, and the four ways
+// to change them: click to add, drag to move, Delete or right-click to remove.
 //
 // The panel owns no note. Every pixel it draws is read from ProjectState at
 // paint time, and every edit leaves as a command. That is what makes the drag
-// undoable in one step and the whole clip reappear after a reload without this
+// undoable in one step and the whole row reappear after a reload without this
 // file knowing either fact.
+//
+// It shows one row of one pattern: the horizontal axis is the pattern's length,
+// not the timeline. Which pattern is on screen is not chosen here — the channel
+// rack chooses it, this panel follows, and both read the same Selection. Two
+// choosers for one choice would be the second truth the S7bis review refused.
 //
 // Which note is selected is not project state and stays here: selecting is not
 // an edit, and undoing a move must not undo a click.
@@ -39,16 +44,17 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void timerCallback() override;
 
-    // The clip being edited: the selected one, or the first of the track. Null
-    // when no track is selected, or when the track holds no clip yet.
-    //
-    // One clip at a time is what this panel is: its horizontal axis is the
-    // span of that clip, not the timeline. Showing several at once would be an
-    // arrangement view, which is a different panel. What was wrong until now
-    // is that the other clips were unreachable, not that they were off screen:
-    // the chooser in the header names every clip the track holds.
+    // The row being edited: what the selected track plays in the current
+    // pattern. Null when no track is selected, when the project holds no
+    // pattern, or when that track has no row in it yet.
     [[nodiscard]] const domain::Clip* clip() const;
     [[nodiscard]] const domain::Track* track() const;
+    [[nodiscard]] const domain::Pattern* pattern() const;
+
+    // The pattern's own length, and where its first placement sits. The row
+    // carries neither: a row is content, and both of these are position.
+    [[nodiscard]] double patternLength() const;
+    [[nodiscard]] double patternStart() const;
 
     // --- geometry. The one place pixels and music meet.
     [[nodiscard]] juce::Rectangle<int> gridArea() const;
@@ -88,15 +94,13 @@ private:
     void addNoteAt(juce::Point<int> point);
     void removeNote(domain::NoteId noteId);
 
-    // Fills the chooser from the track, and marks the edited clip. Called on
-    // every project change, so a clip created by a replay or by a copilot
-    // appears here with no code of its own.
-    void rebuildClipChooser();
-    void addClip();
+    // Opens this track's row in the current pattern, creating the pattern too
+    // when the project holds none. One group, therefore one Ctrl+Z.
+    void addRow();
 
-    // Plays the clip on screen over and over. Called when the user picks or
-    // creates a clip, which is the only moment the pattern changes.
-    void loopOverEditedClip();
+    // Plays the pattern on screen over and over. Called when the user picks a
+    // pattern, which is the only moment what loops changes.
+    void loopOverCurrentPattern();
 
     const Tokens& tokens_;
     DawLookAndFeel& lookAndFeel_;
@@ -152,8 +156,7 @@ private:
 
     std::optional<Drag> drag_;
 
-    juce::ComboBox clipChooser_;
-    juce::TextButton addClip_{"+ Clip"};
+    juce::TextButton addRow_{"+ Ligne"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PianoRollPanel)
 };

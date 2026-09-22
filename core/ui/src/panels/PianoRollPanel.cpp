@@ -1,10 +1,11 @@
 #include "daw/ui/panels/PianoRollPanel.h"
 
 #include "daw/domain/commands/AddNote.h"
-#include "daw/domain/commands/CreateMidiClip.h"
 #include "daw/domain/commands/NoteCommands.h"
 #include "daw/domain/commands/NoteEditCommands.h"
+#include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
+#include "daw/ui/model/PatternEditing.h"
 
 #include <algorithm>
 #include <cmath>
@@ -28,10 +29,9 @@ constexpr int defaultVelocity = 100;
 constexpr int lowestVisiblePitch = 0;
 constexpr int highestVisiblePitch = 127;
 
-// The clip a new track gets when the user draws in an empty piano roll: four
-// bars, from the start.
-constexpr double newClipStartBeats = 0.0;
-constexpr double newClipLengthBeats = 16.0;
+// The length a pattern gets when the user draws in a project that holds none:
+// four bars.
+constexpr double newPatternLengthBeats = 16.0;
 
 // How far the hand travels for the whole velocity range. Three pixels per step
 // would make 1 to 127 a four-hundred-pixel drag; a panel is not that tall.
@@ -71,37 +71,16 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
     setLookAndFeel(&lookAndFeel_);
     setWantsKeyboardFocus(true);
 
-    addAndMakeVisible(clipChooser_);
-    clipChooser_.setTextWhenNothingSelected("aucun clip");
-
-    // Selecting a clip is not an edit: it goes to the Selection, never to the
-    // bus, and undoing a note must not undo a click.
-    clipChooser_.onChange = [this]
-    {
-        const auto* owner = track();
-        const auto index = clipChooser_.getSelectedId() - 1;
-        if (owner == nullptr || index < 0 || index >= static_cast<int>(owner->clips.size()))
-            return;
-
-        const auto& chosen = owner->clips[static_cast<std::size_t>(index)];
-        if (chosen.id != selection_.clip())
-        {
-            selection_.selectClip(owner->id, chosen.id);
-            loopOverEditedClip();
-        }
-    };
-
-    addAndMakeVisible(addClip_);
-    addClip_.onClick = [this] { addClip(); };
+    addAndMakeVisible(addRow_);
+    addRow_.onClick = [this] { addRow(); };
 
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
     startTimer(playheadRefreshMs);
-    rebuildClipChooser();
 
     // The pattern on screen loops from the first frame, without waiting for
-    // the user to pick a clip they have already got.
-    loopOverEditedClip();
+    // the user to pick one they have already got.
+    loopOverCurrentPattern();
 }
 
 PianoRollPanel::~PianoRollPanel()
@@ -114,14 +93,14 @@ PianoRollPanel::~PianoRollPanel()
 
 void PianoRollPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
-    rebuildClipChooser();
+    addRow_.setEnabled(track() != nullptr);
 
     // Only on a selection change, and the distinction matters: the project
     // observer is broadcast from inside a bus notification, and an observer
     // may not call back into the bus. A selection is changed by a click, never
     // by a command, so it is the one source it is safe to answer with one.
     if (source == &selection_)
-        loopOverEditedClip();
+        loopOverCurrentPattern();
 
     repaint();
 }
@@ -131,57 +110,53 @@ void PianoRollPanel::resized()
     auto header = getLocalBounds().removeFromTop(tokens_.integer("metric.panel.headerHeight"));
     header = header.reduced(tokens_.integer("space.md"), tokens_.integer("space.xs"));
 
-    addClip_.setBounds(header.removeFromRight(tokens_.integer("metric.pianoRoll.keyboardWidth")));
-    header.removeFromRight(tokens_.integer("space.sm"));
-    clipChooser_.setBounds(header.removeFromRight(tokens_.integer("metric.pianoRoll.keyboardWidth") * 2));
+    addRow_.setBounds(header.removeFromRight(tokens_.integer("metric.pianoRoll.keyboardWidth")));
 }
 
-void PianoRollPanel::rebuildClipChooser()
-{
-    const auto* owner = track();
-    const auto* edited = clip();
-
-    clipChooser_.clear(juce::dontSendNotification);
-    clipChooser_.setEnabled(owner != nullptr);
-    addClip_.setEnabled(owner != nullptr);
-
-    if (owner == nullptr)
-        return;
-
-    for (std::size_t index = 0; index < owner->clips.size(); ++index)
-    {
-        const auto& candidate = owner->clips[index];
-
-        // Bars from one, like the transport readout: a clip that starts at
-        // beat 16 starts at bar 5, and that is what a musician looks for.
-        const auto bar = static_cast<int>(candidate.startBeats) / beatsPerBar + 1;
-        clipChooser_.addItem("Clip " + juce::String(static_cast<int>(index) + 1) +
-                                 juce::String(u8"  ·  mes. ") + juce::String(bar),
-                             static_cast<int>(index) + 1);
-
-        if (edited != nullptr && candidate.id == edited->id)
-            clipChooser_.setSelectedId(static_cast<int>(index) + 1, juce::dontSendNotification);
-    }
-}
-
-void PianoRollPanel::addClip()
+void PianoRollPanel::addRow()
 {
     const auto* owner = track();
     if (owner == nullptr)
         return;
 
-    // After the last one, so a new clip never lands on top of an existing one.
-    auto start = newClipStartBeats;
-    for (const auto& existing : owner->clips)
-        start = std::max(start, existing.startBeats + existing.lengthBeats);
+    std::vector<std::unique_ptr<domain::Command>> commands;
 
-    const auto clipId = domain::ClipId::generate();
-    if (bus_.execute(std::make_unique<domain::CreateMidiClip>(owner->id, clipId, start, newClipLengthBeats))
-            .ok())
+    auto patternId = pattern() != nullptr ? pattern()->id : domain::PatternId{};
+
+    // A project with no pattern gets one, laid down, in the same group: the
+    // user asked for a place to write, not for three decisions.
+    if (patternId.isNil())
     {
-        selection_.selectClip(owner->id, clipId);
-        loopOverEditedClip();
+        auto created = patternEditing::newPattern(state_, newPatternLengthBeats);
+        patternId = created.patternId;
+        for (auto& command : created.commands)
+            commands.push_back(std::move(command));
     }
+
+    auto row = patternEditing::rowFor(state_, patternId, owner->id);
+    if (row.opening.empty() && !commands.empty())
+    {
+        // The pattern is being created in this very group, so the row it will
+        // hold cannot be read from the state yet.
+        row.clipId = domain::ClipId::generate();
+        row.opening.push_back(std::make_unique<domain::AddPatternTrack>(patternId, row.clipId, owner->id));
+    }
+
+    for (auto& command : row.opening)
+        commands.push_back(std::move(command));
+
+    if (commands.empty())
+        return; // the row is already open
+
+    domain::GroupOptions group{};
+    group.label = "ouvrir une ligne";
+
+    if (!bus_.executeGroup(std::move(commands), group).ok())
+        return;
+
+    selection_.selectPattern(patternId);
+    selection_.selectClip(owner->id, row.clipId);
+    loopOverCurrentPattern();
 }
 
 void PianoRollPanel::timerCallback()
@@ -220,18 +195,37 @@ const domain::Track* PianoRollPanel::track() const
     return state_.findTrack(selection_.track());
 }
 
+const domain::Pattern* PianoRollPanel::pattern() const
+{
+    return patternEditing::current(state_, selection_);
+}
+
 const domain::Clip* PianoRollPanel::clip() const
 {
     const auto* selected = track();
-    if (selected == nullptr || selected->clips.empty())
+    const auto* shown = pattern();
+    if (selected == nullptr || shown == nullptr)
         return nullptr;
 
-    // The selected clip when there is one, the first otherwise: a track with a
-    // single clip must not need a click before it can be edited.
-    if (const auto* named = state_.findClip(selection_.clip()); named != nullptr)
-        return named;
+    // What that track plays in that pattern, and nothing else. There is at
+    // most one such row, so there is nothing to choose and nothing to guess.
+    return shown->findClipForTrack(selected->id);
+}
 
-    return &selected->clips.front();
+double PianoRollPanel::patternLength() const
+{
+    const auto* shown = pattern();
+    return shown != nullptr ? shown->lengthBeats : 0.0;
+}
+
+double PianoRollPanel::patternStart() const
+{
+    const auto* shown = pattern();
+    if (shown == nullptr)
+        return 0.0;
+
+    const auto span = patternEditing::spanOf(state_, shown->id);
+    return span ? span->startBeats : 0.0;
 }
 
 // --- geometry --------------------------------------------------------------
@@ -275,23 +269,23 @@ int PianoRollPanel::pitchAtY(int y) const
 
 double PianoRollPanel::beatAtX(int x) const
 {
-    const auto* edited = clip();
     const auto area = gridArea();
-    if (edited == nullptr || area.getWidth() <= 0)
+    const auto length = patternLength();
+    if (length <= 0.0 || area.getWidth() <= 0)
         return 0.0;
 
     const auto fraction = static_cast<double>(x - area.getX()) / static_cast<double>(area.getWidth());
-    return std::clamp(fraction, 0.0, 1.0) * edited->lengthBeats;
+    return std::clamp(fraction, 0.0, 1.0) * length;
 }
 
 int PianoRollPanel::xForBeat(double beats) const
 {
-    const auto* edited = clip();
     const auto area = gridArea();
-    if (edited == nullptr || edited->lengthBeats <= 0.0)
+    const auto length = patternLength();
+    if (length <= 0.0)
         return area.getX();
 
-    const auto fraction = std::clamp(beats / edited->lengthBeats, 0.0, 1.0);
+    const auto fraction = std::clamp(beats / length, 0.0, 1.0);
     return area.getX() + static_cast<int>(std::llround(fraction * static_cast<double>(area.getWidth())));
 }
 
@@ -362,16 +356,22 @@ void PianoRollPanel::paint(juce::Graphics& g)
     }
 
     const auto* owner = track();
+    const auto* shown = pattern();
     g.setColour(tokens_.colour("color.text.secondary"));
     g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
 
-    // The chooser and the button live on the right of the header; the name
-    // stops before them rather than being drawn underneath.
-    header.removeFromRight(tokens_.integer("metric.pianoRoll.keyboardWidth") * 3 +
-                           tokens_.integer("space.sm") + tokens_.integer("space.md"));
+    // The button lives on the right of the header; the name stops before it
+    // rather than being drawn underneath.
+    header.removeFromRight(tokens_.integer("metric.pianoRoll.keyboardWidth") + tokens_.integer("space.md"));
 
+    // The pattern is named and not chosen here: the rack chooses, this panel
+    // follows. Saying which one is on screen is what keeps the two readable
+    // as one thing.
     const auto count = static_cast<int>(edited->notes.size());
-    g.drawText(juce::String(owner != nullptr ? owner->name : std::string{}) + juce::String(u8"  ·  ") +
+    const auto patternName = shown != nullptr ? patternEditing::displayName(state_, *shown) : std::string{};
+
+    g.drawText(juce::String(patternName) + juce::String(u8"  ·  ") +
+                   juce::String(owner != nullptr ? owner->name : std::string{}) + juce::String(u8"  ·  ") +
                    juce::String(count) + (count > 1 ? " notes" : " note"),
                header,
                juce::Justification::centredLeft,
@@ -399,8 +399,9 @@ void PianoRollPanel::paintEmpty(juce::Graphics& g) const
     g.setColour(tokens_.colour("color.text.disabled"));
     g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
 
-    const auto message =
-        track() == nullptr ? u8"sélectionnez une piste" : u8"cliquez pour créer un clip et poser une note";
+    const auto message = track() == nullptr
+                             ? u8"sélectionnez une piste"
+                             : u8"cliquez pour ouvrir la ligne de cette piste et poser une note";
 
     g.drawText(message, getLocalBounds(), juce::Justification::centred, false);
 }
@@ -423,11 +424,11 @@ void PianoRollPanel::paintGrid(juce::Graphics& g, juce::Rectangle<int> area) con
         g.fillRect(area.getX(), y + keyHeight - hairline, area.getWidth(), hairline);
     }
 
-    const auto* edited = clip();
-    if (edited == nullptr)
+    const auto length = patternLength();
+    if (length <= 0.0)
         return;
 
-    for (double beat = 0.0; beat <= edited->lengthBeats; beat += gridStepBeats)
+    for (double beat = 0.0; beat <= length; beat += gridStepBeats)
     {
         const auto onBar = std::fmod(beat, static_cast<double>(beatsPerBar)) < gridStepBeats / 2.0;
         const auto onBeat = std::fmod(beat, 1.0) < gridStepBeats / 2.0;
@@ -524,8 +525,8 @@ void PianoRollPanel::paintKeyboard(juce::Graphics& g, juce::Rectangle<int> area)
 
 void PianoRollPanel::paintRuler(juce::Graphics& g, juce::Rectangle<int> area) const
 {
-    const auto* edited = clip();
-    if (edited == nullptr)
+    const auto length = patternLength();
+    if (length <= 0.0)
         return;
 
     g.setColour(tokens_.colour("color.surface.panel"));
@@ -539,7 +540,7 @@ void PianoRollPanel::paintRuler(juce::Graphics& g, juce::Rectangle<int> area) co
 
     g.setFont(lookAndFeel_.typography().mono("font.size.micro", "font.weight.regular"));
 
-    for (double beat = 0.0; beat < edited->lengthBeats; beat += static_cast<double>(beatsPerBar))
+    for (double beat = 0.0; beat < length; beat += static_cast<double>(beatsPerBar))
     {
         const auto x = xForBeat(beat);
         g.setColour(tokens_.colour("color.border.hairline"));
@@ -555,12 +556,17 @@ void PianoRollPanel::paintRuler(juce::Graphics& g, juce::Rectangle<int> area) co
 
 std::optional<int> PianoRollPanel::playheadX() const
 {
-    const auto* edited = clip();
-    if (edited == nullptr)
+    const auto length = patternLength();
+    if (length <= 0.0)
         return {};
 
-    const auto local = clock_.positionBeats() - edited->startBeats;
-    if (local < 0.0 || local > edited->lengthBeats)
+    // The axis is the pattern, and the pattern may be laid anywhere on the
+    // timeline: the placement's beat comes off before the playhead means
+    // anything here. A pattern laid eight times draws the playhead when the
+    // transport is inside the placement this panel follows, and not the seven
+    // others — showing eight playheads on one grid would say nothing.
+    const auto local = clock_.positionBeats() - patternStart();
+    if (local < 0.0 || local > length)
         return {};
 
     return xForBeat(local);
@@ -581,32 +587,30 @@ void PianoRollPanel::paintPlayhead(juce::Graphics& g, juce::Rectangle<int> area)
 
 // --- editing ---------------------------------------------------------------
 
-void PianoRollPanel::loopOverEditedClip()
+void PianoRollPanel::loopOverCurrentPattern()
 {
-    // The beatmaker plays a pattern over and over, and the pattern is the clip
-    // on screen. The loop is set when the user chooses a clip and never from
-    // inside a bus notification: an observer may not call back into the bus.
-    const auto* edited = clip();
-    if (edited == nullptr)
+    // The beatmaker plays a pattern over and over. The loop is set when the
+    // user picks a pattern and never from inside a bus notification: an
+    // observer may not call back into the bus.
+    const auto* shown = pattern();
+    if (shown == nullptr)
     {
         static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(false, 0.0, 0.0)));
         return;
     }
 
-    static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(
-        true, edited->startBeats, edited->startBeats + edited->lengthBeats)));
+    patternEditing::loopOver(bus_, state_, shown->id);
 }
 
 void PianoRollPanel::movePlayheadTo(int x)
 {
-    const auto* edited = clip();
-    if (edited == nullptr)
+    if (patternLength() <= 0.0)
         return;
 
-    // The axis of this panel is the span of the clip being edited, so what the
-    // pixel says has to have the clip's own start added back before it means
-    // anything on the timeline.
-    const auto beats = edited->startBeats + beatAtX(x);
+    // The axis of this panel is the pattern, so what the pixel says has to
+    // have the placement's own beat added back before it means anything on the
+    // timeline.
+    const auto beats = patternStart() + beatAtX(x);
 
     static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(beats)));
 }
@@ -617,21 +621,16 @@ void PianoRollPanel::addNoteAt(juce::Point<int> point)
     if (owner == nullptr)
         return;
 
-    auto clipId = clip() != nullptr ? clip()->id : domain::ClipId{};
-
-    // Drawing in a track that has no clip creates the clip first. Two commands,
-    // therefore two history entries: they are two decisions, and undoing the
-    // note must not take the clip away with it.
-    if (clipId.isNil())
+    // Drawing in a project that has no pattern, or in a track that has no row
+    // in it, opens what is missing first. It is one thing the user did, so it
+    // is one group and one Ctrl+Z — the note and the row it needed go back
+    // together, because a row left behind by an undone note is a row nobody
+    // asked for.
+    if (clip() == nullptr)
     {
-        clipId = domain::ClipId::generate();
-        if (!bus_.execute(std::make_unique<domain::CreateMidiClip>(
-                              owner->id, clipId, newClipStartBeats, newClipLengthBeats))
-                 .ok())
+        addRow();
+        if (clip() == nullptr)
             return;
-
-        selection_.selectClip(owner->id, clipId);
-        loopOverEditedClip();
     }
 
     domain::Note note{};
@@ -641,7 +640,7 @@ void PianoRollPanel::addNoteAt(juce::Point<int> point)
     note.startBeats = quantise(beatAtX(point.getX()));
     note.lengthBeats = gridStepBeats;
 
-    if (bus_.execute(std::make_unique<domain::AddNote>(clipId, note)).ok())
+    if (bus_.execute(std::make_unique<domain::AddNote>(clip()->id, note)).ok())
     {
         selectedNote_ = note.id;
         repaint();

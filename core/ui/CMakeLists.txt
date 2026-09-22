@@ -70,10 +70,12 @@ target_sources(daw_ui INTERFACE
     src/model/History.cpp
     src/model/ProjectObserver.cpp
     src/model/Selection.cpp
+    src/model/PatternEditing.cpp
     src/panels/PlaceholderPanel.cpp
     src/panels/TransportPanel.cpp
     src/panels/TrackListPanel.cpp
     src/panels/PianoRollPanel.cpp
+    src/panels/ChannelRackPanel.cpp
     src/panels/PluginChainPanel.cpp
     src/panels/HistoryPanel.cpp
     src/panels/CopilotPanel.cpp)
