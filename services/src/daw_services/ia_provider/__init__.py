@@ -67,11 +67,16 @@ class Usage:
     output_tokens: int = 0
     cache_read_tokens: int = 0
 
+    # Writing to the cache is billed above the plain input rate, so it is
+    # counted apart. A cost that only showed the reads would flatter itself.
+    cache_write_tokens: int = 0
+
     def plus(self, other: Usage) -> Usage:
         return Usage(
             self.input_tokens + other.input_tokens,
             self.output_tokens + other.output_tokens,
             self.cache_read_tokens + other.cache_read_tokens,
+            self.cache_write_tokens + other.cache_write_tokens,
         )
 
     def as_dict(self) -> dict[str, int]:
@@ -79,6 +84,7 @@ class Usage:
             "inputTokens": self.input_tokens,
             "outputTokens": self.output_tokens,
             "cacheReadTokens": self.cache_read_tokens,
+            "cacheWriteTokens": self.cache_write_tokens,
         }
 
 
@@ -140,6 +146,13 @@ class AnthropicProvider:
                 f"Aucune clé d'API. Posez {API_KEY_VARIABLE} dans l'environnement, puis relancez le copilote."
             )
 
+        # The two blocks that do not change from one turn to the next are the
+        # system prompt and the tools: twenty-seven schemas, several thousand
+        # tokens, re-sent at every turn of every request. Marking the end of
+        # the tools makes everything above it cacheable, which covers both.
+        #
+        # The project state is deliberately left out of the cache: it changes
+        # at every request, and caching what changes costs more than it saves.
         sent_tools = []
         known: dict[str, str] = {}
         for tool in tools:
@@ -149,11 +162,14 @@ class AnthropicProvider:
             known[renamed["name"]] = original
             sent_tools.append(renamed)
 
+        if sent_tools:
+            sent_tools[-1] = {**sent_tools[-1], "cache_control": {"type": "ephemeral"}}
+
         body = json.dumps(
             {
                 "model": self._model,
                 "max_tokens": 2048,
-                "system": system,
+                "system": [{"type": "text", "text": system}],
                 "messages": list(messages),
                 "tools": sent_tools,
             },
@@ -212,6 +228,7 @@ def _turn_from(payload: dict[str, Any], known: dict[str, str] | None = None) -> 
         input_tokens=int(usage.get("input_tokens", 0)),
         output_tokens=int(usage.get("output_tokens", 0)),
         cache_read_tokens=int(usage.get("cache_read_input_tokens", 0)),
+        cache_write_tokens=int(usage.get("cache_creation_input_tokens", 0)),
     )
 
     return turn

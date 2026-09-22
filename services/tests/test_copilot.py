@@ -260,7 +260,12 @@ def test_new_identifiers_are_minted_once_per_name() -> None:
 
 def test_an_answer_carries_its_cost() -> None:
     answer = Answer(text="fait", usage=Usage(input_tokens=10, output_tokens=2))
-    assert answer.as_dict()["usage"] == {"inputTokens": 10, "outputTokens": 2, "cacheReadTokens": 0}
+    assert answer.as_dict()["usage"] == {
+        "inputTokens": 10,
+        "outputTokens": 2,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+    }
 
 
 def test_a_peer_reports_a_broken_link_instead_of_hanging() -> None:
