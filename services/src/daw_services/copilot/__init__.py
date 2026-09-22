@@ -54,6 +54,19 @@ Règles :
   envoie la somme.
 - Pour créer quelque chose, donne un identifiant de la forme $new:nom. Le même
   nom dans la même requête désigne la même chose.
+- Le contenu vit dans des patterns. Un pattern porte une ligne par piste et
+  une longueur ; un placement dit où ce pattern se joue. Une note s'écrit dans
+  une ligne, jamais sur une piste directement.
+- Écrire sur une seule piste : clip.create_midi fait le pattern, la ligne et
+  le placement d'un coup, et rend le clipId que note.add attend. Sur plusieurs
+  pistes : pattern.create, pattern.place, puis un pattern.add_track par piste.
+- Écrire dans un pattern qui existe déjà : prends le clipId de la ligne de
+  cette piste dans l'état. Si elle n'y est pas, ouvre-la avec pattern.add_track.
+- Un pattern posé huit fois se modifie une seule fois : les notes sont dans le
+  pattern, jamais dans les placements. N'écris jamais la même note plusieurs
+  fois pour couvrir plusieurs placements.
+- track.set_channel_pitch règle la hauteur d'un canal dans le channel rack. Il
+  ne change aucune note déjà écrite.
 - Pour quantifier ou transposer, lis d'abord les notes du clip : il faut leurs
   identifiants.
 - Si la demande est ambiguë ou hors de ta portée, dis-le en une phrase et
@@ -97,7 +110,7 @@ def resolve_new_ids(payload: Any, minted: dict[str, str]) -> Any:
 READ_TOOLS: list[dict[str, Any]] = [
     {
         "name": "project.get_state",
-        "description": "Relit l'état du projet : tempo, pistes, clips, plugins, transport.",
+        "description": "Relit l'état du projet : tempo, pistes, patterns et leurs lignes, plugins, transport.",
         "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
     },
     {

@@ -1,6 +1,7 @@
 #include "PersistenceTestSupport.h"
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/command/CommandRegistry.h"
+#include "daw/domain/commands/CreateMidiClip.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/domain/serialization/Json.h"
@@ -337,6 +338,90 @@ TEST_CASE("a project written by a newer build is refused instead of half-read")
     REQUIRE(!store.ok());
     CHECK(store.error().code == ErrorCode::storageError);
     CHECK(store.error().message.find("newer version") != std::string::npos);
+}
+
+TEST_CASE("a project written before patterns existed reopens as patterns, and is measured")
+{
+    TemporaryFolder temporary{"legacy-pattern"};
+    const auto project = temporary.child("Beat S8.dawproj");
+
+    // Written by another process, on schema 3, with the payloads a build of
+    // the first eight weeks wrote. The writer is gone before anything below
+    // runs: everything from here comes off the disk.
+    REQUIRE(runChildProcess({"--child", "write-legacy", project.string()}) == 0);
+
+    const auto startedAt = std::chrono::steady_clock::now();
+
+    Reopened session;
+    auto report = reopen(session, project);
+    REQUIRE(report.ok());
+
+    const auto elapsed =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startedAt);
+
+    MESSAGE("réouverture et migration 3 -> 4 : " << elapsed.count() << " ms pour " << report.value().rows
+                                                 << " lignes");
+
+    // The file really was one version behind, and really was migrated.
+    CHECK(session.store->versionOnDisk() == ProjectStore::schemaVersion);
+    CHECK(ProjectStore::schemaVersion == 4);
+
+    const auto clipId = ClipId::parse("01JBWQ7Z0000000000000CL1P0").value();
+    const auto trackId = TrackId::parse("01JBWQ7Z0000000000000TRACK").value();
+
+    // What clip.create_midi wrote is read as a pattern of one row, laid where
+    // the clip started. Nothing in the journal said "pattern": the two
+    // identifiers come from the clip's own bytes.
+    const auto patternId = ProjectState::patternIdForClip(clipId);
+    const auto* pattern = session.state.findPattern(patternId);
+    REQUIRE(pattern != nullptr);
+    CHECK(pattern->lengthBeats == doctest::Approx(4.0));
+    REQUIRE(pattern->clips.size() == 1);
+    CHECK(pattern->clips.front().id == clipId);
+    CHECK(pattern->clips.front().trackId == trackId);
+    CHECK(pattern->clips.front().notes.size() == 4);
+
+    REQUIRE(session.state.placementsOf(patternId).size() == 1);
+    CHECK(session.state.placementsOf(patternId).front()->startBeats == doctest::Approx(8.0));
+
+    // The history came back too: the notes undo one by one, and the clip that
+    // held them takes its pattern and its placement with it.
+    CHECK(session.bus.undoDepth() == 6); // track, clip, four notes
+    for (int index = 0; index < 4; ++index)
+        REQUIRE(session.bus.undo().ok());
+
+    CHECK(session.state.findClip(clipId)->notes.empty());
+
+    REQUIRE(session.bus.undo().ok());
+    CHECK(session.state.patterns().empty());
+    CHECK(session.state.arrangement().empty());
+}
+
+TEST_CASE("the payload of clip.create_midi is the one older builds wrote")
+{
+    // The migration rests on one fact, so the fact is pinned rather than
+    // assumed: the command kept its payload, and only what it means changed.
+    // A key added here would silently break every journal of the first eight
+    // weeks, and this is the test that would say so.
+    ProjectState state;
+    const auto trackId = TrackId::generate();
+    const auto clipId = ClipId::generate();
+
+    Track track{};
+    track.id = trackId;
+    track.name = "Kick";
+    REQUIRE(state.addTrack(track).ok());
+
+    const CreateMidiClip command{trackId, clipId, 8.0, 4.0};
+    const auto payload = command.payload();
+
+    const auto* members = payload.asObject();
+    REQUIRE(members != nullptr);
+    CHECK(members->size() == 4);
+    CHECK(payload.stringAt("trackId").value() == trackId.toString());
+    CHECK(payload.stringAt("clipId").value() == clipId.toString());
+    CHECK(payload.doubleAt("startBeats").value() == doctest::Approx(8.0));
+    CHECK(payload.doubleAt("lengthBeats").value() == doctest::Approx(4.0));
 }
 
 TEST_CASE("an empty project gets a schema, an identity, and no rows")

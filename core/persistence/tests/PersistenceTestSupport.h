@@ -63,6 +63,17 @@ namespace scenarios
                                     const std::filesystem::path& stateFile,
                                     int commands);
 
+// Writes a project the way a build of the first eight weeks wrote one, and
+// leaves it on schema 3.
+//
+// The rows are the ones an S8 binary produced, and not an imitation of them:
+// track.add, clip.create_midi, note.add and track.set_volume all kept the
+// payload they had, so running today's commands writes the same bytes. What
+// the scenario adds is the version number on the meta table, put back to 3, so
+// that the parent's open runs the 3 -> 4 step on a real file instead of on a
+// file that was already current.
+[[nodiscard]] int writeLegacySession(const std::filesystem::path& projectFolder);
+
 } // namespace scenarios
 
 [[nodiscard]] std::string readTextFile(const std::filesystem::path& file);

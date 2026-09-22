@@ -9,6 +9,7 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/domain/serialization/Json.h"
+#include "daw/persistence/Database.h"
 #include "daw/persistence/ProjectStore.h"
 
 #include <atomic>
@@ -170,6 +171,61 @@ int writeGroupSession(const std::filesystem::path& projectFolder)
     store.value()->stopRecording();
     if (!store.value()->close())
         return 5;
+
+    return 0;
+}
+
+int writeLegacySession(const std::filesystem::path& projectFolder)
+{
+    {
+        auto store = persistence::ProjectStore::open(persistence::ProjectFolder{projectFolder});
+        if (!store)
+            return 2;
+
+        Session session;
+        store.value()->startRecording(session.bus);
+
+        const auto trackId = fixedTrackId();
+        const auto clipId = fixedClipId();
+
+        if (!session.bus.execute(std::make_unique<AddTrack>(trackId, "Kick", -3.0)))
+            return 3;
+
+        // The payload eight weeks of journals hold: a track, a clip, a start
+        // and a length. Not one character of it changed when the pattern model
+        // landed, which is the whole reason this file needs no conversion.
+        if (!session.bus.execute(std::make_unique<CreateMidiClip>(trackId, clipId, 8.0, 4.0)))
+            return 4;
+
+        int beat = 0;
+        for (const int pitch : {36, 36, 38, 36})
+        {
+            Note note{};
+            note.id = NoteId::parse("01JBWQ7Z00000000000L3G4CY" + std::to_string(beat)).value();
+            note.pitch = pitch;
+            note.velocity = 100;
+            note.startBeats = static_cast<double>(beat);
+            note.lengthBeats = 0.25;
+            ++beat;
+
+            if (!session.bus.execute(std::make_unique<AddNote>(clipId, note)))
+                return 5;
+        }
+
+        store.value()->stopRecording();
+        if (!store.value()->close())
+            return 6;
+    }
+
+    // Back to the version that build wrote. The rows are untouched: only the
+    // number changes, so the parent opens a file that really is one version
+    // behind and really has to be migrated.
+    auto database = persistence::Database::open(persistence::ProjectFolder{projectFolder}.databaseFile());
+    if (!database)
+        return 7;
+
+    if (!database.value().execute("UPDATE meta SET value = '3' WHERE key = 'schema_version'"))
+        return 8;
 
     return 0;
 }
