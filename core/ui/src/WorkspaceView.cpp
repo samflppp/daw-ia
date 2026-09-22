@@ -8,6 +8,10 @@ WorkspaceView::WorkspaceView(const PanelServices& services, const PanelRegistry&
     , registry_(registry)
 {
     setLookAndFeel(&services_.lookAndFeel);
+
+    // Without this, a click on a panel that wants no focus leaves the key
+    // press with nobody to hand it to.
+    setWantsKeyboardFocus(true);
 }
 
 WorkspaceView::~WorkspaceView()
@@ -35,6 +39,33 @@ void WorkspaceView::show(const WorkspaceManifest& manifest)
 
     resized();
     repaint();
+
+    // The view takes the focus when the screen is built, so a shortcut works
+    // before anything has been clicked. A panel that wants the focus takes it
+    // from here on the first click, and the key press still comes back up.
+    grabKeyboardFocus();
+}
+
+bool WorkspaceView::keyPressed(const juce::KeyPress& key)
+{
+    const auto undo = juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0};
+    const auto redo = juce::KeyPress{'y', juce::ModifierKeys::ctrlModifier, 0};
+    const auto redoAlternative =
+        juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier, 0};
+
+    if (key == undo)
+    {
+        static_cast<void>(services_.bus.undo());
+        return true;
+    }
+
+    if (key == redo || key == redoAlternative)
+    {
+        static_cast<void>(services_.bus.redo());
+        return true;
+    }
+
+    return false;
 }
 
 Rect WorkspaceView::surface() const

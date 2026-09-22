@@ -37,6 +37,16 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
+    // Ctrl+Z and Ctrl+Y live here and not in a panel, for the reason hygiene
+    // rule 2 exists: undo belongs to the project, not to whatever has the
+    // focus. JUCE hands an unhandled key press up the parent chain, so this
+    // is the last component to see it — which is exactly where a shortcut
+    // that must work everywhere belongs.
+    //
+    // A text field that handles its own Ctrl+Z keeps it: typing a request to
+    // the copilot and undoing a word must not undo an edit of the project.
+    bool keyPressed(const juce::KeyPress& key) override;
+
 private:
     struct Placed
     {
