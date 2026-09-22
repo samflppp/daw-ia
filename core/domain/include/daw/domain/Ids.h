@@ -92,6 +92,8 @@ struct ClipIdTag;
 struct NoteIdTag;
 struct PluginIdTag;
 struct TempoPointIdTag;
+struct PatternIdTag;
+struct PlacementIdTag;
 
 using CommandId = EntityId<CommandIdTag>;
 using GestureId = EntityId<GestureIdTag>;
@@ -109,6 +111,17 @@ using NoteId = EntityId<NoteIdTag>;
 // copies of the same synth on the same track are two PluginIds. The binary is
 // named by PluginRef, which is not an identity the project engenders.
 using PluginId = EntityId<PluginIdTag>;
+
+// Identifies one pattern: a piece of content, several tracks wide, that knows
+// nothing about where it is played. Its identity is separate from a placement's
+// so that the same pattern can be laid on the timeline as often as wanted, and
+// so that editing it once is felt everywhere it was laid.
+using PatternId = EntityId<PatternIdTag>;
+
+// Identifies one laying of a pattern on the timeline. It carries a position and
+// nothing else: a placement holds no note, which is exactly what makes "modify
+// a pattern placed eight times" one command instead of eight.
+using PlacementId = EntityId<PlacementIdTag>;
 
 // Identifies one tempo change on the timeline. A point is named rather than
 // located because it moves: a payload that designated a point by its position

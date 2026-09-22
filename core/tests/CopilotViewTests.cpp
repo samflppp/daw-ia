@@ -74,7 +74,7 @@ TEST_CASE("the list handed to the model leaves out what only the application can
     CHECK(text.find("track.set_volume") != std::string::npos);
 }
 
-TEST_CASE("the summary describes clips without carrying their notes")
+TEST_CASE("the summary describes pattern rows without carrying their notes")
 {
     Harness harness;
     const auto clipId = ClipId::generate();
@@ -94,18 +94,34 @@ TEST_CASE("the summary describes clips without carrying their notes")
     const auto summary = summarise(harness.state, machineWith(2));
     const auto text = json::write(summary);
 
-    // The clip is there, by its shape.
+    // The track is there, and it no longer carries what it plays: the notes
+    // live in a pattern now, and the summary says so in the same place.
     const auto* tracks = summary.find("tracks");
     REQUIRE(tracks != nullptr);
     REQUIRE(tracks->asArray() != nullptr);
     REQUIRE(tracks->asArray()->size() == 1);
+    CHECK(tracks->asArray()->front().find("clips") == nullptr);
 
-    const auto& track = tracks->asArray()->front();
-    const auto* clips = track.find("clips");
+    const auto* patterns = summary.find("patterns");
+    REQUIRE(patterns != nullptr);
+    REQUIRE(patterns->asArray() != nullptr);
+    REQUIRE(patterns->asArray()->size() == 1);
+
+    const auto& pattern = patterns->asArray()->front();
+    CHECK(pattern.doubleAt("lengthBeats").value() == doctest::Approx(4.0));
+
+    // And where it is played, which is the placement and never the row.
+    const auto* placements = pattern.find("placements");
+    REQUIRE(placements != nullptr);
+    REQUIRE(placements->asArray()->size() == 1);
+    CHECK(placements->asArray()->front().doubleAt("startBeats").value() == doctest::Approx(0.0));
+
+    const auto* clips = pattern.find("clips");
     REQUIRE(clips != nullptr);
     REQUIRE(clips->asArray()->size() == 1);
 
     const auto& clip = clips->asArray()->front();
+    CHECK(clip.stringAt("trackId").value() == harness.trackId.toString());
     CHECK(clip.intAt("noteCount").value() == 16);
     CHECK(clip.intAt("lowestPitch").value() == 48);
     CHECK(clip.intAt("highestPitch").value() == 63);

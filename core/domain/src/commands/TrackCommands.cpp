@@ -113,10 +113,25 @@ Result<Value> RemoveTrack::apply(ProjectState& state) const
     if (track == nullptr)
         return fail(ErrorCode::notFound, "no such track: " + trackId_.toString());
 
-    // The whole track, clips and plugins included: nothing else can put back
-    // what the removal is about to drop.
-    auto record = Value::object(
-        {{"index", Value{static_cast<std::int64_t>(index.value())}}, {"track", track->toValue()}});
+    // Every row this track plays, and which pattern holds it. The track itself
+    // no longer carries its content — a row belongs to a pattern — so the
+    // record has to name both, or an undo would put back a silent track.
+    Value::Array rows;
+    for (const auto& pattern : state.patterns())
+    {
+        const auto* clip = pattern.findClipForTrack(trackId_);
+        if (clip == nullptr)
+            continue;
+
+        rows.push_back(
+            Value::object({{"patternId", Value{pattern.id.toString()}}, {"clip", clip->toValue()}}));
+    }
+
+    // The whole track, plugins included, plus its rows: nothing else can put
+    // back what the removal is about to drop.
+    auto record = Value::object({{"index", Value{static_cast<std::int64_t>(index.value())}},
+                                 {"track", track->toValue()},
+                                 {"rows", Value::array(std::move(rows))}});
 
     auto removed = state.removeTrack(trackId_);
     if (!removed)
@@ -142,7 +157,59 @@ Result<void> RemoveTrack::revert(ProjectState& state, const Value& undoRecord) c
     if (index.value() < 0)
         return fail(ErrorCode::invalidPayload, "index is negative");
 
-    return state.insertTrack(std::move(track).value(), static_cast<std::size_t>(index.value()));
+    const auto trackId = track.value().id;
+
+    auto inserted = state.insertTrack(std::move(track).value(), static_cast<std::size_t>(index.value()));
+    if (!inserted)
+        return inserted;
+
+    // A record written before patterns existed keeps the clips inside the
+    // track, each with its own start and length. It means what it has always
+    // meant: one pattern of one row per clip, laid where the clip started.
+    auto legacy = legacyClipsOf(*trackValue);
+    if (!legacy)
+        return legacy.error();
+
+    for (auto& clip : legacy.value())
+    {
+        auto rebuilt = state.addSingleTrackPattern(
+            trackId, clip.id, clip.startBeats, clip.lengthBeats, std::move(clip.notes));
+        if (!rebuilt)
+            return rebuilt;
+    }
+
+    const auto* rowsValue = undoRecord.find("rows");
+    if (rowsValue == nullptr)
+        return {};
+
+    const auto* rows = rowsValue->asArray();
+    if (rows == nullptr)
+        return fail(ErrorCode::invalidPayload, "rows must be an array");
+
+    for (const auto& row : *rows)
+    {
+        auto patternText = row.stringAt("patternId");
+        if (!patternText)
+            return patternText.error();
+
+        auto patternId = PatternId::parse(patternText.value());
+        if (!patternId)
+            return fail(patternId.error().code, "patternId: " + patternId.error().message);
+
+        const auto* clipValue = row.find("clip");
+        if (clipValue == nullptr)
+            return fail(ErrorCode::invalidPayload, "missing key: clip");
+
+        auto clip = Clip::fromValue(*clipValue);
+        if (!clip)
+            return clip.error();
+
+        auto added = state.addClip(patternId.value(), std::move(clip).value());
+        if (!added)
+            return added;
+    }
+
+    return {};
 }
 
 SetTrackMuted::SetTrackMuted(TrackId trackId, bool muted)
@@ -377,6 +444,67 @@ Result<void> ReorderTrack::revert(ProjectState& state, const Value& undoRecord) 
 bool ReorderTrack::canCoalesceWith(const Command& newer) const noexcept
 {
     const auto* other = dynamic_cast<const ReorderTrack*>(&newer);
+    return other != nullptr && other->trackId_ == trackId_;
+}
+
+// ---------------------------------------------------------------------------
+// track.set_channel_pitch
+// ---------------------------------------------------------------------------
+
+SetTrackChannelPitch::SetTrackChannelPitch(TrackId trackId, int pitch)
+    : trackId_{trackId}
+    , pitch_{pitch}
+{
+}
+
+Result<std::unique_ptr<Command>> SetTrackChannelPitch::fromPayload(const Value& payload)
+{
+    auto trackId = trackIdAt(payload, "trackId");
+    if (!trackId)
+        return trackId.error();
+
+    auto pitch = payload.intAt("pitch");
+    if (!pitch)
+        return pitch.error();
+
+    return std::unique_ptr<Command>{
+        new SetTrackChannelPitch{trackId.value(), static_cast<int>(pitch.value())}};
+}
+
+Value SetTrackChannelPitch::payload() const
+{
+    return Value::object({{"trackId", Value{trackId_.toString()}}, {"pitch", Value{pitch_}}});
+}
+
+Result<Value> SetTrackChannelPitch::apply(ProjectState& state) const
+{
+    auto previous = state.trackChannelPitch(trackId_);
+    if (!previous)
+        return previous.error();
+
+    if (auto applied = state.setTrackChannelPitch(trackId_, pitch_); !applied)
+        return applied.error();
+
+    return Value::object(
+        {{"trackId", Value{trackId_.toString()}}, {"previousPitch", Value{previous.value()}}});
+}
+
+Result<void> SetTrackChannelPitch::revert(ProjectState& state, const Value& undoRecord) const
+{
+    auto trackId = trackIdAt(undoRecord, "trackId");
+    if (!trackId)
+        return trackId.error();
+
+    auto previous = undoRecord.intAt("previousPitch");
+    if (!previous)
+        return previous.error();
+
+    return state.setTrackChannelPitch(trackId.value(), static_cast<int>(previous.value()));
+}
+
+bool SetTrackChannelPitch::canCoalesceWith(const Command& newer) const noexcept
+{
+    const auto* other = dynamic_cast<const SetTrackChannelPitch*>(&newer);
     return other != nullptr && other->trackId_ == trackId_;
 }
 

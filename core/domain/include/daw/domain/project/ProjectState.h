@@ -64,11 +64,21 @@ struct TempoPoint
     friend bool operator==(const TempoPoint& lhs, const TempoPoint& rhs);
 };
 
+// What one track plays inside one pattern. Content, and only content.
+//
+// It used to carry its own start and length and to belong to a track. Both
+// moved out, and the move is the whole point of the pattern model: the start
+// belongs to the Placement, because the same content can be laid down eight
+// times at eight different beats, and the length belongs to the Pattern,
+// because every track of a pattern is as long as the pattern.
+//
+// What is left is a track and its notes, which is what an edit changes. That
+// is why a pattern laid eight times is modified by one command: the eight
+// placements hold no note to modify.
 struct Clip
 {
     ClipId id{};
-    double startBeats{0.0};
-    double lengthBeats{4.0};
+    TrackId trackId{};
     std::vector<Note> notes;
 
     [[nodiscard]] Result<void> validate() const;
@@ -76,6 +86,54 @@ struct Clip
     [[nodiscard]] static Result<Clip> fromValue(const Value& value);
 
     friend bool operator==(const Clip& lhs, const Clip& rhs);
+};
+
+// A piece of content, several tracks wide. What a beatmaker calls a pattern and
+// what the channel rack shows: one row per track, all of them the same length.
+//
+// A pattern has no position. It is played where placements say, and nowhere
+// else. A pattern nobody placed is written but silent, which is honest: it is
+// material, not music yet.
+struct Pattern
+{
+    PatternId id{};
+
+    // May be empty. An unnamed pattern is displayed by its rank, which is a
+    // decision of the screen; the domain does not invent names, because a name
+    // invented at apply() time would differ between a run and its replay.
+    std::string name;
+
+    double lengthBeats{4.0};
+
+    // At most one clip per track: two clips of the same track in one pattern
+    // would be two answers to "what does this track play here".
+    std::vector<Clip> clips;
+
+    [[nodiscard]] const Clip* findClipForTrack(TrackId trackId) const noexcept;
+
+    [[nodiscard]] Result<void> validate() const;
+    [[nodiscard]] Value toValue() const;
+    [[nodiscard]] static Result<Pattern> fromValue(const Value& value);
+
+    friend bool operator==(const Pattern& lhs, const Pattern& rhs);
+};
+
+// One laying of a pattern on the timeline: which pattern, and at which beat.
+//
+// It carries no track, because the pattern already says which tracks it sounds
+// on, and no length, because the pattern already says how long it is. A field
+// that repeated either would be a second truth waiting to disagree.
+struct Placement
+{
+    PlacementId id{};
+    PatternId patternId{};
+    double startBeats{0.0};
+
+    [[nodiscard]] Result<void> validate() const;
+    [[nodiscard]] Value toValue() const;
+    [[nodiscard]] static Result<Placement> fromValue(const Value& value);
+
+    friend bool operator==(const Placement& lhs, const Placement& rhs);
 };
 
 // --- plugins ---------------------------------------------------------------
@@ -179,7 +237,16 @@ struct Track
     // through. Arranging needs the first, mixing needs the second.
     bool muted{false};
 
-    std::vector<Clip> clips;
+    // The pitch this track plays when a step of the channel rack is lit. A
+    // kick track always plays the same note, and a rack lights cells rather
+    // than choosing pitches.
+    //
+    // It lives in the domain and not in the rack panel on purpose: a hauteur
+    // known only by one screen is a hauteur a copilot cannot use, and
+    // "mets un charleston en doubles-croches sur la piste 3" needs it.
+    // It changes nothing about what already sounds: it is read when a cell is
+    // lit, never applied to notes that exist.
+    int channelPitch{60};
 
     // Order is the chain order: index 0 is first in the signal path.
     std::vector<PluginInstance> plugins;
@@ -190,6 +257,23 @@ struct Track
 
     friend bool operator==(const Track& lhs, const Track& rhs);
 };
+
+// The clips a track carried before patterns existed.
+//
+// Nothing writes this shape any more. It is still read, in exactly two places:
+// the undo record of a track.remove written before the S9 model, and a whole
+// state serialized before it. Each such clip means a pattern of one track, a
+// placement at its start, and a row holding its notes — which is what
+// ProjectState::addSingleTrackPattern builds.
+struct LegacyClip
+{
+    ClipId id{};
+    double startBeats{0.0};
+    double lengthBeats{4.0};
+    std::vector<Note> notes;
+};
+
+[[nodiscard]] Result<std::vector<LegacyClip>> legacyClipsOf(const Value& trackValue);
 
 // Playback state. It is *not* project state: it is never serialized, never
 // compared, never journalled, and the commands that change it are transient.
@@ -251,9 +335,16 @@ public:
     Result<void> setTempoPointBpm(TempoPointId id, double beatsPerMinute);
     Result<void> moveTempoPoint(TempoPointId id, double startBeats);
 
+    static constexpr int lowestChannelPitch = Note::lowestPitch;
+    static constexpr int highestChannelPitch = Note::highestPitch;
+
     [[nodiscard]] const std::vector<Track>& tracks() const noexcept { return tracks_; }
     [[nodiscard]] const Track* findTrack(TrackId id) const noexcept;
     [[nodiscard]] const Clip* findClip(ClipId id) const noexcept;
+
+    // Which pattern holds that clip. The clip alone does not say it, and every
+    // caller that has a ClipId and needs the length it is drawn against does.
+    [[nodiscard]] Result<PatternId> patternOfClip(ClipId id) const;
 
     Result<void> addTrack(Track track); // appends
     Result<void> removeTrack(TrackId id);
@@ -281,8 +372,57 @@ public:
     [[nodiscard]] Result<bool> trackMuted(TrackId id) const;
     Result<void> setTrackMuted(TrackId id, bool muted);
 
-    Result<void> addClip(TrackId trackId, Clip clip);
+    [[nodiscard]] Result<int> trackChannelPitch(TrackId id) const;
+    Result<void> setTrackChannelPitch(TrackId id, int pitch);
+
+    // --- patterns and placements
+    //
+    // Content and position, kept apart. Everything a pattern holds is edited
+    // once; everything a placement holds is a beat. That split is what the
+    // playlist of the next week is built on: laying a pattern down eight times
+    // costs eight placements and copies no note.
+
+    [[nodiscard]] const std::vector<Pattern>& patterns() const noexcept { return patterns_; }
+    [[nodiscard]] const Pattern* findPattern(PatternId id) const noexcept;
+    [[nodiscard]] Result<std::size_t> patternIndex(PatternId id) const;
+
+    Result<void> addPattern(Pattern pattern); // appends
+
+    // Beyond the current count it appends, like insertTrack: a replayed undo
+    // must not fail on a project that grew differently.
+    Result<void> insertPattern(Pattern pattern, std::size_t index);
+    Result<void> removePattern(PatternId id); // takes its placements with it
+    Result<void> setPatternName(PatternId id, std::string name);
+    Result<void> setPatternLength(PatternId id, double lengthBeats);
+
+    [[nodiscard]] const std::vector<Placement>& arrangement() const noexcept { return arrangement_; }
+    [[nodiscard]] const Placement* findPlacement(PlacementId id) const noexcept;
+
+    // The placements of one pattern, in timeline order. The beatmaker loop
+    // reads the first one; the playlist of the next week reads them all.
+    [[nodiscard]] std::vector<const Placement*> placementsOf(PatternId id) const;
+
+    Result<void> addPlacement(Placement placement);
+    Result<void> removePlacement(PlacementId id);
+    Result<void> movePlacement(PlacementId id, double startBeats);
+
+    // Adds an empty track row to a pattern. The clip identifier comes from the
+    // caller, like every other identifier in this project.
+    Result<void> addClip(PatternId patternId, Clip clip);
     Result<void> removeClip(ClipId id);
+
+    // The pattern, the placement and the single row a clip.create_midi means.
+    //
+    // It exists because that command was written before patterns did, and its
+    // payload must keep replaying: eight weeks of journals name a track, a
+    // clip, a start and a length. The identifiers of the pattern and of the
+    // placement are derived from the clip's own bytes, so nothing is engendered
+    // and a replay rebuilds exactly the same project.
+    static PatternId patternIdForClip(ClipId clipId) noexcept;
+    static PlacementId placementIdForClip(ClipId clipId) noexcept;
+
+    Result<void> addSingleTrackPattern(
+        TrackId trackId, ClipId clipId, double startBeats, double lengthBeats, std::vector<Note> notes = {});
 
     Result<void> addNote(ClipId clipId, Note note);
     Result<void> removeNote(ClipId clipId, NoteId noteId);
@@ -357,6 +497,7 @@ public:
 private:
     [[nodiscard]] Track* findTrackMutable(TrackId id) noexcept;
     [[nodiscard]] Clip* findClipMutable(ClipId id) noexcept;
+    [[nodiscard]] Pattern* findPatternMutable(PatternId id) noexcept;
     [[nodiscard]] PluginInstance* findPluginMutable(PluginId id) noexcept;
 
     [[nodiscard]] TempoPoint* findTempoPointMutable(TempoPointId id) noexcept;
@@ -365,6 +506,8 @@ private:
 
     std::vector<TempoPoint> tempo_{TempoPoint{originTempoPointId(), 0.0, 120.0}};
     std::vector<Track> tracks_;
+    std::vector<Pattern> patterns_;
+    std::vector<Placement> arrangement_;
     TransportState transport_;
 };
 

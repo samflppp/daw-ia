@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <string>
+#include <utility>
 
 namespace daw::domain
 {
@@ -28,6 +30,8 @@ Result<void> requireFinitePositive(double length, std::string_view what)
 {
     if (!(length > 0.0))
         return fail(ErrorCode::invalidArgument, std::string{what} + " must be greater than zero");
+    if (!std::isfinite(length))
+        return fail(ErrorCode::invalidArgument, std::string{what} + " must be finite");
     return {};
 }
 
@@ -161,12 +165,8 @@ Result<void> Clip::validate() const
 {
     if (id.isNil())
         return fail(ErrorCode::invalidArgument, "clip identifier is nil");
-    if (startBeats < 0.0)
-        return fail(ErrorCode::invalidArgument, "clip starts before the timeline origin");
-
-    auto length = requireFinitePositive(lengthBeats, "clip length");
-    if (!length)
-        return length;
+    if (trackId.isNil())
+        return fail(ErrorCode::invalidArgument, "clip names no track");
 
     for (const auto& note : notes)
     {
@@ -185,8 +185,7 @@ Value Clip::toValue() const
         serialisedNotes.push_back(note.toValue());
 
     return Value::object({{"id", Value{id.toString()}},
-                          {"startBeats", Value{startBeats}},
-                          {"lengthBeats", Value{lengthBeats}},
+                          {"trackId", Value{trackId.toString()}},
                           {"notes", Value::array(std::move(serialisedNotes))}});
 }
 
@@ -196,18 +195,13 @@ Result<Clip> Clip::fromValue(const Value& value)
     if (!id)
         return id.error();
 
-    auto startBeats = value.doubleAt("startBeats");
-    if (!startBeats)
-        return startBeats.error();
-
-    auto lengthBeats = value.doubleAt("lengthBeats");
-    if (!lengthBeats)
-        return lengthBeats.error();
+    auto trackId = idAt<TrackId>(value, "trackId");
+    if (!trackId)
+        return trackId.error();
 
     Clip clip{};
     clip.id = id.value();
-    clip.startBeats = startBeats.value();
-    clip.lengthBeats = lengthBeats.value();
+    clip.trackId = trackId.value();
 
     const auto* notesValue = value.find("notes");
     if (notesValue != nullptr)
@@ -235,8 +229,165 @@ Result<Clip> Clip::fromValue(const Value& value)
 
 bool operator==(const Clip& lhs, const Clip& rhs)
 {
-    return lhs.id == rhs.id && lhs.startBeats == rhs.startBeats && lhs.lengthBeats == rhs.lengthBeats &&
-           lhs.notes == rhs.notes;
+    return lhs.id == rhs.id && lhs.trackId == rhs.trackId && lhs.notes == rhs.notes;
+}
+
+// ---------------------------------------------------------------------------
+// Pattern
+// ---------------------------------------------------------------------------
+
+const Clip* Pattern::findClipForTrack(TrackId trackId) const noexcept
+{
+    for (const auto& clip : clips)
+    {
+        if (clip.trackId == trackId)
+            return &clip;
+    }
+    return nullptr;
+}
+
+Result<void> Pattern::validate() const
+{
+    if (id.isNil())
+        return fail(ErrorCode::invalidArgument, "pattern identifier is nil");
+
+    auto length = requireFinitePositive(lengthBeats, "pattern length");
+    if (!length)
+        return length;
+
+    for (std::size_t index = 0; index < clips.size(); ++index)
+    {
+        auto valid = clips[index].validate();
+        if (!valid)
+            return valid;
+
+        for (std::size_t other = 0; other < index; ++other)
+        {
+            if (clips[other].trackId == clips[index].trackId)
+                return fail(ErrorCode::conflict,
+                            "the pattern already holds a row for track: " + clips[index].trackId.toString());
+            if (clips[other].id == clips[index].id)
+                return fail(ErrorCode::conflict, "clip already exists: " + clips[index].id.toString());
+        }
+    }
+
+    return {};
+}
+
+Value Pattern::toValue() const
+{
+    Value::Array serialisedClips;
+    serialisedClips.reserve(clips.size());
+    for (const auto& clip : clips)
+        serialisedClips.push_back(clip.toValue());
+
+    return Value::object({{"id", Value{id.toString()}},
+                          {"name", Value{name}},
+                          {"lengthBeats", Value{lengthBeats}},
+                          {"clips", Value::array(std::move(serialisedClips))}});
+}
+
+Result<Pattern> Pattern::fromValue(const Value& value)
+{
+    auto id = idAt<PatternId>(value, "id");
+    if (!id)
+        return id.error();
+
+    auto name = value.stringAt("name");
+    if (!name)
+        return name.error();
+
+    auto lengthBeats = value.doubleAt("lengthBeats");
+    if (!lengthBeats)
+        return lengthBeats.error();
+
+    Pattern pattern{};
+    pattern.id = id.value();
+    pattern.name = std::move(name).value();
+    pattern.lengthBeats = lengthBeats.value();
+
+    if (const auto* clipsValue = value.find("clips"); clipsValue != nullptr)
+    {
+        const auto* items = clipsValue->asArray();
+        if (items == nullptr)
+            return fail(ErrorCode::invalidPayload, "clips must be an array");
+
+        pattern.clips.reserve(items->size());
+        for (const auto& item : *items)
+        {
+            auto clip = Clip::fromValue(item);
+            if (!clip)
+                return clip.error();
+            pattern.clips.push_back(std::move(clip).value());
+        }
+    }
+
+    auto valid = pattern.validate();
+    if (!valid)
+        return valid.error();
+
+    return pattern;
+}
+
+bool operator==(const Pattern& lhs, const Pattern& rhs)
+{
+    return lhs.id == rhs.id && lhs.name == rhs.name && lhs.lengthBeats == rhs.lengthBeats &&
+           lhs.clips == rhs.clips;
+}
+
+// ---------------------------------------------------------------------------
+// Placement
+// ---------------------------------------------------------------------------
+
+Result<void> Placement::validate() const
+{
+    if (id.isNil())
+        return fail(ErrorCode::invalidArgument, "placement identifier is nil");
+    if (patternId.isNil())
+        return fail(ErrorCode::invalidArgument, "the placement names no pattern");
+    if (startBeats < 0.0)
+        return fail(ErrorCode::invalidArgument, "the placement starts before the timeline origin");
+    if (!std::isfinite(startBeats))
+        return fail(ErrorCode::invalidArgument, "the placement starts nowhere");
+    return {};
+}
+
+Value Placement::toValue() const
+{
+    return Value::object({{"id", Value{id.toString()}},
+                          {"patternId", Value{patternId.toString()}},
+                          {"startBeats", Value{startBeats}}});
+}
+
+Result<Placement> Placement::fromValue(const Value& value)
+{
+    auto id = idAt<PlacementId>(value, "id");
+    if (!id)
+        return id.error();
+
+    auto patternId = idAt<PatternId>(value, "patternId");
+    if (!patternId)
+        return patternId.error();
+
+    auto startBeats = value.doubleAt("startBeats");
+    if (!startBeats)
+        return startBeats.error();
+
+    Placement placement{};
+    placement.id = id.value();
+    placement.patternId = patternId.value();
+    placement.startBeats = startBeats.value();
+
+    auto valid = placement.validate();
+    if (!valid)
+        return valid.error();
+
+    return placement;
+}
+
+bool operator==(const Placement& lhs, const Placement& rhs)
+{
+    return lhs.id == rhs.id && lhs.patternId == rhs.patternId && lhs.startBeats == rhs.startBeats;
 }
 
 // ---------------------------------------------------------------------------
@@ -462,12 +613,9 @@ Result<void> Track::validate() const
     if (pan < ProjectState::minPan || pan > ProjectState::maxPan)
         return fail(ErrorCode::invalidArgument, "pan out of range: " + std::to_string(pan));
 
-    for (const auto& clip : clips)
-    {
-        auto valid = clip.validate();
-        if (!valid)
-            return valid;
-    }
+    if (channelPitch < ProjectState::lowestChannelPitch || channelPitch > ProjectState::highestChannelPitch)
+        return fail(ErrorCode::invalidArgument,
+                    "channel pitch out of range: " + std::to_string(channelPitch));
 
     for (const auto& plugin : plugins)
     {
@@ -480,11 +628,6 @@ Result<void> Track::validate() const
 
 Value Track::toValue() const
 {
-    Value::Array serialisedClips;
-    serialisedClips.reserve(clips.size());
-    for (const auto& clip : clips)
-        serialisedClips.push_back(clip.toValue());
-
     Value::Array serialisedPlugins;
     serialisedPlugins.reserve(plugins.size());
     for (const auto& plugin : plugins)
@@ -495,7 +638,7 @@ Value Track::toValue() const
                           {"volumeDb", Value{volumeDb}},
                           {"muted", Value{muted}},
                           {"pan", Value{pan}},
-                          {"clips", Value::array(std::move(serialisedClips))},
+                          {"channelPitch", Value{channelPitch}},
                           {"plugins", Value::array(std::move(serialisedPlugins))}});
 }
 
@@ -538,22 +681,21 @@ Result<Track> Track::fromValue(const Value& value)
         track.pan = pan.value();
     }
 
-    const auto* clipsValue = value.find("clips");
-    if (clipsValue != nullptr)
+    // Absent means middle C, which is where every project written before the
+    // channel rack existed actually sat: nothing read a channel pitch, so
+    // nothing depended on its value.
+    if (value.find("channelPitch") != nullptr)
     {
-        const auto* items = clipsValue->asArray();
-        if (items == nullptr)
-            return fail(ErrorCode::invalidPayload, "clips must be an array");
-
-        track.clips.reserve(items->size());
-        for (const auto& item : *items)
-        {
-            auto clip = Clip::fromValue(item);
-            if (!clip)
-                return clip.error();
-            track.clips.push_back(clip.value());
-        }
+        auto pitch = value.intAt("channelPitch");
+        if (!pitch)
+            return pitch.error();
+        track.channelPitch = static_cast<int>(pitch.value());
     }
+
+    // A "clips" array may be there, written before patterns existed. It is not
+    // read here: a clip is content of a pattern now, and a Track cannot reach
+    // the patterns. legacyClipsOf() reads it, in the two places that have the
+    // state to put it back into.
 
     if (const auto* pluginsValue = value.find("plugins"); pluginsValue != nullptr)
     {
@@ -581,7 +723,67 @@ Result<Track> Track::fromValue(const Value& value)
 bool operator==(const Track& lhs, const Track& rhs)
 {
     return lhs.id == rhs.id && lhs.name == rhs.name && lhs.volumeDb == rhs.volumeDb && lhs.pan == rhs.pan &&
-           lhs.muted == rhs.muted && lhs.clips == rhs.clips && lhs.plugins == rhs.plugins;
+           lhs.muted == rhs.muted && lhs.channelPitch == rhs.channelPitch && lhs.plugins == rhs.plugins;
+}
+
+// ---------------------------------------------------------------------------
+// LegacyClip
+// ---------------------------------------------------------------------------
+
+Result<std::vector<LegacyClip>> legacyClipsOf(const Value& trackValue)
+{
+    std::vector<LegacyClip> clips;
+
+    const auto* clipsValue = trackValue.find("clips");
+    if (clipsValue == nullptr)
+        return clips;
+
+    const auto* items = clipsValue->asArray();
+    if (items == nullptr)
+        return fail(ErrorCode::invalidPayload, "clips must be an array");
+
+    clips.reserve(items->size());
+    for (const auto& item : *items)
+    {
+        auto id = idAt<ClipId>(item, "id");
+        if (!id)
+            return id.error();
+
+        // A clip written after the S9 model carries no start and no length:
+        // it is a pattern row, and it has no business in a legacy list.
+        auto startBeats = item.doubleAt("startBeats");
+        if (!startBeats)
+            return startBeats.error();
+
+        auto lengthBeats = item.doubleAt("lengthBeats");
+        if (!lengthBeats)
+            return lengthBeats.error();
+
+        LegacyClip clip{};
+        clip.id = id.value();
+        clip.startBeats = startBeats.value();
+        clip.lengthBeats = lengthBeats.value();
+
+        if (const auto* notesValue = item.find("notes"); notesValue != nullptr)
+        {
+            const auto* notes = notesValue->asArray();
+            if (notes == nullptr)
+                return fail(ErrorCode::invalidPayload, "notes must be an array");
+
+            clip.notes.reserve(notes->size());
+            for (const auto& noteValue : *notes)
+            {
+                auto note = Note::fromValue(noteValue);
+                if (!note)
+                    return note.error();
+                clip.notes.push_back(std::move(note).value());
+            }
+        }
+
+        clips.push_back(std::move(clip));
+    }
+
+    return clips;
 }
 
 // ---------------------------------------------------------------------------
@@ -778,9 +980,9 @@ Track* ProjectState::findTrackMutable(TrackId id) noexcept
 
 const Clip* ProjectState::findClip(ClipId id) const noexcept
 {
-    for (const auto& track : tracks_)
+    for (const auto& pattern : patterns_)
     {
-        for (const auto& clip : track.clips)
+        for (const auto& clip : pattern.clips)
         {
             if (clip.id == id)
                 return &clip;
@@ -791,15 +993,257 @@ const Clip* ProjectState::findClip(ClipId id) const noexcept
 
 Clip* ProjectState::findClipMutable(ClipId id) noexcept
 {
-    for (auto& track : tracks_)
+    for (auto& pattern : patterns_)
     {
-        for (auto& clip : track.clips)
+        for (auto& clip : pattern.clips)
         {
             if (clip.id == id)
                 return &clip;
         }
     }
     return nullptr;
+}
+
+Result<PatternId> ProjectState::patternOfClip(ClipId id) const
+{
+    for (const auto& pattern : patterns_)
+    {
+        for (const auto& clip : pattern.clips)
+        {
+            if (clip.id == id)
+                return pattern.id;
+        }
+    }
+    return fail(ErrorCode::notFound, "no such clip: " + id.toString());
+}
+
+const Pattern* ProjectState::findPattern(PatternId id) const noexcept
+{
+    for (const auto& pattern : patterns_)
+    {
+        if (pattern.id == id)
+            return &pattern;
+    }
+    return nullptr;
+}
+
+Pattern* ProjectState::findPatternMutable(PatternId id) noexcept
+{
+    for (auto& pattern : patterns_)
+    {
+        if (pattern.id == id)
+            return &pattern;
+    }
+    return nullptr;
+}
+
+Result<std::size_t> ProjectState::patternIndex(PatternId id) const
+{
+    const auto position = std::find_if(
+        patterns_.begin(), patterns_.end(), [id](const Pattern& pattern) { return pattern.id == id; });
+    if (position == patterns_.end())
+        return fail(ErrorCode::notFound, "no such pattern: " + id.toString());
+
+    return static_cast<std::size_t>(std::distance(patterns_.begin(), position));
+}
+
+Result<void> ProjectState::addPattern(Pattern pattern)
+{
+    return insertPattern(std::move(pattern), patterns_.size());
+}
+
+Result<void> ProjectState::insertPattern(Pattern pattern, std::size_t index)
+{
+    auto valid = pattern.validate();
+    if (!valid)
+        return valid;
+
+    if (findPattern(pattern.id) != nullptr)
+        return fail(ErrorCode::conflict, "pattern already exists: " + pattern.id.toString());
+
+    for (const auto& clip : pattern.clips)
+    {
+        if (findClip(clip.id) != nullptr)
+            return fail(ErrorCode::conflict, "clip already exists: " + clip.id.toString());
+        if (findTrack(clip.trackId) == nullptr)
+            return fail(ErrorCode::notFound, "no such track: " + clip.trackId.toString());
+    }
+
+    const auto at = std::min(index, patterns_.size());
+    patterns_.insert(patterns_.begin() + static_cast<std::ptrdiff_t>(at), std::move(pattern));
+    return {};
+}
+
+Result<void> ProjectState::removePattern(PatternId id)
+{
+    const auto position = std::find_if(
+        patterns_.begin(), patterns_.end(), [id](const Pattern& pattern) { return pattern.id == id; });
+    if (position == patterns_.end())
+        return fail(ErrorCode::notFound, "no such pattern: " + id.toString());
+
+    patterns_.erase(position);
+
+    // A placement of a pattern that is gone would name nothing. Dropping them
+    // here rather than refusing keeps the state coherent at every instant; the
+    // undo record of the command that removes a pattern carries them back.
+    arrangement_.erase(std::remove_if(arrangement_.begin(),
+                                      arrangement_.end(),
+                                      [id](const Placement& placement) { return placement.patternId == id; }),
+                       arrangement_.end());
+    return {};
+}
+
+Result<void> ProjectState::setPatternName(PatternId id, std::string name)
+{
+    auto* pattern = findPatternMutable(id);
+    if (pattern == nullptr)
+        return fail(ErrorCode::notFound, "no such pattern: " + id.toString());
+
+    pattern->name = std::move(name);
+    return {};
+}
+
+Result<void> ProjectState::setPatternLength(PatternId id, double lengthBeats)
+{
+    auto length = requireFinitePositive(lengthBeats, "pattern length");
+    if (!length)
+        return length;
+
+    auto* pattern = findPatternMutable(id);
+    if (pattern == nullptr)
+        return fail(ErrorCode::notFound, "no such pattern: " + id.toString());
+
+    // Notes past the new length are kept, not cut. Shortening a pattern by
+    // accident and undoing it has to give the notes back, and a command that
+    // destroyed them could not. What sounds is what the projection lays down;
+    // what is stored is what the user wrote.
+    pattern->lengthBeats = lengthBeats;
+    return {};
+}
+
+const Placement* ProjectState::findPlacement(PlacementId id) const noexcept
+{
+    for (const auto& placement : arrangement_)
+    {
+        if (placement.id == id)
+            return &placement;
+    }
+    return nullptr;
+}
+
+std::vector<const Placement*> ProjectState::placementsOf(PatternId id) const
+{
+    std::vector<const Placement*> found;
+    for (const auto& placement : arrangement_)
+    {
+        if (placement.patternId == id)
+            found.push_back(&placement);
+    }
+
+    std::stable_sort(found.begin(),
+                     found.end(),
+                     [](const Placement* lhs, const Placement* rhs)
+                     { return lhs->startBeats < rhs->startBeats; });
+    return found;
+}
+
+Result<void> ProjectState::addPlacement(Placement placement)
+{
+    auto valid = placement.validate();
+    if (!valid)
+        return valid;
+
+    if (findPlacement(placement.id) != nullptr)
+        return fail(ErrorCode::conflict, "placement already exists: " + placement.id.toString());
+
+    if (findPattern(placement.patternId) == nullptr)
+        return fail(ErrorCode::notFound, "no such pattern: " + placement.patternId.toString());
+
+    arrangement_.push_back(placement);
+    return {};
+}
+
+Result<void> ProjectState::removePlacement(PlacementId id)
+{
+    const auto position = std::find_if(arrangement_.begin(),
+                                       arrangement_.end(),
+                                       [id](const Placement& placement) { return placement.id == id; });
+    if (position == arrangement_.end())
+        return fail(ErrorCode::notFound, "no such placement: " + id.toString());
+
+    arrangement_.erase(position);
+    return {};
+}
+
+Result<void> ProjectState::movePlacement(PlacementId id, double startBeats)
+{
+    const auto position = std::find_if(arrangement_.begin(),
+                                       arrangement_.end(),
+                                       [id](const Placement& placement) { return placement.id == id; });
+    if (position == arrangement_.end())
+        return fail(ErrorCode::notFound, "no such placement: " + id.toString());
+
+    // Validated on a copy before anything is written, like moveNote: a refused
+    // move leaves the placement where it was.
+    Placement moved = *position;
+    moved.startBeats = startBeats;
+
+    auto valid = moved.validate();
+    if (!valid)
+        return valid;
+
+    *position = moved;
+    return {};
+}
+
+PatternId ProjectState::patternIdForClip(ClipId clipId) noexcept
+{
+    return PatternId{clipId.value()};
+}
+
+PlacementId ProjectState::placementIdForClip(ClipId clipId) noexcept
+{
+    return PlacementId{clipId.value()};
+}
+
+Result<void> ProjectState::addSingleTrackPattern(
+    TrackId trackId, ClipId clipId, double startBeats, double lengthBeats, std::vector<Note> notes)
+{
+    Clip clip{};
+    clip.id = clipId;
+    clip.trackId = trackId;
+    clip.notes = std::move(notes);
+
+    Pattern pattern{};
+    pattern.id = patternIdForClip(clipId);
+    pattern.lengthBeats = lengthBeats;
+    pattern.clips.push_back(std::move(clip));
+
+    Placement placement{};
+    placement.id = placementIdForClip(clipId);
+    placement.patternId = pattern.id;
+    placement.startBeats = startBeats;
+
+    // Both validated before either is written: without this a bad start would
+    // leave a pattern behind, and the bus would have recorded no history entry
+    // able to take it away.
+    if (auto valid = pattern.validate(); !valid)
+        return valid;
+    if (auto valid = placement.validate(); !valid)
+        return valid;
+    if (findTrack(trackId) == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + trackId.toString());
+    if (findPattern(pattern.id) != nullptr)
+        return fail(ErrorCode::conflict, "pattern already exists: " + pattern.id.toString());
+    if (findPlacement(placement.id) != nullptr)
+        return fail(ErrorCode::conflict, "placement already exists: " + placement.id.toString());
+    if (findClip(clipId) != nullptr)
+        return fail(ErrorCode::conflict, "clip already exists: " + clipId.toString());
+
+    if (auto added = addPattern(std::move(pattern)); !added)
+        return added;
+
+    return addPlacement(placement);
 }
 
 Result<void> ProjectState::addTrack(Track track)
@@ -810,12 +1254,6 @@ Result<void> ProjectState::addTrack(Track track)
 
     if (findTrack(track.id) != nullptr)
         return fail(ErrorCode::conflict, "track already exists: " + track.id.toString());
-
-    for (const auto& clip : track.clips)
-    {
-        if (findClip(clip.id) != nullptr)
-            return fail(ErrorCode::conflict, "clip already exists: " + clip.id.toString());
-    }
 
     tracks_.push_back(std::move(track));
     return {};
@@ -840,12 +1278,6 @@ Result<void> ProjectState::insertTrack(Track track, std::size_t index)
     if (findTrack(track.id) != nullptr)
         return fail(ErrorCode::conflict, "track already exists: " + track.id.toString());
 
-    for (const auto& clip : track.clips)
-    {
-        if (findClip(clip.id) != nullptr)
-            return fail(ErrorCode::conflict, "clip already exists: " + clip.id.toString());
-    }
-
     const auto position = std::min(index, tracks_.size());
     tracks_.insert(tracks_.begin() + static_cast<std::ptrdiff_t>(position), std::move(track));
     return {};
@@ -859,6 +1291,20 @@ Result<void> ProjectState::removeTrack(TrackId id)
         return fail(ErrorCode::notFound, "no such track: " + id.toString());
 
     tracks_.erase(position);
+
+    // The rows that track held in every pattern go with it: a row names a
+    // track, and a row naming a track that is gone is a row nothing can draw
+    // and nothing can play. The patterns themselves stay, empty if need be —
+    // a pattern is not owned by a track. track.remove carries the rows in its
+    // undo record, which is the only thing able to put them back.
+    for (auto& pattern : patterns_)
+    {
+        pattern.clips.erase(std::remove_if(pattern.clips.begin(),
+                                           pattern.clips.end(),
+                                           [id](const Clip& clip) { return clip.trackId == id; }),
+                            pattern.clips.end());
+    }
+
     return {};
 }
 
@@ -951,32 +1397,61 @@ Result<void> ProjectState::setTrackMuted(TrackId id, bool muted)
     return {};
 }
 
-Result<void> ProjectState::addClip(TrackId trackId, Clip clip)
+Result<int> ProjectState::trackChannelPitch(TrackId id) const
+{
+    const auto* track = findTrack(id);
+    if (track == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    return track->channelPitch;
+}
+
+Result<void> ProjectState::setTrackChannelPitch(TrackId id, int pitch)
+{
+    if (pitch < lowestChannelPitch || pitch > highestChannelPitch)
+        return fail(ErrorCode::invalidArgument, "channel pitch out of range: " + std::to_string(pitch));
+
+    auto* track = findTrackMutable(id);
+    if (track == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    track->channelPitch = pitch;
+    return {};
+}
+
+Result<void> ProjectState::addClip(PatternId patternId, Clip clip)
 {
     auto valid = clip.validate();
     if (!valid)
         return valid;
 
-    auto* track = findTrackMutable(trackId);
-    if (track == nullptr)
-        return fail(ErrorCode::notFound, "no such track: " + trackId.toString());
+    auto* pattern = findPatternMutable(patternId);
+    if (pattern == nullptr)
+        return fail(ErrorCode::notFound, "no such pattern: " + patternId.toString());
 
     if (findClip(clip.id) != nullptr)
         return fail(ErrorCode::conflict, "clip already exists: " + clip.id.toString());
 
-    track->clips.push_back(std::move(clip));
+    if (findTrack(clip.trackId) == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + clip.trackId.toString());
+
+    if (pattern->findClipForTrack(clip.trackId) != nullptr)
+        return fail(ErrorCode::conflict,
+                    "the pattern already holds a row for track: " + clip.trackId.toString());
+
+    pattern->clips.push_back(std::move(clip));
     return {};
 }
 
 Result<void> ProjectState::removeClip(ClipId id)
 {
-    for (auto& track : tracks_)
+    for (auto& pattern : patterns_)
     {
         const auto position = std::find_if(
-            track.clips.begin(), track.clips.end(), [id](const Clip& clip) { return clip.id == id; });
-        if (position != track.clips.end())
+            pattern.clips.begin(), pattern.clips.end(), [id](const Clip& clip) { return clip.id == id; });
+        if (position != pattern.clips.end())
         {
-            track.clips.erase(position);
+            pattern.clips.erase(position);
             return {};
         }
     }
@@ -1315,8 +1790,20 @@ Value ProjectState::toValue() const
     for (const auto& point : tempo_)
         serialisedTempo.push_back(point.toValue());
 
+    Value::Array serialisedPatterns;
+    serialisedPatterns.reserve(patterns_.size());
+    for (const auto& pattern : patterns_)
+        serialisedPatterns.push_back(pattern.toValue());
+
+    Value::Array serialisedArrangement;
+    serialisedArrangement.reserve(arrangement_.size());
+    for (const auto& placement : arrangement_)
+        serialisedArrangement.push_back(placement.toValue());
+
     return Value::object({{"tempo", Value::array(std::move(serialisedTempo))},
-                          {"tracks", Value::array(std::move(serialisedTracks))}});
+                          {"tracks", Value::array(std::move(serialisedTracks))},
+                          {"patterns", Value::array(std::move(serialisedPatterns))},
+                          {"arrangement", Value::array(std::move(serialisedArrangement))}});
 }
 
 Result<ProjectState> ProjectState::fromValue(const Value& value)
@@ -1362,7 +1849,62 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
             if (!track)
                 return track.error();
 
-            auto added = state.addTrack(track.value());
+            const auto trackId = track.value().id;
+
+            auto added = state.addTrack(std::move(track).value());
+            if (!added)
+                return added.error();
+
+            // A state written before patterns existed keeps its clips inside
+            // its tracks. Each one is a pattern of one row, placed where the
+            // clip started — the same reading clip.create_midi gives a journal
+            // row of the same age, so a project reloads the same whichever of
+            // the two paths it comes back through.
+            auto legacy = legacyClipsOf(item);
+            if (!legacy)
+                return legacy.error();
+
+            for (auto& clip : legacy.value())
+            {
+                auto rebuilt = state.addSingleTrackPattern(
+                    trackId, clip.id, clip.startBeats, clip.lengthBeats, std::move(clip.notes));
+                if (!rebuilt)
+                    return rebuilt.error();
+            }
+        }
+    }
+
+    if (const auto* patternsValue = value.find("patterns"); patternsValue != nullptr)
+    {
+        const auto* items = patternsValue->asArray();
+        if (items == nullptr)
+            return fail(ErrorCode::invalidPayload, "patterns must be an array");
+
+        for (const auto& item : *items)
+        {
+            auto pattern = Pattern::fromValue(item);
+            if (!pattern)
+                return pattern.error();
+
+            auto added = state.addPattern(std::move(pattern).value());
+            if (!added)
+                return added.error();
+        }
+    }
+
+    if (const auto* arrangementValue = value.find("arrangement"); arrangementValue != nullptr)
+    {
+        const auto* items = arrangementValue->asArray();
+        if (items == nullptr)
+            return fail(ErrorCode::invalidPayload, "arrangement must be an array");
+
+        for (const auto& item : *items)
+        {
+            auto placement = Placement::fromValue(item);
+            if (!placement)
+                return placement.error();
+
+            auto added = state.addPlacement(placement.value());
             if (!added)
                 return added.error();
         }
@@ -1373,7 +1915,8 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
 
 bool operator==(const ProjectState& lhs, const ProjectState& rhs)
 {
-    return lhs.tempo_ == rhs.tempo_ && lhs.tracks_ == rhs.tracks_;
+    return lhs.tempo_ == rhs.tempo_ && lhs.tracks_ == rhs.tracks_ && lhs.patterns_ == rhs.patterns_ &&
+           lhs.arrangement_ == rhs.arrangement_;
 }
 
 } // namespace daw::domain

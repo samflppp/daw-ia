@@ -36,14 +36,17 @@ Value pluginValue(const PluginInstance& plugin)
                           {"touchedParams", Value{static_cast<std::int64_t>(plugin.params.size())}}});
 }
 
-// A clip, by its shape rather than by its content: how many notes, and the
-// range they cover. Enough to say "the clip on the Bass track, the one with
-// sixteen notes"; not enough to move one, which is what clipNotes is for.
+// A row of a pattern, by its shape rather than by its content: which track it
+// plays, how many notes it holds, and the range they cover. Enough to say "the
+// row of the Bass track in pattern 2, the one with sixteen notes"; not enough
+// to move one, which is what clipNotes is for.
+//
+// No start and no length any more: a row has neither. Where it is played is a
+// property of the placements, and how long it is a property of the pattern.
 Value clipValue(const Clip& clip)
 {
     Value::Object members{{"clipId", Value{clip.id.toString()}},
-                          {"startBeats", Value{clip.startBeats}},
-                          {"lengthBeats", Value{clip.lengthBeats}},
+                          {"trackId", Value{clip.trackId.toString()}},
                           {"noteCount", Value{static_cast<std::int64_t>(clip.notes.size())}}};
 
     if (!clip.notes.empty())
@@ -60,13 +63,32 @@ Value clipValue(const Clip& clip)
     return Value::object(std::move(members));
 }
 
-Value trackValue(const Track& track, std::size_t index)
+// A pattern, with its rows. This is where the notes of a project live now, so
+// this is where the model looks for them: the tracks say who plays, the
+// patterns say what, and the arrangement says when.
+Value patternValue(const Pattern& pattern, const ProjectState& state)
 {
     Value::Array clips;
-    clips.reserve(track.clips.size());
-    for (const auto& clip : track.clips)
+    clips.reserve(pattern.clips.size());
+    for (const auto& clip : pattern.clips)
         clips.push_back(clipValue(clip));
 
+    Value::Array placements;
+    for (const auto* placement : state.placementsOf(pattern.id))
+    {
+        placements.push_back(Value::object({{"placementId", Value{placement->id.toString()}},
+                                            {"startBeats", Value{placement->startBeats}}}));
+    }
+
+    return Value::object({{"patternId", Value{pattern.id.toString()}},
+                          {"name", Value{pattern.name}},
+                          {"lengthBeats", Value{pattern.lengthBeats}},
+                          {"clips", Value::array(std::move(clips))},
+                          {"placements", Value::array(std::move(placements))}});
+}
+
+Value trackValue(const Track& track, std::size_t index)
+{
     Value::Array plugins;
     plugins.reserve(track.plugins.size());
     for (const auto& plugin : track.plugins)
@@ -78,7 +100,7 @@ Value trackValue(const Track& track, std::size_t index)
                           {"volumeDb", Value{track.volumeDb}},
                           {"pan", Value{track.pan}},
                           {"muted", Value{track.muted}},
-                          {"clips", Value::array(std::move(clips))},
+                          {"channelPitch", Value{track.channelPitch}},
                           {"plugins", Value::array(std::move(plugins))}});
 }
 
@@ -126,9 +148,15 @@ Value summarise(const ProjectState& state, const MachinePlugins& plugins)
     for (std::size_t index = 0; index < listed; ++index)
         installed.push_back(pluginRefValue(plugins.available[index]));
 
+    Value::Array patterns;
+    patterns.reserve(state.patterns().size());
+    for (const auto& pattern : state.patterns())
+        patterns.push_back(patternValue(pattern, state));
+
     return Value::object(
         {{"tempo", tempoValue(state)},
          {"tracks", Value::array(std::move(tracks))},
+         {"patterns", Value::array(std::move(patterns))},
          {"transport", transportValue(state)},
          {"machinePlugins",
           Value::object({{"total", Value{static_cast<std::int64_t>(plugins.available.size())}},
@@ -141,14 +169,25 @@ Result<Value> clipNotes(const ProjectState& state, ClipId clipId)
     if (clip == nullptr)
         return fail(ErrorCode::notFound, "no clip " + clipId.toString());
 
+    auto patternId = state.patternOfClip(clipId);
+    if (!patternId)
+        return patternId.error();
+
+    const auto* pattern = state.findPattern(patternId.value());
+    if (pattern == nullptr)
+        return fail(ErrorCode::notFound, "no such pattern: " + patternId.value().toString());
+
     Value::Array notes;
     notes.reserve(clip->notes.size());
     for (const auto& note : clip->notes)
         notes.push_back(note.toValue());
 
+    // The pattern's length travels with the notes: "quantize the notes of this
+    // row" is answered against a grid, and the row itself carries none.
     return Value::object({{"clipId", Value{clip->id.toString()}},
-                          {"startBeats", Value{clip->startBeats}},
-                          {"lengthBeats", Value{clip->lengthBeats}},
+                          {"trackId", Value{clip->trackId.toString()}},
+                          {"patternId", Value{pattern->id.toString()}},
+                          {"lengthBeats", Value{pattern->lengthBeats}},
                           {"notes", Value::array(std::move(notes))}});
 }
 

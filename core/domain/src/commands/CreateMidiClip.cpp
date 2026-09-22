@@ -51,16 +51,14 @@ Value CreateMidiClip::payload() const
 
 Result<Value> CreateMidiClip::apply(ProjectState& state) const
 {
-    Clip clip{};
-    clip.id = clipId_;
-    clip.startBeats = startBeats_;
-    clip.lengthBeats = lengthBeats_;
-
-    auto added = state.addClip(trackId_, std::move(clip));
+    auto added = state.addSingleTrackPattern(trackId_, clipId_, startBeats_, lengthBeats_);
     if (!added)
         return added.error();
 
-    // Undoing a creation only needs to know what to remove.
+    // Undoing a creation only needs to know what to remove, and the clip names
+    // all three: the pattern and the placement are derived from it. The record
+    // keeps the shape it has always had, so an undo written before this week
+    // still reverts what this week's apply built.
     return Value::object({{"clipId", Value{clipId_.toString()}}});
 }
 
@@ -74,7 +72,9 @@ Result<void> CreateMidiClip::revert(ProjectState& state, const Value& undoRecord
     if (!clipId)
         return fail(clipId.error().code, "clipId: " + clipId.error().message);
 
-    return state.removeClip(clipId.value());
+    // The pattern goes, and removePattern takes the placement with it. The row
+    // goes with the pattern that held it, so there is nothing else to undo.
+    return state.removePattern(ProjectState::patternIdForClip(clipId.value()));
 }
 
 } // namespace daw::domain

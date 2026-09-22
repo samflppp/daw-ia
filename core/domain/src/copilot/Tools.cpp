@@ -159,10 +159,11 @@ Value toValue(const std::vector<Tool>& tools)
 std::vector<Tool> builtinTools()
 {
     const auto trackId = identifier("Identifiant de la piste.");
-    const auto clipId = identifier("Identifiant du clip.");
+    const auto clipId = identifier("Identifiant de la ligne d'un pattern, telle que l'état la nomme.");
     const auto noteId = identifier("Identifiant de la note.");
     const auto pluginId = identifier("Identifiant de l'instance de plugin.");
     const auto pointId = identifier("Identifiant du point de tempo.");
+    const auto patternId = identifier("Identifiant du pattern.");
 
     std::vector<Tool> tools;
 
@@ -178,7 +179,7 @@ std::vector<Tool> builtinTools()
             {"trackId", "name", "volumeDb"})));
 
     tools.push_back(make("track.remove",
-                         "Retire une piste, avec ses clips et ses plugins.",
+                         "Retire une piste, avec ses plugins et ce qu'elle joue dans chaque pattern.",
                          schema({{"trackId", trackId}}, {"trackId"})));
 
     tools.push_back(
@@ -216,18 +217,69 @@ std::vector<Tool> builtinTools()
              schema({{"trackId", trackId}, {"muted", field("boolean", "Vrai pour couper la piste.")}},
                     {"trackId", "muted"})));
 
+    tools.push_back(
+        make("track.set_channel_pitch",
+             "Règle la hauteur fixe d'une piste dans le channel rack : la note qu'elle joue quand un "
+             "pas est allumé. Ne change aucune note déjà écrite.",
+             schema({{"trackId", trackId},
+                     {"pitch",
+                      integer("Hauteur MIDI, 60 = do central.",
+                              ProjectState::lowestChannelPitch,
+                              ProjectState::highestChannelPitch)}},
+                    {"trackId", "pitch"})));
+
+    // --- patterns, placements and rows
+    //
+    // Le contenu et la position sont séparés : un pattern porte ce qui se joue,
+    // un placement dit où. Modifier un pattern posé huit fois est une seule
+    // commande, parce que les huit placements ne portent aucune note.
+    tools.push_back(make("pattern.create",
+                         "Crée un pattern vide. Un pattern porte le contenu, pas sa position : "
+                         "il faut le poser avec pattern.place pour qu'il sonne.",
+                         schema({{"patternId", newIdentifier("Identifiant du pattern à créer.")},
+                                 {"name", field("string", "Nom du pattern. Peut être vide.")},
+                                 {"lengthBeats", field("number", "Longueur du pattern, en temps.")}},
+                                {"patternId", "name", "lengthBeats"})));
+
+    tools.push_back(make("pattern.place",
+                         "Pose un pattern sur la timeline. Le même pattern peut être posé autant de fois que "
+                         "voulu : aucune note n'est copiée, et le modifier une fois le change partout.",
+                         schema({{"placementId", newIdentifier("Identifiant de ce placement.")},
+                                 {"patternId", patternId},
+                                 {"startBeats", field("number", "Position sur la timeline, en temps.")}},
+                                {"placementId", "patternId", "startBeats"})));
+
+    tools.push_back(
+        make("pattern.add_track",
+             "Ouvre la ligne d'une piste dans un pattern. La ligne est vide : les notes s'ajoutent "
+             "ensuite avec note.add, en nommant le clipId créé ici.",
+             schema({{"patternId", patternId},
+                     {"clipId", newIdentifier("Identifiant de la ligne à créer.")},
+                     {"trackId", trackId}},
+                    {"patternId", "clipId", "trackId"})));
+
+    tools.push_back(make(
+        "pattern.set_length",
+        "Change la longueur d'un pattern, en temps. Les notes au-delà sont gardées, "
+        "jamais coupées.",
+        schema({{"patternId", patternId}, {"lengthBeats", field("number", "Nouvelle longueur, en temps.")}},
+               {"patternId", "lengthBeats"})));
+
     // --- clips and notes
-    tools.push_back(make("clip.create_midi",
-                         "Crée un clip MIDI vide sur une piste.",
-                         schema({{"trackId", trackId},
-                                 {"clipId", newIdentifier("Identifiant du clip à créer.")},
-                                 {"startBeats", field("number", "Début du clip sur la timeline, en temps.")},
-                                 {"lengthBeats", field("number", "Durée du clip, en temps.")}},
-                                {"trackId", "clipId", "startBeats", "lengthBeats"})));
+    tools.push_back(
+        make("clip.create_midi",
+             "Crée un pattern d'une seule piste et le pose sur la timeline, en une commande. Pour un "
+             "pattern à plusieurs pistes, utiliser pattern.create puis pattern.add_track.",
+             schema({{"trackId", trackId},
+                     {"clipId", newIdentifier("Identifiant de la ligne à créer.")},
+                     {"startBeats", field("number", "Position sur la timeline, en temps.")},
+                     {"lengthBeats", field("number", "Longueur du pattern, en temps.")}},
+                    {"trackId", "clipId", "startBeats", "lengthBeats"})));
 
     tools.push_back(make(
         "note.add",
-        "Ajoute une note dans un clip. Le payload porte le clip et la note à plat.",
+        "Ajoute une note dans la ligne d'un pattern. Le payload porte la ligne et la note à plat. "
+        "Le début est relatif au pattern, pas à la timeline.",
         schema({{"clipId", clipId},
                 {"id", newIdentifier("Identifiant de la note à créer.")},
                 {"pitch", integer("Hauteur MIDI, 60 = do central.", Note::lowestPitch, Note::highestPitch)},

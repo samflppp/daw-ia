@@ -16,13 +16,20 @@ Track makeTrack(TrackId id)
     return track;
 }
 
-Clip makeClip(ClipId id)
+Clip makeClip(ClipId id, TrackId trackId)
 {
     Clip clip{};
     clip.id = id;
-    clip.startBeats = 0.0;
-    clip.lengthBeats = 4.0;
+    clip.trackId = trackId;
     return clip;
+}
+
+// What a clip used to be: a track, a start and a length. It is now a pattern of
+// one row plus a placement, which is exactly what clip.create_midi builds, so
+// the tests keep reading as they did.
+Result<void> addClipOnTrack(ProjectState& state, TrackId trackId, ClipId clipId, double start = 0.0)
+{
+    return state.addSingleTrackPattern(trackId, clipId, start, 4.0);
 }
 
 Note makeNote(NoteId id)
@@ -63,20 +70,35 @@ TEST_CASE("A refused mutation changes nothing")
 
     SUBCASE("clip on an unknown track")
     {
-        CHECK(state.addClip(TrackId::generate(), makeClip(ClipId::generate())).code() == ErrorCode::notFound);
+        CHECK(addClipOnTrack(state, TrackId::generate(), ClipId::generate()).code() == ErrorCode::notFound);
+    }
+
+    SUBCASE("a row in a pattern that does not exist")
+    {
+        CHECK(state.addClip(PatternId::generate(), makeClip(ClipId::generate(), trackId)).code() ==
+              ErrorCode::notFound);
+    }
+
+    SUBCASE("a placement of a pattern that does not exist")
+    {
+        Placement placement{};
+        placement.id = PlacementId::generate();
+        placement.patternId = PatternId::generate();
+        CHECK(state.addPlacement(placement).code() == ErrorCode::notFound);
     }
 
     SUBCASE("note with an impossible pitch")
     {
         const auto clipId = ClipId::generate();
-        REQUIRE(state.addClip(trackId, makeClip(clipId)).ok());
+        REQUIRE(addClipOnTrack(state, trackId, clipId).ok());
 
         auto note = makeNote(NoteId::generate());
         note.pitch = 200;
         CHECK(state.addNote(clipId, note).code() == ErrorCode::invalidArgument);
 
-        // The clip added by this subcase is the only expected difference.
-        REQUIRE(state.removeClip(clipId).ok());
+        // The pattern added by this subcase is the only expected difference,
+        // and removing it takes its placement and its row with it.
+        REQUIRE(state.removePattern(ProjectState::patternIdForClip(clipId)).ok());
     }
 
     CHECK(state.toValue() == before);
@@ -91,7 +113,7 @@ TEST_CASE("Nested lookups find clips and notes across tracks")
     REQUIRE(state.addTrack(makeTrack(secondTrack)).ok());
 
     const auto clipId = ClipId::generate();
-    REQUIRE(state.addClip(secondTrack, makeClip(clipId)).ok());
+    REQUIRE(addClipOnTrack(state, secondTrack, clipId).ok());
 
     const auto noteId = NoteId::generate();
     REQUIRE(state.addNote(clipId, makeNote(noteId)).ok());
@@ -266,7 +288,7 @@ TEST_CASE("A project survives a serialization round-trip")
     const auto trackId = TrackId::generate();
     const auto clipId = ClipId::generate();
     REQUIRE(state.addTrack(makeTrack(trackId)).ok());
-    REQUIRE(state.addClip(trackId, makeClip(clipId)).ok());
+    REQUIRE(addClipOnTrack(state, trackId, clipId).ok());
     REQUIRE(state.addNote(clipId, makeNote(NoteId::generate())).ok());
 
     const auto restored = ProjectState::fromValue(state.toValue());

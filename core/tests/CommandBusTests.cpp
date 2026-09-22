@@ -176,9 +176,10 @@ TEST_CASE("The history has a bound, and says when it drops an entry")
     CHECK(harness.bus.undoDepth() == 3);
     CHECK(observer.truncated == 2);
 
-    // The five clips are all there: truncating the history forgets how to undo,
-    // it never touches the project.
-    CHECK(harness.state.tracks().front().clips.size() == 5);
+    // The five patterns are all there: truncating the history forgets how to
+    // undo, it never touches the project.
+    CHECK(harness.state.patterns().size() == 5);
+    CHECK(harness.state.arrangement().size() == 5);
 }
 
 TEST_CASE("clearHistory forgets the past but keeps the project")

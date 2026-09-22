@@ -43,11 +43,14 @@ private:
     double volumeDb_;
 };
 
-// track.remove — takes the track out, clips, plugins and all.
+// track.remove — takes the track out, rows, plugins and all.
 //
 // The undo record carries the whole track, not its identifier: a track holds
-// clips, notes, plugin instances and captured state digests, and the command
-// itself knows none of them.
+// plugin instances and captured state digests, and the command itself knows
+// none of them. It carries the pattern rows that track played too, each with
+// the pattern that held it — a row is content of a pattern, so removing a
+// track empties as many patterns as it had rows, and only the record can fill
+// them back in.
 class RemoveTrack final : public Command
 {
 public:
@@ -191,6 +194,44 @@ public:
 private:
     TrackId trackId_;
     bool muted_;
+};
+
+// track.set_channel_pitch — the pitch a track plays when a rack step is lit.
+//
+// A kick track always plays the same note, and a channel rack lights cells
+// rather than choosing pitches. That pitch had to live somewhere, and the
+// choice is the one the S7bis review named: in the domain, not in the rack
+// panel. A value known only by one screen is a value a copilot cannot use, and
+// "mets un charleston en doubles-croches sur la piste 3" needs it to answer.
+//
+// It changes nothing that already sounds. It is read when a cell is lit, and
+// the notes already written keep the pitch they were written with — otherwise
+// changing a channel's pitch would silently rewrite a bassline.
+//
+// Coalesces per track, like every continuous control: dragging the value
+// through a dozen semitones is one history entry.
+class SetTrackChannelPitch final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "track.set_channel_pitch";
+
+    SetTrackChannelPitch(TrackId trackId, int pitch);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+    [[nodiscard]] bool canCoalesceWith(const Command& newer) const noexcept override;
+
+    [[nodiscard]] TrackId trackId() const noexcept { return trackId_; }
+    [[nodiscard]] int pitch() const noexcept { return pitch_; }
+
+private:
+    TrackId trackId_;
+    int pitch_;
 };
 
 } // namespace daw::domain

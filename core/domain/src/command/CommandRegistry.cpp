@@ -4,6 +4,7 @@
 #include "daw/domain/commands/CreateMidiClip.h"
 #include "daw/domain/commands/NoteCommands.h"
 #include "daw/domain/commands/NoteEditCommands.h"
+#include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TempoCommands.h"
@@ -45,6 +46,11 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<RemoveTempoPoint>());
     static_cast<void>(registry.add<SetTempoPointBpm>());
     static_cast<void>(registry.add<MoveTempoPoint>());
+    static_cast<void>(registry.add<CreatePattern>());
+    static_cast<void>(registry.add<PlacePattern>());
+    static_cast<void>(registry.add<AddPatternTrack>());
+    static_cast<void>(registry.add<SetPatternLength>());
+    static_cast<void>(registry.add<SetTrackChannelPitch>());
     static_cast<void>(registry.add<CapturePluginState>());
     return registry;
 }

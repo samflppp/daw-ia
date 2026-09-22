@@ -120,7 +120,8 @@ TEST_CASE("A replayed project can still be undone")
 
     const auto* replayedTrack = replayed.state.findTrack(recorded.trackId);
     REQUIRE(replayedTrack != nullptr);
-    CHECK(replayedTrack->clips.empty());
+    CHECK(replayed.state.patterns().empty());
+    CHECK(replayed.state.arrangement().empty());
     CHECK(replayedTrack->volumeDb == doctest::Approx(0.0));
 }
 
