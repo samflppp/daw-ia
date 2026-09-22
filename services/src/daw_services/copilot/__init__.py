@@ -110,7 +110,9 @@ def resolve_new_ids(payload: Any, minted: dict[str, str]) -> Any:
 READ_TOOLS: list[dict[str, Any]] = [
     {
         "name": "project.get_state",
-        "description": "Relit l'état du projet : tempo, pistes, patterns et leurs lignes, plugins, transport.",
+        "description": (
+            "Relit l'état du projet : tempo, pistes, patterns et leurs lignes, plugins, transport."
+        ),
         "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
     },
     {
