@@ -1,8 +1,8 @@
 # Bilan de fin de S9 — DAW IA
 
 **Période :** semaine 9 sur 26. Rédigé le 22 septembre 2026.
-**Dépôt :** `samflppp/daw-ia` (privé), branche `main`, 4 commits (`d08564a` → `HEAD`).
-**Volume :** 43 fichiers, +3 489 lignes, −328.
+**Dépôt :** `samflppp/daw-ia` (privé), branche `main`, 6 commits (`d08564a` → `32c7158`).
+**Volume :** 46 fichiers, +3 856 lignes, −330.
 **Tests :** 211 cas hors audio (192 de domaine, 19 de persistance), 51 cas d'engine sous label
 `audio`, 18 cas Python.
 **Registry :** 33 types de commandes, 28 la semaine dernière.
@@ -288,11 +288,27 @@ cmake --build --preset windows-msvc
     montre un par un dans son sélecteur, et **le morceau sonne exactement comme avant**. C'est le
     point le plus important de cette liste.
 
+## 10 bis. La CI est passée au rouge une fois
+
+`ruff` a refusé le commit `45b5424` : `E501 Line too long (111 > 110)`, dans
+`services/src/daw_services/copilot/__init__.py:113`. J'avais allongé la description de
+`project.get_state` pour qu'elle dise « patterns et leurs lignes » et je n'avais lancé que
+`pytest`. Les vérifications C++ tournaient (`check-format.sh`, `check_hygiene.py`), le versant
+Python non.
+
+Corrigé en `32c7158` : la chaîne est emballée entre parenthèses. Vérifié cette fois avant de
+pousser — `ruff check`, `ruff format --check`, 18 cas.
+
+Ce que ça dit, et qui vaut plus que le correctif : **il n'y a pas une commande unique qui lance
+tout ce que la CI lance.** Trois vérifications vivent à trois endroits, et une semaine sur deux
+j'en oublie une. Un `scripts/check-all.sh` est la dette à éponger, et elle est petite.
+
 ## 11. Ce qui n'a pas été fait
 
 | Point | Pourquoi |
 |---|---|
-| La preuve copilote en vrai | réseau bloqué ici ; §8 |
+| La preuve copilote en vrai | la sortie réseau tombait par intermittence sur la machine ; §8. Le `git push` a échoué trois fois de suite pour la même raison, puis est passé sans rien changer |
+| Une commande unique qui lance toutes les vérifications | §10 bis ; c'est la dette de la semaine |
 | Le nom d'un pattern, modifiable | `pattern.rename` est en S10 avec les autres verbes de placement. Un pattern sans nom s'affiche par son rang, et le rang est une lecture, pas un état |
 | Réordonner les canaux du rack | c'est `track.reorder`, qui existe déjà et que le rack n'expose pas encore. Rien ne bloque |
 | Un pas qui dure plus d'un pas | le rack dessine où un son commence ; sa durée est ce que le piano-roll est |
