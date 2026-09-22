@@ -4,6 +4,8 @@
 #include "daw/domain/copilot/Tools.h"
 #include "daw/domain/serialization/Json.h"
 
+#include <algorithm>
+
 using namespace daw::domain;
 using namespace daw::domain::copilot;
 using daw::testing::Harness;
