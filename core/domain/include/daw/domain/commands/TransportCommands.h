@@ -1,6 +1,8 @@
 #pragma once
 
+#include "daw/domain/Ids.h"
 #include "daw/domain/command/Command.h"
+#include "daw/domain/project/ProjectState.h"
 
 #include <memory>
 
@@ -72,6 +74,37 @@ private:
     bool looping_;
     double startBeats_;
     double endBeats_;
+};
+
+// transport.set_mode — pattern or song.
+//
+// Transient like the rest of the transport. The pattern pattern mode plays is
+// in the payload, never read from a screen: the command means the same thing
+// whoever sends it, the rack, the transport button or the copilot.
+//
+// Switching mode brings the playhead back to the start. The two modes share no
+// timeline — beat 40 of the song is nowhere in a four-beat pattern — so there
+// is no position that means the same thing on both sides.
+class TransportSetMode final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "transport.set_mode";
+    static constexpr std::string_view songMode = "song";
+    static constexpr std::string_view patternMode = "pattern";
+
+    TransportSetMode(PlayMode mode, PatternId auditioned);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] HistoryPolicy historyPolicy() const noexcept override { return HistoryPolicy::transient; }
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+private:
+    PlayMode mode_;
+    PatternId auditioned_;
 };
 
 class TransportSetPosition final : public Command

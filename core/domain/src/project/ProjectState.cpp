@@ -1795,6 +1795,19 @@ Result<void> ProjectState::setLoop(bool looping, double startBeats, double endBe
     return {};
 }
 
+Result<void> ProjectState::setPlayMode(PlayMode mode, PatternId auditioned)
+{
+    if (mode == PlayMode::song && !auditioned.isNil())
+        return fail(ErrorCode::invalidArgument, "song mode auditions no pattern");
+
+    if (!auditioned.isNil() && findPattern(auditioned) == nullptr)
+        return fail(ErrorCode::notFound, "no such pattern: " + auditioned.toString());
+
+    transport_.mode = mode;
+    transport_.auditionedPattern = auditioned;
+    return {};
+}
+
 Value ProjectState::toValue() const
 {
     Value::Array serialisedTracks;

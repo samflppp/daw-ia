@@ -125,12 +125,17 @@ Value tempoValue(const ProjectState& state)
 Value transportValue(const ProjectState& state)
 {
     const auto& transport = state.transport();
-    return Value::object({{"playing", Value{transport.playing}},
-                          {"positionBeats", Value{transport.positionBeats}},
-                          {"looping", Value{transport.looping}},
-                          {"loopStartBeats", Value{transport.loopStartBeats}},
-                          {"loopEndBeats", Value{transport.loopEndBeats}},
-                          {"tempoAtPosition", Value{state.tempoAt(transport.positionBeats)}}});
+    return Value::object(
+        {{"playing", Value{transport.playing}},
+         {"positionBeats", Value{transport.positionBeats}},
+         {"looping", Value{transport.looping}},
+         {"loopStartBeats", Value{transport.loopStartBeats}},
+         {"loopEndBeats", Value{transport.loopEndBeats}},
+         {"mode", Value{std::string{transport.mode == PlayMode::pattern ? "pattern" : "song"}}},
+         {"auditionedPatternId",
+          Value{transport.auditionedPattern.isNil() ? std::string{}
+                                                    : transport.auditionedPattern.toString()}},
+         {"tempoAtPosition", Value{state.tempoAt(transport.positionBeats)}}});
 }
 
 } // namespace

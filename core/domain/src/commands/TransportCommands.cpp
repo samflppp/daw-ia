@@ -129,6 +129,71 @@ Result<void> TransportStop::revert(ProjectState& state, const Value& undoRecord)
 }
 
 // ---------------------------------------------------------------------------
+// transport.set_mode
+// ---------------------------------------------------------------------------
+
+TransportSetMode::TransportSetMode(PlayMode mode, PatternId auditioned)
+    : mode_{mode}
+    , auditioned_{auditioned}
+{
+}
+
+Result<std::unique_ptr<Command>> TransportSetMode::fromPayload(const Value& payload)
+{
+    auto mode = payload.stringAt("mode");
+    if (!mode)
+        return mode.error();
+
+    PlayMode parsed{PlayMode::song};
+    if (mode.value() == patternMode)
+        parsed = PlayMode::pattern;
+    else if (mode.value() != songMode)
+        return fail(ErrorCode::invalidPayload, "mode is neither pattern nor song: " + mode.value());
+
+    auto patternId = payload.stringAt("patternId");
+    if (!patternId)
+        return patternId.error();
+
+    // An empty string names no pattern. It is spelled out rather than left
+    // absent, so the payload always carries the same two keys.
+    PatternId auditioned{};
+    if (!patternId.value().empty())
+    {
+        auto id = PatternId::parse(patternId.value());
+        if (!id)
+            return fail(id.error().code, "patternId: " + id.error().message);
+        auditioned = id.value();
+    }
+
+    return std::unique_ptr<Command>{new TransportSetMode{parsed, auditioned}};
+}
+
+Value TransportSetMode::payload() const
+{
+    return Value::object(
+        {{"mode", Value{std::string{mode_ == PlayMode::pattern ? patternMode : songMode}}},
+         {"patternId", Value{auditioned_.isNil() ? std::string{} : auditioned_.toString()}}});
+}
+
+Result<Value> TransportSetMode::apply(ProjectState& state) const
+{
+    if (auto applied = state.setPlayMode(mode_, auditioned_); !applied)
+        return applied.error();
+
+    if (auto moved = state.setPositionBeats(0.0); !moved)
+        return moved.error();
+
+    return Value{};
+}
+
+Result<void> TransportSetMode::revert(ProjectState& state, const Value& undoRecord) const
+{
+    static_cast<void>(state);
+    static_cast<void>(undoRecord);
+    return neverReverted(commandType);
+}
+
+// ---------------------------------------------------------------------------
 // transport.set_position
 // ---------------------------------------------------------------------------
 

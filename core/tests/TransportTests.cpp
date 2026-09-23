@@ -106,8 +106,8 @@ TEST_CASE("The transport commands survive the round-trip and are registered")
     const auto registry = CommandRegistry::withBuiltinCommands();
 
     // Eight track commands, one clip, seven note, six pattern, two
-    // placement, four transport, five plugin, four tempo.
-    CHECK(registry.types().size() == 37);
+    // placement, five transport, five plugin, four tempo.
+    CHECK(registry.types().size() == 38);
     CHECK(registry.contains("transport.play"));
     CHECK(registry.contains("transport.stop"));
     CHECK(registry.contains("transport.set_position"));
@@ -132,4 +132,85 @@ TEST_CASE("The volume range is the one Tracktion actually accepts")
     CHECK(harness.bus.execute(harness.setVolume(6.0)).ok());
     CHECK(harness.bus.execute(harness.setVolume(-100.0)).ok());
     CHECK(harness.bus.execute(harness.setVolume(6.5)).code() == ErrorCode::invalidArgument);
+}
+
+TEST_CASE("switching to pattern mode names the pattern, rewinds, and writes no history")
+{
+    Harness harness;
+    const auto clipId = ClipId::generate();
+    REQUIRE(harness.bus.execute(harness.createClip(clipId, 8.0, 4.0)).ok());
+    const auto patternId = ProjectState::patternIdForClip(clipId);
+
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetPosition>(12.0)).ok());
+
+    const auto depth = harness.bus.undoDepth();
+    const auto journalled = harness.bus.journal().size();
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetMode>(PlayMode::pattern, patternId)).ok());
+
+    CHECK(harness.state.transport().mode == PlayMode::pattern);
+    CHECK(harness.state.transport().auditionedPattern == patternId);
+
+    // Beat 12 of the song is nowhere in a four-beat pattern: the playhead goes
+    // back to the start rather than to a position that means nothing.
+    CHECK(harness.state.transport().positionBeats == doctest::Approx(0.0));
+    CHECK(harness.bus.undoDepth() == depth);
+    CHECK(harness.bus.journal().size() == journalled);
+
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetMode>(PlayMode::song, PatternId{})).ok());
+    CHECK(harness.state.transport().mode == PlayMode::song);
+    CHECK(harness.state.transport().auditionedPattern.isNil());
+}
+
+TEST_CASE("pattern mode may name nothing, but never a pattern that does not exist")
+{
+    Harness harness;
+
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetMode>(PlayMode::pattern, PatternId{})).ok());
+    CHECK(harness.state.transport().mode == PlayMode::pattern);
+
+    CHECK(harness.bus.execute(std::make_unique<TransportSetMode>(PlayMode::pattern, PatternId::generate()))
+              .code() == ErrorCode::notFound);
+
+    // A refused switch leaves the mode where it was.
+    CHECK(harness.state.transport().mode == PlayMode::pattern);
+}
+
+TEST_CASE("transport.set_mode reads back the payload it writes")
+{
+    const auto registry = CommandRegistry::withBuiltinCommands();
+    const auto patternId = PatternId::generate();
+
+    const TransportSetMode pattern{PlayMode::pattern, patternId};
+    auto rebuilt = registry.create(TransportSetMode::commandType, pattern.payload());
+    REQUIRE(rebuilt.ok());
+    CHECK(rebuilt.value()->payload() == pattern.payload());
+
+    const TransportSetMode song{PlayMode::song, PatternId{}};
+    rebuilt = registry.create(TransportSetMode::commandType, song.payload());
+    REQUIRE(rebuilt.ok());
+    CHECK(rebuilt.value()->payload() == song.payload());
+
+    CHECK_FALSE(registry
+                    .create(TransportSetMode::commandType,
+                            Value::object({{"mode", Value{std::string{"chanson"}}},
+                                           {"patternId", Value{std::string{}}}}))
+                    .ok());
+}
+
+TEST_CASE("the mode is session state: it is not serialized and survives an undo")
+{
+    Harness harness;
+    const auto clipId = ClipId::generate();
+    REQUIRE(harness.bus.execute(harness.createClip(clipId)).ok());
+    const auto patternId = ProjectState::patternIdForClip(clipId);
+
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetMode>(PlayMode::pattern, patternId)).ok());
+
+    const auto restored = ProjectState::fromValue(harness.state.toValue());
+    REQUIRE(restored.ok());
+    CHECK(restored.value().transport().mode == PlayMode::song);
+
+    REQUIRE(harness.bus.execute(harness.setVolume(-6.0)).ok());
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(harness.state.transport().mode == PlayMode::pattern);
 }

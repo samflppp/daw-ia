@@ -448,6 +448,21 @@ std::vector<Tool> builtinTools()
                                  {"endBeats", field("number", "Fin de la boucle, en temps.")}},
                                 {"looping", "startBeats", "endBeats"})));
 
+    tools.push_back(make(
+        "transport.set_mode",
+        "Bascule entre le mode pattern (un seul pattern, seul, en boucle depuis le début) et le mode "
+        "chanson (la timeline entière, tous les placements). Ramène la tête au début.",
+        schema(
+            {{"mode",
+              Value::object(
+                  {{"type", Value{std::string{"string"}}},
+                   {"enum", Value::array({Value{std::string{"pattern"}}, Value{std::string{"song"}}})},
+                   {"description", Value{std::string{"pattern ou song."}}}})},
+             {"patternId",
+              field("string",
+                    "En mode pattern, l'identifiant du pattern à jouer. En mode chanson, une chaîne vide.")}},
+            {"mode", "patternId"})));
+
     return tools;
 }
 

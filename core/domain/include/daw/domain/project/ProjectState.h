@@ -275,6 +275,23 @@ struct LegacyClip
 
 [[nodiscard]] Result<std::vector<LegacyClip>> legacyClipsOf(const Value& trackValue);
 
+// What the transport plays: the pattern being worked on, alone and looping,
+// or the arrangement.
+//
+//   pattern  the auditioned pattern is laid once at beat 0, every placement
+//            is silent, and playback loops over the pattern's length. Nothing
+//            else in the arrangement can be heard, which is what makes a
+//            pattern editable while a song exists around it.
+//   song     the placements are laid where they are, and the loop is the one
+//            transport.set_loop asked for, if any.
+//
+// It is a property of the session and not of the project, like the playhead.
+enum class PlayMode
+{
+    song,
+    pattern
+};
+
 // Playback state. It is *not* project state: it is never serialized, never
 // compared, never journalled, and the commands that change it are transient.
 // A project file does not remember that it was playing.
@@ -293,6 +310,16 @@ struct TransportState
     bool looping{false};
     double loopStartBeats{0.0};
     double loopEndBeats{0.0};
+
+    // Song by default, so that a project nobody set a mode on plays what is
+    // laid on its timeline. The beatmaker asks for pattern mode when it opens.
+    PlayMode mode{PlayMode::song};
+
+    // The pattern pattern mode plays. Nil in song mode, and allowed to be nil
+    // in pattern mode too: a project with no pattern yet plays silence rather
+    // than refusing to enter the mode. A pattern removed while auditioned
+    // leaves a name that finds nothing, which the projection reads as silence.
+    PatternId auditionedPattern{};
 };
 
 class ProjectState
@@ -493,6 +520,12 @@ public:
     // An empty or backwards range is refused rather than silently disabled: a
     // loop of length zero would be a transport that never advances.
     Result<void> setLoop(bool looping, double startBeats, double endBeats);
+
+    // Switches between pattern and song. Pattern mode names the pattern it
+    // plays, or nothing; song mode names none. A pattern that does not exist is
+    // refused: a mode that auditioned a typo would play silence and say
+    // nothing.
+    Result<void> setPlayMode(PlayMode mode, PatternId auditioned);
 
     // Whole-state serialization. Tests compare two states through it, and the
     // versioning layer of a later week will hash it. Transport is excluded on
