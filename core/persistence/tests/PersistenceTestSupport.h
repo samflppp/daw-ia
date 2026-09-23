@@ -74,6 +74,18 @@ namespace scenarios
 // file that was already current.
 [[nodiscard]] int writeLegacySession(const std::filesystem::path& projectFolder);
 
+// Opens a project, replays it, and adds what the channel rack of S9 wrote: a
+// pattern laid by "+ Pattern", a row opened by the first lit cell, and a
+// stroke of three more cells. Run on the output of writeLegacySession, it
+// leaves a project the way a user of the first nine weeks would have: an S8
+// clip migrated to a pattern, and an S9 pattern next to it.
+[[nodiscard]] int extendAsRackSession(const std::filesystem::path& projectFolder);
+
+// Opens a project, replays it, and writes its state and its undo depth as
+// JSON: what another process sees when it opens the same folder.
+[[nodiscard]] int dumpSession(const std::filesystem::path& projectFolder,
+                              const std::filesystem::path& stateFile);
+
 } // namespace scenarios
 
 [[nodiscard]] std::string readTextFile(const std::filesystem::path& file);

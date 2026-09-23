@@ -2,6 +2,7 @@
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/command/CommandRegistry.h"
 #include "daw/domain/commands/CreateMidiClip.h"
+#include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/domain/serialization/Json.h"
@@ -649,4 +650,101 @@ TEST_CASE("a group reopens as one entry, and one Ctrl+Z")
     REQUIRE(envelope.ok());
     REQUIRE(envelope.value().group.has_value());
     CHECK(envelope.value().group->label == "ajoute une piste Basse et mets-y Vital");
+}
+
+TEST_CASE("a project of the first nine weeks reopens under the playlist, takes its verbs, and reopens again")
+{
+    TemporaryFolder temporary{"arrangement"};
+    const auto project = temporary.child("Beat S9.dawproj");
+    const auto dumped = temporary.child("dumped.json");
+
+    // Two builds that are gone: an S8 one wrote a clip on schema 3, an S9 one
+    // opened it, migrated it, and let the rack add a pattern of its own.
+    REQUIRE(runChildProcess({"--child", "write-legacy", project.string()}) == 0);
+    REQUIRE(runChildProcess({"--child", "extend-as-rack", project.string()}) == 0);
+
+    const auto legacyPattern =
+        ProjectState::patternIdForClip(ClipId::parse("01JBWQ7Z0000000000000CL1P0").value());
+    const auto legacyPlacement =
+        ProjectState::placementIdForClip(ClipId::parse("01JBWQ7Z0000000000000CL1P0").value());
+    const auto rackPattern = PatternId::parse("01JBWQ7Z0000000000PATTERN0").value();
+    const auto rackPlacement = PlacementId::parse("01JBWQ7Z0000000000P0SE0000").value();
+
+    std::string beforePlaylist;
+    std::size_t depthBeforePlaylist = 0;
+    {
+        const auto startedAt = std::chrono::steady_clock::now();
+        Reopened session;
+        auto report = reopen(session, project);
+        REQUIRE(report.ok());
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startedAt);
+        MESSAGE("réouverture sous S10 d'un projet S8 + S9 : " << elapsed.count() << " ms pour "
+                                                              << report.value().rows << " lignes");
+
+        CHECK(session.store->versionOnDisk() == 4);
+        REQUIRE(session.state.patterns().size() == 2);
+        REQUIRE(session.state.arrangement().size() == 2);
+        CHECK(session.state.findPlacement(legacyPlacement)->startBeats == doctest::Approx(8.0));
+        CHECK(session.state.findPlacement(rackPlacement)->startBeats == doctest::Approx(12.0));
+        CHECK(session.state.findPattern(rackPattern)->clips.front().notes.size() == 4);
+
+        beforePlaylist = session.stateJson();
+        depthBeforePlaylist = session.bus.undoDepth();
+
+        // What the playlist and the copilot of this week write: the rack
+        // pattern repeated to eight layings in one group, the legacy one moved
+        // to the end, a name, and one laying taken off.
+        session.store->startRecording(session.bus);
+
+        std::vector<std::unique_ptr<Command>> repeat;
+        for (int index = 1; index < 8; ++index)
+        {
+            repeat.push_back(std::make_unique<PlacePattern>(
+                PlacementId::generate(), rackPattern, 12.0 + 4.0 * static_cast<double>(index)));
+        }
+
+        GroupOptions options{};
+        options.label = "répète le pattern 2 huit fois";
+        options.origin.actor = Actor::copilot;
+        REQUIRE(session.bus.executeGroup(std::move(repeat), std::move(options)).ok());
+
+        REQUIRE(session.bus.execute(std::make_unique<MovePlacement>(legacyPlacement, 44.0)).ok());
+        REQUIRE(session.bus.execute(std::make_unique<RenamePattern>(rackPattern, "Refrain")).ok());
+        REQUIRE(session.bus.execute(std::make_unique<RemovePlacement>(rackPlacement)).ok());
+
+        session.store->stopRecording();
+        REQUIRE(session.store->close().ok());
+    }
+
+    // Another process opens what this one closed.
+    REQUIRE(runChildProcess({"--child", "dump", project.string(), dumped.string()}) == 0);
+    auto seen = json::read(readTextFile(dumped));
+    REQUIRE(seen.ok());
+
+    const auto startedAt = std::chrono::steady_clock::now();
+    Reopened session;
+    auto report = reopen(session, project);
+    REQUIRE(report.ok());
+    const auto elapsed =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startedAt);
+    MESSAGE("réouverture après les verbes de la playlist : " << elapsed.count() << " ms pour "
+                                                             << report.value().rows << " lignes");
+
+    CHECK(*seen.value().find("state") == session.state.toValue());
+    CHECK(seen.value().intAt("undoDepth").value() == static_cast<std::int64_t>(session.bus.undoDepth()));
+
+    CHECK(session.state.placementsOf(rackPattern).size() == 7);
+    CHECK(session.state.findPlacement(rackPlacement) == nullptr);
+    CHECK(session.state.findPlacement(legacyPlacement)->startBeats == doctest::Approx(44.0));
+    CHECK(session.state.findPattern(rackPattern)->name == "Refrain");
+    CHECK(session.state.findPattern(legacyPattern) != nullptr);
+
+    // Four history entries, and four Ctrl+Z give back the project as S9 left it,
+    // to the byte: the removal comes back at its rank, the move to its beat,
+    // the eight layings as one entry.
+    CHECK(session.bus.undoDepth() == depthBeforePlaylist + 4);
+    for (int index = 0; index < 4; ++index)
+        REQUIRE(session.bus.undo().ok());
+    CHECK(session.stateJson() == beforePlaylist);
 }

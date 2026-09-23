@@ -32,6 +32,12 @@ int runChildScenario(int argc, char** argv)
     if (scenario == "write-legacy" && argc >= 4)
         return daw::testing::scenarios::writeLegacySession(argv[3]);
 
+    if (scenario == "extend-as-rack" && argc >= 4)
+        return daw::testing::scenarios::extendAsRackSession(argv[3]);
+
+    if (scenario == "dump" && argc >= 5)
+        return daw::testing::scenarios::dumpSession(argv[3], argv[4]);
+
     if (scenario == "write-large" && argc >= 6)
         return daw::testing::scenarios::writeLargeSession(argv[3], argv[4], std::atoi(argv[5]));
 

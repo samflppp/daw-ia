@@ -4,6 +4,7 @@
 #include "daw/domain/command/CommandRegistry.h"
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/CreateMidiClip.h"
+#include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
@@ -13,6 +14,7 @@
 #include "daw/persistence/ProjectStore.h"
 
 #include <atomic>
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <memory>
@@ -33,6 +35,12 @@ std::atomic<int> folderCounter{0};
 // would name two different things.
 constexpr std::string_view trackIdText = "01JBWQ7Z0000000000000TRACK";
 constexpr std::string_view clipIdText = "01JBWQ7Z0000000000000CL1P0";
+
+// The pattern the rack of S9 would have made, named the same way on both
+// sides for the same reason.
+constexpr std::string_view rackPatternIdText = "01JBWQ7Z0000000000PATTERN0";
+constexpr std::string_view rackRowIdText = "01JBWQ7Z00000000000R0W0000";
+constexpr std::string_view rackPlacementIdText = "01JBWQ7Z0000000000P0SE0000";
 
 } // namespace
 
@@ -352,6 +360,98 @@ int writeLargeSession(const std::filesystem::path& projectFolder,
     store.value()->stopRecording();
     if (!store.value()->close())
         return 7;
+
+    return 0;
+}
+
+int extendAsRackSession(const std::filesystem::path& projectFolder)
+{
+    auto store = persistence::ProjectStore::open(persistence::ProjectFolder{projectFolder});
+    if (!store)
+        return 2;
+
+    Session session;
+    if (!store.value()->replayInto(session.bus))
+        return 3;
+
+    store.value()->startRecording(session.bus);
+
+    const auto trackId = fixedTrackId();
+    const auto patternId = PatternId::parse(rackPatternIdText).value();
+    const auto rowId = ClipId::parse(rackRowIdText).value();
+    const auto placementId = PlacementId::parse(rackPlacementIdText).value();
+
+    // "+ Pattern" as the rack of S9 did it: the pattern and a placement after
+    // everything already laid down, in one group.
+    {
+        std::vector<std::unique_ptr<Command>> commands;
+        commands.push_back(std::make_unique<CreatePattern>(patternId, std::string{}, 4.0));
+        commands.push_back(std::make_unique<PlacePattern>(placementId, patternId, 12.0));
+
+        GroupOptions options{};
+        options.label = "créer un pattern";
+        if (!session.bus.executeGroup(std::move(commands), std::move(options)))
+            return 4;
+    }
+
+    // The first lit cell opens the row, in the same group.
+    const auto hit = [](double beat)
+    {
+        Note note{};
+        note.id = NoteId::generate();
+        note.pitch = 42;
+        note.velocity = 90;
+        note.startBeats = beat;
+        note.lengthBeats = 0.25;
+        return note;
+    };
+
+    {
+        std::vector<std::unique_ptr<Command>> commands;
+        commands.push_back(std::make_unique<AddPatternTrack>(patternId, rowId, trackId));
+        commands.push_back(std::make_unique<AddNote>(rowId, hit(0.0)));
+
+        GroupOptions options{};
+        options.label = "allumer un pas";
+        if (!session.bus.executeGroup(std::move(commands), std::move(options)))
+            return 5;
+    }
+
+    // And a stroke across three more cells: one gesture.
+    const auto gesture = session.bus.beginGesture("peindre des pas");
+    for (const double beat : {1.0, 2.0, 3.0})
+    {
+        if (!session.bus.execute(std::make_unique<AddNote>(rowId, hit(beat)), ExecuteOptions{gesture}))
+            return 6;
+    }
+    if (!session.bus.endGesture(gesture))
+        return 7;
+
+    store.value()->stopRecording();
+    if (!store.value()->close())
+        return 8;
+
+    return 0;
+}
+
+int dumpSession(const std::filesystem::path& projectFolder, const std::filesystem::path& stateFile)
+{
+    auto store = persistence::ProjectStore::open(persistence::ProjectFolder{projectFolder});
+    if (!store)
+        return 2;
+
+    Session session;
+    if (!store.value()->replayInto(session.bus))
+        return 3;
+
+    const auto dumped =
+        Value::object({{"state", session.state.toValue()},
+                       {"undoDepth", Value{static_cast<std::int64_t>(session.bus.undoDepth())}}});
+    if (!writeTextFile(stateFile, json::write(dumped)))
+        return 4;
+
+    if (!store.value()->close())
+        return 5;
 
     return 0;
 }
