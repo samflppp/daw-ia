@@ -142,7 +142,8 @@ juce::Rectangle<int> PlaylistPanel::blockBounds(const domain::Placement& placeme
                                 grid.getY() + static_cast<int>(index.value()) * laneHeight,
                                 std::max(1, right - left),
                                 laneHeight}
-        .reduced(0, tokens_.integer("metric.playlist.blockInset"));
+        .withTrimmedTop(tokens_.integer("metric.playlist.blockInset"))
+        .withTrimmedBottom(tokens_.integer("metric.playlist.blockInset"));
 }
 
 const domain::Placement* PlaylistPanel::placementAt(juce::Point<int> point) const
