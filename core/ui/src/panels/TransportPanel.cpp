@@ -1,6 +1,7 @@
 #include "daw/ui/panels/TransportPanel.h"
 
 #include "daw/domain/commands/TransportCommands.h"
+#include "daw/ui/model/PatternEditing.h"
 
 #include <cmath>
 
@@ -145,6 +146,7 @@ TransportPanel::TransportPanel(const PanelContext& context)
     , project_(context.project)
     , clock_(context.clock)
     , workspaces_(context.workspaces)
+    , selection_(context.selection)
 {
     setLookAndFeel(&lookAndFeel_);
 
@@ -167,6 +169,30 @@ TransportPanel::TransportPanel(const PanelContext& context)
     // what can be undone; it asks, and it asks again after every change.
     undo_->onClick = [this] { static_cast<void>(bus_.undo()); };
     redo_->onClick = [this] { static_cast<void>(bus_.redo()); };
+
+    // Pattern mode plays the pattern the rack and the piano roll show, and
+    // names it in the command: the transport never reads a screen on its own.
+    for (auto* button : {&patternMode_, &songMode_})
+    {
+        button->setClickingTogglesState(false);
+        addAndMakeVisible(*button);
+    }
+
+    patternMode_.setTooltip(u8"Joue le pattern en cours d'édition, seul, en boucle");
+    songMode_.setTooltip(u8"Joue toute la playlist");
+
+    patternMode_.onClick = [this]
+    {
+        const auto* shown = patternEditing::current(state_, selection_);
+        static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetMode>(
+            domain::PlayMode::pattern, shown != nullptr ? shown->id : domain::PatternId{})));
+    };
+
+    songMode_.onClick = [this]
+    {
+        static_cast<void>(bus_.execute(
+            std::make_unique<domain::TransportSetMode>(domain::PlayMode::song, domain::PatternId{})));
+    };
 
     for (const auto& entry : workspaces_.available())
     {
@@ -221,6 +247,10 @@ void TransportPanel::refresh()
     // play button over silence is the interface lying about the one thing the
     // user can hear.
     play_->setToggleState(clock_.isPlaying(), juce::dontSendNotification);
+
+    const auto patternMode = state_.transport().mode == domain::PlayMode::pattern;
+    patternMode_.setToggleState(patternMode, juce::dontSendNotification);
+    songMode_.setToggleState(!patternMode, juce::dontSendNotification);
 
     const auto current = workspaces_.current();
     const auto entries = workspaces_.available();
@@ -313,6 +343,19 @@ void TransportPanel::resized()
     undo_->setBounds(controls.removeFromLeft(size));
     controls.removeFromLeft(gap);
     redo_->setBounds(controls.removeFromLeft(size));
+
+    // PAT and SONG after the three readouts, where paint() leaves them room.
+    {
+        auto modes = area;
+        modes.removeFromLeft(tokens_.integer("space.xl"));
+        const auto readoutWidth = size * 4;
+        modes.removeFromLeft((readoutWidth + tokens_.integer("space.lg")) * 3);
+        modes = modes.withSizeKeepingCentre(modes.getWidth(), size);
+
+        patternMode_.setBounds(modes.removeFromLeft(size * 2));
+        modes.removeFromLeft(gap);
+        songMode_.setBounds(modes.removeFromLeft(size * 2));
+    }
 
     // The workspace switch is pushed to the far right: it is the one control
     // here that does not act on the music.

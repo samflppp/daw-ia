@@ -129,6 +129,14 @@ public:
         // the domain would go on saying "playing" over a silent engine.
         transportSync_ = std::make_unique<TransportSync>(bus_, state_, engineHost_->edit());
 
+        // The beatmaker opens in pattern mode, on the first pattern: what a
+        // beatmaker hears first is the loop being written, not the song. The
+        // rack moves the audition to whatever pattern it shows, and a project
+        // without a pattern yet auditions nothing until it has one.
+        static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetMode>(
+            domain::PlayMode::pattern,
+            state_.patterns().empty() ? domain::PatternId{} : state_.patterns().front().id)));
+
         // The bus is called from the message thread and only from there: the
         // projector mutates the Edit, and Tracktion expects that on this
         // thread. The rule has to be revisited when a Python service starts

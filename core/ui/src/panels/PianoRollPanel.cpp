@@ -78,9 +78,9 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
     selection_.addChangeListener(this);
     startTimer(playheadRefreshMs);
 
-    // The pattern on screen loops from the first frame, without waiting for
-    // the user to pick one they have already got.
-    loopOverCurrentPattern();
+    // Pattern mode plays the pattern on screen from the first frame, without
+    // waiting for the user to pick one they have already got.
+    followCurrentPattern();
 }
 
 PianoRollPanel::~PianoRollPanel()
@@ -100,7 +100,7 @@ void PianoRollPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     // may not call back into the bus. A selection is changed by a click, never
     // by a command, so it is the one source it is safe to answer with one.
     if (source == &selection_)
-        loopOverCurrentPattern();
+        followCurrentPattern();
 
     repaint();
 }
@@ -127,7 +127,7 @@ void PianoRollPanel::addRow()
     // user asked for a place to write, not for three decisions.
     if (patternId.isNil())
     {
-        auto created = patternEditing::newPattern(state_, newPatternLengthBeats);
+        auto created = patternEditing::newPattern(newPatternLengthBeats);
         patternId = created.patternId;
         for (auto& command : created.commands)
             commands.push_back(std::move(command));
@@ -156,7 +156,7 @@ void PianoRollPanel::addRow()
 
     selection_.selectPattern(patternId);
     selection_.selectClip(owner->id, row.clipId);
-    loopOverCurrentPattern();
+    followCurrentPattern();
 }
 
 void PianoRollPanel::timerCallback()
@@ -218,14 +218,10 @@ double PianoRollPanel::patternLength() const
     return shown != nullptr ? shown->lengthBeats : 0.0;
 }
 
-double PianoRollPanel::patternStart() const
+double PianoRollPanel::transportBeat(double patternBeats) const
 {
     const auto* shown = pattern();
-    if (shown == nullptr)
-        return 0.0;
-
-    const auto span = patternEditing::spanOf(state_, shown->id);
-    return span ? span->startBeats : 0.0;
+    return shown != nullptr ? patternEditing::transportBeat(state_, shown->id, patternBeats) : patternBeats;
 }
 
 // --- geometry --------------------------------------------------------------
@@ -560,16 +556,18 @@ std::optional<int> PianoRollPanel::playheadX() const
     if (length <= 0.0)
         return {};
 
-    // The axis is the pattern, and the pattern may be laid anywhere on the
-    // timeline: the placement's beat comes off before the playhead means
-    // anything here. A pattern laid eight times draws the playhead when the
-    // transport is inside the placement this panel follows, and not the seven
-    // others — showing eight playheads on one grid would say nothing.
-    const auto local = clock_.positionBeats() - patternStart();
-    if (local < 0.0 || local > length)
+    // The axis is the pattern. In pattern mode the transport plays it from
+    // beat 0; in song mode the placement the transport is in comes off before
+    // the playhead means anything here. One playhead on one grid, whichever
+    // laying is sounding.
+    const auto* shown = pattern();
+    const auto local = shown != nullptr
+                           ? patternEditing::localBeats(state_, shown->id, clock_.positionBeats())
+                           : std::nullopt;
+    if (!local)
         return {};
 
-    return xForBeat(local);
+    return xForBeat(*local);
 }
 
 void PianoRollPanel::paintPlayhead(juce::Graphics& g, juce::Rectangle<int> area) const
@@ -587,19 +585,13 @@ void PianoRollPanel::paintPlayhead(juce::Graphics& g, juce::Rectangle<int> area)
 
 // --- editing ---------------------------------------------------------------
 
-void PianoRollPanel::loopOverCurrentPattern()
+void PianoRollPanel::followCurrentPattern()
 {
-    // The beatmaker plays a pattern over and over. The loop is set when the
-    // user picks a pattern and never from inside a bus notification: an
-    // observer may not call back into the bus.
+    // Pattern mode plays the pattern on screen. Set when the user picks a
+    // pattern and never from inside a bus notification: an observer may not
+    // call back into the bus.
     const auto* shown = pattern();
-    if (shown == nullptr)
-    {
-        static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(false, 0.0, 0.0)));
-        return;
-    }
-
-    patternEditing::loopOver(bus_, state_, shown->id);
+    patternEditing::follow(bus_, state_, shown != nullptr ? shown->id : domain::PatternId{});
 }
 
 void PianoRollPanel::movePlayheadTo(int x)
@@ -608,9 +600,8 @@ void PianoRollPanel::movePlayheadTo(int x)
         return;
 
     // The axis of this panel is the pattern, so what the pixel says has to
-    // have the placement's own beat added back before it means anything on the
-    // timeline.
-    const auto beats = patternStart() + beatAtX(x);
+    // be read back into transport beats before it means anything there.
+    const auto beats = transportBeat(beatAtX(x));
 
     static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(beats)));
 }

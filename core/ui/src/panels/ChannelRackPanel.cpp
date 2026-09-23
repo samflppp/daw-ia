@@ -72,7 +72,7 @@ ChannelRackPanel::ChannelRackPanel(const PanelContext& context)
         if (chosen.id != selection_.pattern())
         {
             selection_.selectPattern(chosen.id);
-            patternEditing::loopOver(bus_, state_, chosen.id);
+            patternEditing::follow(bus_, state_, chosen.id);
         }
     };
 
@@ -103,6 +103,7 @@ ChannelRackPanel::ChannelRackPanel(const PanelContext& context)
 ChannelRackPanel::~ChannelRackPanel()
 {
     stopTimer();
+    cancelPendingUpdate();
     selection_.removeChangeListener(this);
     project_.removeChangeListener(this);
     setLookAndFeel(nullptr);
@@ -110,10 +111,32 @@ ChannelRackPanel::~ChannelRackPanel()
 
 void ChannelRackPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
-    juce::ignoreUnused(source);
+    // A selection is changed by a click, never by a command, so pattern mode
+    // can follow it at once. A project change arrives from inside a bus
+    // notification, where calling back into the bus is refused: the check is
+    // put off until the notification is over.
+    if (source == &selection_)
+        followCurrentPattern();
+    else
+        triggerAsyncUpdate();
 
     rebuildPatternChooser();
     repaint();
+}
+
+void ChannelRackPanel::handleAsyncUpdate()
+{
+    followCurrentPattern();
+}
+
+void ChannelRackPanel::followCurrentPattern()
+{
+    // The pattern pattern mode plays is the one this rack shows. An undo that
+    // removed it, or a pattern.remove, leaves the rack on another one, and the
+    // transport has to follow it there rather than audition a name that finds
+    // nothing.
+    const auto* shown = pattern();
+    patternEditing::follow(bus_, state_, shown != nullptr ? shown->id : domain::PatternId{});
 }
 
 void ChannelRackPanel::rebuildPatternChooser()
@@ -134,11 +157,11 @@ void ChannelRackPanel::rebuildPatternChooser()
 
 void ChannelRackPanel::createPattern()
 {
-    auto created = patternEditing::newPattern(state_, newPatternLengthBeats);
+    auto created = patternEditing::newPattern(newPatternLengthBeats);
 
-    // Creating a pattern and laying it down are two commands and one thing the
-    // user did, so they are one group and one Ctrl+Z. A pattern created without
-    // a placement would be written and silent.
+    // Created and not laid down: pattern mode plays it where it is, and the
+    // playlist is where it goes onto the song. A group of one, so the history
+    // names what the user did.
     domain::GroupOptions group{};
     group.label = "créer un pattern";
 
@@ -146,7 +169,6 @@ void ChannelRackPanel::createPattern()
         return;
 
     selection_.selectPattern(created.patternId);
-    patternEditing::loopOver(bus_, state_, created.patternId);
 }
 
 const domain::Pattern* ChannelRackPanel::pattern() const
@@ -412,15 +434,11 @@ std::optional<int> ChannelRackPanel::playheadStep() const
     if (shown == nullptr || stepBeats() <= 0.0)
         return {};
 
-    const auto span = patternEditing::spanOf(state_, shown->id);
-    if (!span)
+    const auto local = patternEditing::localBeats(state_, shown->id, clock_.positionBeats());
+    if (!local)
         return {};
 
-    const auto local = clock_.positionBeats() - span->startBeats;
-    if (local < 0.0 || local >= span->lengthBeats)
-        return {};
-
-    return std::clamp(static_cast<int>(local / stepBeats()), 0, std::max(0, stepCount() - 1));
+    return std::clamp(static_cast<int>(*local / stepBeats()), 0, std::max(0, stepCount() - 1));
 }
 
 void ChannelRackPanel::paintPlayhead(juce::Graphics& g, juce::Rectangle<int> area) const

@@ -24,20 +24,29 @@ namespace daw::ui::patternEditing
 // when nothing is selected. Null on a project that holds none.
 [[nodiscard]] const domain::Pattern* current(const domain::ProjectState& state, const Selection& selection);
 
-// Where a pattern is laid on the timeline, and how long it runs. Read from its
-// earliest placement; nothing when the pattern has never been laid down, which
-// is a pattern that is written and silent.
-struct Span
-{
-    double startBeats{0.0};
-    double lengthBeats{4.0};
-};
+// Where the playhead is inside a pattern, in the pattern's own beats.
+//
+// Pattern mode plays the auditioned pattern from beat 0, so the transport's
+// position is already local. Song mode plays placements, so the position is
+// local to the placement it falls in, if any. Nothing when the pattern is not
+// what is sounding: the rack and the piano roll draw no playhead then, rather
+// than one that moves over a pattern nobody hears.
+[[nodiscard]] std::optional<double>
+localBeats(const domain::ProjectState& state, domain::PatternId patternId, double positionBeats);
 
-[[nodiscard]] std::optional<Span> spanOf(const domain::ProjectState& state, domain::PatternId patternId);
+// The reverse: where on the transport a beat of the pattern is. In song mode,
+// in its earliest placement; in pattern mode, the beat itself.
+[[nodiscard]] double
+transportBeat(const domain::ProjectState& state, domain::PatternId patternId, double patternBeats);
 
-// Loops the transport over a pattern. A transient command like every other
-// transport change, so it enters no history entry.
-void loopOver(domain::CommandBus& bus, const domain::ProjectState& state, domain::PatternId patternId);
+// Makes pattern mode audition that pattern. Nothing in song mode, where the
+// arrangement plays whatever pattern is being edited — which is what song mode
+// means. A transient command like every other transport change, so it enters
+// no history entry; and nothing at all when it would change nothing.
+//
+// Never called from inside a bus notification: an observer may not call back
+// into the bus.
+void follow(domain::CommandBus& bus, const domain::ProjectState& state, domain::PatternId patternId);
 
 // The row a track plays in a pattern, creating it when it has none.
 //
@@ -54,15 +63,19 @@ struct Row
 [[nodiscard]] Row
 rowFor(const domain::ProjectState& state, domain::PatternId patternId, domain::TrackId trackId);
 
-// The commands that create a pattern and lay it down at the first free beat.
-// Two commands, one group, one Ctrl+Z.
+// The command that creates a pattern, empty and unplaced.
+//
+// It used to lay the pattern down too, because the loop needed a placement to
+// hear it. Pattern mode plays a pattern where it is, so a new pattern stays off
+// the arrangement until the playlist puts it there — which is what a beatmaker
+// expects, and what keeps the song from filling up with every sketch.
 struct NewPattern
 {
     domain::PatternId patternId{};
     std::vector<std::unique_ptr<domain::Command>> commands;
 };
 
-[[nodiscard]] NewPattern newPattern(const domain::ProjectState& state, double lengthBeats);
+[[nodiscard]] NewPattern newPattern(double lengthBeats);
 
 // What the pattern is called on screen. A pattern the domain left unnamed is
 // shown by its rank: the domain invents no name, because a name invented at

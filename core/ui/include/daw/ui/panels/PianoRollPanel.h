@@ -51,10 +51,11 @@ private:
     [[nodiscard]] const domain::Track* track() const;
     [[nodiscard]] const domain::Pattern* pattern() const;
 
-    // The pattern's own length, and where its first placement sits. The row
-    // carries neither: a row is content, and both of these are position.
+    // The pattern's own length, and where one of its beats is on the
+    // transport. The row carries neither: a row is content, and both of these
+    // are position.
     [[nodiscard]] double patternLength() const;
-    [[nodiscard]] double patternStart() const;
+    [[nodiscard]] double transportBeat(double patternBeats) const;
 
     // --- geometry. The one place pixels and music meet.
     [[nodiscard]] juce::Rectangle<int> gridArea() const;
@@ -98,9 +99,10 @@ private:
     // when the project holds none. One group, therefore one Ctrl+Z.
     void addRow();
 
-    // Plays the pattern on screen over and over. Called when the user picks a
-    // pattern, which is the only moment what loops changes.
-    void loopOverCurrentPattern();
+    // Makes pattern mode play the pattern on screen. Called when the user
+    // picks a pattern, which is the only moment what pattern mode plays
+    // changes.
+    void followCurrentPattern();
 
     const Tokens& tokens_;
     DawLookAndFeel& lookAndFeel_;

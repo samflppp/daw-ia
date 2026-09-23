@@ -26,7 +26,10 @@ namespace daw::ui
 // The grid follows the pattern's length: sixteen steps of a sixteenth fill four
 // beats, and a pattern of eight beats shows thirty-two of them. The pattern is
 // the truth and the number of cells is a reading of it — never the reverse.
-class ChannelRackPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
+class ChannelRackPanel final : public juce::Component,
+                               private juce::ChangeListener,
+                               private juce::Timer,
+                               private juce::AsyncUpdater
 {
 public:
     explicit ChannelRackPanel(const PanelContext& context);
@@ -42,6 +45,10 @@ public:
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void timerCallback() override;
+    void handleAsyncUpdate() override;
+
+    // Pattern mode plays the pattern this rack shows, and nothing else.
+    void followCurrentPattern();
 
     [[nodiscard]] const domain::Pattern* pattern() const;
 

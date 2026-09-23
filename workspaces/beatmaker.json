@@ -3,10 +3,11 @@
   "schemaVersion": 1,
   "id": "beatmaker",
   "label": "Beatmaker",
-  "description": "Production de beats : transport, pistes, channel rack, piano roll, chaîne de plugins, historique, copilote.",
+  "description": "Production de beats : transport, pistes, playlist, channel rack, piano roll, chaîne de plugins, historique, copilote.",
   "panels": [
     "transport",
     "tracks",
+    "playlist",
     "channel_rack",
     "piano_roll",
     "plugin_chain",
@@ -33,12 +34,16 @@
             "weight": 9,
             "children": [
               {
+                "panel": "playlist",
+                "weight": 4
+              },
+              {
                 "panel": "channel_rack",
-                "weight": 5
+                "weight": 3
               },
               {
                 "panel": "piano_roll",
-                "weight": 5
+                "weight": 4
               }
             ]
           },
@@ -94,7 +99,12 @@
     "pattern.place",
     "pattern.add_track",
     "pattern.set_length",
-    "track.set_channel_pitch"
+    "track.set_channel_pitch",
+    "pattern.rename",
+    "pattern.remove",
+    "placement.move",
+    "placement.remove",
+    "transport.set_mode"
   ],
   "services": [
     "mcp",

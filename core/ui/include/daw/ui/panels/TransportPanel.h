@@ -18,6 +18,11 @@ namespace daw::ui
 // undone is a button that lies the first time a command arrives from elsewhere
 // — from MCP, from a copilot, from a replay.
 //
+// PAT and SONG choose what play plays: the pattern being edited, alone and
+// looping from its start, or the whole arrangement. The two buttons are one
+// transient command each, and the lit one is read from the transport state,
+// so a copilot that switches mode lights the right button with no code here.
+//
 // The playhead is the exception, and a deliberate one. It does not come from
 // the project: it comes from the clock, sixty times a second, because that is
 // where it actually is.
@@ -63,6 +68,7 @@ private:
     ProjectObserver& project_;
     const TransportClock& clock_;
     WorkspaceHost& workspaces_;
+    Selection& selection_;
 
     class IconButton;
 
@@ -73,6 +79,9 @@ private:
     std::unique_ptr<IconButton> redo_;
 
     std::vector<std::unique_ptr<juce::TextButton>> workspaceButtons_;
+
+    juce::TextButton patternMode_{"PAT"};
+    juce::TextButton songMode_{"SONG"};
 
     // What the last refresh drew, so a tick that changes nothing repaints
     // nothing. The readout is redrawn thirty times a second and the rest of the

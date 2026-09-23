@@ -31,27 +31,50 @@ const domain::Pattern* current(const domain::ProjectState& state, const Selectio
     return &state.patterns().front();
 }
 
-std::optional<Span> spanOf(const domain::ProjectState& state, domain::PatternId patternId)
+std::optional<double>
+localBeats(const domain::ProjectState& state, domain::PatternId patternId, double positionBeats)
 {
     const auto* pattern = state.findPattern(patternId);
     if (pattern == nullptr)
         return std::nullopt;
 
-    const auto placements = state.placementsOf(patternId);
-    if (placements.empty())
-        return std::nullopt;
+    const auto& transport = state.transport();
+    if (transport.mode == domain::PlayMode::pattern)
+    {
+        if (transport.auditionedPattern != patternId || positionBeats < 0.0 ||
+            positionBeats >= pattern->lengthBeats)
+            return std::nullopt;
 
-    return Span{placements.front()->startBeats, pattern->lengthBeats};
+        return positionBeats;
+    }
+
+    for (const auto* placement : state.placementsOf(patternId))
+    {
+        const auto local = positionBeats - placement->startBeats;
+        if (local >= 0.0 && local < pattern->lengthBeats)
+            return local;
+    }
+
+    return std::nullopt;
 }
 
-void loopOver(domain::CommandBus& bus, const domain::ProjectState& state, domain::PatternId patternId)
+double transportBeat(const domain::ProjectState& state, domain::PatternId patternId, double patternBeats)
 {
-    const auto span = spanOf(state, patternId);
-    if (!span)
+    if (state.transport().mode == domain::PlayMode::pattern)
+        return patternBeats;
+
+    const auto placements = state.placementsOf(patternId);
+    return placements.empty() ? patternBeats : placements.front()->startBeats + patternBeats;
+}
+
+void follow(domain::CommandBus& bus, const domain::ProjectState& state, domain::PatternId patternId)
+{
+    const auto& transport = state.transport();
+    if (transport.mode != domain::PlayMode::pattern || transport.auditionedPattern == patternId)
         return;
 
-    static_cast<void>(bus.execute(std::make_unique<domain::TransportSetLoop>(
-        true, span->startBeats, span->startBeats + span->lengthBeats)));
+    static_cast<void>(
+        bus.execute(std::make_unique<domain::TransportSetMode>(domain::PlayMode::pattern, patternId)));
 }
 
 Row rowFor(const domain::ProjectState& state, domain::PatternId patternId, domain::TrackId trackId)
@@ -73,30 +96,14 @@ Row rowFor(const domain::ProjectState& state, domain::PatternId patternId, domai
     return row;
 }
 
-NewPattern newPattern(const domain::ProjectState& state, double lengthBeats)
+NewPattern newPattern(double lengthBeats)
 {
     NewPattern created{};
     created.patternId = domain::PatternId::generate();
 
     const auto length = lengthBeats > 0.0 ? lengthBeats : defaultPatternLengthBeats;
-
-    // After everything already laid down, so a new pattern never starts on top
-    // of another one. It is a first position and not a rule: the playlist of
-    // the next week moves placements, and moving one is what it is for.
-    double start = 0.0;
-    for (const auto& placement : state.arrangement())
-    {
-        const auto* pattern = state.findPattern(placement.patternId);
-        if (pattern == nullptr)
-            continue;
-
-        start = std::max(start, placement.startBeats + pattern->lengthBeats);
-    }
-
     created.commands.push_back(
         std::make_unique<domain::CreatePattern>(created.patternId, std::string{}, length));
-    created.commands.push_back(
-        std::make_unique<domain::PlacePattern>(domain::PlacementId::generate(), created.patternId, start));
 
     return created;
 }
