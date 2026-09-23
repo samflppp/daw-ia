@@ -4,6 +4,9 @@
 #include "daw/domain/commands/TransportCommands.h"
 
 #include <algorithm>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace daw::engine
 {
@@ -20,6 +23,11 @@ const juce::Identifier domainTrackIdProperty{"dawDomainTrackId"};
 // Removing a plugin in the middle cannot make the projector write a state into
 // the wrong plugin.
 const juce::Identifier domainPluginIdProperty{"dawDomainPluginId"};
+
+// And one level further: a clip carries the key of what it lays down, a
+// placement and a row, or the auditioned row in pattern mode. Clips are bound
+// by it, so moving one placement moves one clip and rebuilds nothing else.
+const juce::Identifier domainClipKeyProperty{"dawDomainClipKey"};
 
 juce::String toJuce(const std::string& text)
 {
@@ -78,8 +86,18 @@ bool ProjectProjector::applyTransport(const domain::Receipt& receipt)
 
     if (receipt.type == domain::TransportSetLoop::commandType)
     {
-        const auto& transport = state_.transport();
-        transport_.setLoop(transport.looping, transport.loopStartBeats, transport.loopEndBeats);
+        reconcileLoop(true);
+        return true;
+    }
+
+    if (receipt.type == domain::TransportSetMode::commandType)
+    {
+        // The one transport command that changes what the Edit holds: pattern
+        // mode lays the auditioned pattern alone at beat 0, song mode lays the
+        // arrangement. Both are what reconcile() already computes from the
+        // mode, and the loop comes with it.
+        reconcile();
+        transport_.setPosition(state_.transport().positionBeats);
         return true;
     }
 
@@ -359,15 +377,46 @@ void ProjectProjector::reconcilePlugins(tracktion::AudioTrack& target, const dom
 namespace
 {
 
-// Every (placement, row) pair a track plays, in a fixed order.
+// One clip the Edit has to hold: which row, where, and for how long.
+struct LaidOutRow
+{
+    std::string key;
+    double startBeats{0.0};
+    double lengthBeats{0.0};
+    const domain::Clip* row{nullptr};
+};
+
+// Every clip a track plays, in a fixed order, and what depends on the mode.
 //
 // A pattern says what a track plays and how long the material is; a placement
 // says where. Neither alone is a clip on a timeline, and walking them together
-// is the only way to get one. The order is the patterns' own, then the
-// placements' by beat, so two runs on the same state lay the same thing down.
-template <typename Fn>
-void forEachLaidOutRow(const domain::ProjectState& state, domain::TrackId trackId, Fn&& visit)
+// is the only way to get one.
+//
+//   song     one clip per (placement, row), keyed by both identifiers: the
+//            same row laid twice is two clips, and two clips of the same key
+//            would be two things nothing could tell apart.
+//   pattern  the auditioned pattern alone, at beat 0, keyed apart from every
+//            placement so that switching mode never mistakes one for the other.
+//
+// The order is the patterns' own, then the placements' by beat, so two runs on
+// the same state lay the same thing down.
+[[nodiscard]] std::vector<LaidOutRow> laidOutRows(const domain::ProjectState& state, domain::TrackId trackId)
 {
+    std::vector<LaidOutRow> rows;
+    const auto& transport = state.transport();
+
+    if (transport.mode == domain::PlayMode::pattern)
+    {
+        const auto* pattern = state.findPattern(transport.auditionedPattern);
+        if (pattern == nullptr)
+            return rows;
+
+        if (const auto* row = pattern->findClipForTrack(trackId); row != nullptr)
+            rows.push_back(LaidOutRow{"audition:" + row->id.toString(), 0.0, pattern->lengthBeats, row});
+
+        return rows;
+    }
+
     for (const auto& pattern : state.patterns())
     {
         const auto* row = pattern.findClipForTrack(trackId);
@@ -375,7 +424,42 @@ void forEachLaidOutRow(const domain::ProjectState& state, domain::TrackId trackI
             continue;
 
         for (const auto* placement : state.placementsOf(pattern.id))
-            visit(*placement, pattern, *row);
+        {
+            rows.push_back(LaidOutRow{placement->id.toString() + ":" + row->id.toString(),
+                                      placement->startBeats,
+                                      pattern.lengthBeats,
+                                      row});
+        }
+    }
+
+    return rows;
+}
+
+[[nodiscard]] domain::Value notesValue(const domain::Clip& row)
+{
+    domain::Value::Array notes;
+    notes.reserve(row.notes.size());
+    for (const auto& note : row.notes)
+        notes.push_back(note.toValue());
+    return domain::Value::array(std::move(notes));
+}
+
+void writeNotes(tracktion::MidiClip& clip, const domain::Clip& row)
+{
+    auto& sequence = clip.getSequence();
+    sequence.clear(nullptr);
+
+    // Note positions are relative to the clip, the way Tracktion stores them
+    // and the way the domain defines them: a note is written once in the
+    // pattern and lands at every placement of it.
+    for (const auto& note : row.notes)
+    {
+        sequence.addNote(note.pitch,
+                         tracktion::BeatPosition::fromBeats(note.startBeats),
+                         tracktion::BeatDuration::fromBeats(note.lengthBeats),
+                         note.velocity,
+                         0,
+                         nullptr);
     }
 }
 
@@ -385,70 +469,154 @@ domain::Value ProjectProjector::playedValue(domain::TrackId trackId) const
 {
     domain::Value::Array entries;
 
-    forEachLaidOutRow(
-        state_,
-        trackId,
-        [&entries](
-            const domain::Placement& placement, const domain::Pattern& pattern, const domain::Clip& row)
-        {
-            domain::Value::Array notes;
-            notes.reserve(row.notes.size());
-            for (const auto& note : row.notes)
-                notes.push_back(note.toValue());
-
-            entries.push_back(domain::Value::object({{"placementId", domain::Value{placement.id.toString()}},
-                                                     {"clipId", domain::Value{row.id.toString()}},
-                                                     {"startBeats", domain::Value{placement.startBeats}},
-                                                     {"lengthBeats", domain::Value{pattern.lengthBeats}},
-                                                     {"notes", domain::Value::array(std::move(notes))}}));
-        });
+    for (const auto& laid : laidOutRows(state_, trackId))
+    {
+        entries.push_back(domain::Value::object({{"key", domain::Value{laid.key}},
+                                                 {"startBeats", domain::Value{laid.startBeats}},
+                                                 {"lengthBeats", domain::Value{laid.lengthBeats}},
+                                                 {"notes", notesValue(*laid.row)}}));
+    }
 
     return domain::Value::array(std::move(entries));
 }
 
-void ProjectProjector::rebuildClips(tracktion::AudioTrack& target, domain::TrackId trackId)
+void ProjectProjector::reconcileClips(tracktion::AudioTrack& target, domain::TrackId trackId, bool retimed)
 {
-    const auto existing = target.getClips();
-    for (auto* clip : existing)
+    const auto wanted = laidOutRows(state_, trackId);
+
+    const auto isWanted = [&wanted](const juce::String& key)
     {
-        if (clip != nullptr)
+        return std::any_of(
+            wanted.begin(), wanted.end(), [&key](const LaidOutRow& laid) { return toJuce(laid.key) == key; });
+    };
+
+    // What the Edit already holds, bound by key and never by position. A clip
+    // with no key, or with a key the state no longer lays down, leaves.
+    std::vector<std::pair<juce::String, tracktion::MidiClip*>> existing;
+    const auto clips = target.getClips();
+    for (auto* clip : clips)
+    {
+        if (clip == nullptr)
+            continue;
+
+        const auto key = clip->state.getProperty(domainClipKeyProperty).toString();
+        auto* midi = dynamic_cast<tracktion::MidiClip*>(clip);
+
+        if (midi == nullptr || key.isEmpty() || !isWanted(key))
+        {
             clip->removeFromParent();
+            continue;
+        }
+
+        existing.emplace_back(key, midi);
     }
 
-    forEachLaidOutRow(
-        state_,
-        trackId,
-        [this,
-         &target](const domain::Placement& placement, const domain::Pattern& pattern, const domain::Clip& row)
+    for (const auto& laid : wanted)
+    {
+        const auto key = toJuce(laid.key);
+        const tracktion::BeatRange beats{tracktion::BeatPosition::fromBeats(laid.startBeats),
+                                         tracktion::BeatDuration::fromBeats(laid.lengthBeats)};
+        const auto time = edit_.tempoSequence.toTime(beats);
+
+        auto notes = notesValue(*laid.row);
+
+        const auto found = std::find_if(
+            existing.begin(), existing.end(), [&key](const auto& entry) { return entry.first == key; });
+
+        auto remembered = std::find_if(projectedClips_.begin(),
+                                       projectedClips_.end(),
+                                       [&laid](const ProjectedClip& clip) { return clip.key == laid.key; });
+
+        if (found == existing.end() || remembered == projectedClips_.end())
         {
-            const tracktion::BeatRange beats{tracktion::BeatPosition::fromBeats(placement.startBeats),
-                                             tracktion::BeatDuration::fromBeats(pattern.lengthBeats)};
+            if (found != existing.end())
+                found->second->removeFromParent();
 
-            // The name carries both identifiers: the same row laid twice is two
-            // Tracktion clips, and two clips of the same name would be two
-            // things nothing could tell apart.
-            const auto name = placement.id.toString() + ":" + row.id.toString();
+            auto created = target.insertMIDIClip(key, time, nullptr);
+            if (created == nullptr)
+                continue;
 
-            auto midiClip = target.insertMIDIClip(toJuce(name), edit_.tempoSequence.toTime(beats), nullptr);
-            if (midiClip == nullptr)
-                return;
+            created->state.setProperty(domainClipKeyProperty, key, nullptr);
+            writeNotes(*created, *laid.row);
+            ++stats_.clipsInserted;
 
-            auto& sequence = midiClip->getSequence();
-            sequence.clear(nullptr);
+            if (remembered == projectedClips_.end())
+                projectedClips_.push_back(
+                    ProjectedClip{laid.key, laid.startBeats, laid.lengthBeats, std::move(notes)});
+            else
+                *remembered = ProjectedClip{laid.key, laid.startBeats, laid.lengthBeats, std::move(notes)};
+            continue;
+        }
 
-            // Note positions are relative to the clip, the way Tracktion stores
-            // them and the way the domain defines them: a note is written once
-            // in the pattern and lands at every placement of it.
-            for (const auto& note : row.notes)
-            {
-                sequence.addNote(note.pitch,
-                                 tracktion::BeatPosition::fromBeats(note.startBeats),
-                                 tracktion::BeatDuration::fromBeats(note.lengthBeats),
-                                 note.velocity,
-                                 0,
-                                 nullptr);
-            }
-        });
+        auto& clip = *found->second;
+
+        // Where the clip sits is set again whenever its beats moved, and also
+        // whenever the tempo did: the Edit holds seconds, and a tempo change
+        // moves every second while moving no beat. This is the trap of S7,
+        // and repositioning is enough to get out of it — the notes are in
+        // beats, relative to the clip, and nothing in them has to change.
+        if (retimed || remembered->startBeats != laid.startBeats ||
+            remembered->lengthBeats != laid.lengthBeats)
+        {
+            clip.setPosition(tracktion::ClipPosition{time, {}});
+            remembered->startBeats = laid.startBeats;
+            remembered->lengthBeats = laid.lengthBeats;
+            ++stats_.clipsMoved;
+        }
+
+        if (!(remembered->notes == notes))
+        {
+            writeNotes(clip, *laid.row);
+            remembered->notes = std::move(notes);
+            ++stats_.clipsRewritten;
+        }
+    }
+}
+
+void ProjectProjector::forgetClipsNotLaidOut()
+{
+    std::vector<std::string> keys;
+    for (const auto& source : state_.tracks())
+    {
+        for (const auto& laid : laidOutRows(state_, source.id))
+            keys.push_back(laid.key);
+    }
+
+    projectedClips_.erase(
+        std::remove_if(projectedClips_.begin(),
+                       projectedClips_.end(),
+                       [&keys](const ProjectedClip& clip)
+                       { return std::find(keys.begin(), keys.end(), clip.key) == keys.end(); }),
+        projectedClips_.end());
+}
+
+void ProjectProjector::reconcileLoop(bool force)
+{
+    const auto& transport = state_.transport();
+
+    bool looping = transport.looping;
+    double start = transport.loopStartBeats;
+    double end = transport.loopEndBeats;
+
+    // Pattern mode loops over the auditioned pattern, and over nothing else:
+    // its length is read here, at every projection, so lengthening the pattern
+    // lengthens the loop without a transport command of its own.
+    if (transport.mode == domain::PlayMode::pattern)
+    {
+        const auto* pattern = state_.findPattern(transport.auditionedPattern);
+        looping = pattern != nullptr;
+        start = 0.0;
+        end = pattern != nullptr ? pattern->lengthBeats : 0.0;
+    }
+
+    auto wanted = domain::Value::object(
+        {{"looping", domain::Value{looping}}, {"start", domain::Value{start}}, {"end", domain::Value{end}}});
+
+    if (!force && wanted == projectedLoop_)
+        return;
+
+    transport_.setLoop(looping, start, end);
+    projectedLoop_ = std::move(wanted);
 }
 
 bool ProjectProjector::reconcileTempo()
@@ -502,14 +670,10 @@ void ProjectProjector::reconcile()
         ~Guard() { flag = false; }
     } guard{projecting_};
 
-    if (reconcileTempo())
-    {
-        // Every clip was placed in seconds computed from the old sequence, so
-        // every track has to be laid out again. Forgetting the last projected
-        // form of each track is enough: the loop below rebuilds what it no
-        // longer recognises.
-        projected_.clear();
-    }
+    // Every clip was placed in seconds computed from the old sequence. They
+    // are all set again below, and none of them is rebuilt: a tempo change
+    // moves seconds, never beats, and the notes are in beats.
+    const bool retimed = reconcileTempo();
 
     removeUnknownTracks();
 
@@ -536,50 +700,57 @@ void ProjectProjector::reconcile()
                                            [&source](const auto& entry) { return entry.first == source.id; });
         const bool isNew = previous == projected_.end();
 
-        if (!isNew && previous->second == snapshot)
+        const auto partChanged = [&](std::string_view part)
         {
-            stillProjected.emplace_back(source.id, snapshot);
-            continue;
+            const auto* before = isNew ? nullptr : previous->second.find(part);
+            const auto* now = snapshot.find(part);
+            return before == nullptr || now == nullptr || !(*before == *now);
+        };
+
+        const bool trackChanged = partChanged("track");
+        const bool playedChanged = partChanged("played");
+
+        if (trackChanged)
+        {
+            target->setName(toJuce(source.name));
+
+            if (auto* volume = target->getVolumePlugin(); volume != nullptr)
+            {
+                volume->setVolumeDb(static_cast<float>(source.volumeDb));
+
+                // The law is written before the position, and on every
+                // projection: an Edit built elsewhere, or a Tracktion default
+                // moved by another part of the process, would otherwise decide
+                // the stereo image of this project.
+                volume->setPanLaw(panLaw);
+                volume->setPan(static_cast<float>(source.pan));
+            }
+
+            // Tracktion's own mute, not a volume of -100 dB: it silences the
+            // clips and the instrument that plays them, and it leaves the fader
+            // alone, so unmuting gives the track back exactly where the user
+            // left it.
+            target->setMute(source.muted);
+
+            ensureInstrument(*target, source);
+            reconcilePlugins(*target, source);
         }
 
-        target->setName(toJuce(source.name));
-
-        if (auto* volume = target->getVolumePlugin(); volume != nullptr)
-        {
-            volume->setVolumeDb(static_cast<float>(source.volumeDb));
-
-            // The law is written before the position, and on every projection:
-            // an Edit built elsewhere, or a Tracktion default moved by another
-            // part of the process, would otherwise decide the stereo image of
-            // this project.
-            volume->setPanLaw(panLaw);
-            volume->setPan(static_cast<float>(source.pan));
-        }
-
-        // Tracktion's own mute, not a volume of -100 dB: it silences the clips
-        // and the instrument that plays them, and it leaves the fader alone, so
-        // unmuting gives the track back exactly where the user left it.
-        target->setMute(source.muted);
-
-        ensureInstrument(*target, source);
-        reconcilePlugins(*target, source);
-
-        // Clips are the expensive part, so they are laid out again only when
-        // what the track plays actually changed. Dragging a fader touches the
-        // volume and nothing else; adding a note to a pattern laid eight times
-        // rebuilds the eight clips of that track, and no other track.
-        const auto* previousPlayed = isNew ? nullptr : previous->second.find("played");
-        const auto* currentPlayed = snapshot.find("played");
-        const bool playedChanged =
-            previousPlayed == nullptr || currentPlayed == nullptr || !(*previousPlayed == *currentPlayed);
-
-        if (playedChanged)
-            rebuildClips(*target, source.id);
+        // Clips are the expensive part, so they are looked at only when what
+        // the track plays changed, or when the tempo moved the seconds under
+        // them. Even then each one is bound by its key and touched only in
+        // what changed: moving one placement repositions one clip, and adding
+        // a note to a pattern laid eight times rewrites eight sequences and
+        // inserts nothing.
+        if (playedChanged || retimed)
+            reconcileClips(*target, source.id, retimed);
 
         stillProjected.emplace_back(source.id, snapshot);
     }
 
     projected_ = std::move(stillProjected);
+    forgetClipsNotLaidOut();
+    reconcileLoop(retimed);
 
     projecting_ = false;
     if (onProjected)

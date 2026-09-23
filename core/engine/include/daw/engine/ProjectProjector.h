@@ -9,6 +9,7 @@
 
 #include <tracktion_engine/tracktion_engine.h>
 
+#include <cstddef>
 #include <functional>
 #include <string>
 #include <utility>
@@ -89,6 +90,18 @@ public:
     // Idempotent: calling it twice in a row changes nothing the second time.
     void reconcile();
 
+    // What the clip reconciliation did since the projector was built. Read by
+    // the engine tests, which have to prove that an unchanged clip is not
+    // rebuilt; nothing else depends on it.
+    struct Stats
+    {
+        std::size_t clipsInserted{0};
+        std::size_t clipsMoved{0};
+        std::size_t clipsRewritten{0};
+    };
+
+    [[nodiscard]] const Stats& stats() const noexcept { return stats_; }
+
     void onExecuted(const domain::Receipt& receipt) override;
     void onCoalesced(const domain::Receipt& receipt) override;
     void onUndone(const domain::Receipt& receipt) override;
@@ -110,19 +123,32 @@ private:
     void removeUnknownTracks();
     void ensureInstrument(tracktion::AudioTrack& track, const domain::Track& source);
 
-    // What one track actually plays, laid out on the timeline: one Tracktion
-    // clip per (placement, pattern row) pair.
+    // Brings the clips of one track into agreement with what it plays.
     //
-    // This is the one place where content and position meet, and it is a
-    // projection and not a state: the domain holds the notes once, in the
-    // pattern, whatever the number of placements. A pattern laid eight times
-    // becomes eight Tracktion clips here and stays one row over there, which
-    // is why editing it is one command.
-    void rebuildClips(tracktion::AudioTrack& target, domain::TrackId trackId);
+    // One Tracktion clip per (placement, pattern row) pair in song mode, one per
+    // row of the auditioned pattern in pattern mode. This is the one place where
+    // content and position meet, and it is a projection and not a state: the
+    // domain holds the notes once, in the pattern, whatever the number of
+    // placements.
+    //
+    // Bound by key, never by position. A clip whose key is gone leaves, a key
+    // with no clip gets one, and a clip that stays is touched only in what
+    // changed: its position when its beats or the tempo moved, its notes when
+    // they did. `retimed` says the tempo moved and every clip has to be set
+    // again in seconds.
+    void reconcileClips(tracktion::AudioTrack& target, domain::TrackId trackId, bool retimed);
+
+    // Drops the memory of clips nothing lays down any more, across every track.
+    void forgetClipsNotLaidOut();
+
+    // The loop the engine has to run: the auditioned pattern's length in
+    // pattern mode, the one transport.set_loop asked for in song mode. Applied
+    // when it changed, or when `force` says the seconds under it moved.
+    void reconcileLoop(bool force);
 
     // The serialized form of what that track plays. Compared against the last
-    // projection to decide whether the clips have to be laid out again: a
-    // fader drag must not rebuild them, and a note added to a pattern must.
+    // projection to decide whether its clips have to be looked at: a fader drag
+    // must not touch them, and a note added to a pattern must.
     [[nodiscard]] domain::Value playedValue(domain::TrackId trackId) const;
 
     // --- plugins
@@ -152,6 +178,20 @@ private:
     // Last projected form, keyed by domain identifier. Lets an unchanged track
     // be skipped without ever binding by position.
     std::vector<std::pair<domain::TrackId, domain::Value>> projected_;
+
+    // Last projected form of each clip, keyed like the clip itself.
+    struct ProjectedClip
+    {
+        std::string key;
+        double startBeats{0.0};
+        double lengthBeats{0.0};
+        domain::Value notes;
+    };
+
+    std::vector<ProjectedClip> projectedClips_;
+
+    domain::Value projectedLoop_;
+    Stats stats_;
 
     // Last projected tempo sequence. Rebuilding it costs little, but rebuilding
     // it for nothing would drag every clip of the Edit with it.
