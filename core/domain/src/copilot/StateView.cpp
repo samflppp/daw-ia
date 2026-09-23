@@ -80,11 +80,19 @@ Value patternValue(const Pattern& pattern, const ProjectState& state)
                                             {"startBeats", Value{placement->startBeats}}}));
     }
 
-    return Value::object({{"patternId", Value{pattern.id.toString()}},
-                          {"name", Value{pattern.name}},
-                          {"lengthBeats", Value{pattern.lengthBeats}},
-                          {"clips", Value::array(std::move(clips))},
-                          {"placements", Value::array(std::move(placements))}});
+    // The rank is what "le pattern 2" means: the screens show an unnamed
+    // pattern by it, so the model has to read the same number the user reads.
+    const auto index = state.patternIndex(pattern.id);
+    const auto rank = static_cast<std::int64_t>(index ? index.value() + 1 : 0);
+
+    return Value::object(
+        {{"patternId", Value{pattern.id.toString()}},
+         {"rank", Value{rank}},
+         {"label", Value{pattern.name.empty() ? "Pattern " + std::to_string(rank) : pattern.name}},
+         {"name", Value{pattern.name}},
+         {"lengthBeats", Value{pattern.lengthBeats}},
+         {"clips", Value::array(std::move(clips))},
+         {"placements", Value::array(std::move(placements))}});
 }
 
 Value trackValue(const Track& track, std::size_t index)
@@ -158,10 +166,20 @@ Value summarise(const ProjectState& state, const MachinePlugins& plugins)
     for (const auto& pattern : state.patterns())
         patterns.push_back(patternValue(pattern, state));
 
+    // Where the song ends: "ajoute le pattern 2 à la suite" starts there, and
+    // without it the model would have to add up every placement itself.
+    double arrangementEnd = 0.0;
+    for (const auto& placement : state.arrangement())
+    {
+        if (const auto* pattern = state.findPattern(placement.patternId); pattern != nullptr)
+            arrangementEnd = std::max(arrangementEnd, placement.startBeats + pattern->lengthBeats);
+    }
+
     return Value::object(
         {{"tempo", tempoValue(state)},
          {"tracks", Value::array(std::move(tracks))},
          {"patterns", Value::array(std::move(patterns))},
+         {"arrangementEndBeats", Value{arrangementEnd}},
          {"transport", transportValue(state)},
          {"machinePlugins",
           Value::object({{"total", Value{static_cast<std::int64_t>(plugins.available.size())}},

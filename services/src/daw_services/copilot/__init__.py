@@ -65,6 +65,13 @@ Règles :
 - Un pattern posé huit fois se modifie une seule fois : les notes sont dans le
   pattern, jamais dans les placements. N'écris jamais la même note plusieurs
   fois pour couvrir plusieurs placements.
+- Les patterns sont numérotés par leur rang (champ rank) : « le pattern 2 »
+  est celui de rang 2, et label est le nom que l'utilisateur voit.
+- La playlist est faite de placements. Répéter un pattern N fois, c'est N
+  pattern.place du même pattern, bout à bout : le k-ième commence à
+  début + k × lengthBeats. Ne crée jamais un nouveau pattern pour répéter.
+  « À la suite » commence à arrangementEndBeats. placement.move déplace une
+  pose, placement.remove en retire une ; aucune des deux ne touche aux notes.
 - track.set_channel_pitch règle la hauteur d'un canal dans le channel rack. Il
   ne change aucune note déjà écrite.
 - Pour quantifier ou transposer, lis d'abord les notes du clip : il faut leurs
@@ -111,7 +118,7 @@ READ_TOOLS: list[dict[str, Any]] = [
     {
         "name": "project.get_state",
         "description": (
-            "Relit l'état du projet : tempo, pistes, patterns et leurs lignes, plugins, transport."
+            "Relit l'état du projet : tempo, pistes, patterns, lignes et placements, plugins, transport."
         ),
         "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
     },

@@ -1,5 +1,7 @@
 #include "TestSupport.h"
 #include "daw/domain/commands/NoteEditCommands.h"
+#include "daw/domain/commands/PatternCommands.h"
+#include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/copilot/StateView.h"
 #include "daw/domain/copilot/Tools.h"
 #include "daw/domain/serialization/Json.h"
@@ -183,4 +185,35 @@ TEST_CASE("a machine full of plugins is cut, said, and searchable")
     REQUIRE(found.find("found") != nullptr);
     REQUIRE(found.find("found")->asArray()->size() == 1);
     CHECK(found.find("found")->asArray()->front().stringAt("name").value() == "Plugin 137");
+}
+
+TEST_CASE("the summary says the rank a user reads, where the song ends, and the play mode")
+{
+    Harness harness;
+    const auto first = ClipId::generate();
+    REQUIRE(harness.bus.execute(harness.createClip(first, 0.0, 4.0)).ok());
+
+    const auto second = PatternId::generate();
+    REQUIRE(harness.bus.execute(std::make_unique<CreatePattern>(second, "Refrain", 8.0)).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<PlacePattern>(PlacementId::generate(), second, 12.0)).ok());
+
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetMode>(PlayMode::pattern, second)).ok());
+
+    const auto summary = summarise(harness.state, machineWith(0));
+
+    // "le pattern 1" is the one an unnamed pattern is shown as; a named one
+    // keeps its name and still has its rank.
+    const auto& patterns = *summary.find("patterns")->asArray();
+    REQUIRE(patterns.size() == 2);
+    CHECK(patterns[0].intAt("rank").value() == 1);
+    CHECK(patterns[0].stringAt("label").value() == "Pattern 1");
+    CHECK(patterns[1].intAt("rank").value() == 2);
+    CHECK(patterns[1].stringAt("label").value() == "Refrain");
+
+    // Beat 12 plus eight: "à la suite" starts at 20.
+    CHECK(summary.doubleAt("arrangementEndBeats").value() == doctest::Approx(20.0));
+
+    const auto* transport = summary.find("transport");
+    CHECK(transport->stringAt("mode").value() == "pattern");
+    CHECK(transport->stringAt("auditionedPatternId").value() == second.toString());
 }
