@@ -50,6 +50,10 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<PlacePattern>());
     static_cast<void>(registry.add<AddPatternTrack>());
     static_cast<void>(registry.add<SetPatternLength>());
+    static_cast<void>(registry.add<RenamePattern>());
+    static_cast<void>(registry.add<RemovePattern>());
+    static_cast<void>(registry.add<MovePlacement>());
+    static_cast<void>(registry.add<RemovePlacement>());
     static_cast<void>(registry.add<SetTrackChannelPitch>());
     static_cast<void>(registry.add<CapturePluginState>());
     return registry;

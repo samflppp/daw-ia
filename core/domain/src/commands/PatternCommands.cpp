@@ -1,6 +1,8 @@
 #include "daw/domain/commands/PatternCommands.h"
 
+#include <cstdint>
 #include <utility>
+#include <vector>
 
 namespace daw::domain
 {
@@ -258,6 +260,300 @@ bool SetPatternLength::canCoalesceWith(const Command& newer) const noexcept
 {
     const auto* other = dynamic_cast<const SetPatternLength*>(&newer);
     return other != nullptr && other->patternId_ == patternId_;
+}
+
+// ---------------------------------------------------------------------------
+// pattern.rename
+// ---------------------------------------------------------------------------
+
+RenamePattern::RenamePattern(PatternId patternId, std::string name)
+    : patternId_{patternId}
+    , name_{std::move(name)}
+{
+}
+
+Result<std::unique_ptr<Command>> RenamePattern::fromPayload(const Value& payload)
+{
+    auto patternId = idAt<PatternId>(payload, "patternId");
+    if (!patternId)
+        return patternId.error();
+
+    auto name = payload.stringAt("name");
+    if (!name)
+        return name.error();
+
+    return std::unique_ptr<Command>{new RenamePattern{patternId.value(), std::move(name).value()}};
+}
+
+Value RenamePattern::payload() const
+{
+    return Value::object({{"patternId", Value{patternId_.toString()}}, {"name", Value{name_}}});
+}
+
+Result<Value> RenamePattern::apply(ProjectState& state) const
+{
+    const auto* pattern = state.findPattern(patternId_);
+    if (pattern == nullptr)
+        return fail(ErrorCode::notFound, "no such pattern: " + patternId_.toString());
+
+    auto previous = pattern->name;
+
+    if (auto applied = state.setPatternName(patternId_, name_); !applied)
+        return applied.error();
+
+    return Value::object({{"patternId", Value{patternId_.toString()}}, {"previousName", Value{previous}}});
+}
+
+Result<void> RenamePattern::revert(ProjectState& state, const Value& undoRecord) const
+{
+    auto patternId = idAt<PatternId>(undoRecord, "patternId");
+    if (!patternId)
+        return patternId.error();
+
+    auto previous = undoRecord.stringAt("previousName");
+    if (!previous)
+        return previous.error();
+
+    return state.setPatternName(patternId.value(), std::move(previous).value());
+}
+
+// ---------------------------------------------------------------------------
+// pattern.remove
+// ---------------------------------------------------------------------------
+
+RemovePattern::RemovePattern(PatternId patternId)
+    : patternId_{patternId}
+{
+}
+
+Result<std::unique_ptr<Command>> RemovePattern::fromPayload(const Value& payload)
+{
+    auto patternId = idAt<PatternId>(payload, "patternId");
+    if (!patternId)
+        return patternId.error();
+
+    return std::unique_ptr<Command>{new RemovePattern{patternId.value()}};
+}
+
+Value RemovePattern::payload() const
+{
+    return Value::object({{"patternId", Value{patternId_.toString()}}});
+}
+
+Result<Value> RemovePattern::apply(ProjectState& state) const
+{
+    const auto* pattern = state.findPattern(patternId_);
+    if (pattern == nullptr)
+        return fail(ErrorCode::notFound, "no such pattern: " + patternId_.toString());
+
+    auto index = state.patternIndex(patternId_);
+    if (!index)
+        return index.error();
+
+    // Each placement with its rank in the arrangement, read before anything
+    // moves. They are listed in arrangement order, which is the order revert
+    // reinserts them in: inserting by ascending rank puts each one exactly
+    // where it was.
+    Value::Array placements;
+    for (std::size_t rank = 0; rank < state.arrangement().size(); ++rank)
+    {
+        const auto& placement = state.arrangement()[rank];
+        if (placement.patternId != patternId_)
+            continue;
+
+        placements.push_back(Value::object(
+            {{"placement", placement.toValue()}, {"index", Value{static_cast<std::int64_t>(rank)}}}));
+    }
+
+    auto record = Value::object({{"pattern", pattern->toValue()},
+                                 {"index", Value{static_cast<std::int64_t>(index.value())}},
+                                 {"placements", Value::array(std::move(placements))}});
+
+    if (auto removed = state.removePattern(patternId_); !removed)
+        return removed.error();
+
+    return record;
+}
+
+Result<void> RemovePattern::revert(ProjectState& state, const Value& undoRecord) const
+{
+    const auto* patternValue = undoRecord.find("pattern");
+    if (patternValue == nullptr)
+        return fail(ErrorCode::invalidPayload, "missing key: pattern");
+
+    auto pattern = Pattern::fromValue(*patternValue);
+    if (!pattern)
+        return pattern.error();
+
+    auto index = undoRecord.intAt("index");
+    if (!index)
+        return index.error();
+    if (index.value() < 0)
+        return fail(ErrorCode::invalidPayload, "index is negative");
+
+    const auto* placementsValue = undoRecord.find("placements");
+    const auto* placements = placementsValue != nullptr ? placementsValue->asArray() : nullptr;
+    if (placements == nullptr)
+        return fail(ErrorCode::invalidPayload, "placements must be an array");
+
+    // Everything is parsed before anything is written, so a damaged record
+    // leaves the state as it found it.
+    std::vector<std::pair<Placement, std::size_t>> restored;
+    restored.reserve(placements->size());
+    for (const auto& entry : *placements)
+    {
+        const auto* placementValue = entry.find("placement");
+        if (placementValue == nullptr)
+            return fail(ErrorCode::invalidPayload, "missing key: placement");
+
+        auto placement = Placement::fromValue(*placementValue);
+        if (!placement)
+            return placement.error();
+
+        auto rank = entry.intAt("index");
+        if (!rank)
+            return rank.error();
+        if (rank.value() < 0)
+            return fail(ErrorCode::invalidPayload, "index is negative");
+
+        restored.emplace_back(placement.value(), static_cast<std::size_t>(rank.value()));
+    }
+
+    auto inserted = state.insertPattern(std::move(pattern).value(), static_cast<std::size_t>(index.value()));
+    if (!inserted)
+        return inserted;
+
+    for (const auto& [placement, rank] : restored)
+    {
+        if (auto placed = state.insertPlacement(placement, rank); !placed)
+            return placed;
+    }
+
+    return {};
+}
+
+// ---------------------------------------------------------------------------
+// placement.move
+// ---------------------------------------------------------------------------
+
+MovePlacement::MovePlacement(PlacementId placementId, double startBeats)
+    : placementId_{placementId}
+    , startBeats_{startBeats}
+{
+}
+
+Result<std::unique_ptr<Command>> MovePlacement::fromPayload(const Value& payload)
+{
+    auto placementId = idAt<PlacementId>(payload, "placementId");
+    if (!placementId)
+        return placementId.error();
+
+    auto startBeats = payload.doubleAt("startBeats");
+    if (!startBeats)
+        return startBeats.error();
+
+    return std::unique_ptr<Command>{new MovePlacement{placementId.value(), startBeats.value()}};
+}
+
+Value MovePlacement::payload() const
+{
+    return Value::object(
+        {{"placementId", Value{placementId_.toString()}}, {"startBeats", Value{startBeats_}}});
+}
+
+Result<Value> MovePlacement::apply(ProjectState& state) const
+{
+    const auto* placement = state.findPlacement(placementId_);
+    if (placement == nullptr)
+        return fail(ErrorCode::notFound, "no such placement: " + placementId_.toString());
+
+    const auto previous = placement->startBeats;
+
+    if (auto moved = state.movePlacement(placementId_, startBeats_); !moved)
+        return moved.error();
+
+    return Value::object(
+        {{"placementId", Value{placementId_.toString()}}, {"previousStartBeats", Value{previous}}});
+}
+
+Result<void> MovePlacement::revert(ProjectState& state, const Value& undoRecord) const
+{
+    auto placementId = idAt<PlacementId>(undoRecord, "placementId");
+    if (!placementId)
+        return placementId.error();
+
+    auto previous = undoRecord.doubleAt("previousStartBeats");
+    if (!previous)
+        return previous.error();
+
+    return state.movePlacement(placementId.value(), previous.value());
+}
+
+bool MovePlacement::canCoalesceWith(const Command& newer) const noexcept
+{
+    const auto* other = dynamic_cast<const MovePlacement*>(&newer);
+    return other != nullptr && other->placementId_ == placementId_;
+}
+
+// ---------------------------------------------------------------------------
+// placement.remove
+// ---------------------------------------------------------------------------
+
+RemovePlacement::RemovePlacement(PlacementId placementId)
+    : placementId_{placementId}
+{
+}
+
+Result<std::unique_ptr<Command>> RemovePlacement::fromPayload(const Value& payload)
+{
+    auto placementId = idAt<PlacementId>(payload, "placementId");
+    if (!placementId)
+        return placementId.error();
+
+    return std::unique_ptr<Command>{new RemovePlacement{placementId.value()}};
+}
+
+Value RemovePlacement::payload() const
+{
+    return Value::object({{"placementId", Value{placementId_.toString()}}});
+}
+
+Result<Value> RemovePlacement::apply(ProjectState& state) const
+{
+    const auto* placement = state.findPlacement(placementId_);
+    if (placement == nullptr)
+        return fail(ErrorCode::notFound, "no such placement: " + placementId_.toString());
+
+    auto index = state.placementIndex(placementId_);
+    if (!index)
+        return index.error();
+
+    auto record = Value::object(
+        {{"placement", placement->toValue()}, {"index", Value{static_cast<std::int64_t>(index.value())}}});
+
+    if (auto removed = state.removePlacement(placementId_); !removed)
+        return removed.error();
+
+    return record;
+}
+
+Result<void> RemovePlacement::revert(ProjectState& state, const Value& undoRecord) const
+{
+    const auto* placementValue = undoRecord.find("placement");
+    if (placementValue == nullptr)
+        return fail(ErrorCode::invalidPayload, "missing key: placement");
+
+    auto placement = Placement::fromValue(*placementValue);
+    if (!placement)
+        return placement.error();
+
+    auto index = undoRecord.intAt("index");
+    if (!index)
+        return index.error();
+    if (index.value() < 0)
+        return fail(ErrorCode::invalidPayload, "index is negative");
+
+    return state.insertPlacement(placement.value(), static_cast<std::size_t>(index.value()));
 }
 
 } // namespace daw::domain

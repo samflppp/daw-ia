@@ -3,6 +3,10 @@
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/serialization/Json.h"
 
+#include <initializer_list>
+#include <memory>
+#include <vector>
+
 #include <doctest/doctest.h>
 
 using namespace daw::domain;
@@ -300,4 +304,151 @@ TEST_CASE("a pattern and its placements survive a serialization round-trip")
     const auto restored = ProjectState::fromValue(harness.state.toValue());
     REQUIRE(restored.ok());
     CHECK(restored.value() == harness.state);
+}
+
+namespace
+{
+
+// A pattern of one row laid at each of the given beats. Returns the
+// placements in the order they were laid.
+struct Laid
+{
+    PatternId patternId{PatternId::generate()};
+    ClipId clipId{ClipId::generate()};
+    std::vector<PlacementId> placements;
+};
+
+Laid layPattern(Harness& harness, std::initializer_list<double> beats)
+{
+    Laid laid{};
+    REQUIRE(harness.bus.execute(std::make_unique<CreatePattern>(laid.patternId, "Beat", 4.0)).ok());
+    REQUIRE(
+        harness.bus.execute(std::make_unique<AddPatternTrack>(laid.patternId, laid.clipId, harness.trackId))
+            .ok());
+
+    for (const auto beat : beats)
+    {
+        laid.placements.push_back(PlacementId::generate());
+        REQUIRE(
+            harness.bus.execute(std::make_unique<PlacePattern>(laid.placements.back(), laid.patternId, beat))
+                .ok());
+    }
+    return laid;
+}
+
+} // namespace
+
+TEST_CASE("moving a placement moves that laying only, and a drag is one entry")
+{
+    Harness harness;
+    const auto laid = layPattern(harness, {0.0, 4.0, 8.0});
+
+    const auto gesture = harness.bus.beginGesture("déplacer un placement");
+    ExecuteOptions options{};
+    options.gesture = gesture;
+
+    const auto before = harness.bus.undoDepth();
+    for (double beat = 4.0; beat <= 16.0; beat += 1.0)
+        REQUIRE(harness.bus.execute(std::make_unique<MovePlacement>(laid.placements[1], beat), options).ok());
+    REQUIRE(harness.bus.endGesture(gesture).ok());
+
+    CHECK(harness.bus.undoDepth() == before + 1);
+    CHECK(harness.state.findPlacement(laid.placements[1])->startBeats == doctest::Approx(16.0));
+
+    // The two other layings of the same pattern did not move: a placement is a
+    // position, and a position is not shared.
+    CHECK(harness.state.findPlacement(laid.placements[0])->startBeats == doctest::Approx(0.0));
+    CHECK(harness.state.findPlacement(laid.placements[2])->startBeats == doctest::Approx(8.0));
+
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(harness.state.findPlacement(laid.placements[1])->startBeats == doctest::Approx(4.0));
+}
+
+TEST_CASE("a placement cannot be moved before the timeline origin")
+{
+    Harness harness;
+    const auto laid = layPattern(harness, {4.0});
+
+    CHECK(harness.bus.execute(std::make_unique<MovePlacement>(laid.placements[0], -1.0)).code() ==
+          ErrorCode::invalidArgument);
+    CHECK(harness.state.findPlacement(laid.placements[0])->startBeats == doctest::Approx(4.0));
+}
+
+TEST_CASE("removing a placement keeps the pattern, and undoing puts it back at its rank")
+{
+    Harness harness;
+    const auto laid = layPattern(harness, {0.0, 4.0, 8.0});
+    const auto original = harness.state.toValue();
+
+    REQUIRE(harness.bus.execute(std::make_unique<RemovePlacement>(laid.placements[1])).ok());
+    CHECK(harness.state.findPlacement(laid.placements[1]) == nullptr);
+    CHECK(harness.state.findPattern(laid.patternId) != nullptr);
+    CHECK(harness.state.placementsOf(laid.patternId).size() == 2);
+
+    // Back where it was in the arrangement, not appended: two projects that
+    // differ by the order of a vector are two serialized forms.
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(harness.state.toValue() == original);
+}
+
+TEST_CASE("renaming a pattern undoes to its previous name")
+{
+    Harness harness;
+    const auto laid = layPattern(harness, {0.0});
+
+    REQUIRE(harness.bus.execute(std::make_unique<RenamePattern>(laid.patternId, "Couplet")).ok());
+    CHECK(harness.state.findPattern(laid.patternId)->name == "Couplet");
+
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(harness.state.findPattern(laid.patternId)->name == "Beat");
+}
+
+TEST_CASE("removing a pattern takes its rows and placements, and undoing restores the same arrangement")
+{
+    Harness harness;
+    const auto first = layPattern(harness, {0.0, 8.0});
+    const auto second = layPattern(harness, {4.0, 12.0});
+    const auto third = layPattern(harness, {16.0});
+
+    REQUIRE(
+        harness.bus.execute(std::make_unique<AddNote>(second.clipId, makeNote(NoteId::generate(), 38, 1.0)))
+            .ok());
+
+    const auto original = harness.state.toValue();
+
+    REQUIRE(harness.bus.execute(std::make_unique<RemovePattern>(second.patternId)).ok());
+    CHECK(harness.state.findPattern(second.patternId) == nullptr);
+    CHECK(harness.state.findClip(second.clipId) == nullptr);
+    CHECK(harness.state.arrangement().size() == 3);
+
+    // The other patterns and their layings are untouched.
+    CHECK(harness.state.placementsOf(first.patternId).size() == 2);
+    CHECK(harness.state.placementsOf(third.patternId).size() == 1);
+
+    // Pattern at its rank, row with its note, placements interleaved exactly
+    // where they were among the others.
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(harness.state.toValue() == original);
+
+    REQUIRE(harness.bus.redo().ok());
+    CHECK(harness.state.findPattern(second.patternId) == nullptr);
+}
+
+TEST_CASE("the four arrangement verbs replay from their payloads")
+{
+    Harness harness;
+    const auto laid = layPattern(harness, {0.0, 4.0});
+
+    const std::vector<std::shared_ptr<Command>> commands{
+        std::make_shared<RenamePattern>(laid.patternId, "Refrain"),
+        std::make_shared<MovePlacement>(laid.placements[0], 2.0),
+        std::make_shared<RemovePlacement>(laid.placements[1]),
+        std::make_shared<RemovePattern>(laid.patternId)};
+
+    for (const auto& command : commands)
+    {
+        auto rebuilt = harness.registry.create(command->type(), command->payload());
+        REQUIRE(rebuilt.ok());
+        CHECK(rebuilt.value()->payload() == command->payload());
+    }
 }

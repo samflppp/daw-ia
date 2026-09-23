@@ -1149,6 +1149,22 @@ std::vector<const Placement*> ProjectState::placementsOf(PatternId id) const
 
 Result<void> ProjectState::addPlacement(Placement placement)
 {
+    return insertPlacement(placement, arrangement_.size());
+}
+
+Result<std::size_t> ProjectState::placementIndex(PlacementId id) const
+{
+    const auto position = std::find_if(arrangement_.begin(),
+                                       arrangement_.end(),
+                                       [id](const Placement& placement) { return placement.id == id; });
+    if (position == arrangement_.end())
+        return fail(ErrorCode::notFound, "no such placement: " + id.toString());
+
+    return static_cast<std::size_t>(std::distance(arrangement_.begin(), position));
+}
+
+Result<void> ProjectState::insertPlacement(Placement placement, std::size_t index)
+{
     auto valid = placement.validate();
     if (!valid)
         return valid;
@@ -1159,7 +1175,8 @@ Result<void> ProjectState::addPlacement(Placement placement)
     if (findPattern(placement.patternId) == nullptr)
         return fail(ErrorCode::notFound, "no such pattern: " + placement.patternId.toString());
 
-    arrangement_.push_back(placement);
+    const auto at = std::min(index, arrangement_.size());
+    arrangement_.insert(arrangement_.begin() + static_cast<std::ptrdiff_t>(at), placement);
     return {};
 }
 

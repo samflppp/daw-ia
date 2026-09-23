@@ -403,6 +403,14 @@ public:
     [[nodiscard]] std::vector<const Placement*> placementsOf(PatternId id) const;
 
     Result<void> addPlacement(Placement placement);
+
+    // Undoing a removal has to put the placement back where it was in the
+    // arrangement. Order carries no musical meaning — a placement sounds at its
+    // beat whatever its rank — but it carries an equality, exactly as for
+    // notes. Beyond the current count it appends.
+    [[nodiscard]] Result<std::size_t> placementIndex(PlacementId id) const;
+    Result<void> insertPlacement(Placement placement, std::size_t index);
+
     Result<void> removePlacement(PlacementId id);
     Result<void> movePlacement(PlacementId id, double startBeats);
 

@@ -164,6 +164,7 @@ std::vector<Tool> builtinTools()
     const auto pluginId = identifier("Identifiant de l'instance de plugin.");
     const auto pointId = identifier("Identifiant du point de tempo.");
     const auto patternId = identifier("Identifiant du pattern.");
+    const auto placementId = identifier("Identifiant d'un placement, tel que l'état le nomme.");
 
     std::vector<Tool> tools;
 
@@ -264,6 +265,32 @@ std::vector<Tool> builtinTools()
         "jamais coupées.",
         schema({{"patternId", patternId}, {"lengthBeats", field("number", "Nouvelle longueur, en temps.")}},
                {"patternId", "lengthBeats"})));
+
+    tools.push_back(make("pattern.rename",
+                         "Renomme un pattern. Un nom vide le fait afficher par son rang.",
+                         schema({{"patternId", patternId}, {"name", field("string", "Nouveau nom.")}},
+                                {"patternId", "name"})));
+
+    tools.push_back(make("pattern.remove",
+                         "Supprime un pattern, ses lignes, et tous ses placements sur la timeline.",
+                         schema({{"patternId", patternId}}, {"patternId"})));
+
+    // --- the arrangement
+    //
+    // Un placement pose un pattern à un temps. Il ne porte ni piste ni longueur :
+    // les deux sont dans le pattern. Le déplacer ou le retirer ne touche aucune
+    // note, et les autres placements du même pattern ne bougent pas.
+    tools.push_back(
+        make("placement.move",
+             "Déplace un placement sur la timeline. Le pattern et ses autres placements ne bougent pas.",
+             schema({{"placementId", placementId},
+                     {"startBeats", field("number", "Nouvelle position sur la timeline, en temps.")}},
+                    {"placementId", "startBeats"})));
+
+    tools.push_back(make("placement.remove",
+                         "Retire un placement de la timeline. Le pattern reste, et ses autres placements "
+                         "aussi.",
+                         schema({{"placementId", placementId}}, {"placementId"})));
 
     // --- clips and notes
     tools.push_back(

@@ -10,17 +10,18 @@
 namespace daw::domain
 {
 
-// The three verbs the pattern model needs, and no more.
+// The verbs of the pattern model.
 //
 // A pattern is content; a placement is where that content is played. Keeping
 // them apart is what makes "modify a pattern laid eight times" one command:
 // the eight placements hold no note, so there is nothing to modify eight
-// times. Everything the playlist of the next week does — laying a pattern
-// again, dragging it, taking it off — is a placement and never a note.
+// times. Everything the playlist does — laying a pattern again, dragging it,
+// taking it off — is a placement and never a note.
 //
-// pattern.remove, pattern.rename, placement.move and placement.remove are
-// deliberately absent. The screen of this week cannot call them, and a verb no
-// screen can call is a verb nothing proves.
+// There is no placement.resize. The length belongs to the pattern, and
+// stretching one laying out of eight must not stretch the seven others. A
+// laying cut short would be a length of its own on the placement: additive,
+// and not needed yet.
 
 // pattern.create — an empty pattern, of a given length.
 //
@@ -135,6 +136,95 @@ public:
 private:
     PatternId patternId_;
     double lengthBeats_;
+};
+
+// pattern.rename — what the pattern is called. An empty name is allowed and
+// means "shown by its rank", exactly as at creation.
+class RenamePattern final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "pattern.rename";
+
+    RenamePattern(PatternId patternId, std::string name);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+private:
+    PatternId patternId_;
+    std::string name_;
+};
+
+// pattern.remove — the pattern, its rows, and every placement of it.
+//
+// A placement of a pattern that is gone would name nothing, so they leave
+// together. The undo record carries all of it, with the ranks, so an undo puts
+// back the same arrangement and not merely an equivalent one.
+class RemovePattern final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "pattern.remove";
+
+    explicit RemovePattern(PatternId patternId);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+private:
+    PatternId patternId_;
+};
+
+// placement.move — lays an existing placement at another beat.
+//
+// Coalesces per placement: dragging a block across the playlist is one
+// history entry, and the undo puts it back where the drag started.
+class MovePlacement final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "placement.move";
+
+    MovePlacement(PlacementId placementId, double startBeats);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+    [[nodiscard]] bool canCoalesceWith(const Command& newer) const noexcept override;
+
+private:
+    PlacementId placementId_;
+    double startBeats_;
+};
+
+// placement.remove — takes one laying off the timeline. The pattern stays: it
+// is material, and the seven other layings still play it.
+class RemovePlacement final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "placement.remove";
+
+    explicit RemovePlacement(PlacementId placementId);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+private:
+    PlacementId placementId_;
 };
 
 } // namespace daw::domain
