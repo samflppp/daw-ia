@@ -3,10 +3,15 @@
 **Période :** semaine 10 sur 26. Rédigé le 23 septembre 2026.
 **Dépôt :** `samflppp/daw-ia` (privé), branche `main`, 10 commits S10 (`295d36d` → `HEAD`).
 **Volume :** 37 fichiers, +2 657 lignes, −230 (IDEES.md compris).
-**Tests :** 222 cas hors audio (202 de domaine, 20 de persistance), 58 cas d'engine sous label
-`audio`, 18 cas Python.
-**Registry :** 38 types de commandes, contre 33 la semaine dernière.
-**Schéma de projet :** 4, inchangé.
+**Tests :** 233 cas hors audio (domaine et persistance), 61 cas d'engine sous label `audio`,
+18 cas Python, au dernier passage complet.
+**Registry :** 42 types de commandes, contre 33 la semaine dernière (38 pour la playlist, 4 pour les
+samples).
+**Schéma de projet :** 4. Les samples ajoutent deux champs optionnels, écrits seulement s'ils
+servent : un projet sans sample s'écrit à l'octet près comme avant.
+
+**Mis à jour le 24 septembre** avec la seconde demande de la semaine : barre espace, navigateur de
+samples, canal sampler, clips audio, sélection et copier-coller façon FL (§8 ter).
 
 La S9 avait séparé le contenu de sa position. Cette semaine, la position est devenue un écran : la
 playlist. Et l'affirmation « modifié une fois, change partout » est maintenant prouvée par un rendu
@@ -24,6 +29,8 @@ audio, plus seulement par une lecture de l'état.
 | 5 | Projection par identité, sans reconstruire ce qui n'a pas changé, piège du tempo compris | Livré | §3.1, compteurs et identité d'objet |
 | 6 | Commandes dans la table du copilote ; « répète le pattern 1 huit fois puis ajoute le pattern 2 » | Livré : une entrée copilote, un Ctrl+Z | §5 ; §8, point 7 |
 | 7 | Les projets des semaines précédentes se relisent | Livré | §6 ; trois processus, 22 ms puis 28 ms |
+| 8 | Demandé en cours de semaine : pages en fenêtres | Livré | §8 bis |
+| 9 | Demandé en cours de semaine : espace, samples, glisser-déposer, sélection, Ctrl+C/V/B | Livré | §8 ter |
 
 ## 2. Le modèle de placement retenu
 
@@ -124,7 +131,7 @@ moins 16 mesures, plus 4 mesures libres après la dernière pose.
 ## 5. Le copilote
 
 - Les 5 nouvelles commandes sont dans la table. Le test croisé registry ↔ table passe dans les
-  deux sens (38 = 38).
+  deux sens (38 = 38 pour la playlist, 42 = 42 avec les samples).
 - L'état résumé donne à chaque pattern son **rang** (`rank`) et le **libellé** affiché (`label`).
   Ainsi « le pattern 2 » désigne la même chose pour l'utilisateur et pour le modèle. Il donne
   aussi `arrangementEndBeats`, la fin du morceau, et le mode de lecture.
@@ -168,6 +175,9 @@ avec les commandes d'aujourd'hui, dont les payloads n'ont pas changé ; le test 
 |---|---|
 | Redimensionner une pose | décision validée ; §2 |
 | Défilement et zoom de la playlist | la timeline s'adapte à la largeur. Au-delà d'une soixantaine de mesures, les blocs deviennent étroits |
+| Écoute d'un sample dans le navigateur | un clic sur un sample ne le joue pas encore ; il faut le déposer pour l'entendre |
+| Réglages du sampler (note de base, enveloppe, hauteur) | le canal joue le sample en entier à sa hauteur d'origine ; aucun réglage exposé |
+| Couper ou étirer un clip audio | un clip dure son sample, comme une pose dure son pattern |
 | Lignes libres façon FL (plusieurs patterns sur une ligne) | écarté à la validation : ce serait un état d'écran dans le domaine |
 
 **IDEES.md :** aucune idée du fichier n'a servi cette semaine, et rien n'y a été mis en œuvre.
@@ -194,9 +204,13 @@ boutons. Les Ctrl+Z passent par la vue, et la phrase est posée au vrai copilote
 laisse une capture de la fenêtre. Chaque étape qui change le son rend l'Edit hors ligne en WAV
 et compte les attaques sur la grille du rack.
 
-Résultat : **60 vérifications, aucune en échec**, sur trois exécutions : la liste (51), la
-réouverture par un autre processus (5), un projet S8 + S9 (4). Les rapports et trois captures sont
-dans `docs/verification-s10/`.
+Résultat : **94 vérifications, aucune en échec**, sur trois exécutions du build final : la liste
+(85, dont les 34 de la seconde demande, §8 ter), la réouverture par un autre processus (5), un
+projet S8 + S9 (4). Les rapports et cinq captures sont dans `docs/verification-s10/`.
+
+Un premier passage de la liste a eu 5 échecs, tous au copilote, parce que l'appel au modèle a
+expiré (« The handshake operation timed out »). C'était le réseau, pas le code : le second passage
+les a tous passés, sans rien changer.
 
 | # | Vérification | Mesuré |
 |---|---|---|
@@ -221,8 +235,9 @@ l'exécutable. Le second passage a été lancé volontairement hors du dépôt, 
 
 **Ce que le copilote a répondu :** « Le pattern 1 était déjà répété huit fois (0 à 128). J'ai
 ajouté le pattern 2 à la suite ». Huit poses existaient déjà, donc sa lecture est défendable. En
-revanche il a écrit « à partir de la mesure 128 » alors qu'il s'agit du **temps** 128 (mesure 33).
-C'est le prompt qu'il faut reprendre : lui faire donner les positions en mesures.
+revanche il a d'abord écrit « à partir de la mesure 128 » alors qu'il s'agit du **temps** 128
+(mesure 33). Le prompt dit maintenant que les outils parlent en temps et l'utilisateur en mesures,
+avec la conversion. Au passage suivant : « à partir de la mesure 33 ».
 
 **Ce qui reste hors de portée d'une vérification automatique :**
 - l'écoute sur les enceintes : le rendu hors ligne en est la mesure, pas l'expérience ;
@@ -260,6 +275,81 @@ vide pour la playlist et le copilote. Et un pattern de 4 mesures affiche 64 pas 
 rack. FL ouvre un pattern sur 1 mesure ; le passer à 1 mesure par défaut serait un choix à
 valider.
 
+## 8 ter. Samples, sélection, copier-coller
+
+Ta demande, et tes deux choix : un sample déposé sur le rack devient un **canal sampler** ; la
+playlist prend des **clips audio** tout de suite.
+
+**Le modèle.** Deux ajouts au domaine, sans migration :
+
+| Ajout | Contenu | Commandes |
+|---|---|---|
+| `Track.sample` (optionnel) | `SampleRef` : empreinte des octets dans le ContentStore, nom, format, durée | `track.set_sample` |
+| `AudioClip` | identifiant, piste, `SampleRef`, temps de début ; pas de longueur, il dure son sample | `audio.place`, `audio.move`, `audio.remove` |
+
+Les octets sont **copiés dans le projet** par leur empreinte. Un projet ne dépend donc pas du
+dossier d'où vient le sample : on peut vider ou déplacer le drumkit, le projet sonne pareil.
+`track.remove` emporte les clips audio de la piste, et son annulation les rend avec leur rang.
+
+**Le moteur.** Un canal sampler porte un `SamplerPlugin` à la place du synthé. Les clips audio
+vivent sur une **piste compagnon** : un instrument remplace l'audio qui entre dans sa piste, et un
+clip posé sur la piste du sampler aurait été muet. Le test de rendu l'a montré avant qu'un écran
+le cache. Les clips audio suivent la même réconciliation par clé : déplacer un clip le repositionne
+sans le recréer, et à 60 BPM il garde son objet et sa durée en secondes. En mode pattern, ils se
+taisent.
+
+**L'écran.**
+
+| Geste | Effet |
+|---|---|
+| Espace | lecture / arrêt, depuis n'importe quelle page |
+| page **Navigateur** (à gauche) | « + Dossier » donne accès à un drumkit ou un sample pack ; arbre ouvert à la demande ; clic droit sur un dossier racine pour le retirer ; dossiers gardés dans `DAW IA.layout` |
+| déposer un sample sur une ligne du rack | ce canal devient sampler |
+| déposer un sample sous les lignes du rack | nouveau canal sampler, nommé d'après le fichier ; **une** entrée d'historique |
+| déposer un sample sur la playlist (depuis le navigateur ou l'Explorateur) | nouvelle piste + clip audio à la mesure sous le pointeur ; **une** entrée |
+| glisser des blocs | toute la sélection bouge ; **une** entrée, quel que soit le nombre de blocs |
+| Ctrl + glisser dans le vide | sélection en zone |
+| Ctrl + Maj + clic | ajoute un bloc à la sélection, ou l'en retire |
+| Ctrl+C, Ctrl+V | copie ; colle à la tête de lecture |
+| Ctrl+B | duplique la sélection juste après elle, arrondie à la mesure ; la sélection passe aux copies, donc Ctrl+B répété enchaîne |
+| Suppr | retire la sélection |
+
+Le copilote voit les samples et les clips audio dans l'état résumé. Il peut déplacer et retirer un
+clip audio. Il ne peut pas en poser un ni changer le sample d'un canal : il faudrait qu'il fournisse
+des octets, ce qu'il n'a pas.
+
+**Vérifié par l'application (34 des 85) :** Espace lance puis arrête la lecture. Le navigateur
+montre un drumkit écrit pour l'occasion. Le dépôt sur le rack crée un canal « Kick 808 » en une
+entrée. Ses cases allumées s'entendent au rendu, aux bons pas. Le clap déposé sur la playlist
+s'entend à son temps, et le rendu va jusqu'au bout du clap. Ctrl + glisser prend 2 blocs. Ctrl +
+Maj + clic en ajoute un, puis le retire. Ctrl+B ajoute 2 poses en une entrée, et un Ctrl+Z les
+retire. Ctrl+C / Ctrl+V colle au temps 100. Suppr retire, et Ctrl+Z rend l'état à l'octet près.
+
+**Le bug que tu as trouvé : un sample déposé sur la playlist ne sonnait pas.** L'application
+s'ouvre en mode pattern, et le mode pattern ne joue que le pattern écouté : le clip audio était
+bien posé, mais muet tant qu'on n'appuyait pas sur SONG. La vérification ne l'avait pas vu, parce
+qu'elle appuyait sur SONG juste avant le dépôt. Maintenant, un dépôt sur la playlist passe en mode
+chanson. La vérification dépose désormais en PAT et contrôle que SONG est pris et que le clap
+s'entend. Si tu n'entends toujours rien en direct, c'est un autre bug : le rendu hors ligne, lui,
+entend le clap.
+
+**Trouvé en vérifiant :** le coller prenait l'horloge du moteur même à l'arrêt ; il prend
+maintenant la position du transport quand rien ne joue. La page Navigateur était plus étroite que
+sa largeur minimale, et une fenêtre se cachait sous la playlist. Elle est élargie, et la mémoire
+des fenêtres se remet à zéro d'elle-même quand la disposition du manifeste change.
+
+## 8 quater. Ce qui reste pour clore la S10
+
+| Reste | Nature |
+|---|---|
+| Commit de la seconde demande, `--verify-reopen` et `--verify-legacy` sur le build final | fait |
+| Prompt du copilote en mesures | fait ; il dit « mesure 33 » |
+| Un sample déposé sur la playlist restait muet | corrigé (§8 ter) |
+| Longueur par défaut d'un pattern | **tranché par toi : 4 mesures**, c'est déjà le cas |
+| Bande d'en-tête de la fenêtre principale : fermer, réduire, agrandir, ouvrir, enregistrer | demandée ; décision de structure à valider avant de coder |
+| Bandes d'en-tête vides dans les pages | cosmétique ; à traiter avec la bande ci-dessus |
+| Écoute sur les enceintes | à faire par toi : seul point qu'aucun rendu ne remplace |
+
 ## 9. Ce que la S11 hérite
 
 | Pièce | Usage |
@@ -267,7 +357,9 @@ valider.
 | `ProjectProjector::stats()` | tout ajout au moteur peut prouver qu'il ne reconstruit pas plus que nécessaire |
 | `transport.set_mode` | le point d'entrée pour faire écouter un pattern généré avant de le poser |
 | `arrangementEndBeats`, `rank`, `label` | le vocabulaire d'arrangement du copilote |
-| Pose tronquée, défilement de la playlist | reportés, sans migration |
+| `SampleRef`, ContentStore par empreinte | tout audio importé ou généré entre dans le projet par le même chemin |
+| Piste compagnon | le modèle pour mêler instrument et audio sur une même piste du domaine |
+| Pose tronquée, défilement de la playlist, écoute dans le navigateur | reportés, sans migration |
 
 ## 10. Suivi d'avancement
 
@@ -275,7 +367,7 @@ valider.
 |---|---|---|
 | S1–S8 | Socle, bus, moteur, plugins, persistance, UI, domaine, copilote | Acquis |
 | S9 | Channel rack, modèle de pattern | Acquis |
-| S10 | La playlist, puis le beatmaker en fenêtres | Livré ; 60 vérifications automatiques : §8 |
+| S10 | La playlist, le beatmaker en fenêtres, les samples | Livré ; 94 vérifications automatiques (§8) ; reste la bande d'en-tête (§8 quater) |
 
 Aucune décision d'architecture n'a été rouverte. La règle des identifiants tient : chaque
 `PlacementId` est tiré par l'appelant (la playlist, le copilote avec `$new:`), jamais par une
