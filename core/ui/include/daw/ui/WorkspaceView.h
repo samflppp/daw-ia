@@ -67,7 +67,7 @@ public:
     // focus. JUCE hands an unhandled key press up the parent chain, so this
     // is the last component to see it — which is exactly where a shortcut
     // that must work everywhere belongs. The page keys live here for the same
-    // reason.
+    // reason, and so does Space, which starts and stops playback.
     //
     // A text field that handles its own Ctrl+Z keeps it: typing a request to
     // the copilot and undoing a word must not undo an edit of the project.

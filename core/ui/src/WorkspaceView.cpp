@@ -1,7 +1,10 @@
 #include "daw/ui/WorkspaceView.h"
 
+#include "daw/domain/commands/TransportCommands.h"
+
 #include <algorithm>
 #include <cstdlib>
+#include <memory>
 #include <string>
 
 namespace daw::ui
@@ -365,6 +368,18 @@ bool WorkspaceView::keyPressed(const juce::KeyPress& key)
     if (key == redo || key == redoAlternative)
     {
         static_cast<void>(services_.bus.redo());
+        return true;
+    }
+
+    // Space starts and stops, from anywhere the key reaches: a text field that
+    // takes the space keeps it, so typing a request to the copilot never
+    // starts the song.
+    if (key == juce::KeyPress{juce::KeyPress::spaceKey})
+    {
+        if (services_.clock.isPlaying())
+            static_cast<void>(services_.bus.execute(std::make_unique<domain::TransportStop>()));
+        else
+            static_cast<void>(services_.bus.execute(std::make_unique<domain::TransportPlay>()));
         return true;
     }
 

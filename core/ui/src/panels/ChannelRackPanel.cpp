@@ -58,6 +58,11 @@ ChannelRackPanel::ChannelRackPanel(const PanelContext& context)
     setLookAndFeel(&lookAndFeel_);
 
     addAndMakeVisible(patternChooser_);
+
+    // A chooser that kept the focus after a click would open its list on the
+    // next press of Space instead of letting the transport have it.
+    patternChooser_.setWantsKeyboardFocus(false);
+    resolutionChooser_.setWantsKeyboardFocus(false);
     patternChooser_.setTextWhenNothingSelected("aucun pattern");
 
     // Choosing a pattern is not an edit: it goes to the Selection, never to
