@@ -1,5 +1,6 @@
 #include "daw/domain/commands/TrackCommands.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <utility>
 
@@ -129,9 +130,23 @@ Result<Value> RemoveTrack::apply(ProjectState& state) const
 
     // The whole track, plugins included, plus its rows: nothing else can put
     // back what the removal is about to drop.
+    // And its audio clips, each with its rank, so an undo lays them back in
+    // the same order.
+    Value::Array audio;
+    for (std::size_t rank = 0; rank < state.audioClips().size(); ++rank)
+    {
+        const auto& clip = state.audioClips()[rank];
+        if (clip.trackId != trackId_)
+            continue;
+
+        audio.push_back(
+            Value::object({{"clip", clip.toValue()}, {"index", Value{static_cast<std::int64_t>(rank)}}}));
+    }
+
     auto record = Value::object({{"index", Value{static_cast<std::int64_t>(index.value())}},
                                  {"track", track->toValue()},
-                                 {"rows", Value::array(std::move(rows))}});
+                                 {"rows", Value::array(std::move(rows))},
+                                 {"audio", Value::array(std::move(audio))}});
 
     auto removed = state.removeTrack(trackId_);
     if (!removed)
@@ -207,6 +222,32 @@ Result<void> RemoveTrack::revert(ProjectState& state, const Value& undoRecord) c
         auto added = state.addClip(patternId.value(), std::move(clip).value());
         if (!added)
             return added;
+    }
+
+    // Absent from a record written before audio clips existed: there were none.
+    const auto* audioValue = undoRecord.find("audio");
+    const auto* audio = audioValue != nullptr ? audioValue->asArray() : nullptr;
+    if (audio == nullptr)
+        return {};
+
+    for (const auto& entry : *audio)
+    {
+        const auto* clipValue = entry.find("clip");
+        if (clipValue == nullptr)
+            return fail(ErrorCode::invalidPayload, "missing key: clip");
+
+        auto clip = AudioClip::fromValue(*clipValue);
+        if (!clip)
+            return clip.error();
+
+        auto rank = entry.intAt("index");
+        if (!rank)
+            return rank.error();
+
+        auto laid = state.insertAudioClip(std::move(clip).value(),
+                                          static_cast<std::size_t>(std::max<std::int64_t>(0, rank.value())));
+        if (!laid)
+            return laid;
     }
 
     return {};

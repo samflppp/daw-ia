@@ -94,6 +94,7 @@ struct PluginIdTag;
 struct TempoPointIdTag;
 struct PatternIdTag;
 struct PlacementIdTag;
+struct AudioClipIdTag;
 
 using CommandId = EntityId<CommandIdTag>;
 using GestureId = EntityId<GestureIdTag>;
@@ -122,6 +123,11 @@ using PatternId = EntityId<PatternIdTag>;
 // nothing else: a placement holds no note, which is exactly what makes "modify
 // a pattern placed eight times" one command instead of eight.
 using PlacementId = EntityId<PlacementIdTag>;
+
+// Identifies one audio clip laid on the timeline: a sample, a track it sounds
+// on, and a beat. Its own kind of identifier, because it is neither a pattern
+// nor a placement of one: it holds no note, and nothing edits it from a rack.
+using AudioClipId = EntityId<AudioClipIdTag>;
 
 // Identifies one tempo change on the timeline. A point is named rather than
 // located because it moves: a payload that designated a point by its position

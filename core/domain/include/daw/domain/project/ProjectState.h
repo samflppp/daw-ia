@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -217,6 +218,28 @@ struct PluginInstance
     friend bool operator==(const PluginInstance& lhs, const PluginInstance& rhs);
 };
 
+// A sample the project holds: an audio file, by the digest of its bytes.
+//
+// The bytes are copied into the project's content store when the sample comes
+// in, so the project keeps sounding when the drumkit it came from is moved,
+// renamed or deleted. What the domain keeps is the reference, the name it had,
+// the format it was in — needed to read it back — and its length, measured
+// once at import: the playlist draws an audio clip that long without opening
+// the file.
+struct SampleRef
+{
+    BlobRef blob;
+    std::string name;   // "Kick 01.wav", for the eye
+    std::string format; // "wav", "aif", "flac", "mp3", "ogg": lowercase, no dot
+    double seconds{0.0};
+
+    [[nodiscard]] Result<void> validate() const;
+    [[nodiscard]] Value toValue() const;
+    [[nodiscard]] static Result<SampleRef> fromValue(const Value& value);
+
+    friend bool operator==(const SampleRef& lhs, const SampleRef& rhs);
+};
+
 struct Track
 {
     TrackId id{};
@@ -251,11 +274,38 @@ struct Track
     // Order is the chain order: index 0 is first in the signal path.
     std::vector<PluginInstance> plugins;
 
+    // A sampler channel, the way FL makes one when a sample is dropped on the
+    // channel rack: the instrument of this track is that sample, and a lit
+    // cell triggers it. The channel pitch is the note that plays it at its own
+    // pitch. Absent, the track plays whatever instrument its chain holds.
+    std::optional<SampleRef> sample;
+
     [[nodiscard]] Result<void> validate() const;
     [[nodiscard]] Value toValue() const;
     [[nodiscard]] static Result<Track> fromValue(const Value& value);
 
     friend bool operator==(const Track& lhs, const Track& rhs);
+};
+
+// One audio clip on the timeline: a sample, the track it sounds on, and the
+// beat it starts at.
+//
+// It is not in a pattern. A pattern is notes a rack edits; an audio clip is a
+// recording laid where it plays, the way FL lays one in its playlist. It has no
+// length of its own either: it lasts as long as its sample, in seconds, so a
+// tempo change moves where it starts and never stretches it.
+struct AudioClip
+{
+    AudioClipId id{};
+    TrackId trackId{};
+    SampleRef sample;
+    double startBeats{0.0};
+
+    [[nodiscard]] Result<void> validate() const;
+    [[nodiscard]] Value toValue() const;
+    [[nodiscard]] static Result<AudioClip> fromValue(const Value& value);
+
+    friend bool operator==(const AudioClip& lhs, const AudioClip& rhs);
 };
 
 // The clips a track carried before patterns existed.
@@ -401,6 +451,23 @@ public:
 
     [[nodiscard]] Result<int> trackChannelPitch(TrackId id) const;
     Result<void> setTrackChannelPitch(TrackId id, int pitch);
+
+    // Makes the track a sampler channel on that sample, or, with nothing, gives
+    // it back to its chain.
+    Result<void> setTrackSample(TrackId id, std::optional<SampleRef> sample);
+
+    // --- audio clips
+    //
+    // In the arrangement next to the placements, and ordered the same way: by
+    // the order they were laid, which an undo restores.
+    [[nodiscard]] const std::vector<AudioClip>& audioClips() const noexcept { return audio_; }
+    [[nodiscard]] const AudioClip* findAudioClip(AudioClipId id) const noexcept;
+    [[nodiscard]] Result<std::size_t> audioClipIndex(AudioClipId id) const;
+
+    Result<void> addAudioClip(AudioClip clip);
+    Result<void> insertAudioClip(AudioClip clip, std::size_t index);
+    Result<void> removeAudioClip(AudioClipId id);
+    Result<void> moveAudioClip(AudioClipId id, double startBeats);
 
     // --- patterns and placements
     //
@@ -549,6 +616,7 @@ private:
     std::vector<Track> tracks_;
     std::vector<Pattern> patterns_;
     std::vector<Placement> arrangement_;
+    std::vector<AudioClip> audio_;
     TransportState transport_;
 };
 

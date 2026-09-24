@@ -102,14 +102,38 @@ Value trackValue(const Track& track, std::size_t index)
     for (const auto& plugin : track.plugins)
         plugins.push_back(pluginValue(plugin));
 
-    return Value::object({{"trackId", Value{track.id.toString()}},
+    Value::Object members{{"trackId", Value{track.id.toString()}},
                           {"index", Value{static_cast<std::int64_t>(index)}},
                           {"name", Value{track.name}},
                           {"volumeDb", Value{track.volumeDb}},
                           {"pan", Value{track.pan}},
                           {"muted", Value{track.muted}},
-                          {"channelPitch", Value{track.channelPitch}},
-                          {"plugins", Value::array(std::move(plugins))}});
+                          {"channelPitch", Value{static_cast<std::int64_t>(track.channelPitch)}},
+                          {"plugins", Value::array(std::move(plugins))}};
+
+    // A sampler channel says which sample it plays, by name: the digest means
+    // nothing to a model.
+    if (track.sample.has_value())
+        members.emplace_back("sample", Value{track.sample->name});
+
+    return Value::object(std::move(members));
+}
+
+// The audio clips on the timeline: which sample, on which track, from which
+// beat, and for how long in seconds — a clip does not follow the tempo.
+Value audioValue(const ProjectState& state)
+{
+    Value::Array clips;
+    clips.reserve(state.audioClips().size());
+    for (const auto& clip : state.audioClips())
+    {
+        clips.push_back(Value::object({{"clipId", Value{clip.id.toString()}},
+                                       {"trackId", Value{clip.trackId.toString()}},
+                                       {"sample", Value{clip.sample.name}},
+                                       {"startBeats", Value{clip.startBeats}},
+                                       {"seconds", Value{clip.sample.seconds}}}));
+    }
+    return Value::array(std::move(clips));
 }
 
 Value tempoValue(const ProjectState& state)
@@ -180,6 +204,7 @@ Value summarise(const ProjectState& state, const MachinePlugins& plugins)
          {"tracks", Value::array(std::move(tracks))},
          {"patterns", Value::array(std::move(patterns))},
          {"arrangementEndBeats", Value{arrangementEnd}},
+         {"audioClips", audioValue(state)},
          {"transport", transportValue(state)},
          {"machinePlugins",
           Value::object({{"total", Value{static_cast<std::int64_t>(plugins.available.size())}},

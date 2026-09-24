@@ -20,6 +20,7 @@ add_executable(daw_domain_tests
     NoteCommandTests.cpp
     NoteEditCommandTests.cpp
     PatternTests.cpp
+    SampleTests.cpp
     TempoCommandTests.cpp
     TransportTests.cpp
     ThreadingTests.cpp

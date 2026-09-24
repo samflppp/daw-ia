@@ -67,12 +67,16 @@ TEST_CASE("the list handed to the model leaves out what only the application can
     const auto offered = copilot::toValue(tools);
     REQUIRE(offered.asArray() != nullptr);
 
-    // One command of the registry is not offered: capturing a plugin state
-    // needs the bytes, and the copilot has none.
-    CHECK(offered.asArray()->size() == tools.size() - 1);
+    // Three commands of the registry are not offered: capturing a plugin
+    // state, making a sampler channel and laying an audio clip all need bytes,
+    // and the copilot has none.
+    CHECK(offered.asArray()->size() == tools.size() - 3);
 
     const auto text = json::write(offered);
     CHECK(text.find("plugin.capture_state") == std::string::npos);
+    CHECK(text.find("track.set_sample") == std::string::npos);
+    CHECK(text.find("audio.place") == std::string::npos);
+    CHECK(text.find("audio.move") != std::string::npos);
     CHECK(text.find("track.set_volume") != std::string::npos);
 }
 

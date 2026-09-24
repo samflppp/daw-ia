@@ -6,6 +6,7 @@
 #include "daw/domain/commands/NoteEditCommands.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
+#include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TempoCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
@@ -55,6 +56,10 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<RemovePattern>());
     static_cast<void>(registry.add<MovePlacement>());
     static_cast<void>(registry.add<RemovePlacement>());
+    static_cast<void>(registry.add<SetTrackSample>());
+    static_cast<void>(registry.add<PlaceAudio>());
+    static_cast<void>(registry.add<MoveAudio>());
+    static_cast<void>(registry.add<RemoveAudio>());
     static_cast<void>(registry.add<SetTrackChannelPitch>());
     static_cast<void>(registry.add<CapturePluginState>());
     return registry;

@@ -604,6 +604,139 @@ bool operator==(const PluginInstance& lhs, const PluginInstance& rhs)
 // Track
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// SampleRef
+// ---------------------------------------------------------------------------
+
+Result<void> SampleRef::validate() const
+{
+    if (blob.isEmpty())
+        return fail(ErrorCode::invalidArgument, "a sample names its bytes");
+    if (auto valid = blob.validate(); !valid)
+        return valid;
+    if (name.empty())
+        return fail(ErrorCode::invalidArgument, "a sample has a name");
+    if (format.empty() || format.size() > 8 ||
+        !std::all_of(format.begin(),
+                     format.end(),
+                     [](char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'); }))
+        return fail(ErrorCode::invalidArgument, "a sample format is a lowercase extension: " + format);
+    if (!(seconds > 0.0) || !std::isfinite(seconds))
+        return fail(ErrorCode::invalidArgument, "a sample lasts some time");
+    return {};
+}
+
+Value SampleRef::toValue() const
+{
+    return Value::object({{"blob", blob.toValue()},
+                          {"name", Value{name}},
+                          {"format", Value{format}},
+                          {"seconds", Value{seconds}}});
+}
+
+Result<SampleRef> SampleRef::fromValue(const Value& value)
+{
+    const auto* blobValue = value.find("blob");
+    if (blobValue == nullptr)
+        return fail(ErrorCode::invalidPayload, "missing key: blob");
+
+    auto blob = BlobRef::fromValue(*blobValue);
+    if (!blob)
+        return blob.error();
+
+    auto name = value.stringAt("name");
+    if (!name)
+        return name.error();
+
+    auto format = value.stringAt("format");
+    if (!format)
+        return format.error();
+
+    auto seconds = value.doubleAt("seconds");
+    if (!seconds)
+        return seconds.error();
+
+    SampleRef sample{};
+    sample.blob = blob.value();
+    sample.name = name.value();
+    sample.format = format.value();
+    sample.seconds = seconds.value();
+
+    if (auto valid = sample.validate(); !valid)
+        return valid.error();
+
+    return sample;
+}
+
+bool operator==(const SampleRef& lhs, const SampleRef& rhs)
+{
+    return lhs.blob == rhs.blob && lhs.name == rhs.name && lhs.format == rhs.format &&
+           lhs.seconds == rhs.seconds;
+}
+
+// ---------------------------------------------------------------------------
+// AudioClip
+// ---------------------------------------------------------------------------
+
+Result<void> AudioClip::validate() const
+{
+    if (id.isNil())
+        return fail(ErrorCode::invalidArgument, "audio clip identifier is nil");
+    if (trackId.isNil())
+        return fail(ErrorCode::invalidArgument, "an audio clip sounds on a track");
+    if (startBeats < 0.0 || !std::isfinite(startBeats))
+        return fail(ErrorCode::invalidArgument, "the audio clip starts before the timeline origin");
+    return sample.validate();
+}
+
+Value AudioClip::toValue() const
+{
+    return Value::object({{"id", Value{id.toString()}},
+                          {"trackId", Value{trackId.toString()}},
+                          {"sample", sample.toValue()},
+                          {"startBeats", Value{startBeats}}});
+}
+
+Result<AudioClip> AudioClip::fromValue(const Value& value)
+{
+    auto id = idAt<AudioClipId>(value, "id");
+    if (!id)
+        return id.error();
+
+    auto trackId = idAt<TrackId>(value, "trackId");
+    if (!trackId)
+        return trackId.error();
+
+    const auto* sampleValue = value.find("sample");
+    if (sampleValue == nullptr)
+        return fail(ErrorCode::invalidPayload, "missing key: sample");
+
+    auto sample = SampleRef::fromValue(*sampleValue);
+    if (!sample)
+        return sample.error();
+
+    auto startBeats = value.doubleAt("startBeats");
+    if (!startBeats)
+        return startBeats.error();
+
+    AudioClip clip{};
+    clip.id = id.value();
+    clip.trackId = trackId.value();
+    clip.sample = std::move(sample).value();
+    clip.startBeats = startBeats.value();
+
+    if (auto valid = clip.validate(); !valid)
+        return valid.error();
+
+    return clip;
+}
+
+bool operator==(const AudioClip& lhs, const AudioClip& rhs)
+{
+    return lhs.id == rhs.id && lhs.trackId == rhs.trackId && lhs.sample == rhs.sample &&
+           lhs.startBeats == rhs.startBeats;
+}
+
 Result<void> Track::validate() const
 {
     if (id.isNil())
@@ -623,6 +756,10 @@ Result<void> Track::validate() const
         if (!valid)
             return valid;
     }
+
+    if (sample.has_value())
+        return sample->validate();
+
     return {};
 }
 
@@ -633,13 +770,20 @@ Value Track::toValue() const
     for (const auto& plugin : plugins)
         serialisedPlugins.push_back(plugin.toValue());
 
-    return Value::object({{"id", Value{id.toString()}},
+    Value::Object members{{"id", Value{id.toString()}},
                           {"name", Value{name}},
                           {"volumeDb", Value{volumeDb}},
                           {"muted", Value{muted}},
                           {"pan", Value{pan}},
                           {"channelPitch", Value{channelPitch}},
-                          {"plugins", Value::array(std::move(serialisedPlugins))}});
+                          {"plugins", Value::array(std::move(serialisedPlugins))}};
+
+    // Written only when there is one: a track without a sample serialises the
+    // way it always has, byte for byte.
+    if (sample.has_value())
+        members.emplace_back("sample", sample->toValue());
+
+    return Value::object(std::move(members));
 }
 
 Result<Track> Track::fromValue(const Value& value)
@@ -713,6 +857,14 @@ Result<Track> Track::fromValue(const Value& value)
         }
     }
 
+    if (const auto* sampleValue = value.find("sample"); sampleValue != nullptr)
+    {
+        auto sample = SampleRef::fromValue(*sampleValue);
+        if (!sample)
+            return sample.error();
+        track.sample = std::move(sample).value();
+    }
+
     auto valid = track.validate();
     if (!valid)
         return valid.error();
@@ -723,7 +875,8 @@ Result<Track> Track::fromValue(const Value& value)
 bool operator==(const Track& lhs, const Track& rhs)
 {
     return lhs.id == rhs.id && lhs.name == rhs.name && lhs.volumeDb == rhs.volumeDb && lhs.pan == rhs.pan &&
-           lhs.muted == rhs.muted && lhs.channelPitch == rhs.channelPitch && lhs.plugins == rhs.plugins;
+           lhs.muted == rhs.muted && lhs.channelPitch == rhs.channelPitch && lhs.plugins == rhs.plugins &&
+           lhs.sample == rhs.sample;
 }
 
 // ---------------------------------------------------------------------------
@@ -1322,6 +1475,13 @@ Result<void> ProjectState::removeTrack(TrackId id)
                             pattern.clips.end());
     }
 
+    // Its audio clips go too, for the same reason; the undo record carries
+    // them back.
+    audio_.erase(std::remove_if(audio_.begin(),
+                                audio_.end(),
+                                [id](const AudioClip& clip) { return clip.trackId == id; }),
+                 audio_.end());
+
     return {};
 }
 
@@ -1421,6 +1581,90 @@ Result<int> ProjectState::trackChannelPitch(TrackId id) const
         return fail(ErrorCode::notFound, "no such track: " + id.toString());
 
     return track->channelPitch;
+}
+
+Result<void> ProjectState::setTrackSample(TrackId id, std::optional<SampleRef> sample)
+{
+    if (sample.has_value())
+    {
+        if (auto valid = sample->validate(); !valid)
+            return valid;
+    }
+
+    auto* track = findTrackMutable(id);
+    if (track == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    track->sample = std::move(sample);
+    return {};
+}
+
+const AudioClip* ProjectState::findAudioClip(AudioClipId id) const noexcept
+{
+    for (const auto& clip : audio_)
+    {
+        if (clip.id == id)
+            return &clip;
+    }
+    return nullptr;
+}
+
+Result<std::size_t> ProjectState::audioClipIndex(AudioClipId id) const
+{
+    const auto position =
+        std::find_if(audio_.begin(), audio_.end(), [id](const AudioClip& clip) { return clip.id == id; });
+    if (position == audio_.end())
+        return fail(ErrorCode::notFound, "no such audio clip: " + id.toString());
+
+    return static_cast<std::size_t>(std::distance(audio_.begin(), position));
+}
+
+Result<void> ProjectState::addAudioClip(AudioClip clip)
+{
+    return insertAudioClip(std::move(clip), audio_.size());
+}
+
+Result<void> ProjectState::insertAudioClip(AudioClip clip, std::size_t index)
+{
+    if (auto valid = clip.validate(); !valid)
+        return valid;
+
+    if (findAudioClip(clip.id) != nullptr)
+        return fail(ErrorCode::conflict, "audio clip already exists: " + clip.id.toString());
+
+    if (findTrack(clip.trackId) == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + clip.trackId.toString());
+
+    const auto at = std::min(index, audio_.size());
+    audio_.insert(audio_.begin() + static_cast<std::ptrdiff_t>(at), std::move(clip));
+    return {};
+}
+
+Result<void> ProjectState::removeAudioClip(AudioClipId id)
+{
+    const auto position =
+        std::find_if(audio_.begin(), audio_.end(), [id](const AudioClip& clip) { return clip.id == id; });
+    if (position == audio_.end())
+        return fail(ErrorCode::notFound, "no such audio clip: " + id.toString());
+
+    audio_.erase(position);
+    return {};
+}
+
+Result<void> ProjectState::moveAudioClip(AudioClipId id, double startBeats)
+{
+    const auto position =
+        std::find_if(audio_.begin(), audio_.end(), [id](const AudioClip& clip) { return clip.id == id; });
+    if (position == audio_.end())
+        return fail(ErrorCode::notFound, "no such audio clip: " + id.toString());
+
+    AudioClip moved = *position;
+    moved.startBeats = startBeats;
+    if (auto valid = moved.validate(); !valid)
+        return valid;
+
+    *position = std::move(moved);
+    return {};
 }
 
 Result<void> ProjectState::setTrackChannelPitch(TrackId id, int pitch)
@@ -1830,10 +2074,23 @@ Value ProjectState::toValue() const
     for (const auto& placement : arrangement_)
         serialisedArrangement.push_back(placement.toValue());
 
-    return Value::object({{"tempo", Value::array(std::move(serialisedTempo))},
+    Value::Object members{{"tempo", Value::array(std::move(serialisedTempo))},
                           {"tracks", Value::array(std::move(serialisedTracks))},
                           {"patterns", Value::array(std::move(serialisedPatterns))},
-                          {"arrangement", Value::array(std::move(serialisedArrangement))}});
+                          {"arrangement", Value::array(std::move(serialisedArrangement))}};
+
+    // Only when there is some: a project without audio serialises the way it
+    // did before audio clips existed, byte for byte.
+    if (!audio_.empty())
+    {
+        Value::Array serialisedAudio;
+        serialisedAudio.reserve(audio_.size());
+        for (const auto& clip : audio_)
+            serialisedAudio.push_back(clip.toValue());
+        members.emplace_back("audio", Value::array(std::move(serialisedAudio)));
+    }
+
+    return Value::object(std::move(members));
 }
 
 Result<ProjectState> ProjectState::fromValue(const Value& value)
@@ -1940,13 +2197,31 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
         }
     }
 
+    if (const auto* audioValue = value.find("audio"); audioValue != nullptr)
+    {
+        const auto* items = audioValue->asArray();
+        if (items == nullptr)
+            return fail(ErrorCode::invalidPayload, "audio must be an array");
+
+        for (const auto& item : *items)
+        {
+            auto clip = AudioClip::fromValue(item);
+            if (!clip)
+                return clip.error();
+
+            auto added = state.addAudioClip(std::move(clip).value());
+            if (!added)
+                return added.error();
+        }
+    }
+
     return state;
 }
 
 bool operator==(const ProjectState& lhs, const ProjectState& rhs)
 {
     return lhs.tempo_ == rhs.tempo_ && lhs.tracks_ == rhs.tracks_ && lhs.patterns_ == rhs.patterns_ &&
-           lhs.arrangement_ == rhs.arrangement_;
+           lhs.arrangement_ == rhs.arrangement_ && lhs.audio_ == rhs.audio_;
 }
 
 } // namespace daw::domain

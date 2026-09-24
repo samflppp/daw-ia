@@ -292,6 +292,35 @@ std::vector<Tool> builtinTools()
                          "aussi.",
                          schema({{"placementId", placementId}}, {"placementId"})));
 
+    // --- samples
+    //
+    // Les octets d'un sample entrent dans le projet par l'application, jamais
+    // par le copilote : il ne tient aucun fichier. Poser un sample est donc
+    // réservé à l'application ; déplacer ou retirer un clip audio ne demande
+    // que son identifiant.
+    tools.push_back(
+        hidden(make("track.set_sample",
+                    "Fait d'une piste un canal sampler sur un sample importé. Réservé à l'application.",
+                    schema({{"trackId", trackId}}, {"trackId"}))));
+
+    tools.push_back(
+        hidden(make("audio.place",
+                    "Pose un clip audio sur la timeline. Réservé à l'application : il faut les octets "
+                    "du sample.",
+                    schema({{"trackId", trackId}}, {"trackId"}))));
+
+    tools.push_back(
+        make("audio.move",
+             "Déplace un clip audio sur la timeline. Il garde sa durée : un sample ne s'étire pas.",
+             schema({{"clipId", identifier("Identifiant du clip audio, tel que l'état le nomme.")},
+                     {"startBeats", field("number", "Nouvelle position sur la timeline, en temps.")}},
+                    {"clipId", "startBeats"})));
+
+    tools.push_back(make(
+        "audio.remove",
+        "Retire un clip audio de la timeline.",
+        schema({{"clipId", identifier("Identifiant du clip audio, tel que l'état le nomme.")}}, {"clipId"})));
+
     // --- clips and notes
     tools.push_back(
         make("clip.create_midi",
