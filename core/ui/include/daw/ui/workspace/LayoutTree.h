@@ -62,4 +62,29 @@ layoutPanels(const LayoutNode& root, Rect surface, LayoutOptions options = {});
 [[nodiscard]] std::vector<Rect>
 layoutSeparators(const LayoutNode& root, Rect surface, LayoutOptions options = {});
 
+// Where a page opens on a desktop: its fractions turned into pixels, then
+// brought back inside the desktop and up to the minimum size. A page that
+// cannot be reached is a page that cannot be closed.
+struct PageLimits
+{
+    int minimumWidth{0};
+    int minimumHeight{0};
+};
+
+[[nodiscard]] Rect
+pageBounds(double x, double y, double width, double height, Rect desktop, PageLimits limits);
+
+// The same rectangle as fractions of the desktop: what the application stores
+// when the user has moved a page, so it reopens in the same place on a screen
+// of another size.
+struct PageFractions
+{
+    double x{0.0};
+    double y{0.0};
+    double width{0.0};
+    double height{0.0};
+};
+
+[[nodiscard]] PageFractions pageFractions(Rect bounds, Rect desktop);
+
 } // namespace daw::ui

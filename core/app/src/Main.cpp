@@ -181,6 +181,12 @@ public:
         transportSync_.reset();
         rack_.reset();
         window_.reset();
+
+        // After the window: closing it is the last thing that can move a page.
+        if (layoutSettings_ != nullptr)
+            static_cast<void>(layoutSettings_->saveIfNeeded());
+        layoutSettings_.reset();
+
         juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
         lookAndFeel_.reset();
         switch_.reset();
@@ -256,6 +262,17 @@ private:
                                          *copilot_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
+
+        // Where the pages of a windowed workspace were left, kept next to the
+        // other settings of this machine and never in the project: a window's
+        // place is a matter of this screen.
+        juce::PropertiesFile::Options layoutOptions;
+        layoutOptions.applicationName = "DAW IA";
+        layoutOptions.folderName = "DAW IA";
+        layoutOptions.filenameSuffix = ".layout";
+        layoutOptions.osxLibrarySubFolder = "Application Support";
+        layoutSettings_ = std::make_unique<juce::PropertiesFile>(layoutOptions);
+        view->setPageMemory(layoutSettings_.get());
         auto* viewPointer = view.get();
 
         // The switch rebuilds the screen through the view, and the view is what
@@ -537,6 +554,7 @@ private:
     std::unique_ptr<CopilotBridge> copilot_;
     std::unique_ptr<PluginRack> rack_;
     std::unique_ptr<TransportSync> transportSync_;
+    std::unique_ptr<juce::PropertiesFile> layoutSettings_;
     std::unique_ptr<MainWindow> window_;
 };
 

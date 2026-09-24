@@ -107,6 +107,93 @@ Result<LayoutNode> nodeFromValue(const Value& value)
     return node;
 }
 
+Result<double> fractionAt(const Value& value, std::string_view key, double fallback)
+{
+    const auto* found = value.find(key);
+    if (found == nullptr)
+        return fallback;
+
+    auto number = found->asDouble();
+    if (!number)
+        return number.error();
+
+    if (number.value() < 0.0 || number.value() > 1.0)
+        return fail(ErrorCode::invalidPayload,
+                    std::string{key} + " is a fraction of the desktop, between 0 and 1");
+
+    return number.value();
+}
+
+Result<WindowedLayout> windowsFromValue(const Value& value)
+{
+    WindowedLayout layout{};
+
+    auto bar = stringsAt(value, "bar", false);
+    if (!bar)
+        return bar.error();
+    layout.bar = std::move(bar).value();
+
+    const auto* pages = value.find("pages");
+    const auto* items = pages != nullptr ? pages->asArray() : nullptr;
+    if (items == nullptr || items->empty())
+        return fail(ErrorCode::invalidPayload, "a windowed layout holds at least one page");
+
+    for (const auto& item : *items)
+    {
+        Page page{};
+
+        auto panel = item.stringAt("panel");
+        if (!panel)
+            return panel.error();
+        if (panel.value().empty())
+            return fail(ErrorCode::invalidPayload, "a page has a panel");
+        page.panel = panel.value();
+
+        auto title = item.stringAt("title");
+        if (!title)
+            return title.error();
+        page.title = title.value();
+
+        if (const auto* shortcut = item.find("shortcut"); shortcut != nullptr)
+        {
+            auto text = shortcut->asString();
+            if (!text)
+                return text.error();
+            page.shortcut = text.value();
+        }
+
+        if (const auto* open = item.find("open"); open != nullptr)
+        {
+            auto flag = open->asBool();
+            if (!flag)
+                return flag.error();
+            page.open = flag.value();
+        }
+
+        auto x = fractionAt(item, "x", page.x);
+        auto y = fractionAt(item, "y", page.y);
+        auto width = fractionAt(item, "width", page.width);
+        auto height = fractionAt(item, "height", page.height);
+        for (const auto* part : {&x, &y, &width, &height})
+        {
+            if (!*part)
+                return part->error();
+        }
+
+        page.x = x.value();
+        page.y = y.value();
+        page.width = width.value();
+        page.height = height.value();
+
+        if (page.width <= 0.0 || page.height <= 0.0)
+            return fail(ErrorCode::invalidPayload, "a page has a size: " + page.panel);
+
+        layout.pages.push_back(std::move(page));
+    }
+
+    return layout;
+}
+
 void collectPanels(const LayoutNode& node, std::vector<std::string>& into)
 {
     if (node.isLeaf())
@@ -180,16 +267,34 @@ Result<WorkspaceManifest> WorkspaceManifest::fromValue(const Value& value)
     if (layout == nullptr)
         return fail(ErrorCode::invalidPayload, "layout is missing");
 
-    auto root = nodeFromValue(*layout);
-    if (!root)
-        return root.error();
-    manifest.layout = std::move(root).value();
+    // A layout with pages is made of windows; anything else is a split tree.
+    if (layout->find("pages") != nullptr)
+    {
+        auto windows = windowsFromValue(*layout);
+        if (!windows)
+            return windows.error();
+        manifest.windows = std::move(windows).value();
+    }
+    else
+    {
+        auto root = nodeFromValue(*layout);
+        if (!root)
+            return root.error();
+        manifest.layout = std::move(root).value();
+    }
 
     // What the JSON schema cannot express: the layout and the declaration have
     // to agree. A layout that places an undeclared panel would build a screen
     // the manifest does not describe; a declared panel that nothing places
     // would be a panel nobody can ever see.
     const auto placed = manifest.placedPanels();
+
+    for (std::size_t index = 0; index < placed.size(); ++index)
+    {
+        if (std::find(placed.begin(), placed.begin() + static_cast<std::ptrdiff_t>(index), placed[index]) !=
+            placed.begin() + static_cast<std::ptrdiff_t>(index))
+            return fail(ErrorCode::invalidPayload, "this panel is placed twice: " + placed[index]);
+    }
 
     for (const auto& name : placed)
     {
@@ -209,6 +314,15 @@ Result<WorkspaceManifest> WorkspaceManifest::fromValue(const Value& value)
 std::vector<std::string> WorkspaceManifest::placedPanels() const
 {
     std::vector<std::string> placed;
+
+    if (windows.has_value())
+    {
+        placed = windows->bar;
+        for (const auto& page : windows->pages)
+            placed.push_back(page.panel);
+        return placed;
+    }
+
     collectPanels(layout, placed);
     return placed;
 }

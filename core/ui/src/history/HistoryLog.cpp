@@ -1,7 +1,7 @@
 #include "daw/ui/history/HistoryLog.h"
 
 #include <algorithm>
-#include <array>
+#include <iterator>
 #include <utility>
 
 namespace daw::ui
@@ -12,16 +12,35 @@ namespace
 // One label per command the registry knows. Kept next to nothing else, so that
 // adding a command and forgetting its label shows the command's own name in
 // the panel rather than a wrong sentence.
-constexpr std::array<std::pair<std::string_view, std::string_view>, 17> labels{{
+constexpr std::pair<std::string_view, std::string_view> labels[] = {
     {"track.add", "Nouvelle piste"},
     {"track.remove", "Piste supprimée"},
+    {"track.rename", "Piste renommée"},
+    {"track.reorder", "Piste déplacée"},
     {"track.set_volume", "Volume de piste"},
+    {"track.set_pan", "Panoramique"},
     {"track.set_muted", "Piste coupée"},
+    {"track.set_channel_pitch", "Hauteur du canal"},
     {"clip.create_midi", "Nouveau clip"},
     {"note.add", "Note ajoutée"},
     {"note.remove", "Note effacée"},
     {"note.move", "Note déplacée"},
     {"note.resize", "Note allongée"},
+    {"note.set_velocity", "Vélocité"},
+    {"note.quantize", "Quantification"},
+    {"note.transpose", "Transposition"},
+    {"pattern.create", "Nouveau pattern"},
+    {"pattern.place", "Pattern posé"},
+    {"pattern.add_track", "Ligne ouverte"},
+    {"pattern.set_length", "Longueur du pattern"},
+    {"pattern.rename", "Pattern renommé"},
+    {"pattern.remove", "Pattern supprimé"},
+    {"placement.move", "Pose déplacée"},
+    {"placement.remove", "Pose retirée"},
+    {"tempo.insert", "Changement de tempo"},
+    {"tempo.remove", "Tempo retiré"},
+    {"tempo.set_bpm", "Tempo"},
+    {"tempo.move", "Tempo déplacé"},
     {"plugin.insert", "Plugin inséré"},
     {"plugin.remove", "Plugin retiré"},
     {"plugin.set_bypassed", "Plugin contourné"},
@@ -30,7 +49,9 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 17> labels{{
     {"transport.play", "Lecture"},
     {"transport.stop", "Arrêt"},
     {"transport.set_position", "Position"},
-}};
+    {"transport.set_loop", "Boucle"},
+    {"transport.set_mode", "Mode de lecture"},
+};
 
 } // namespace
 
@@ -47,10 +68,10 @@ std::string_view HistoryLog::Entry::label() const noexcept
 
 std::string_view HistoryLog::describe(std::string_view type) noexcept
 {
-    const auto found =
-        std::find_if(labels.begin(), labels.end(), [type](const auto& pair) { return pair.first == type; });
+    const auto found = std::find_if(
+        std::begin(labels), std::end(labels), [type](const auto& pair) { return pair.first == type; });
 
-    return found != labels.end() ? found->second : type;
+    return found != std::end(labels) ? found->second : type;
 }
 
 void HistoryLog::clear() noexcept

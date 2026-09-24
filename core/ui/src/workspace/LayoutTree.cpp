@@ -124,4 +124,39 @@ std::vector<Rect> layoutSeparators(const LayoutNode& root, Rect surface, LayoutO
     return separators;
 }
 
+Rect pageBounds(double x, double y, double width, double height, Rect desktop, PageLimits limits)
+{
+    if (desktop.isEmpty())
+        return {};
+
+    const auto scale = [](double fraction, int extent)
+    { return static_cast<int>(std::lround(fraction * static_cast<double>(extent))); };
+
+    Rect page{};
+    page.width = std::min(desktop.width, std::max(limits.minimumWidth, scale(width, desktop.width)));
+    page.height = std::min(desktop.height, std::max(limits.minimumHeight, scale(height, desktop.height)));
+
+    // Pushed back inside rather than cut: the whole window stays reachable,
+    // title bar included.
+    page.x = desktop.x + std::clamp(scale(x, desktop.width), 0, desktop.width - page.width);
+    page.y = desktop.y + std::clamp(scale(y, desktop.height), 0, desktop.height - page.height);
+    return page;
+}
+
+PageFractions pageFractions(Rect bounds, Rect desktop)
+{
+    if (desktop.isEmpty())
+        return {};
+
+    const auto across = static_cast<double>(desktop.width);
+    const auto down = static_cast<double>(desktop.height);
+
+    PageFractions fractions{};
+    fractions.x = std::clamp(static_cast<double>(bounds.x - desktop.x) / across, 0.0, 1.0);
+    fractions.y = std::clamp(static_cast<double>(bounds.y - desktop.y) / down, 0.0, 1.0);
+    fractions.width = std::clamp(static_cast<double>(bounds.width) / across, 0.0, 1.0);
+    fractions.height = std::clamp(static_cast<double>(bounds.height) / down, 0.0, 1.0);
+    return fractions;
+}
+
 } // namespace daw::ui

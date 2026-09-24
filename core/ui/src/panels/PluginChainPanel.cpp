@@ -199,6 +199,7 @@ PluginChainPanel::PluginChainPanel(const PanelContext& context)
     , selection_(context.selection)
     , plugins_(context.plugins)
 {
+    titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
 
     slotHolder_ = std::make_unique<juce::Component>();
@@ -387,7 +388,10 @@ void PluginChainPanel::paint(juce::Graphics& g)
 
     g.setColour(tokens_.colour("color.text.tertiary"));
     g.setFont(lookAndFeel_.typography().caps("font.size.micro"));
-    g.drawText(u8"CHAÎNE", header, juce::Justification::centredLeft, false);
+    if (!titled_)
+    {
+        g.drawText(u8"CHAÎNE", header, juce::Justification::centredLeft, false);
+    }
 
     g.setColour(tokens_.colour("color.text.disabled"));
     g.setFont(lookAndFeel_.typography().sans("font.size.micro", "font.weight.regular"));

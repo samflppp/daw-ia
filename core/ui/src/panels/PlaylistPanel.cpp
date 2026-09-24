@@ -39,6 +39,7 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context)
     , selection_(context.selection)
     , clock_(context.clock)
 {
+    titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
 
     project_.addChangeListener(this);
@@ -178,7 +179,10 @@ void PlaylistPanel::paint(juce::Graphics& g)
     header.removeFromLeft(tokens_.integer("space.md"));
     g.setColour(tokens_.colour("color.text.tertiary"));
     g.setFont(lookAndFeel_.typography().caps("font.size.micro"));
-    g.drawText("PLAYLIST", header, juce::Justification::centredLeft, false);
+    if (!titled_)
+    {
+        g.drawText("PLAYLIST", header, juce::Justification::centredLeft, false);
+    }
 
     if (state_.patterns().empty())
     {

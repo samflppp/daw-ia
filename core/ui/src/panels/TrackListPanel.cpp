@@ -431,6 +431,7 @@ TrackListPanel::TrackListPanel(const PanelContext& context)
     , project_(context.project)
     , selection_(context.selection)
 {
+    titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
 
     rowHolder_ = std::make_unique<juce::Component>();
@@ -545,7 +546,10 @@ void TrackListPanel::paint(juce::Graphics& g)
 
     g.setColour(tokens_.colour("color.text.tertiary"));
     g.setFont(lookAndFeel_.typography().caps("font.size.micro"));
-    g.drawText("PISTES", header, juce::Justification::centredLeft, false);
+    if (!titled_)
+    {
+        g.drawText("PISTES", header, juce::Justification::centredLeft, false);
+    }
 
     g.setColour(tokens_.colour("color.text.disabled"));
     g.setFont(lookAndFeel_.typography().mono("font.size.micro", "font.weight.regular"));

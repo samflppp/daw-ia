@@ -60,6 +60,11 @@ struct PanelContext : PanelServices
     // The identifier the manifest used. A panel needs it to name itself, and
     // the placeholder needs it to say what is missing.
     std::string id;
+
+    // True when the panel sits in a page window whose title bar already names
+    // it. The panel then leaves its own caption out: one name per window, not
+    // the same word twice, one above the other.
+    bool titled{false};
 };
 
 // Maps a manifest identifier onto the component that answers for it.

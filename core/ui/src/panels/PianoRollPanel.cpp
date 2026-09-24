@@ -68,6 +68,7 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
     , selection_(context.selection)
     , clock_(context.clock)
 {
+    titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
     setWantsKeyboardFocus(true);
 
@@ -339,10 +340,13 @@ void PianoRollPanel::paint(juce::Graphics& g)
     // Twice the keyboard, because the title does not fit in one: a header
     // clipped to "PIANO-ROL" is the kind of detail a jury reads before it reads
     // anything else.
-    g.drawText("PIANO-ROLL",
-               header.removeFromLeft(tokens_.integer("metric.pianoRoll.keyboardWidth") * 2),
-               juce::Justification::centredLeft,
-               false);
+    if (!titled_)
+    {
+        g.drawText("PIANO-ROLL",
+                   header.removeFromLeft(tokens_.integer("metric.pianoRoll.keyboardWidth") * 2),
+                   juce::Justification::centredLeft,
+                   false);
+    }
 
     const auto* edited = clip();
     if (edited == nullptr)

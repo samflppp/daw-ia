@@ -53,6 +53,9 @@ private:
     std::vector<Slot*> slots_;
     juce::TextButton add_{"+  Plugin"};
 
+    // True in a page window, whose title bar names the panel already.
+    bool titled_{false};
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginChainPanel)
 };
 

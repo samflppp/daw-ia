@@ -15,57 +15,77 @@
     "copilot"
   ],
   "layout": {
-    "split": "vertical",
-    "children": [
+    "bar": [
+      "transport"
+    ],
+    "pages": [
       {
-        "panel": "transport",
-        "weight": 1
+        "panel": "playlist",
+        "title": "Playlist",
+        "shortcut": "F5",
+        "open": true,
+        "x": 0,
+        "y": 0,
+        "width": 0.66,
+        "height": 0.55
       },
       {
-        "split": "horizontal",
-        "weight": 9,
-        "children": [
-          {
-            "panel": "tracks",
-            "weight": 3
-          },
-          {
-            "split": "vertical",
-            "weight": 9,
-            "children": [
-              {
-                "panel": "playlist",
-                "weight": 4
-              },
-              {
-                "panel": "channel_rack",
-                "weight": 3
-              },
-              {
-                "panel": "piano_roll",
-                "weight": 4
-              }
-            ]
-          },
-          {
-            "split": "vertical",
-            "weight": 3,
-            "children": [
-              {
-                "panel": "plugin_chain",
-                "weight": 2
-              },
-              {
-                "panel": "history",
-                "weight": 2
-              },
-              {
-                "panel": "copilot",
-                "weight": 3
-              }
-            ]
-          }
-        ]
+        "panel": "channel_rack",
+        "title": "Channel rack",
+        "shortcut": "F6",
+        "open": true,
+        "x": 0,
+        "y": 0.55,
+        "width": 0.66,
+        "height": 0.45
+      },
+      {
+        "panel": "piano_roll",
+        "title": "Piano roll",
+        "shortcut": "F7",
+        "open": false,
+        "x": 0.08,
+        "y": 0.08,
+        "width": 0.72,
+        "height": 0.8
+      },
+      {
+        "panel": "plugin_chain",
+        "title": "Plugins",
+        "shortcut": "F8",
+        "open": false,
+        "x": 0.5,
+        "y": 0.1,
+        "width": 0.3,
+        "height": 0.6
+      },
+      {
+        "panel": "tracks",
+        "title": "Pistes",
+        "shortcut": "F9",
+        "open": false,
+        "x": 0.05,
+        "y": 0.15,
+        "width": 0.4,
+        "height": 0.7
+      },
+      {
+        "panel": "history",
+        "title": "Historique",
+        "open": true,
+        "x": 0.66,
+        "y": 0,
+        "width": 0.34,
+        "height": 0.35
+      },
+      {
+        "panel": "copilot",
+        "title": "Copilote",
+        "open": true,
+        "x": 0.66,
+        "y": 0.35,
+        "width": 0.34,
+        "height": 0.65
       }
     ]
   },

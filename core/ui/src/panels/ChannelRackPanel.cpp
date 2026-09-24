@@ -54,6 +54,7 @@ ChannelRackPanel::ChannelRackPanel(const PanelContext& context)
     , selection_(context.selection)
     , clock_(context.clock)
 {
+    titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
 
     addAndMakeVisible(patternChooser_);
@@ -305,10 +306,13 @@ void ChannelRackPanel::paint(juce::Graphics& g)
     header.removeFromLeft(tokens_.integer("space.md"));
     g.setColour(tokens_.colour("color.text.tertiary"));
     g.setFont(lookAndFeel_.typography().caps("font.size.micro"));
-    g.drawText("CHANNEL RACK",
-               header.removeFromLeft(tokens_.integer("metric.channelRack.channelWidth")),
-               juce::Justification::centredLeft,
-               false);
+    if (!titled_)
+    {
+        g.drawText("CHANNEL RACK",
+                   header.removeFromLeft(tokens_.integer("metric.channelRack.channelWidth")),
+                   juce::Justification::centredLeft,
+                   false);
+    }
 
     if (pattern() == nullptr || state_.tracks().empty())
     {

@@ -1,8 +1,11 @@
 #include "daw/ui/workspace/LayoutTree.h"
 #include "daw/ui/workspace/WorkspaceManifest.h"
 
+#include <fstream>
+#include <iterator>
 #include <ostream>
 #include <string>
+#include <vector>
 
 #include <doctest/doctest.h>
 
@@ -184,4 +187,80 @@ TEST_CASE("the nested manifest lands where its weights say")
     // tracks and piano_roll share the rest, one to three.
     CHECK(panels[1].bounds == Rect{0, 100, 200, 300});
     CHECK(panels[2].bounds == Rect{200, 100, 600, 300});
+}
+
+TEST_CASE("a windowed manifest reads its bar and its pages, in that order")
+{
+    constexpr const char* windowed = R"({
+      "schemaVersion": 1, "id": "test", "label": "Test",
+      "panels": ["transport", "playlist", "copilot"],
+      "layout": {
+        "bar": ["transport"],
+        "pages": [
+          { "panel": "playlist", "title": "Playlist", "shortcut": "F5", "x": 0, "y": 0, "width": 0.6, "height": 1 },
+          { "panel": "copilot", "title": "Copilote", "open": false, "x": 0.6, "y": 0, "width": 0.4, "height": 1 }
+        ]
+      }
+    })";
+
+    auto manifest = WorkspaceManifest::parse(windowed);
+    REQUIRE(manifest.ok());
+    REQUIRE(manifest.value().windows.has_value());
+
+    const auto& layout = *manifest.value().windows;
+    REQUIRE(layout.pages.size() == 2);
+    CHECK(layout.pages[0].shortcut == "F5");
+    CHECK(layout.pages[0].open);
+    CHECK_FALSE(layout.pages[1].open);
+    CHECK(layout.pages[1].x == doctest::Approx(0.6));
+
+    const auto placed = manifest.value().placedPanels();
+    REQUIRE(placed.size() == 3);
+    CHECK(placed[0] == "transport");
+    CHECK(placed[1] == "playlist");
+    CHECK(placed[2] == "copilot");
+}
+
+TEST_CASE("a windowed manifest refuses a panel on two pages, and a page outside the desktop")
+{
+    const auto twice =
+        std::string{R"({"schemaVersion":1,"id":"t","label":"T","panels":["playlist"],)"} +
+        R"("layout":{"pages":[{"panel":"playlist","title":"A"},{"panel":"playlist","title":"B"}]}})";
+    CHECK(WorkspaceManifest::parse(twice).code() == ErrorCode::invalidPayload);
+
+    const auto outside = std::string{R"({"schemaVersion":1,"id":"t","label":"T","panels":["playlist"],)"} +
+                         R"("layout":{"pages":[{"panel":"playlist","title":"A","x":1.5}]}})";
+    CHECK(WorkspaceManifest::parse(outside).code() == ErrorCode::invalidPayload);
+}
+
+TEST_CASE("a page opens where its fractions say, and is pushed back inside a small desktop")
+{
+    const Rect desktop{0, 100, 1000, 600};
+
+    const auto page = pageBounds(0.5, 0.5, 0.4, 0.4, desktop, PageLimits{200, 150});
+    CHECK(page == Rect{500, 400, 400, 240});
+
+    // Too far right and too small: the minimum size wins, and the window is
+    // moved back so that all of it, title bar included, stays on the desktop.
+    const auto pushed = pageBounds(0.95, 0.95, 0.05, 0.05, desktop, PageLimits{200, 150});
+    CHECK(pushed == Rect{800, 550, 200, 150});
+
+    // And the way back: a moved window is stored as fractions, and reopens in
+    // the same place.
+    const auto fractions = pageFractions(page, desktop);
+    CHECK(pageBounds(fractions.x, fractions.y, fractions.width, fractions.height, desktop, PageLimits{}) ==
+          page);
+}
+
+TEST_CASE("the beatmaker manifest shipped with the application is windowed and parses")
+{
+    std::ifstream file{std::string{DAW_WORKSPACES_DIR} + "/beatmaker.json", std::ios::binary};
+    REQUIRE(file.good());
+    const std::string text{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+
+    auto manifest = WorkspaceManifest::parse(text);
+    REQUIRE(manifest.ok());
+    REQUIRE(manifest.value().windows.has_value());
+    CHECK(manifest.value().windows->bar == std::vector<std::string>{"transport"});
+    CHECK(manifest.value().windows->pages.size() == 7);
 }

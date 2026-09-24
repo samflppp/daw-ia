@@ -67,6 +67,7 @@ target_sources(daw_ui INTERFACE
     src/Workspaces.cpp
     src/PanelRegistry.cpp
     src/WorkspaceView.cpp
+    src/PageWindow.cpp
     src/model/History.cpp
     src/model/ProjectObserver.cpp
     src/model/Selection.cpp

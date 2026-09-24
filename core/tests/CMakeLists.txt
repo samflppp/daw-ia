@@ -29,6 +29,11 @@ add_executable(daw_domain_tests
 target_link_libraries(daw_domain_tests PRIVATE daw::domain daw::ui_workspace doctest::doctest)
 daw_set_warnings(daw_domain_tests)
 
+# The manifests the application embeds, read from disk by the one test that
+# checks the shipped beatmaker layout.
+target_compile_definitions(daw_domain_tests PRIVATE
+    DAW_WORKSPACES_DIR="${PROJECT_SOURCE_DIR}/workspaces")
+
 # One ctest entry per TEST_CASE, so a failure names the case, not the binary.
 doctest_discover_tests(daw_domain_tests
     TEST_PREFIX "domain."

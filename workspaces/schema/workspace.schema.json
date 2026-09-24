@@ -2,34 +2,71 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dawia.local/schema/workspace.schema.json",
   "title": "Workspace manifest",
-  "description": "Declarative description of a workspace: which panels exist, how they are laid out, which commands and services are exposed. Contains no pixel values: sizes are relative weights, visual values live in core/ui/tokens.",
+  "description": "Declarative description of a workspace: which panels exist, how they are laid out, which commands and services are exposed. Contains no pixel values: sizes are relative weights or fractions of the desktop, visual values live in core/ui/tokens.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "id", "label", "panels", "layout"],
+  "required": [
+    "schemaVersion",
+    "id",
+    "label",
+    "panels",
+    "layout"
+  ],
   "properties": {
-    "$schema": { "type": "string" },
-    "schemaVersion": { "const": 1 },
-    "id": { "$ref": "#/$defs/identifier" },
-    "label": { "type": "string", "minLength": 1 },
-    "description": { "type": "string" },
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
     "panels": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": { "$ref": "#/$defs/identifier" }
+      "items": {
+        "$ref": "#/$defs/identifier"
+      }
     },
-    "layout": { "$ref": "#/$defs/layoutNode" },
+    "layout": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/layoutNode"
+        },
+        {
+          "$ref": "#/$defs/windowedLayout"
+        }
+      ]
+    },
     "commands": {
       "description": "Command Bus command types surfaced in this workspace (menus, palette, MCP).",
       "type": "array",
       "uniqueItems": true,
-      "items": { "$ref": "#/$defs/commandType" }
+      "items": {
+        "$ref": "#/$defs/commandType"
+      }
     },
     "services": {
       "description": "Python services this workspace needs at startup.",
       "type": "array",
       "uniqueItems": true,
-      "items": { "enum": ["mcp", "harmony", "conditioning", "ia_provider"] }
+      "items": {
+        "enum": [
+          "mcp",
+          "harmony",
+          "conditioning",
+          "ia_provider"
+        ]
+      }
     }
   },
   "$defs": {
@@ -46,27 +83,112 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["panel"],
+          "required": [
+            "panel"
+          ],
           "properties": {
-            "panel": { "$ref": "#/$defs/identifier" },
-            "weight": { "type": "number", "exclusiveMinimum": 0 }
+            "panel": {
+              "$ref": "#/$defs/identifier"
+            },
+            "weight": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["split", "children"],
+          "required": [
+            "split",
+            "children"
+          ],
           "properties": {
-            "split": { "enum": ["horizontal", "vertical"] },
-            "weight": { "type": "number", "exclusiveMinimum": 0 },
+            "split": {
+              "enum": [
+                "horizontal",
+                "vertical"
+              ]
+            },
+            "weight": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
             "children": {
               "type": "array",
               "minItems": 2,
-              "items": { "$ref": "#/$defs/layoutNode" }
+              "items": {
+                "$ref": "#/$defs/layoutNode"
+              }
             }
           }
         }
       ]
+    },
+    "windowedLayout": {
+      "description": "Pages in windows over a desktop, the way FL Studio shows them, under a bar that is always there.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pages"
+      ],
+      "properties": {
+        "bar": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "pages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "panel",
+              "title"
+            ],
+            "properties": {
+              "panel": {
+                "$ref": "#/$defs/identifier"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "shortcut": {
+                "type": "string",
+                "pattern": "^F([1-9]|1[0-2])$"
+              },
+              "open": {
+                "type": "boolean"
+              },
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "width": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1
+              },
+              "height": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -30,6 +30,7 @@ CopilotPanel::CopilotPanel(const PanelContext& context)
     , lookAndFeel_(context.lookAndFeel)
     , copilot_(context.copilot)
 {
+    titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
 
     request_.setMultiLine(false);
@@ -144,7 +145,10 @@ void CopilotPanel::paint(juce::Graphics& g)
     header.removeFromLeft(tokens_.integer("space.md"));
     g.setColour(tokens_.colour("color.text.tertiary"));
     g.setFont(lookAndFeel_.typography().caps("font.size.micro"));
-    g.drawText("COPILOTE", header, juce::Justification::centredLeft, false);
+    if (!titled_)
+    {
+        g.drawText("COPILOTE", header, juce::Justification::centredLeft, false);
+    }
 
     // The state, on its own line above the field, so that "thinking" is read
     // without looking for it.

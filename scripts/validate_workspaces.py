@@ -20,6 +20,8 @@ EXPECTED = {"decouverte", "beatmaker", "ugc", "film"}
 
 
 def layout_panels(node: dict) -> list[str]:
+    if "pages" in node:
+        return [*node.get("bar", []), *(page["panel"] for page in node["pages"])]
     if "panel" in node:
         return [node["panel"]]
     return [p for child in node["children"] for p in layout_panels(child)]
@@ -46,6 +48,11 @@ def check_manifest(path: Path, validator: Draft202012Validator) -> list[str]:
         errors.append(f"{path.name}: panel '{panel}' is declared but not placed in layout")
     for panel in sorted({p for p in placed if placed.count(p) > 1}):
         errors.append(f"{path.name}: panel '{panel}' is placed more than once")
+
+    if "pages" in manifest["layout"]:
+        shortcuts = [page["shortcut"] for page in manifest["layout"]["pages"] if "shortcut" in page]
+        for key in sorted({k for k in shortcuts if shortcuts.count(k) > 1}):
+            errors.append(f"{path.name}: shortcut '{key}' opens more than one page")
 
     return errors
 

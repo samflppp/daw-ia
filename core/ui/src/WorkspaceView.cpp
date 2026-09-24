@@ -1,7 +1,51 @@
 #include "daw/ui/WorkspaceView.h"
 
+#include <algorithm>
+#include <cstdlib>
+#include <string>
+
 namespace daw::ui
 {
+namespace
+{
+
+// The function keys a page may be bound to, by the name the manifest uses.
+[[nodiscard]] int functionKeyCode(const std::string& name)
+{
+    static const int codes[] = {juce::KeyPress::F1Key,
+                                juce::KeyPress::F2Key,
+                                juce::KeyPress::F3Key,
+                                juce::KeyPress::F4Key,
+                                juce::KeyPress::F5Key,
+                                juce::KeyPress::F6Key,
+                                juce::KeyPress::F7Key,
+                                juce::KeyPress::F8Key,
+                                juce::KeyPress::F9Key,
+                                juce::KeyPress::F10Key,
+                                juce::KeyPress::F11Key,
+                                juce::KeyPress::F12Key};
+
+    if (name.size() < 2 || name.front() != 'F')
+        return 0;
+
+    const auto number = std::atoi(name.c_str() + 1);
+    if (number < 1 || number > 12)
+        return 0;
+
+    return codes[number - 1];
+}
+
+[[nodiscard]] Rect toRect(juce::Rectangle<int> area)
+{
+    return Rect{area.getX(), area.getY(), area.getWidth(), area.getHeight()};
+}
+
+[[nodiscard]] juce::Rectangle<int> toJuce(Rect rect)
+{
+    return {rect.x, rect.y, rect.width, rect.height};
+}
+
+} // namespace
 
 WorkspaceView::WorkspaceView(const PanelServices& services, const PanelRegistry& registry)
     : services_(services)
@@ -16,25 +60,44 @@ WorkspaceView::WorkspaceView(const PanelServices& services, const PanelRegistry&
 
 WorkspaceView::~WorkspaceView()
 {
+    pages_.clear();
+    panels_.clear();
     setLookAndFeel(nullptr);
 }
 
 void WorkspaceView::show(const WorkspaceManifest& manifest)
 {
+    pages_.clear();
     panels_.clear();
 
     layout_ = manifest.layout;
     workspaceId_ = juce::String(manifest.id);
 
-    // The order is the one the layout places them in, so the rectangles that
-    // come back from layoutPanels() line up with this list index for index.
-    for (const auto& id : manifest.placedPanels())
+    if (manifest.windows.has_value())
     {
-        PanelContext context{services_, id};
-        auto panel = registry_.create(context);
+        for (const auto& id : manifest.windows->bar)
+        {
+            PanelContext context{services_, id};
+            auto panel = registry_.create(context);
+            addAndMakeVisible(*panel);
+            panels_.push_back(Placed{juce::String(id), std::move(panel)});
+        }
 
-        addAndMakeVisible(*panel);
-        panels_.push_back(Placed{juce::String(id), std::move(panel)});
+        buildPages(*manifest.windows);
+    }
+    else
+    {
+        // The order is the one the layout places them in, so the rectangles
+        // that come back from layoutPanels() line up with this list index for
+        // index.
+        for (const auto& id : manifest.placedPanels())
+        {
+            PanelContext context{services_, id};
+            auto panel = registry_.create(context);
+
+            addAndMakeVisible(*panel);
+            panels_.push_back(Placed{juce::String(id), std::move(panel)});
+        }
     }
 
     resized();
@@ -45,6 +108,246 @@ void WorkspaceView::show(const WorkspaceManifest& manifest)
     // from here on the first click, and the key press still comes back up.
     grabKeyboardFocus();
 }
+
+// --- windows ----------------------------------------------------------------
+
+void WorkspaceView::buildPages(const WindowedLayout& layout)
+{
+    pages_.reserve(layout.pages.size());
+
+    for (const auto& page : layout.pages)
+    {
+        PanelContext context{services_, page.panel, true};
+
+        PageSlot slot{};
+        slot.page = page;
+        slot.open = page.open;
+        slot.place = PageFractions{page.x, page.y, page.width, page.height};
+        recall(slot);
+
+        slot.window = std::make_unique<PageWindow>(services_.tokens,
+                                                   services_.lookAndFeel,
+                                                   juce::String::fromUTF8(page.title.c_str()),
+                                                   registry_.create(context));
+
+        const auto label = page.shortcut.empty() ? page.title : page.title + "  " + page.shortcut;
+        slot.tab = std::make_unique<juce::TextButton>(juce::String::fromUTF8(label.c_str()));
+        slot.tab->setClickingTogglesState(false);
+
+        pages_.push_back(std::move(slot));
+    }
+
+    // Wired once the vector no longer moves: each callback finds its slot by
+    // panel name, never by an address that a reallocation would invalidate.
+    for (auto& slot : pages_)
+    {
+        const auto name = slot.page.panel;
+        auto& window = *slot.window;
+
+        window.desktop = [this] { return desktopArea(); };
+
+        window.onClose = [this, name]
+        {
+            if (auto* found = slotFor(name); found != nullptr)
+                setOpen(*found, false);
+        };
+
+        window.onMaximise = [this, name]
+        {
+            if (auto* found = slotFor(name); found != nullptr)
+            {
+                found->maximised = !found->maximised;
+                placePage(*found);
+                bringToFront(*found);
+            }
+        };
+
+        window.onFront = [this, name]
+        {
+            if (auto* found = slotFor(name); found != nullptr)
+                markActive(found);
+        };
+
+        window.onMoved = [this, name]
+        {
+            auto* found = slotFor(name);
+            if (found == nullptr || placing_)
+                return;
+
+            // A moved window is no longer maximised: the user has put it
+            // somewhere, and that somewhere is what is remembered.
+            found->maximised = false;
+            found->place = pageFractions(toRect(found->window->getBounds()), toRect(desktopArea()));
+            remember(*found);
+        };
+
+        slot.tab->onClick = [this, name]
+        {
+            if (auto* found = slotFor(name); found != nullptr)
+            {
+                if (found->open && found->window->isActive())
+                    setOpen(*found, false);
+                else
+                    setOpen(*found, true);
+            }
+        };
+
+        addAndMakeVisible(*slot.tab);
+        addChildComponent(*slot.window);
+        slot.window->setVisible(slot.open);
+        slot.tab->setToggleState(slot.open, juce::dontSendNotification);
+    }
+
+    // The last open page in the manifest's order starts in front.
+    for (auto slot = pages_.rbegin(); slot != pages_.rend(); ++slot)
+    {
+        if (slot->open)
+        {
+            markActive(&*slot);
+            break;
+        }
+    }
+}
+
+WorkspaceView::PageSlot* WorkspaceView::slotFor(std::string_view panel)
+{
+    const auto found = std::find_if(
+        pages_.begin(), pages_.end(), [panel](const PageSlot& slot) { return slot.page.panel == panel; });
+    return found == pages_.end() ? nullptr : &(*found);
+}
+
+juce::Rectangle<int> WorkspaceView::barArea() const
+{
+    auto area = getLocalBounds();
+    const auto height =
+        services_.tokens.integer("metric.transport.height") * static_cast<int>(panels_.size());
+    return area.removeFromTop(height);
+}
+
+juce::Rectangle<int> WorkspaceView::tabArea() const
+{
+    auto area = getLocalBounds();
+    area.removeFromTop(barArea().getHeight());
+    return area.removeFromTop(services_.tokens.integer("metric.page.tabHeight"));
+}
+
+juce::Rectangle<int> WorkspaceView::desktopArea() const
+{
+    auto area = getLocalBounds();
+    area.removeFromTop(barArea().getHeight() + services_.tokens.integer("metric.page.tabHeight"));
+    return area;
+}
+
+void WorkspaceView::placePage(PageSlot& slot)
+{
+    const auto desktop = toRect(desktopArea());
+
+    const PageLimits limits{services_.tokens.integer("metric.page.minWidth"),
+                            services_.tokens.integer("metric.page.minHeight")};
+
+    const auto bounds =
+        slot.maximised
+            ? desktop
+            : pageBounds(slot.place.x, slot.place.y, slot.place.width, slot.place.height, desktop, limits);
+
+    placing_ = true;
+    slot.window->setBounds(toJuce(bounds));
+    placing_ = false;
+}
+
+void WorkspaceView::setOpen(PageSlot& slot, bool open)
+{
+    slot.open = open;
+    slot.window->setVisible(open);
+    slot.tab->setToggleState(open, juce::dontSendNotification);
+
+    if (open)
+    {
+        placePage(slot);
+        bringToFront(slot);
+    }
+    else if (slot.window->isActive())
+    {
+        // The focus goes back to the view, so the keys still reach it.
+        slot.window->setActive(false);
+        grabKeyboardFocus();
+    }
+
+    remember(slot);
+}
+
+void WorkspaceView::bringToFront(PageSlot& slot)
+{
+    slot.window->toFront(false);
+    markActive(&slot);
+}
+
+void WorkspaceView::markActive(const PageSlot* front)
+{
+    for (auto& slot : pages_)
+        slot.window->setActive(&slot == front);
+}
+
+bool WorkspaceView::showPage(std::string_view panel, bool visible)
+{
+    auto* slot = slotFor(panel);
+    if (slot == nullptr)
+        return false;
+
+    setOpen(*slot, visible);
+    return true;
+}
+
+juce::Component* WorkspaceView::panel(std::string_view id) const
+{
+    for (const auto& placed : panels_)
+    {
+        if (placed.id == juce::String(std::string{id}))
+            return placed.panel.get();
+    }
+
+    for (const auto& slot : pages_)
+    {
+        if (slot.page.panel == id)
+            return &slot.window->panel();
+    }
+
+    return nullptr;
+}
+
+void WorkspaceView::remember(const PageSlot& slot) const
+{
+    if (memory_ == nullptr)
+        return;
+
+    const auto key = "page." + workspaceId_ + "." + juce::String(slot.page.panel);
+    const auto value = juce::String(slot.open ? 1 : 0) + ";" + juce::String(slot.place.x, 4) + ";" +
+                       juce::String(slot.place.y, 4) + ";" + juce::String(slot.place.width, 4) + ";" +
+                       juce::String(slot.place.height, 4);
+    memory_->setValue(key, value);
+}
+
+void WorkspaceView::recall(PageSlot& slot) const
+{
+    if (memory_ == nullptr)
+        return;
+
+    const auto key = "page." + workspaceId_ + "." + juce::String(slot.page.panel);
+    const auto parts = juce::StringArray::fromTokens(memory_->getValue(key), ";", {});
+    if (parts.size() != 5)
+        return;
+
+    // A stored place that is not a place is ignored rather than trusted: the
+    // manifest's own place is always there to fall back on.
+    const auto fraction = [&parts](int index) { return parts[index].getDoubleValue(); };
+    if (fraction(3) <= 0.0 || fraction(4) <= 0.0)
+        return;
+
+    slot.open = parts[0].getIntValue() != 0;
+    slot.place = PageFractions{fraction(1), fraction(2), fraction(3), fraction(4)};
+}
+
+// --- shared -------------------------------------------------------------------
 
 bool WorkspaceView::keyPressed(const juce::KeyPress& key)
 {
@@ -62,6 +365,24 @@ bool WorkspaceView::keyPressed(const juce::KeyPress& key)
     if (key == redo || key == redoAlternative)
     {
         static_cast<void>(services_.bus.redo());
+        return true;
+    }
+
+    // A page key opens its page, brings it to the front, or closes it when it
+    // is already the one in front — the way F5, F6 and F7 behave in FL.
+    for (auto& slot : pages_)
+    {
+        const auto code = functionKeyCode(slot.page.shortcut);
+        if (code == 0 || key.getKeyCode() != code || key.getModifiers().isAnyModifierKeyDown())
+            continue;
+
+        if (slot.open && slot.window->isActive())
+            setOpen(slot, false);
+        else if (slot.open)
+            bringToFront(slot);
+        else
+            setOpen(slot, true);
+
         return true;
     }
 
@@ -84,6 +405,16 @@ void WorkspaceView::paint(juce::Graphics& g)
 {
     g.fillAll(services_.tokens.colour("color.surface.base"));
 
+    if (windowed())
+    {
+        auto tabs = tabArea();
+        g.setColour(services_.tokens.colour("color.surface.panel"));
+        g.fillRect(tabs);
+        g.setColour(services_.tokens.colour("color.border.hairline"));
+        g.fillRect(tabs.removeFromBottom(services_.tokens.integer("stroke.hairline")));
+        return;
+    }
+
     g.setColour(services_.tokens.colour("color.border.hairline"));
     for (const auto& rule : layoutSeparators(layout_, surface(), options()))
         g.fillRect(rule.x, rule.y, rule.width, rule.height);
@@ -91,6 +422,28 @@ void WorkspaceView::paint(juce::Graphics& g)
 
 void WorkspaceView::resized()
 {
+    if (windowed())
+    {
+        auto bar = barArea();
+        for (auto& placed : panels_)
+            placed.panel->setBounds(bar.removeFromTop(services_.tokens.integer("metric.transport.height")));
+
+        auto tabs =
+            tabArea().reduced(services_.tokens.integer("space.sm"), services_.tokens.integer("space.xs"));
+        for (auto& slot : pages_)
+        {
+            slot.tab->setBounds(tabs.removeFromLeft(services_.tokens.integer("metric.page.tabWidth")));
+            tabs.removeFromLeft(services_.tokens.integer("space.xs"));
+        }
+
+        // Pages keep their place as fractions, so a larger main window gives
+        // larger pages instead of a band of empty desktop.
+        for (auto& slot : pages_)
+            placePage(slot);
+
+        return;
+    }
+
     const auto placed = layoutPanels(layout_, surface(), options());
 
     for (std::size_t index = 0; index < panels_.size() && index < placed.size(); ++index)

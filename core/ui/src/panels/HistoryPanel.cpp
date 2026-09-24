@@ -45,6 +45,7 @@ HistoryPanel::HistoryPanel(const PanelContext& context)
     , bus_(context.bus)
     , history_(context.history)
 {
+    titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
 
     addAndMakeVisible(undo_);
@@ -160,7 +161,10 @@ void HistoryPanel::paint(juce::Graphics& g)
 
     g.setColour(tokens_.colour("color.text.tertiary"));
     g.setFont(lookAndFeel_.typography().caps("font.size.micro"));
-    g.drawText("HISTORIQUE", header, juce::Justification::centredLeft, false);
+    if (!titled_)
+    {
+        g.drawText("HISTORIQUE", header, juce::Justification::centredLeft, false);
+    }
 
     g.setColour(tokens_.colour("color.text.disabled"));
     g.setFont(lookAndFeel_.typography().mono("font.size.micro", "font.weight.regular"));

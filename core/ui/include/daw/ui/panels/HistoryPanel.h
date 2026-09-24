@@ -49,6 +49,9 @@ private:
     juce::TextButton redo_{u8"Rétablir"};
     int hovered_{-1};
 
+    // True in a page window, whose title bar names the panel already.
+    bool titled_{false};
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(HistoryPanel)
 };
 
