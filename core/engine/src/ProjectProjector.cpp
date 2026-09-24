@@ -29,6 +29,24 @@ const juce::Identifier domainPluginIdProperty{"dawDomainPluginId"};
 // by it, so moving one placement moves one clip and rebuilds nothing else.
 const juce::Identifier domainClipKeyProperty{"dawDomainClipKey"};
 
+// The sampler a sampler channel plays through carries the digest of the sample
+// it holds: a different digest is a different sound, and the only reason to
+// touch it.
+const juce::Identifier domainSampleProperty{"dawDomainSample"};
+
+// A domain track that holds audio clips is two Tracktion tracks: the one that
+// plays its patterns through its instrument, and a companion that plays its
+// recordings. An instrument — the 4OSC fallback, a sampler, a VST — replaces
+// whatever audio reaches it, so a recording on the instrument's own track
+// would be silent. The companion carries the same identifier and this role.
+const juce::Identifier domainRoleProperty{"dawDomainRole"};
+const juce::String audioRole{"audio"};
+
+// The note that plays a sample at its own pitch. A lit cell plays the channel
+// pitch, which is middle C unless the user changed it — so a drum sample
+// dropped on the rack sounds as it was recorded.
+constexpr int samplerRootNote = 60;
+
 juce::String toJuce(const std::string& text)
 {
     return juce::String::fromUTF8(text.c_str(), static_cast<int>(text.size()));
@@ -132,19 +150,21 @@ void ProjectProjector::onRedone(const domain::Receipt& receipt)
     reconcile();
 }
 
-tracktion::AudioTrack* ProjectProjector::findTrack(const domain::TrackId& id) const
+tracktion::AudioTrack* ProjectProjector::findTrack(const domain::TrackId& id, bool companion) const
 {
     const auto wanted = toJuce(id.toString());
+    const auto role = companion ? audioRole : juce::String{};
 
     for (auto* track : tracktion::getAudioTracks(edit_))
     {
-        if (track != nullptr && track->state.getProperty(domainTrackIdProperty).toString() == wanted)
+        if (track != nullptr && track->state.getProperty(domainTrackIdProperty).toString() == wanted &&
+            track->state.getProperty(domainRoleProperty).toString() == role)
             return track;
     }
     return nullptr;
 }
 
-tracktion::AudioTrack* ProjectProjector::createTrackFor(const domain::TrackId& id)
+tracktion::AudioTrack* ProjectProjector::createTrackFor(const domain::TrackId& id, bool companion)
 {
     const auto before = tracktion::getAudioTracks(edit_);
     edit_.ensureNumberOfAudioTracks(before.size() + 1);
@@ -154,10 +174,33 @@ tracktion::AudioTrack* ProjectProjector::createTrackFor(const domain::TrackId& i
         if (track != nullptr && !before.contains(track))
         {
             track->state.setProperty(domainTrackIdProperty, toJuce(id.toString()), nullptr);
+            if (companion)
+                track->state.setProperty(domainRoleProperty, audioRole, nullptr);
             return track;
         }
     }
     return nullptr;
+}
+
+void ProjectProjector::applyMix(tracktion::AudioTrack& target, const domain::Track& source)
+{
+    target.setName(toJuce(source.name));
+
+    if (auto* volume = target.getVolumePlugin(); volume != nullptr)
+    {
+        volume->setVolumeDb(static_cast<float>(source.volumeDb));
+
+        // The law is written before the position, and on every projection: an
+        // Edit built elsewhere, or a Tracktion default moved by another part of
+        // the process, would otherwise decide the stereo image of this project.
+        volume->setPanLaw(panLaw);
+        volume->setPan(static_cast<float>(source.pan));
+    }
+
+    // Tracktion's own mute, not a volume of -100 dB: it silences the clips and
+    // the instrument that plays them, and it leaves the fader alone, so
+    // unmuting gives the track back exactly where the user left it.
+    target.setMute(source.muted);
 }
 
 void ProjectProjector::removeUnknownTracks()
@@ -190,7 +233,9 @@ void ProjectProjector::ensureInstrument(tracktion::AudioTrack& track, const doma
     // second synth under the user's own, playing the same notes.
     const auto existing = track.pluginList.getPluginsOfType<tracktion::FourOscPlugin>();
 
-    if (hasDomainInstrument(source))
+    ensureSampler(track, source);
+
+    if (hasDomainInstrument(source) || source.sample.has_value())
     {
         for (auto plugin : existing)
         {
@@ -208,6 +253,82 @@ void ProjectProjector::ensureInstrument(tracktion::AudioTrack& track, const doma
     {
         track.pluginList.insertPlugin(plugin, 0, nullptr);
     }
+}
+
+juce::File ProjectProjector::sampleFile(const domain::SampleRef& sample) const
+{
+    if (contentStore_ == nullptr)
+        return {};
+
+    // The store names its files by digest and nothing else, and an audio
+    // reader chooses its format by extension. So the sample is written once
+    // more, next to the store, under a name that says what it is. It is a
+    // cache: the store stays the truth, and this file can be deleted at will.
+    const auto cache = contentStore_->root().getSiblingFile("samples");
+    const auto file = cache.getChildFile(toJuce(sample.blob.digest) + "." + toJuce(sample.format));
+    if (file.existsAsFile())
+        return file;
+
+    auto bytes = contentStore_->get(sample.blob);
+    if (!bytes)
+        return {};
+
+    static_cast<void>(cache.createDirectory());
+    if (!file.replaceWithData(bytes.value().getData(), bytes.value().getSize()))
+        return {};
+
+    return file;
+}
+
+void ProjectProjector::ensureSampler(tracktion::AudioTrack& track, const domain::Track& source)
+{
+    const auto samplers = track.pluginList.getPluginsOfType<tracktion::SamplerPlugin>();
+
+    if (!source.sample.has_value())
+    {
+        for (auto sampler : samplers)
+        {
+            if (sampler != nullptr && sampler->state.hasProperty(domainSampleProperty))
+                sampler->deleteFromParent();
+        }
+        return;
+    }
+
+    const auto wanted = toJuce(source.sample->blob.digest);
+    for (auto sampler : samplers)
+    {
+        if (sampler == nullptr || !sampler->state.hasProperty(domainSampleProperty))
+            continue;
+
+        if (sampler->state.getProperty(domainSampleProperty).toString() == wanted)
+            return; // already playing this sound
+
+        sampler->deleteFromParent();
+    }
+
+    const auto file = sampleFile(*source.sample);
+    if (!file.existsAsFile())
+        return; // no store or no bytes: silent rather than wrong
+
+    auto plugin = edit_.getPluginCache().createNewPlugin(tracktion::SamplerPlugin::xmlTypeName, {});
+    auto* sampler = dynamic_cast<tracktion::SamplerPlugin*>(plugin.get());
+    if (sampler == nullptr)
+        return;
+
+    sampler->state.setProperty(domainSampleProperty, wanted, nullptr);
+
+    // The whole file, every key, open-ended: a drum hit rings as long as it
+    // was recorded, whatever the length of the step that triggered it.
+    if (sampler
+            ->addSound(file.getFullPathName(), toJuce(source.sample->name), 0.0, source.sample->seconds, 0.0f)
+            .isNotEmpty())
+        return;
+
+    sampler->setSoundParams(0, samplerRootNote, 0, 127);
+    sampler->setSoundOpenEnded(0, true);
+    sampler->flushPendingUpdates();
+
+    track.pluginList.insertPlugin(plugin, 0, nullptr);
 }
 
 bool ProjectProjector::isInstrument(const domain::PluginRef& ref) const
@@ -435,6 +556,28 @@ struct LaidOutRow
     return rows;
 }
 
+// The audio clips a track plays: in song mode only — pattern mode plays the
+// auditioned pattern and nothing else of the arrangement.
+[[nodiscard]] std::vector<const domain::AudioClip*> laidOutAudio(const domain::ProjectState& state,
+                                                                 domain::TrackId trackId)
+{
+    std::vector<const domain::AudioClip*> clips;
+    if (state.transport().mode == domain::PlayMode::pattern)
+        return clips;
+
+    for (const auto& clip : state.audioClips())
+    {
+        if (clip.trackId == trackId)
+            clips.push_back(&clip);
+    }
+    return clips;
+}
+
+[[nodiscard]] std::string audioKey(const domain::AudioClip& clip)
+{
+    return "audio:" + clip.id.toString();
+}
+
 [[nodiscard]] domain::Value notesValue(const domain::Clip& row)
 {
     domain::Value::Array notes;
@@ -477,6 +620,14 @@ domain::Value ProjectProjector::playedValue(domain::TrackId trackId) const
                                                  {"notes", notesValue(*laid.row)}}));
     }
 
+    for (const auto* clip : laidOutAudio(state_, trackId))
+    {
+        entries.push_back(domain::Value::object({{"key", domain::Value{audioKey(*clip)}},
+                                                 {"startBeats", domain::Value{clip->startBeats}},
+                                                 {"seconds", domain::Value{clip->sample.seconds}},
+                                                 {"sample", domain::Value{clip->sample.blob.digest}}}));
+    }
+
     return domain::Value::array(std::move(entries));
 }
 
@@ -500,15 +651,14 @@ void ProjectProjector::reconcileClips(tracktion::AudioTrack& target, domain::Tra
             continue;
 
         const auto key = clip->state.getProperty(domainClipKeyProperty).toString();
-        auto* midi = dynamic_cast<tracktion::MidiClip*>(clip);
 
-        if (midi == nullptr || key.isEmpty() || !isWanted(key))
+        if (auto* midi = dynamic_cast<tracktion::MidiClip*>(clip); midi != nullptr && isWanted(key))
         {
-            clip->removeFromParent();
+            existing.emplace_back(key, midi);
             continue;
         }
 
-        existing.emplace_back(key, midi);
+        clip->removeFromParent();
     }
 
     for (const auto& laid : wanted)
@@ -573,6 +723,96 @@ void ProjectProjector::reconcileClips(tracktion::AudioTrack& target, domain::Tra
     }
 }
 
+void ProjectProjector::reconcileAudioTrack(tracktion::AudioTrack& companion,
+                                           domain::TrackId trackId,
+                                           bool retimed)
+{
+    const auto audio = laidOutAudio(state_, trackId);
+
+    std::vector<std::pair<juce::String, tracktion::WaveAudioClip*>> existing;
+    const auto clips = companion.getClips();
+    for (auto* clip : clips)
+    {
+        if (clip == nullptr)
+            continue;
+
+        const auto key = clip->state.getProperty(domainClipKeyProperty).toString();
+        const auto wanted =
+            std::any_of(audio.begin(),
+                        audio.end(),
+                        [&key](const domain::AudioClip* laid) { return toJuce(audioKey(*laid)) == key; });
+
+        if (auto* wave = dynamic_cast<tracktion::WaveAudioClip*>(clip); wave != nullptr && wanted)
+        {
+            existing.emplace_back(key, wave);
+            continue;
+        }
+
+        clip->removeFromParent();
+    }
+
+    reconcileAudio(companion, audio, existing, retimed);
+}
+
+void ProjectProjector::reconcileAudio(
+    tracktion::AudioTrack& target,
+    const std::vector<const domain::AudioClip*>& wanted,
+    std::vector<std::pair<juce::String, tracktion::WaveAudioClip*>>& existing,
+    bool retimed)
+{
+    for (const auto* clip : wanted)
+    {
+        const auto key = toJuce(audioKey(*clip));
+
+        // In beats where it starts, in seconds how long it lasts: a recording
+        // is not stretched by a tempo change, it is only moved.
+        const auto start = edit_.tempoSequence.toTime(tracktion::BeatPosition::fromBeats(clip->startBeats));
+        const tracktion::TimeRange time{start, tracktion::TimeDuration::fromSeconds(clip->sample.seconds)};
+
+        const auto found = std::find_if(
+            existing.begin(), existing.end(), [&key](const auto& entry) { return entry.first == key; });
+
+        auto remembered =
+            std::find_if(projectedClips_.begin(),
+                         projectedClips_.end(),
+                         [clip](const ProjectedClip& projected) { return projected.key == audioKey(*clip); });
+
+        if (found == existing.end())
+        {
+            const auto file = sampleFile(clip->sample);
+            if (!file.existsAsFile())
+                continue;
+
+            auto created = target.insertWaveClip(
+                toJuce(clip->sample.name), file, tracktion::ClipPosition{time, {}}, false);
+            if (created == nullptr)
+                continue;
+
+            created->state.setProperty(domainClipKeyProperty, key, nullptr);
+            ++stats_.clipsInserted;
+
+            ProjectedClip projected{audioKey(*clip), clip->startBeats, clip->sample.seconds, {}};
+            if (remembered == projectedClips_.end())
+                projectedClips_.push_back(std::move(projected));
+            else
+                *remembered = std::move(projected);
+            continue;
+        }
+
+        if (remembered == projectedClips_.end() || retimed || remembered->startBeats != clip->startBeats)
+        {
+            found->second->setPosition(tracktion::ClipPosition{time, {}});
+            ++stats_.clipsMoved;
+
+            if (remembered == projectedClips_.end())
+                projectedClips_.push_back(
+                    ProjectedClip{audioKey(*clip), clip->startBeats, clip->sample.seconds, {}});
+            else
+                remembered->startBeats = clip->startBeats;
+        }
+    }
+}
+
 void ProjectProjector::forgetClipsNotLaidOut()
 {
     std::vector<std::string> keys;
@@ -580,6 +820,8 @@ void ProjectProjector::forgetClipsNotLaidOut()
     {
         for (const auto& laid : laidOutRows(state_, source.id))
             keys.push_back(laid.key);
+        for (const auto* clip : laidOutAudio(state_, source.id))
+            keys.push_back(audioKey(*clip));
     }
 
     projectedClips_.erase(
@@ -682,9 +924,9 @@ void ProjectProjector::reconcile()
 
     for (const auto& source : state_.tracks())
     {
-        auto* target = findTrack(source.id);
+        auto* target = findTrack(source.id, false);
         if (target == nullptr)
-            target = createTrackFor(source.id);
+            target = createTrackFor(source.id, false);
         if (target == nullptr)
             continue;
 
@@ -712,26 +954,7 @@ void ProjectProjector::reconcile()
 
         if (trackChanged)
         {
-            target->setName(toJuce(source.name));
-
-            if (auto* volume = target->getVolumePlugin(); volume != nullptr)
-            {
-                volume->setVolumeDb(static_cast<float>(source.volumeDb));
-
-                // The law is written before the position, and on every
-                // projection: an Edit built elsewhere, or a Tracktion default
-                // moved by another part of the process, would otherwise decide
-                // the stereo image of this project.
-                volume->setPanLaw(panLaw);
-                volume->setPan(static_cast<float>(source.pan));
-            }
-
-            // Tracktion's own mute, not a volume of -100 dB: it silences the
-            // clips and the instrument that plays them, and it leaves the fader
-            // alone, so unmuting gives the track back exactly where the user
-            // left it.
-            target->setMute(source.muted);
-
+            applyMix(*target, source);
             ensureInstrument(*target, source);
             reconcilePlugins(*target, source);
         }
@@ -744,6 +967,21 @@ void ProjectProjector::reconcile()
         // inserts nothing.
         if (playedChanged || retimed)
             reconcileClips(*target, source.id, retimed);
+
+        // The recordings, on the companion: made the first time the track has
+        // one, mixed like the track itself, never given an instrument.
+        auto* companion = findTrack(source.id, true);
+        const bool needsCompanion = companion == nullptr && !laidOutAudio(state_, source.id).empty();
+        if (needsCompanion)
+            companion = createTrackFor(source.id, true);
+
+        if (companion != nullptr)
+        {
+            if (trackChanged || needsCompanion)
+                applyMix(*companion, source);
+            if (playedChanged || retimed || needsCompanion)
+                reconcileAudioTrack(*companion, source.id, retimed);
+        }
 
         stillProjected.emplace_back(source.id, snapshot);
     }

@@ -118,8 +118,17 @@ private:
 
     [[nodiscard]] bool reconcileTempo();
 
-    [[nodiscard]] tracktion::AudioTrack* findTrack(const domain::TrackId& id) const;
-    [[nodiscard]] tracktion::AudioTrack* createTrackFor(const domain::TrackId& id);
+    // The Tracktion track of a domain track: the one that plays its patterns,
+    // or, with `companion`, the one that plays its audio clips.
+    [[nodiscard]] tracktion::AudioTrack* findTrack(const domain::TrackId& id, bool companion) const;
+    [[nodiscard]] tracktion::AudioTrack* createTrackFor(const domain::TrackId& id, bool companion);
+
+    // Name, volume, pan law, pan and mute: written the same on a track and on
+    // its companion, so a recording and a pattern of one track mix as one.
+    void applyMix(tracktion::AudioTrack& target, const domain::Track& source);
+
+    // The audio clips of a track, on its companion.
+    void reconcileAudioTrack(tracktion::AudioTrack& companion, domain::TrackId trackId, bool retimed);
     void removeUnknownTracks();
     void ensureInstrument(tracktion::AudioTrack& track, const domain::Track& source);
 
@@ -137,6 +146,22 @@ private:
     // they did. `retimed` says the tempo moved and every clip has to be set
     // again in seconds.
     void reconcileClips(tracktion::AudioTrack& target, domain::TrackId trackId, bool retimed);
+
+    // The audio clips of one track, bound by key like the pattern rows: laid
+    // when new, moved when their beat or the tempo moved, never rebuilt.
+    void reconcileAudio(tracktion::AudioTrack& target,
+                        const std::vector<const domain::AudioClip*>& wanted,
+                        std::vector<std::pair<juce::String, tracktion::WaveAudioClip*>>& existing,
+                        bool retimed);
+
+    // A sampler channel plays its sample through a Tracktion sampler that this
+    // class owns, marked with the sample's digest. Replaced only when the
+    // digest changes; removed when the track stops being a sampler channel.
+    void ensureSampler(tracktion::AudioTrack& track, const domain::Track& source);
+
+    // A readable copy of a sample, with the extension its format needs. Empty
+    // when there is no store or the store has lost the bytes.
+    [[nodiscard]] juce::File sampleFile(const domain::SampleRef& sample) const;
 
     // Drops the memory of clips nothing lays down any more, across every track.
     void forgetClipsNotLaidOut();
