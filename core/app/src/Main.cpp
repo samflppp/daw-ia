@@ -4,6 +4,7 @@
 #include "PluginRack.h"
 #include "PluginWindow.h"
 #include "TransportSync.h"
+#include "Verification.h"
 #include "WorkspaceSwitch.h"
 #include "daw/domain/BuildInfo.h"
 #include "daw/domain/command/CommandBus.h"
@@ -161,11 +162,59 @@ public:
         // the way: the plugin scan, the demo, and a machine with no key.
         if (copilot_ != nullptr && !commandLine.contains("--no-copilot"))
             copilot_->start();
+
+        startVerificationIfAsked(commandLine);
+    }
+
+    // --verify, --verify-reopen, --verify-legacy <folder>: the checks a person
+    // would run, run by the binary on its own window. See Verification.h.
+    void startVerificationIfAsked(const juce::String& commandLine)
+    {
+        const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+
+        for (int index = 0; index < tokens.size() - 1; ++index)
+        {
+            auto run = Verification::Run::list;
+            if (tokens[index] == "--verify-reopen")
+                run = Verification::Run::reopen;
+            else if (tokens[index] == "--verify-legacy")
+                run = Verification::Run::legacy;
+            else if (tokens[index] != "--verify")
+                continue;
+
+            if (view_ == nullptr)
+            {
+                juce::Logger::writeToLog("verify: no workspace on screen");
+                return;
+            }
+
+            verification_ = std::make_unique<Verification>(Verification::Wiring{
+                bus_,
+                state_,
+                *view_,
+                history_,
+                *copilot_,
+                selection_,
+                *clock_,
+                ui::Tokens::builtIn(),
+                engineHost_->edit(),
+                juce::File{tokens[index + 1].unquoted()},
+                run,
+                [](bool passed)
+                {
+                    juce::Logger::writeToLog(juce::String("verify: ") + (passed ? "passed" : "FAILED"));
+                    juce::JUCEApplication::getInstance()->systemRequestedQuit();
+                }});
+
+            verification_->start();
+            return;
+        }
     }
 
     void shutdown() override
     {
         stopTimer();
+        verification_.reset();
 
         // The copilot goes first: it holds a thread that answers through the
         // bus, and the bus is about to be taken apart.
@@ -262,6 +311,7 @@ private:
                                          *copilot_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
+        view_ = view.get();
 
         // Where the pages of a windowed workspace were left, kept next to the
         // other settings of this machine and never in the project: a window's
@@ -555,6 +605,8 @@ private:
     std::unique_ptr<PluginRack> rack_;
     std::unique_ptr<TransportSync> transportSync_;
     std::unique_ptr<juce::PropertiesFile> layoutSettings_;
+    ui::WorkspaceView* view_{nullptr};
+    std::unique_ptr<Verification> verification_;
     std::unique_ptr<MainWindow> window_;
 };
 
