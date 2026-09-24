@@ -5,32 +5,40 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace daw::ui
 {
 
-// The playlist: the arrangement, one lane per pattern.
+// The playlist: the arrangement, one lane per pattern, then one lane per track
+// that holds audio clips.
 //
-// A lane is a pattern and never a track. That is what the pattern model
-// imposes: a placement carries no track, because the pattern already says on
-// which tracks it sounds, so a lane per track would show the same laying on
-// several lanes and drag them all at once. One lane per pattern shows each
-// laying once, and moving it moves exactly what it says.
+// A pattern lane is a pattern and never a track: a placement carries no track,
+// because the pattern already says on which tracks it sounds. An audio lane is
+// a track, because an audio clip does carry one. Both kinds of lane are
+// derived from the state at paint time; nothing about the screen enters the
+// domain, and a copilot that lays a pattern sees it appear with no code here.
 //
-// The lanes are derived, not stored: lane n is the n-th pattern of the
-// project. Nothing about the screen enters the domain, and a copilot that lays
-// a pattern sees it appear on its lane with no code here.
+// The gestures are FL Studio's:
+//   click in a pattern lane    pattern.place, at the bar under the pointer
+//   drop a sample              a new track and an audio.place, at the bar
+//   drag a block               the whole selection moves, one history entry
+//   right-click a block        removes it, or the whole selection
+//   Ctrl + drag on empty       selects every block the rectangle touches
+//   Ctrl + Shift + click       adds a block to the selection, or takes it out
+//   Ctrl+C, Ctrl+V             copies the selection, pastes it at the playhead
+//   Ctrl+B                     duplicates the selection right after itself
+//   Delete                     removes the selection
+// Placing and moving snap to the bar; Shift snaps to the beat.
 //
-// Every edit leaves as a command:
-//   click in a lane           pattern.place, at the bar under the pointer
-//   drag a block              placement.move, one gesture, one entry
-//   right-click a block       placement.remove
-//   lane header, right-click  pattern.rename, pattern.remove
-// Placing snaps to the bar; Shift snaps to the beat.
-//
-// There is no resize. The length belongs to the pattern, and stretching one
-// laying out of eight must not stretch the seven others.
-class PlaylistPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
+// There is no resize. A pattern's length belongs to the pattern, and an audio
+// clip lasts as long as its sample.
+class PlaylistPanel final : public juce::Component,
+                            public juce::DragAndDropTarget,
+                            public juce::FileDragAndDropTarget,
+                            private juce::ChangeListener,
+                            private juce::Timer
 {
 public:
     explicit PlaylistPanel(const PanelContext& context);
@@ -42,10 +50,39 @@ public:
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
     void mouseDoubleClick(const juce::MouseEvent& event) override;
+    bool keyPressed(const juce::KeyPress& key) override;
+
+    // A sample from the browser, or a file from the system.
+    bool isInterestedInDragSource(const SourceDetails& details) override;
+    void itemDropped(const SourceDetails& details) override;
+    bool isInterestedInFileDrag(const juce::StringArray& files) override;
+    void filesDropped(const juce::StringArray& files, int x, int y) override;
+
+    // One block of the playlist: a placement of a pattern, or an audio clip.
+    struct Item
+    {
+        bool audio{false};
+        std::string id;
+
+        friend bool operator==(const Item& lhs, const Item& rhs)
+        {
+            return lhs.audio == rhs.audio && lhs.id == rhs.id;
+        }
+    };
+
+    // What is selected, in the order it was selected. Read by the scripted
+    // verification, which checks what a Ctrl + drag caught.
+    [[nodiscard]] const std::vector<Item>& selected() const noexcept { return selected_; }
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void timerCallback() override;
+
+    // --- lanes
+    [[nodiscard]] int patternLaneCount() const;
+    [[nodiscard]] std::vector<domain::TrackId> audioTracks() const;
+    [[nodiscard]] int laneCount() const;
+    [[nodiscard]] int laneOfTrack(domain::TrackId trackId) const;
 
     // --- geometry
     [[nodiscard]] juce::Rectangle<int> headerArea() const; // the lane names
@@ -59,14 +96,18 @@ private:
     [[nodiscard]] double beatAtX(int x) const;
     [[nodiscard]] int xForBeat(double beats) const;
     [[nodiscard]] int laneAtY(int y) const; // -1 outside any lane
-    [[nodiscard]] juce::Rectangle<int> blockBounds(const domain::Placement& placement) const;
-
-    // The placement drawn under that point, or null. The last one drawn wins,
-    // which is the one on top.
-    [[nodiscard]] const domain::Placement* placementAt(juce::Point<int> point) const;
-
     [[nodiscard]] static double snap(double beats, bool fine);
 
+    // --- items
+    [[nodiscard]] std::vector<Item> items() const;
+    [[nodiscard]] std::optional<double> startOf(const Item& item) const;
+    [[nodiscard]] double lengthOf(const Item& item) const;
+    [[nodiscard]] int laneOf(const Item& item) const;
+    [[nodiscard]] juce::Rectangle<int> bounds(const Item& item, double offsetBeats = 0.0) const;
+    [[nodiscard]] std::optional<Item> itemAt(juce::Point<int> point) const;
+    [[nodiscard]] bool isSelected(const Item& item) const;
+
+    // --- painting
     void paintRuler(juce::Graphics& g, juce::Rectangle<int> area) const;
     void paintLanes(juce::Graphics& g, juce::Rectangle<int> grid, juce::Rectangle<int> headers) const;
     void paintBlocks(juce::Graphics& g, juce::Rectangle<int> grid) const;
@@ -77,9 +118,17 @@ private:
     // from its own start, which is nowhere on this timeline.
     [[nodiscard]] std::optional<int> playheadX() const;
 
+    // --- editing
     void placeAt(int lane, double beats);
     void showLaneMenu(int lane);
     void renamePattern(domain::PatternId patternId);
+    void dropSample(const juce::File& file, juce::Point<int> at);
+
+    void moveSelection(double offsetBeats);
+    void removeSelection();
+    void copySelection();
+    void pasteAt(double beats);
+    void duplicateSelection();
 
     const Tokens& tokens_;
     DawLookAndFeel& lookAndFeel_;
@@ -88,19 +137,35 @@ private:
     ProjectObserver& project_;
     Selection& selection_;
     const TransportClock& clock_;
+    SampleHost& samples_;
 
-    struct Drag
+    std::vector<Item> selected_;
+
+    // A move in progress: the selection is drawn shifted, and one group of
+    // moves leaves when the mouse is released — one history entry however
+    // many blocks moved and however long the hand hesitated.
+    struct Move
     {
-        domain::PlacementId placementId{};
-        domain::GestureId gesture{};
-
-        // Where in the block the pointer took it, in beats, so the block does
-        // not jump to put its start under the pointer.
         double grabBeats{0.0};
-        double lastStartBeats{0.0};
+        double offsetBeats{0.0};
     };
+    std::optional<Move> move_;
 
-    std::optional<Drag> drag_;
+    // A Ctrl + drag in progress, in panel coordinates.
+    std::optional<juce::Rectangle<int>> band_;
+    juce::Point<int> bandStart_;
+
+    // What Ctrl+C took: each block with its start relative to the first one.
+    struct Copied
+    {
+        bool audio{false};
+        domain::PatternId patternId{};
+        domain::TrackId trackId{};
+        std::optional<domain::SampleRef> sample;
+        double offsetBeats{0.0};
+    };
+    std::vector<Copied> clipboard_;
+
     std::optional<int> paintedPlayheadX_;
 
     // True in a page window, whose title bar names the panel already.

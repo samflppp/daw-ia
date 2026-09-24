@@ -3,6 +3,7 @@
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/NoteCommands.h"
 #include "daw/domain/commands/PatternCommands.h"
+#include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/ui/model/PatternEditing.h"
 
@@ -53,6 +54,7 @@ ChannelRackPanel::ChannelRackPanel(const PanelContext& context)
     , project_(context.project)
     , selection_(context.selection)
     , clock_(context.clock)
+    , samples_(context.samples)
 {
     titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
@@ -378,7 +380,16 @@ void ChannelRackPanel::paintChannels(juce::Graphics& g, juce::Rectangle<int> are
 
         g.setColour(tokens_.colour(track.muted ? "color.text.disabled" : "color.text.primary"));
         g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
-        g.drawText(track.name, content, juce::Justification::centredLeft, true);
+        g.drawText(
+            juce::String::fromUTF8(track.name.c_str()), content, juce::Justification::centredLeft, true);
+
+        // A sampler channel is marked, so a dropped kick is told apart from a
+        // synth channel at a glance.
+        if (track.sample.has_value())
+        {
+            g.setColour(tokens_.colour("color.actor.copilot"));
+            g.fillRect(row.getX(), row.getY(), tokens_.integer("stroke.hairline") * 2, row.getHeight());
+        }
     }
 
     g.setColour(tokens_.colour("color.border.hairline"));
@@ -665,6 +676,71 @@ void ChannelRackPanel::mouseUp(const juce::MouseEvent& event)
 
     static_cast<void>(bus_.endGesture(drag_->gesture));
     drag_.reset();
+}
+
+// --- dropping samples ---------------------------------------------------------
+
+void ChannelRackPanel::dropSample(const juce::File& file, int y)
+{
+    auto sample = samples_.import(file);
+    if (!sample)
+        return;
+
+    // On a channel: that channel plays the sample from now on.
+    if (const auto row = rowAtY(y); row >= 0)
+    {
+        const auto& track = state_.tracks()[static_cast<std::size_t>(row)];
+        static_cast<void>(bus_.execute(std::make_unique<domain::SetTrackSample>(track.id, sample.value())));
+        selection_.selectTrack(track.id);
+        return;
+    }
+
+    // Below the channels: a new one, named after the sample. Two commands, one
+    // thing the user did, one Ctrl+Z.
+    const auto trackId = domain::TrackId::generate();
+    std::vector<std::unique_ptr<domain::Command>> commands;
+    commands.push_back(
+        std::make_unique<domain::AddTrack>(trackId, file.getFileNameWithoutExtension().toStdString(), 0.0));
+    commands.push_back(std::make_unique<domain::SetTrackSample>(trackId, sample.value()));
+
+    domain::GroupOptions group{};
+    group.label = "canal sampler : " + sample.value().name;
+
+    if (bus_.executeGroup(std::move(commands), group).ok())
+        selection_.selectTrack(trackId);
+}
+
+bool ChannelRackPanel::isInterestedInDragSource(const SourceDetails& details)
+{
+    return details.description.toString().startsWith("sample:");
+}
+
+void ChannelRackPanel::itemDropped(const SourceDetails& details)
+{
+    const auto description = details.description.toString();
+    if (description.startsWith("sample:"))
+        dropSample(juce::File{description.fromFirstOccurrenceOf("sample:", false, false)},
+                   details.localPosition.y);
+}
+
+bool ChannelRackPanel::isInterestedInFileDrag(const juce::StringArray& files)
+{
+    return std::any_of(files.begin(),
+                       files.end(),
+                       [](const juce::String& path) { return SampleHost::isSampleFile(juce::File{path}); });
+}
+
+void ChannelRackPanel::filesDropped(const juce::StringArray& files, int x, int y)
+{
+    juce::ignoreUnused(x);
+    for (const auto& path : files)
+    {
+        if (SampleHost::isSampleFile(juce::File{path}))
+        {
+            dropSample(juce::File{path}, y);
+            return;
+        }
+    }
 }
 
 } // namespace daw::ui

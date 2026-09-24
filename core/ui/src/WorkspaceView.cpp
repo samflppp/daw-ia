@@ -118,6 +118,12 @@ void WorkspaceView::buildPages(const WindowedLayout& layout)
 {
     pages_.reserve(layout.pages.size());
 
+    juce::String described;
+    for (const auto& page : layout.pages)
+        described << page.panel << ':' << page.x << ',' << page.y << ',' << page.width << ',' << page.height
+                  << ';';
+    layoutSignature_ = juce::String::toHexString(described.hashCode64());
+
     for (const auto& page : layout.pages)
     {
         PanelContext context{services_, page.panel, true};
@@ -318,12 +324,15 @@ juce::Component* WorkspaceView::panel(std::string_view id) const
     return nullptr;
 }
 
+// The key carries a signature of the manifest's pages: when a manifest gains a
+// page or moves one, the places kept for the old layout would lay the new one
+// under them, so they are dropped and the manifest's own layout is used again.
 void WorkspaceView::remember(const PageSlot& slot) const
 {
     if (memory_ == nullptr)
         return;
 
-    const auto key = "page." + workspaceId_ + "." + juce::String(slot.page.panel);
+    const auto key = "page." + workspaceId_ + "." + layoutSignature_ + "." + juce::String(slot.page.panel);
     const auto value = juce::String(slot.open ? 1 : 0) + ";" + juce::String(slot.place.x, 4) + ";" +
                        juce::String(slot.place.y, 4) + ";" + juce::String(slot.place.width, 4) + ";" +
                        juce::String(slot.place.height, 4);
@@ -335,7 +344,7 @@ void WorkspaceView::recall(PageSlot& slot) const
     if (memory_ == nullptr)
         return;
 
-    const auto key = "page." + workspaceId_ + "." + juce::String(slot.page.panel);
+    const auto key = "page." + workspaceId_ + "." + layoutSignature_ + "." + juce::String(slot.page.panel);
     const auto parts = juce::StringArray::fromTokens(memory_->getValue(key), ";", {});
     if (parts.size() != 5)
         return;

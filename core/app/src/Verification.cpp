@@ -5,6 +5,8 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/serialization/Json.h"
+#include "daw/ui/panels/BrowserPanel.h"
+#include "daw/ui/panels/PlaylistPanel.h"
 
 #include <algorithm>
 #include <cmath>
@@ -42,6 +44,7 @@ Verification::Verification(Wiring wiring)
     , clock_(wiring.clock)
     , tokens_(wiring.tokens)
     , edit_(wiring.edit)
+    , samples_(wiring.samples)
     , folder_(std::move(wiring.folder))
     , run_(wiring.run)
     , finished_(std::move(wiring.finished))
@@ -262,7 +265,7 @@ void Verification::press(const juce::String& text)
         found->onClick();
 }
 
-void Verification::click(juce::Component& target, juce::Point<int> at, bool right, bool shift)
+void Verification::click(juce::Component& target, juce::Point<int> at, bool right, bool shift, bool ctrl)
 {
     auto source = juce::Desktop::getInstance().getMainMouseSource();
     const auto now = juce::Time::getCurrentTime();
@@ -271,6 +274,8 @@ void Verification::click(juce::Component& target, juce::Point<int> at, bool righ
                                          : juce::ModifierKeys::leftButtonModifier};
     if (shift)
         held = held.withFlags(juce::ModifierKeys::shiftModifier);
+    if (ctrl)
+        held = held.withFlags(juce::ModifierKeys::ctrlModifier);
 
     const auto position = at.toFloat();
     const juce::MouseEvent down{source,
@@ -308,11 +313,12 @@ void Verification::click(juce::Component& target, juce::Point<int> at, bool righ
     target.mouseUp(up);
 }
 
-void Verification::drag(juce::Component& target, juce::Point<int> from, juce::Point<int> to)
+void Verification::drag(juce::Component& target, juce::Point<int> from, juce::Point<int> to, bool ctrl)
 {
     auto source = juce::Desktop::getInstance().getMainMouseSource();
     const auto now = juce::Time::getCurrentTime();
-    const auto held = juce::ModifierKeys{juce::ModifierKeys::leftButtonModifier};
+    const auto held = juce::ModifierKeys{juce::ModifierKeys::leftButtonModifier |
+                                         (ctrl ? juce::ModifierKeys::ctrlModifier : 0)};
     const auto start = from.toFloat();
 
     const juce::MouseEvent down{source,
@@ -374,6 +380,24 @@ void Verification::drag(juce::Component& target, juce::Point<int> from, juce::Po
                               1,
                               true};
     target.mouseUp(up);
+}
+
+void Verification::writeHit(const juce::File& file, double seconds)
+{
+    constexpr double rate = 44100.0;
+    juce::AudioBuffer<float> buffer{1, static_cast<int>(seconds * rate)};
+    buffer.clear();
+    for (int index = 0; index < static_cast<int>(0.05 * rate); ++index)
+        buffer.setSample(0, index, 0.8f * std::sin(static_cast<float>(index) * 0.2f));
+
+    static_cast<void>(file.deleteFile());
+    std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream>(file);
+    juce::WavAudioFormat wav;
+    auto writer = wav.createWriterFor(
+        stream,
+        juce::AudioFormatWriterOptions{}.withSampleRate(rate).withNumChannels(1).withBitsPerSample(16));
+    if (writer != nullptr)
+        static_cast<void>(writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples()));
 }
 
 void Verification::key(const juce::KeyPress& press)
@@ -575,11 +599,10 @@ void Verification::buildList()
 
             auto* playlist = panel("playlist");
             const auto fourth = state_.arrangement()[3].id;
-            // Grabbed two beats into the block and let go ten beats further:
-            // its start lands on beat 58, which the bar snap brings to 56. Far
-            // from a bar line on both sides, so a pixel of rounding cannot
-            // change the bar.
-            drag(*playlist, playlistBeat(0, 50.0), playlistBeat(0, 60.0));
+            // Grabbed two beats into the block and let go eight beats further:
+            // the move snaps to the bar as a whole, and eight beats is two bars
+            // with nothing to round.
+            drag(*playlist, playlistBeat(0, 50.0), playlistBeat(0, 58.0));
 
             check(state_.findPlacement(fourth)->startBeats == 56.0,
                   "le 4e bloc a suivi, à la mesure près (mesure 15)");
@@ -746,6 +769,269 @@ void Verification::buildList()
             check(state_.patterns().size() == 1, "supprimé, avec ses poses");
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(domain::json::write(state_.toValue()) == savedState_, "Ctrl+Z le remet au même endroit");
+        });
+
+    // --- the week's additions -------------------------------------------------
+
+    add(
+        "Espace lance la lecture",
+        [this] { key(juce::KeyPress{juce::KeyPress::spaceKey}); },
+        [this] { return clock_.isPlaying(); },
+        8000.0);
+
+    add(
+        "Espace l'arrête",
+        [this]
+        {
+            check(clock_.isPlaying(), "la lecture tournait");
+            key(juce::KeyPress{juce::KeyPress::spaceKey});
+        },
+        [this] { return !clock_.isPlaying(); },
+        8000.0);
+
+    add("le navigateur montre un drumkit",
+        [this]
+        {
+            // A drumkit of two samples, written here so the list needs nothing
+            // from the machine it runs on.
+            kit_ = folder_.getChildFile("drumkit");
+            static_cast<void>(kit_.createDirectory());
+            writeHit(kit_.getChildFile("Kick 808.wav"), 0.4);
+            writeHit(kit_.getChildFile("Clap.wav"), 1.5);
+
+            samples_.addFolder(kit_);
+            auto* browser = dynamic_cast<ui::BrowserPanel*>(panel("browser"));
+            check(browser != nullptr && browser->isShowing(), "la page Navigateur est ouverte");
+            if (browser == nullptr)
+                return;
+
+            browser->refresh();
+
+            juce::TreeView* tree = nullptr;
+            for (auto* child : browser->getChildren())
+                tree = tree != nullptr ? tree : dynamic_cast<juce::TreeView*>(child);
+
+            check(tree != nullptr && tree->getRootItem() != nullptr &&
+                      tree->getRootItem()->getNumSubItems() == 1,
+                  "le dossier du drumkit est dans l'arbre");
+            if (tree != nullptr && tree->getRootItem() != nullptr &&
+                tree->getRootItem()->getNumSubItems() == 1)
+            {
+                auto* kitItem = tree->getRootItem()->getSubItem(0);
+                kitItem->setOpen(true);
+                check(kitItem->getNumSubItems() == 2, "ses deux samples y sont");
+                check(kitItem->getNumSubItems() == 2 &&
+                          kitItem->getSubItem(0)->getDragSourceDescription().toString().startsWith("sample:"),
+                      "un sample se glisse par son chemin");
+            }
+        });
+
+    add("déposer un sample sous les canaux du rack crée un canal sampler",
+        [this]
+        {
+            auto* rack = dynamic_cast<juce::DragAndDropTarget*>(panel("channel_rack"));
+            check(rack != nullptr, "le rack accepte un dépôt");
+            if (rack == nullptr)
+                return;
+
+            const auto tracks = state_.tracks().size();
+            savedDepth_ = depth();
+
+            const auto below = rackCell(static_cast<int>(tracks) + 2, 0);
+            const juce::DragAndDropTarget::SourceDetails details{
+                "sample:" + kit_.getChildFile("Kick 808.wav").getFullPathName(), panel("browser"), below};
+            check(rack->isInterestedInDragSource(details), "un sample du navigateur l'intéresse");
+            rack->itemDropped(details);
+
+            check(state_.tracks().size() == tracks + 1, "un canal de plus");
+            check(depth() == savedDepth_ + 1, "une seule entrée d'historique");
+            const auto& added = state_.tracks().back();
+            check(added.sample.has_value() && added.sample->name == "Kick 808.wav",
+                  "le canal joue « Kick 808.wav »");
+            check(added.name == "Kick 808", "nommé d'après le sample");
+            if (added.sample.has_value())
+                note("octets copiés dans le projet : " + std::to_string(added.sample->blob.byteCount) +
+                     ", empreinte " + added.sample->blob.digest.substr(0, 12) + "…");
+        });
+
+    add("le canal sampler joue ses cases",
+        [this]
+        {
+            // In pattern mode, on the pattern the rack shows.
+            press("PAT");
+            const auto row = static_cast<int>(state_.tracks().size()) - 1;
+            auto* rack = panel("channel_rack");
+
+            const auto before = listen("20a-avant-sampler", 90.0);
+            for (const auto step : {1, 5, 9, 13})
+                click(*rack, rackCell(row, step));
+            const auto after = listen("20b-canal-sampler", 90.0);
+
+            bool heard = true;
+            for (const auto step : {1, 5, 9, 13})
+                heard =
+                    heard && std::find(after.onsets.begin(), after.onsets.end(), step) != after.onsets.end();
+            check(heard, "le sample s'entend sur les pas 2, 6, 10, 14 qu'on vient d'allumer");
+            // The hats on the steps right after a sampler hit sit under its
+            // tail and cannot be told apart by level; the ones that follow a
+            // silent step can, and they must all still be there.
+            bool hatsKept = true;
+            for (const auto step : {0, 4, 8, 12})
+                hatsKept = hatsKept &&
+                           std::find(after.onsets.begin(), after.onsets.end(), step) != after.onsets.end();
+            check(hatsKept,
+                  "les hats du pattern sont toujours là : le sampler s'ajoute, il ne remplace rien");
+            note("attaques avant : " + std::to_string(before.onsets.size()) +
+                 ", après : " + std::to_string(after.onsets.size()) +
+                 " ; un hat collé derrière un coup du sampler est sous sa queue");
+
+            // Left in PAT on purpose: a sample dropped on the playlist must be
+            // heard even when the rack was the last thing played.
+        });
+
+    add("déposer un sample sur la playlist pose un clip audio",
+        [this]
+        {
+            auto* playlistPanel = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            check(playlistPanel != nullptr, "la playlist accepte un dépôt");
+            if (playlistPanel == nullptr)
+                return;
+
+            double end = 0.0;
+            for (const auto& placement : state_.arrangement())
+                end = std::max(end,
+                               placement.startBeats + state_.findPattern(placement.patternId)->lengthBeats);
+            audioStart_ = end + 4.0;
+
+            savedDepth_ = depth();
+            const juce::DragAndDropTarget::SourceDetails details{
+                "sample:" + kit_.getChildFile("Clap.wav").getFullPathName(),
+                panel("browser"),
+                playlistBeat(0, audioStart_ + 0.5)};
+            playlistPanel->itemDropped(details);
+
+            check(state_.audioClips().size() == 1, "un clip audio");
+            check(depth() == savedDepth_ + 1, "une seule entrée d'historique : la piste et le clip ensemble");
+            check(state_.transport().mode == domain::PlayMode::song,
+                  "le dépôt passe en mode chanson : en PAT, le clip serait muet");
+            if (!state_.audioClips().empty())
+            {
+                const auto& clip = state_.audioClips().front();
+                check(clip.startBeats == audioStart_,
+                      "posé à la mesure sous le pointeur, temps " + std::to_string(clip.startBeats));
+                check(std::abs(clip.sample.seconds - 1.5) < 0.01, "il dure son sample : 1,5 s");
+            }
+
+            const auto heard = listen("21-clip-audio", 90.0);
+            const auto step = static_cast<int>(std::lround(audioStart_ / stepBeats));
+            check(std::find(heard.onsets.begin(), heard.onsets.end(), step) != heard.onsets.end(),
+                  "le clap s'entend à son temps");
+            check(heard.seconds >= audioStart_ * 60.0 / 90.0 + 1.4, "le rendu va jusqu'au bout du clap");
+        });
+
+    add("Ctrl + glisser sélectionne une zone",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            // From the empty space above the first lane? The lanes start right
+            // under the ruler; the band starts in lane 0 before beat 0 is not
+            // possible, so it starts on an empty spot of lane 1 and sweeps up
+            // over the first two layings of pattern 1.
+            const auto from = playlistBeat(1, 30.0);
+            const auto to = playlistBeat(0, 1.0);
+            drag(*playlist, from, to, true);
+
+            check(playlist->selected().size() == 2,
+                  "deux blocs pris dans la zone : " + std::to_string(playlist->selected().size()));
+        });
+
+    add("Ctrl + Maj + clic ajoute un bloc à la sélection",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            click(*playlist, playlistBeat(0, 32.0 + 2.0), false, true, true);
+            check(playlist->selected().size() == 3, "trois blocs sélectionnés");
+            click(*playlist, playlistBeat(0, 32.0 + 2.0), false, true, true);
+            check(playlist->selected().size() == 2, "un second Ctrl + Maj + clic le retire");
+        });
+
+    add("Ctrl+B duplique la sélection juste après elle",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            const auto placements = state_.arrangement().size();
+            savedDepth_ = depth();
+            static_cast<void>(playlist->keyPressed(juce::KeyPress{'b', juce::ModifierKeys::ctrlModifier, 0}));
+
+            check(state_.arrangement().size() == placements + 2, "deux poses de plus");
+            check(depth() == savedDepth_ + 1, "une seule entrée d'historique");
+
+            // The selection covered beats 0 to 32; its copy starts at 32 and 48,
+            // on top of the layings already there — a duplicate is a laying.
+            int at32 = 0;
+            int at48 = 0;
+            for (const auto& placement : state_.arrangement())
+            {
+                at32 += placement.startBeats == 32.0 ? 1 : 0;
+                at48 += placement.startBeats == 48.0 ? 1 : 0;
+            }
+            check(at32 >= 2 && at48 >= 2, "les copies commencent aux temps 32 et 48");
+            check(playlist->selected().size() == 2,
+                  "la sélection passe aux copies, prête pour un autre Ctrl+B");
+
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(state_.arrangement().size() == placements, "un Ctrl+Z les retire toutes les deux");
+        });
+
+    add("Ctrl+C puis Ctrl+V colle à la tête de lecture",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            // The selection: the first laying only.
+            click(*playlist, playlistBeat(0, 2.0));
+            check(playlist->selected().size() == 1, "un bloc sélectionné au clic");
+
+            static_cast<void>(playlist->keyPressed(juce::KeyPress{'c', juce::ModifierKeys::ctrlModifier, 0}));
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(100.0)));
+
+            const auto placements = state_.arrangement().size();
+            static_cast<void>(playlist->keyPressed(juce::KeyPress{'v', juce::ModifierKeys::ctrlModifier, 0}));
+
+            check(state_.arrangement().size() == placements + 1, "une pose de plus");
+            const auto pasted =
+                std::any_of(state_.arrangement().begin(),
+                            state_.arrangement().end(),
+                            [](const domain::Placement& placement) { return placement.startBeats == 100.0; });
+            check(pasted, "au temps 100, là où est la tête");
+        });
+
+    add("Suppr retire la sélection, Ctrl+Z la rend",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            savedState_ = domain::json::write(state_.toValue());
+            const auto placements = state_.arrangement().size();
+
+            static_cast<void>(playlist->keyPressed(juce::KeyPress{juce::KeyPress::deleteKey}));
+            check(state_.arrangement().size() == placements - 1, "le bloc collé est retiré");
+
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == savedState_, "Ctrl+Z le remet, à l'octet près");
         });
 }
 

@@ -3,10 +3,11 @@
   "schemaVersion": 1,
   "id": "beatmaker",
   "label": "Beatmaker",
-  "description": "Production de beats : transport, pistes, playlist, channel rack, piano roll, chaîne de plugins, historique, copilote.",
+  "description": "Production de beats : transport, navigateur de samples, playlist, channel rack, piano roll, chaîne de plugins, historique, copilote.",
   "panels": [
     "transport",
     "tracks",
+    "browser",
     "playlist",
     "channel_rack",
     "piano_roll",
@@ -20,13 +21,22 @@
     ],
     "pages": [
       {
+        "panel": "browser",
+        "title": "Navigateur",
+        "open": true,
+        "x": 0,
+        "y": 0,
+        "width": 0.22,
+        "height": 1
+      },
+      {
         "panel": "playlist",
         "title": "Playlist",
         "shortcut": "F5",
         "open": true,
-        "x": 0,
+        "x": 0.22,
         "y": 0,
-        "width": 0.66,
+        "width": 0.48,
         "height": 0.55
       },
       {
@@ -34,9 +44,9 @@
         "title": "Channel rack",
         "shortcut": "F6",
         "open": true,
-        "x": 0,
+        "x": 0.22,
         "y": 0.55,
-        "width": 0.66,
+        "width": 0.48,
         "height": 0.45
       },
       {
@@ -73,18 +83,18 @@
         "panel": "history",
         "title": "Historique",
         "open": true,
-        "x": 0.66,
+        "x": 0.7,
         "y": 0,
-        "width": 0.34,
+        "width": 0.3,
         "height": 0.35
       },
       {
         "panel": "copilot",
         "title": "Copilote",
         "open": true,
-        "x": 0.66,
+        "x": 0.7,
         "y": 0.35,
-        "width": 0.34,
+        "width": 0.3,
         "height": 0.65
       }
     ]
@@ -124,7 +134,11 @@
     "pattern.remove",
     "placement.move",
     "placement.remove",
-    "transport.set_mode"
+    "transport.set_mode",
+    "track.set_sample",
+    "audio.place",
+    "audio.move",
+    "audio.remove"
   ],
   "services": [
     "mcp",

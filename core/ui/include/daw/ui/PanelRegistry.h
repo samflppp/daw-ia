@@ -8,6 +8,7 @@
 #include "daw/ui/model/History.h"
 #include "daw/ui/model/PluginHost.h"
 #include "daw/ui/model/ProjectObserver.h"
+#include "daw/ui/model/SampleHost.h"
 #include "daw/ui/model/Selection.h"
 #include "daw/ui/model/TransportClock.h"
 #include "daw/ui/model/WorkspaceHost.h"
@@ -52,6 +53,10 @@ struct PanelServices
     // and a way to ask. The process and the socket behind it stop at the
     // application.
     CopilotHost& copilot;
+
+    // The samples: their bytes into the project, and the folders of this
+    // machine the browser shows.
+    SampleHost& samples;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

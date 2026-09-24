@@ -262,5 +262,5 @@ TEST_CASE("the beatmaker manifest shipped with the application is windowed and p
     REQUIRE(manifest.ok());
     REQUIRE(manifest.value().windows.has_value());
     CHECK(manifest.value().windows->bar == std::vector<std::string>{"transport"});
-    CHECK(manifest.value().windows->pages.size() == 7);
+    CHECK(manifest.value().windows->pages.size() == 8);
 }

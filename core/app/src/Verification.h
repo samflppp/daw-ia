@@ -6,6 +6,7 @@
 #include "daw/ui/WorkspaceView.h"
 #include "daw/ui/model/CopilotHost.h"
 #include "daw/ui/model/History.h"
+#include "daw/ui/model/SampleHost.h"
 #include "daw/ui/model/Selection.h"
 #include "daw/ui/model/TransportClock.h"
 
@@ -61,6 +62,7 @@ public:
         const ui::TransportClock& clock;
         const ui::Tokens& tokens;
         tracktion::Edit& edit;
+        ui::SampleHost& samples;
         juce::File folder;
         Run run{Run::list};
 
@@ -117,8 +119,16 @@ private:
     [[nodiscard]] juce::Component* panel(const char* id) const;
     [[nodiscard]] juce::Button* button(juce::Component& root, const juce::String& text) const;
     void press(const juce::String& text);
-    void click(juce::Component& target, juce::Point<int> at, bool right = false, bool shift = false);
-    void drag(juce::Component& target, juce::Point<int> from, juce::Point<int> to);
+    void click(juce::Component& target,
+               juce::Point<int> at,
+               bool right = false,
+               bool shift = false,
+               bool ctrl = false);
+    void drag(juce::Component& target, juce::Point<int> from, juce::Point<int> to, bool ctrl = false);
+
+    // A short burst and silence, as a WAV file: a drum hit an onset detector
+    // cannot miss.
+    static void writeHit(const juce::File& file, double seconds);
     void key(const juce::KeyPress& press);
 
     // Where a cell of the rack and a beat of a playlist lane are, read from the
@@ -137,6 +147,7 @@ private:
     const ui::TransportClock& clock_;
     const ui::Tokens& tokens_;
     tracktion::Edit& edit_;
+    ui::SampleHost& samples_;
     juce::File folder_;
     Run run_;
     std::function<void(bool)> finished_;
@@ -156,6 +167,8 @@ private:
     std::string savedState_;
     std::size_t savedDepth_{0};
     std::size_t transcriptBefore_{0};
+    juce::File kit_;
+    double audioStart_{0.0};
 };
 
 } // namespace daw::app

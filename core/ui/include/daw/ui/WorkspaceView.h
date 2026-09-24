@@ -32,7 +32,10 @@ namespace daw::ui
 //            windows over the desktop underneath, the way FL Studio shows its
 //            playlist, channel rack and piano roll. F5, F6 … open a page,
 //            bring it to the front, or close it when it is already there.
-class WorkspaceView final : public juce::Component
+//
+// It is also the drag-and-drop container: a sample dragged out of the browser
+// page travels over the view to the rack or the playlist page it is dropped on.
+class WorkspaceView final : public juce::Component, public juce::DragAndDropContainer
 {
 public:
     WorkspaceView(const PanelServices& services, const PanelRegistry& registry);
@@ -115,6 +118,9 @@ private:
 
     LayoutNode layout_;
     juce::String workspaceId_;
+
+    // A hash of the manifest's pages, part of every remembered key.
+    juce::String layoutSignature_;
     std::vector<Placed> panels_;
     std::vector<PageSlot> pages_;
 

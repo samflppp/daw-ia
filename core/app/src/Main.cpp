@@ -3,6 +3,7 @@
 #include "MainWindow.h"
 #include "PluginRack.h"
 #include "PluginWindow.h"
+#include "SampleLibrary.h"
 #include "TransportSync.h"
 #include "Verification.h"
 #include "WorkspaceSwitch.h"
@@ -198,6 +199,7 @@ public:
                 *clock_,
                 ui::Tokens::builtIn(),
                 engineHost_->edit(),
+                *sampleLibrary_,
                 juce::File{tokens[index + 1].unquoted()},
                 run,
                 [](bool passed)
@@ -234,6 +236,7 @@ public:
         // After the window: closing it is the last thing that can move a page.
         if (layoutSettings_ != nullptr)
             static_cast<void>(layoutSettings_->saveIfNeeded());
+        sampleLibrary_.reset();
         layoutSettings_.reset();
 
         juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
@@ -298,6 +301,21 @@ private:
         copilot_ = std::make_unique<CopilotBridge>(
             CopilotBridge::Wiring{bus_, state_, registry_, [this] { return rack_->available(); }});
 
+        // Where the pages of a windowed workspace were left, kept next to the
+        // other settings of this machine and never in the project: a window's
+        // place is a matter of this screen.
+        juce::PropertiesFile::Options layoutOptions;
+        layoutOptions.applicationName = "DAW IA";
+        layoutOptions.folderName = "DAW IA";
+        layoutOptions.filenameSuffix = ".layout";
+        layoutOptions.osxLibrarySubFolder = "Application Support";
+        layoutSettings_ = std::make_unique<juce::PropertiesFile>(layoutOptions);
+
+        // The samples: bytes into the project's store, folders into the same
+        // settings as the pages, because both are this machine's.
+        sampleLibrary_ =
+            std::make_unique<SampleLibrary>([this] { return contentStore_.get(); }, layoutSettings_.get());
+
         const ui::PanelServices services{tokens,
                                          *lookAndFeel_,
                                          bus_,
@@ -308,20 +326,12 @@ private:
                                          history_,
                                          *rack_,
                                          *switch_,
-                                         *copilot_};
+                                         *copilot_,
+                                         *sampleLibrary_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();
 
-        // Where the pages of a windowed workspace were left, kept next to the
-        // other settings of this machine and never in the project: a window's
-        // place is a matter of this screen.
-        juce::PropertiesFile::Options layoutOptions;
-        layoutOptions.applicationName = "DAW IA";
-        layoutOptions.folderName = "DAW IA";
-        layoutOptions.filenameSuffix = ".layout";
-        layoutOptions.osxLibrarySubFolder = "Application Support";
-        layoutSettings_ = std::make_unique<juce::PropertiesFile>(layoutOptions);
         view->setPageMemory(layoutSettings_.get());
         auto* viewPointer = view.get();
 
@@ -605,6 +615,7 @@ private:
     std::unique_ptr<PluginRack> rack_;
     std::unique_ptr<TransportSync> transportSync_;
     std::unique_ptr<juce::PropertiesFile> layoutSettings_;
+    std::unique_ptr<SampleLibrary> sampleLibrary_;
     ui::WorkspaceView* view_{nullptr};
     std::unique_ptr<Verification> verification_;
     std::unique_ptr<MainWindow> window_;

@@ -1,6 +1,8 @@
 #include "daw/ui/panels/PlaylistPanel.h"
 
 #include "daw/domain/commands/PatternCommands.h"
+#include "daw/domain/commands/SampleCommands.h"
+#include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/ui/model/PatternEditing.h"
 
@@ -28,6 +30,23 @@ enum LaneMenu
     removeItem = 2
 };
 
+// A sample the browser hands over, by its drag description.
+constexpr const char* samplePrefix = "sample:";
+
+[[nodiscard]] std::optional<juce::File> sampleFrom(const juce::DragAndDropTarget::SourceDetails& details)
+{
+    const auto description = details.description.toString();
+    if (!description.startsWith(samplePrefix))
+        return std::nullopt;
+
+    return juce::File{description.fromFirstOccurrenceOf(samplePrefix, false, false)};
+}
+
+[[nodiscard]] double ceilToBar(double beats)
+{
+    return std::ceil(beats / beatsPerBar - 1e-9) * beatsPerBar;
+}
+
 } // namespace
 
 PlaylistPanel::PlaylistPanel(const PanelContext& context)
@@ -38,9 +57,15 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context)
     , project_(context.project)
     , selection_(context.selection)
     , clock_(context.clock)
+    , samples_(context.samples)
 {
     titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
+
+    // The playlist takes the keys it knows — Ctrl+C, Ctrl+V, Ctrl+B, Delete —
+    // and lets the others go up to the view: Space and Ctrl+Z still work
+    // after a click here.
+    setWantsKeyboardFocus(true);
 
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
@@ -58,7 +83,52 @@ PlaylistPanel::~PlaylistPanel()
 void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
     juce::ignoreUnused(source);
+
+    // A block an undo took away is no longer selectable.
+    const auto all = items();
+    selected_.erase(std::remove_if(selected_.begin(),
+                                   selected_.end(),
+                                   [&all](const Item& item)
+                                   { return std::find(all.begin(), all.end(), item) == all.end(); }),
+                    selected_.end());
     repaint();
+}
+
+// --- lanes ------------------------------------------------------------------
+
+int PlaylistPanel::patternLaneCount() const
+{
+    return static_cast<int>(state_.patterns().size());
+}
+
+std::vector<domain::TrackId> PlaylistPanel::audioTracks() const
+{
+    // In the order of the track list, one lane per track that holds audio.
+    std::vector<domain::TrackId> tracks;
+    for (const auto& track : state_.tracks())
+    {
+        const auto holds =
+            std::any_of(state_.audioClips().begin(),
+                        state_.audioClips().end(),
+                        [&track](const domain::AudioClip& clip) { return clip.trackId == track.id; });
+        if (holds)
+            tracks.push_back(track.id);
+    }
+    return tracks;
+}
+
+int PlaylistPanel::laneCount() const
+{
+    return patternLaneCount() + static_cast<int>(audioTracks().size());
+}
+
+int PlaylistPanel::laneOfTrack(domain::TrackId trackId) const
+{
+    const auto tracks = audioTracks();
+    const auto found = std::find(tracks.begin(), tracks.end(), trackId);
+    return found == tracks.end()
+               ? -1
+               : patternLaneCount() + static_cast<int>(std::distance(tracks.begin(), found));
 }
 
 // --- geometry ---------------------------------------------------------------
@@ -91,10 +161,10 @@ juce::Rectangle<int> PlaylistPanel::gridArea() const
 double PlaylistPanel::visibleBeats() const
 {
     double end = 0.0;
-    for (const auto& placement : state_.arrangement())
+    for (const auto& item : items())
     {
-        if (const auto* pattern = state_.findPattern(placement.patternId); pattern != nullptr)
-            end = std::max(end, placement.startBeats + pattern->lengthBeats);
+        if (const auto start = startOf(item); start.has_value())
+            end = std::max(end, *start + lengthOf(item));
     }
 
     const auto wanted = std::max(minimumVisibleBeats, end + roomAfterSongBeats);
@@ -124,44 +194,112 @@ int PlaylistPanel::laneAtY(int y) const
         return -1;
 
     const auto lane = (y - grid.getY()) / laneHeight;
-    return lane < static_cast<int>(state_.patterns().size()) ? lane : -1;
-}
-
-juce::Rectangle<int> PlaylistPanel::blockBounds(const domain::Placement& placement) const
-{
-    const auto index = state_.patternIndex(placement.patternId);
-    const auto* pattern = state_.findPattern(placement.patternId);
-    if (!index || pattern == nullptr)
-        return {};
-
-    const auto grid = gridArea();
-    const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
-    const auto left = xForBeat(placement.startBeats);
-    const auto right = xForBeat(placement.startBeats + pattern->lengthBeats);
-
-    return juce::Rectangle<int>{left,
-                                grid.getY() + static_cast<int>(index.value()) * laneHeight,
-                                std::max(1, right - left),
-                                laneHeight}
-        .withTrimmedTop(tokens_.integer("metric.playlist.blockInset"))
-        .withTrimmedBottom(tokens_.integer("metric.playlist.blockInset"));
-}
-
-const domain::Placement* PlaylistPanel::placementAt(juce::Point<int> point) const
-{
-    const domain::Placement* found = nullptr;
-    for (const auto& placement : state_.arrangement())
-    {
-        if (blockBounds(placement).contains(point))
-            found = &placement;
-    }
-    return found;
+    return lane < laneCount() ? lane : -1;
 }
 
 double PlaylistPanel::snap(double beats, bool fine)
 {
     const auto step = fine ? 1.0 : static_cast<double>(beatsPerBar);
     return std::max(0.0, std::floor(beats / step) * step);
+}
+
+// --- items ------------------------------------------------------------------
+
+std::vector<PlaylistPanel::Item> PlaylistPanel::items() const
+{
+    std::vector<Item> all;
+    for (const auto& placement : state_.arrangement())
+        all.push_back(Item{false, placement.id.toString()});
+    for (const auto& clip : state_.audioClips())
+        all.push_back(Item{true, clip.id.toString()});
+    return all;
+}
+
+std::optional<double> PlaylistPanel::startOf(const Item& item) const
+{
+    if (item.audio)
+    {
+        const auto id = domain::AudioClipId::parse(item.id);
+        const auto* clip = id ? state_.findAudioClip(id.value()) : nullptr;
+        return clip != nullptr ? std::optional<double>{clip->startBeats} : std::nullopt;
+    }
+
+    const auto id = domain::PlacementId::parse(item.id);
+    const auto* placement = id ? state_.findPlacement(id.value()) : nullptr;
+    return placement != nullptr ? std::optional<double>{placement->startBeats} : std::nullopt;
+}
+
+double PlaylistPanel::lengthOf(const Item& item) const
+{
+    if (item.audio)
+    {
+        const auto id = domain::AudioClipId::parse(item.id);
+        const auto* clip = id ? state_.findAudioClip(id.value()) : nullptr;
+        if (clip == nullptr)
+            return 0.0;
+
+        // A recording lasts seconds, and the grid is in beats: read through
+        // the tempo where it starts. Drawing only — the Edit uses the real
+        // sequence.
+        return clip->sample.seconds * state_.tempoAt(clip->startBeats) / 60.0;
+    }
+
+    const auto id = domain::PlacementId::parse(item.id);
+    const auto* placement = id ? state_.findPlacement(id.value()) : nullptr;
+    const auto* pattern = placement != nullptr ? state_.findPattern(placement->patternId) : nullptr;
+    return pattern != nullptr ? pattern->lengthBeats : 0.0;
+}
+
+int PlaylistPanel::laneOf(const Item& item) const
+{
+    if (item.audio)
+    {
+        const auto id = domain::AudioClipId::parse(item.id);
+        const auto* clip = id ? state_.findAudioClip(id.value()) : nullptr;
+        return clip != nullptr ? laneOfTrack(clip->trackId) : -1;
+    }
+
+    const auto id = domain::PlacementId::parse(item.id);
+    const auto* placement = id ? state_.findPlacement(id.value()) : nullptr;
+    if (placement == nullptr)
+        return -1;
+
+    const auto index = state_.patternIndex(placement->patternId);
+    return index ? static_cast<int>(index.value()) : -1;
+}
+
+juce::Rectangle<int> PlaylistPanel::bounds(const Item& item, double offsetBeats) const
+{
+    const auto start = startOf(item);
+    const auto lane = laneOf(item);
+    if (!start.has_value() || lane < 0)
+        return {};
+
+    const auto grid = gridArea();
+    const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
+    const auto left = xForBeat(std::max(0.0, *start + offsetBeats));
+    const auto right = xForBeat(std::max(0.0, *start + offsetBeats) + lengthOf(item));
+
+    return juce::Rectangle<int>{left, grid.getY() + lane * laneHeight, std::max(1, right - left), laneHeight}
+        .withTrimmedTop(tokens_.integer("metric.playlist.blockInset"))
+        .withTrimmedBottom(tokens_.integer("metric.playlist.blockInset"));
+}
+
+std::optional<PlaylistPanel::Item> PlaylistPanel::itemAt(juce::Point<int> point) const
+{
+    // The last one drawn wins, which is the one on top.
+    std::optional<Item> found;
+    for (const auto& item : items())
+    {
+        if (bounds(item).contains(point))
+            found = item;
+    }
+    return found;
+}
+
+bool PlaylistPanel::isSelected(const Item& item) const
+{
+    return std::find(selected_.begin(), selected_.end(), item) != selected_.end();
 }
 
 // --- painting ---------------------------------------------------------------
@@ -180,11 +318,9 @@ void PlaylistPanel::paint(juce::Graphics& g)
     g.setColour(tokens_.colour("color.text.tertiary"));
     g.setFont(lookAndFeel_.typography().caps("font.size.micro"));
     if (!titled_)
-    {
         g.drawText("PLAYLIST", header, juce::Justification::centredLeft, false);
-    }
 
-    if (state_.patterns().empty())
+    if (laneCount() == 0)
     {
         paintEmpty(g);
         return;
@@ -194,14 +330,24 @@ void PlaylistPanel::paint(juce::Graphics& g)
     paintLanes(g, gridArea(), headerArea());
     paintBlocks(g, gridArea());
     paintPlayhead(g);
+
+    if (band_.has_value())
+    {
+        g.setColour(tokens_.colour("color.state.selected"));
+        g.fillRect(*band_);
+        g.setColour(tokens_.colour("color.accent.primary"));
+        g.drawRect(*band_, tokens_.integer("stroke.hairline"));
+    }
 }
 
 void PlaylistPanel::paintEmpty(juce::Graphics& g) const
 {
     g.setColour(tokens_.colour("color.text.disabled"));
     g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
-    g.drawText(
-        u8"créez un pattern dans le channel rack", getLocalBounds(), juce::Justification::centred, false);
+    g.drawText(u8"créez un pattern dans le channel rack, ou déposez un sample ici",
+               getLocalBounds(),
+               juce::Justification::centred,
+               false);
 }
 
 void PlaylistPanel::paintRuler(juce::Graphics& g, juce::Rectangle<int> area) const
@@ -255,33 +401,45 @@ void PlaylistPanel::paintLanes(juce::Graphics& g,
     g.setColour(tokens_.colour("color.surface.panel"));
     g.fillRect(headers);
 
-    for (std::size_t index = 0; index < state_.patterns().size(); ++index)
+    const auto tracks = audioTracks();
+    for (int lane = 0; lane < laneCount(); ++lane)
     {
-        const auto& pattern = state_.patterns()[index];
-        const auto y = grid.getY() + static_cast<int>(index) * laneHeight;
+        const auto y = grid.getY() + lane * laneHeight;
         if (y >= grid.getBottom())
             break;
 
         auto name = headers.withY(y).withHeight(laneHeight);
+        juce::String label;
 
-        // The pattern the rack and the piano roll show is the lit lane: one
-        // choice, three screens.
-        if (shown != nullptr && pattern.id == shown->id)
+        if (lane < patternLaneCount())
         {
-            g.setColour(tokens_.colour("color.state.selected"));
-            g.fillRect(name);
+            const auto& pattern = state_.patterns()[static_cast<std::size_t>(lane)];
+            label = juce::String::fromUTF8(patternEditing::displayName(state_, pattern).c_str());
+
+            // The pattern the rack and the piano roll show is the lit lane:
+            // one choice, three screens.
+            if (shown != nullptr && pattern.id == shown->id)
+            {
+                g.setColour(tokens_.colour("color.state.selected"));
+                g.fillRect(name);
+            }
+        }
+        else if (const auto* track =
+                     state_.findTrack(tracks[static_cast<std::size_t>(lane - patternLaneCount())]);
+                 track != nullptr)
+        {
+            label = juce::String::fromUTF8(track->name.c_str());
         }
 
         g.setColour(tokens_.colour("color.border.hairline"));
         g.fillRect(grid.getX(), y + laneHeight - hairline, grid.getWidth(), hairline);
         g.fillRect(name.getX(), name.getBottom() - hairline, name.getWidth(), hairline);
 
-        g.setColour(tokens_.colour("color.text.primary"));
+        g.setColour(
+            tokens_.colour(lane < patternLaneCount() ? "color.text.primary" : "color.text.secondary"));
         g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
-        g.drawText(patternEditing::displayName(state_, pattern),
-                   name.reduced(tokens_.integer("space.sm"), 0),
-                   juce::Justification::centredLeft,
-                   true);
+        g.drawText(
+            label, name.reduced(tokens_.integer("space.sm"), 0), juce::Justification::centredLeft, true);
     }
 
     g.setColour(tokens_.colour("color.border.hairline"));
@@ -296,30 +454,56 @@ void PlaylistPanel::paintBlocks(juce::Graphics& g, juce::Rectangle<int> grid) co
     g.saveState();
     g.reduceClipRegion(grid);
 
-    for (const auto& placement : state_.arrangement())
+    for (const auto& item : items())
     {
-        const auto block = blockBounds(placement);
+        const auto moving = move_.has_value() && isSelected(item);
+        const auto block = bounds(item, moving ? move_->offsetBeats : 0.0);
         if (block.isEmpty())
             continue;
 
-        const auto* pattern = state_.findPattern(placement.patternId);
-        const auto current = shown != nullptr && pattern != nullptr && pattern->id == shown->id;
+        juce::String label;
+        bool lit = false;
 
-        // The layings of the pattern being edited are lit: an edit in the rack
-        // lands in every one of them, and the screen says so before the ear
-        // does.
-        g.setColour(tokens_.colour(current ? "color.note.fill" : "color.note.fillSoft"));
+        if (item.audio)
+        {
+            const auto id = domain::AudioClipId::parse(item.id);
+            if (const auto* clip = id ? state_.findAudioClip(id.value()) : nullptr; clip != nullptr)
+                label = juce::String::fromUTF8(clip->sample.name.c_str());
+        }
+        else
+        {
+            const auto id = domain::PlacementId::parse(item.id);
+            const auto* placement = id ? state_.findPlacement(id.value()) : nullptr;
+            const auto* pattern = placement != nullptr ? state_.findPattern(placement->patternId) : nullptr;
+            if (pattern != nullptr)
+            {
+                label = juce::String::fromUTF8(patternEditing::displayName(state_, *pattern).c_str());
+
+                // The layings of the pattern being edited are lit: an edit in
+                // the rack lands in every one of them, and the screen says so
+                // before the ear does.
+                lit = shown != nullptr && pattern->id == shown->id;
+            }
+        }
+
+        const auto* fill =
+            item.audio ? "color.actor.copilot" : (lit ? "color.note.fill" : "color.note.fillSoft");
+        g.setColour(tokens_.colour(fill));
         g.fillRoundedRectangle(block.toFloat(), radius);
 
-        if (pattern != nullptr)
+        // A selected block is outlined, so a selection of twenty reads at a
+        // glance and a single one does not look like the pattern being edited.
+        if (isSelected(item))
         {
-            g.setColour(tokens_.colour("color.note.label"));
-            g.setFont(lookAndFeel_.typography().sans("font.size.micro", "font.weight.medium"));
-            g.drawText(patternEditing::displayName(state_, *pattern),
-                       block.reduced(tokens_.integer("space.xs"), 0),
-                       juce::Justification::centredLeft,
-                       true);
+            g.setColour(tokens_.colour("color.note.selected"));
+            g.drawRoundedRectangle(
+                block.toFloat(), radius, static_cast<float>(tokens_.integer("stroke.hairline") * 2));
         }
+
+        g.setColour(tokens_.colour("color.note.label"));
+        g.setFont(lookAndFeel_.typography().sans("font.size.micro", "font.weight.medium"));
+        g.drawText(
+            label, block.reduced(tokens_.integer("space.xs"), 0), juce::Justification::centredLeft, true);
     }
 
     g.restoreState();
@@ -372,16 +556,226 @@ void PlaylistPanel::timerCallback()
 
 void PlaylistPanel::placeAt(int lane, double beats)
 {
-    if (lane < 0 || lane >= static_cast<int>(state_.patterns().size()))
+    if (lane < 0 || lane >= patternLaneCount())
         return;
 
     const auto patternId = state_.patterns()[static_cast<std::size_t>(lane)].id;
 
     // The identifier is drawn here, by the caller, like every identifier in
     // this project: the command engenders none.
-    static_cast<void>(bus_.execute(
-        std::make_unique<domain::PlacePattern>(domain::PlacementId::generate(), patternId, beats)));
+    const auto placementId = domain::PlacementId::generate();
+    if (bus_.execute(std::make_unique<domain::PlacePattern>(placementId, patternId, beats)).ok())
+        selected_ = {Item{false, placementId.toString()}};
+
     selection_.selectPattern(patternId);
+}
+
+void PlaylistPanel::dropSample(const juce::File& file, juce::Point<int> at)
+{
+    auto sample = samples_.import(file);
+    if (!sample)
+        return;
+
+    // A recording gets a track of its own, named after it, the way FL gives a
+    // dropped sample a playlist track: two commands, one thing the user did,
+    // one Ctrl+Z.
+    const auto trackId = domain::TrackId::generate();
+    const auto clipId = domain::AudioClipId::generate();
+    const auto beats = snap(beatAtX(at.getX()), false);
+
+    std::vector<std::unique_ptr<domain::Command>> commands;
+    commands.push_back(
+        std::make_unique<domain::AddTrack>(trackId, file.getFileNameWithoutExtension().toStdString(), 0.0));
+    commands.push_back(std::make_unique<domain::PlaceAudio>(clipId, trackId, sample.value(), beats));
+
+    domain::GroupOptions group{};
+    group.label = "déposer " + sample.value().name;
+
+    if (!bus_.executeGroup(std::move(commands), group).ok())
+        return;
+
+    selected_ = {Item{true, clipId.toString()}};
+
+    // Pattern mode plays the auditioned pattern and nothing of the
+    // arrangement: a clip dropped there would stay silent until SONG. A drop
+    // on the playlist is a gesture on the song, so the song is what plays.
+    if (state_.transport().mode == domain::PlayMode::pattern)
+        static_cast<void>(bus_.execute(
+            std::make_unique<domain::TransportSetMode>(domain::PlayMode::song, domain::PatternId{})));
+}
+
+void PlaylistPanel::moveSelection(double offsetBeats)
+{
+    if (selected_.empty() || offsetBeats == 0.0)
+        return;
+
+    // Never before the origin: the whole selection stops where its earliest
+    // block would cross it, so the shape of the selection is kept.
+    double earliest = 0.0;
+    bool first = true;
+    for (const auto& item : selected_)
+    {
+        if (const auto start = startOf(item); start.has_value())
+        {
+            earliest = first ? *start : std::min(earliest, *start);
+            first = false;
+        }
+    }
+    const auto offset = std::max(offsetBeats, -earliest);
+    if (offset == 0.0)
+        return;
+
+    std::vector<std::unique_ptr<domain::Command>> commands;
+    for (const auto& item : selected_)
+    {
+        const auto start = startOf(item);
+        if (!start.has_value())
+            continue;
+
+        if (item.audio)
+            commands.push_back(std::make_unique<domain::MoveAudio>(
+                domain::AudioClipId::parse(item.id).value(), *start + offset));
+        else
+            commands.push_back(std::make_unique<domain::MovePlacement>(
+                domain::PlacementId::parse(item.id).value(), *start + offset));
+    }
+
+    domain::GroupOptions group{};
+    group.label = selected_.size() == 1 ? "déplacer un bloc" : "déplacer la sélection";
+    static_cast<void>(bus_.executeGroup(std::move(commands), group));
+}
+
+void PlaylistPanel::removeSelection()
+{
+    if (selected_.empty())
+        return;
+
+    std::vector<std::unique_ptr<domain::Command>> commands;
+    for (const auto& item : selected_)
+    {
+        if (item.audio)
+            commands.push_back(
+                std::make_unique<domain::RemoveAudio>(domain::AudioClipId::parse(item.id).value()));
+        else
+            commands.push_back(
+                std::make_unique<domain::RemovePlacement>(domain::PlacementId::parse(item.id).value()));
+    }
+
+    domain::GroupOptions group{};
+    group.label = selected_.size() == 1 ? "retirer un bloc" : "retirer la sélection";
+    if (bus_.executeGroup(std::move(commands), group).ok())
+        selected_.clear();
+}
+
+void PlaylistPanel::copySelection()
+{
+    clipboard_.clear();
+
+    double earliest = 0.0;
+    bool first = true;
+    for (const auto& item : selected_)
+    {
+        if (const auto start = startOf(item); start.has_value())
+        {
+            earliest = first ? *start : std::min(earliest, *start);
+            first = false;
+        }
+    }
+
+    for (const auto& item : selected_)
+    {
+        Copied copied{};
+        copied.audio = item.audio;
+
+        if (item.audio)
+        {
+            const auto* clip = state_.findAudioClip(domain::AudioClipId::parse(item.id).value());
+            if (clip == nullptr)
+                continue;
+            copied.trackId = clip->trackId;
+            copied.sample = clip->sample;
+            copied.offsetBeats = clip->startBeats - earliest;
+        }
+        else
+        {
+            const auto* placement = state_.findPlacement(domain::PlacementId::parse(item.id).value());
+            if (placement == nullptr)
+                continue;
+            copied.patternId = placement->patternId;
+            copied.offsetBeats = placement->startBeats - earliest;
+        }
+
+        clipboard_.push_back(std::move(copied));
+    }
+}
+
+void PlaylistPanel::pasteAt(double beats)
+{
+    if (clipboard_.empty())
+        return;
+
+    // New layings of the same content: a pasted pattern is the same pattern,
+    // so editing it later changes every copy, the way it does in FL.
+    std::vector<std::unique_ptr<domain::Command>> commands;
+    std::vector<Item> pasted;
+
+    for (const auto& copied : clipboard_)
+    {
+        if (copied.audio)
+        {
+            if (!copied.sample.has_value() || state_.findTrack(copied.trackId) == nullptr)
+                continue;
+
+            const auto clipId = domain::AudioClipId::generate();
+            commands.push_back(std::make_unique<domain::PlaceAudio>(
+                clipId, copied.trackId, *copied.sample, beats + copied.offsetBeats));
+            pasted.push_back(Item{true, clipId.toString()});
+        }
+        else
+        {
+            if (state_.findPattern(copied.patternId) == nullptr)
+                continue;
+
+            const auto placementId = domain::PlacementId::generate();
+            commands.push_back(std::make_unique<domain::PlacePattern>(
+                placementId, copied.patternId, beats + copied.offsetBeats));
+            pasted.push_back(Item{false, placementId.toString()});
+        }
+    }
+
+    if (commands.empty())
+        return;
+
+    domain::GroupOptions group{};
+    group.label = "coller";
+    if (bus_.executeGroup(std::move(commands), group).ok())
+        selected_ = std::move(pasted);
+}
+
+void PlaylistPanel::duplicateSelection()
+{
+    if (selected_.empty())
+        return;
+
+    // Right after the selection, rounded up to the bar: what Ctrl+B does in FL.
+    double earliest = 0.0;
+    double latest = 0.0;
+    bool first = true;
+    for (const auto& item : selected_)
+    {
+        const auto start = startOf(item);
+        if (!start.has_value())
+            continue;
+
+        earliest = first ? *start : std::min(earliest, *start);
+        latest = first ? *start + lengthOf(item) : std::max(latest, *start + lengthOf(item));
+        first = false;
+    }
+    if (first)
+        return;
+
+    copySelection();
+    pasteAt(earliest + ceilToBar(latest - earliest));
 }
 
 void PlaylistPanel::renamePattern(domain::PatternId patternId)
@@ -411,7 +805,7 @@ void PlaylistPanel::renamePattern(domain::PatternId patternId)
 
 void PlaylistPanel::showLaneMenu(int lane)
 {
-    if (lane < 0 || lane >= static_cast<int>(state_.patterns().size()))
+    if (lane < 0 || lane >= patternLaneCount())
         return;
 
     const auto patternId = state_.patterns()[static_cast<std::size_t>(lane)].id;
@@ -433,7 +827,10 @@ void PlaylistPanel::showLaneMenu(int lane)
 
 void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
 {
+    grabKeyboardFocus();
+
     const auto point = event.getPosition();
+    const auto& mods = event.mods;
 
     // The ruler moves the playhead, in song mode: pattern mode plays from the
     // pattern's own start, which is nowhere on this timeline.
@@ -451,10 +848,10 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
 
     if (headerArea().contains(point))
     {
-        if (lane < 0)
+        if (lane < 0 || lane >= patternLaneCount())
             return;
 
-        if (event.mods.isRightButtonDown())
+        if (mods.isRightButtonDown())
         {
             showLaneMenu(lane);
             return;
@@ -469,59 +866,115 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
     if (!gridArea().contains(point))
         return;
 
-    if (const auto* placement = placementAt(point); placement != nullptr)
+    const auto hit = itemAt(point);
+
+    if (hit.has_value())
     {
-        if (event.mods.isRightButtonDown())
+        if (mods.isCtrlDown() && mods.isShiftDown())
         {
-            static_cast<void>(bus_.execute(std::make_unique<domain::RemovePlacement>(placement->id)));
+            // Added to the selection, or taken out of it.
+            if (isSelected(*hit))
+                selected_.erase(std::remove(selected_.begin(), selected_.end(), *hit), selected_.end());
+            else
+                selected_.push_back(*hit);
+            repaint();
             return;
         }
 
-        selection_.selectPattern(placement->patternId);
+        if (!isSelected(*hit))
+            selected_ = {*hit};
 
-        Drag drag{};
-        drag.placementId = placement->id;
-        drag.gesture = bus_.beginGesture("déplacer un placement");
-        drag.grabBeats = beatAtX(point.getX()) - placement->startBeats;
-        drag.lastStartBeats = placement->startBeats;
-        drag_ = drag;
+        if (mods.isRightButtonDown())
+        {
+            removeSelection();
+            return;
+        }
+
+        if (!hit->audio)
+        {
+            const auto* placement = state_.findPlacement(domain::PlacementId::parse(hit->id).value());
+            if (placement != nullptr)
+                selection_.selectPattern(placement->patternId);
+        }
+
+        Move move{};
+        move.grabBeats = beatAtX(point.getX());
+        move_ = move;
+        repaint();
         return;
     }
 
-    if (event.mods.isRightButtonDown() || lane < 0)
+    if (mods.isCtrlDown())
+    {
+        bandStart_ = point;
+        band_ = juce::Rectangle<int>{point, point};
+        if (!mods.isShiftDown())
+            selected_.clear();
+        repaint();
         return;
+    }
 
-    placeAt(lane, snap(beatAtX(point.getX()), event.mods.isShiftDown()));
+    selected_.clear();
+
+    if (mods.isRightButtonDown() || lane < 0)
+    {
+        repaint();
+        return;
+    }
+
+    placeAt(lane, snap(beatAtX(point.getX()), mods.isShiftDown()));
 }
 
 void PlaylistPanel::mouseDrag(const juce::MouseEvent& event)
 {
-    if (!drag_.has_value())
+    if (band_.has_value())
+    {
+        band_ = juce::Rectangle<int>{bandStart_, event.getPosition()}.getIntersection(gridArea());
+        repaint();
+        return;
+    }
+
+    if (!move_.has_value())
         return;
 
-    const auto start = snap(beatAtX(event.getPosition().getX()) - drag_->grabBeats, event.mods.isShiftDown());
+    // The move snaps as a whole, by the bar (by the beat with Shift): the
+    // blocks keep their places relative to each other.
+    const auto raw = beatAtX(event.getPosition().getX()) - move_->grabBeats;
+    const auto step = event.mods.isShiftDown() ? 1.0 : static_cast<double>(beatsPerBar);
+    const auto offset = std::round(raw / step) * step;
 
-    // One command per new position, not per mouse move: a slow hand would
-    // otherwise send hundreds of identical moves inside the gesture.
-    if (start == drag_->lastStartBeats)
-        return;
-
-    domain::ExecuteOptions options{};
-    options.gesture = drag_->gesture;
-
-    if (bus_.execute(std::make_unique<domain::MovePlacement>(drag_->placementId, start), options).ok())
-        drag_->lastStartBeats = start;
+    if (offset != move_->offsetBeats)
+    {
+        move_->offsetBeats = offset;
+        repaint();
+    }
 }
 
 void PlaylistPanel::mouseUp(const juce::MouseEvent& event)
 {
     juce::ignoreUnused(event);
 
-    if (!drag_.has_value())
+    if (band_.has_value())
+    {
+        const auto area = *band_;
+        band_.reset();
+
+        for (const auto& item : items())
+        {
+            if (bounds(item).intersects(area) && !isSelected(item))
+                selected_.push_back(item);
+        }
+        repaint();
+        return;
+    }
+
+    if (!move_.has_value())
         return;
 
-    static_cast<void>(bus_.endGesture(drag_->gesture));
-    drag_.reset();
+    const auto offset = move_->offsetBeats;
+    move_.reset();
+    moveSelection(offset);
+    repaint();
 }
 
 void PlaylistPanel::mouseDoubleClick(const juce::MouseEvent& event)
@@ -530,8 +983,78 @@ void PlaylistPanel::mouseDoubleClick(const juce::MouseEvent& event)
         return;
 
     const auto lane = laneAtY(event.getPosition().getY());
-    if (lane >= 0)
+    if (lane >= 0 && lane < patternLaneCount())
         renamePattern(state_.patterns()[static_cast<std::size_t>(lane)].id);
+}
+
+bool PlaylistPanel::keyPressed(const juce::KeyPress& key)
+{
+    const auto ctrl = juce::ModifierKeys::ctrlModifier;
+
+    if (key == juce::KeyPress{'c', ctrl, 0})
+    {
+        copySelection();
+        return true;
+    }
+
+    if (key == juce::KeyPress{'v', ctrl, 0})
+    {
+        // At the playhead, on its bar: where the song is being listened to.
+        // While playing, the engine's clock says where that is; stopped, the
+        // domain does — the ruler, Stop and the copilot all set it there, and
+        // the engine only follows.
+        const auto position = clock_.isPlaying() ? clock_.positionBeats() : state_.transport().positionBeats;
+        pasteAt(snap(position, false));
+        return true;
+    }
+
+    if (key == juce::KeyPress{'b', ctrl, 0})
+    {
+        duplicateSelection();
+        return true;
+    }
+
+    if (key == juce::KeyPress{juce::KeyPress::deleteKey} ||
+        key == juce::KeyPress{juce::KeyPress::backspaceKey})
+    {
+        removeSelection();
+        return true;
+    }
+
+    return false;
+}
+
+// --- dropping samples ---------------------------------------------------------
+
+bool PlaylistPanel::isInterestedInDragSource(const SourceDetails& details)
+{
+    return sampleFrom(details).has_value();
+}
+
+void PlaylistPanel::itemDropped(const SourceDetails& details)
+{
+    if (const auto file = sampleFrom(details); file.has_value())
+        dropSample(*file, details.localPosition);
+}
+
+bool PlaylistPanel::isInterestedInFileDrag(const juce::StringArray& files)
+{
+    return std::any_of(files.begin(),
+                       files.end(),
+                       [](const juce::String& path) { return SampleHost::isSampleFile(juce::File{path}); });
+}
+
+void PlaylistPanel::filesDropped(const juce::StringArray& files, int x, int y)
+{
+    for (const auto& path : files)
+    {
+        const juce::File file{path};
+        if (SampleHost::isSampleFile(file))
+        {
+            dropSample(file, {x, y});
+            return;
+        }
+    }
 }
 
 } // namespace daw::ui

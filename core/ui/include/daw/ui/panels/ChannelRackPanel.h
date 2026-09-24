@@ -27,6 +27,8 @@ namespace daw::ui
 // beats, and a pattern of eight beats shows thirty-two of them. The pattern is
 // the truth and the number of cells is a reading of it — never the reverse.
 class ChannelRackPanel final : public juce::Component,
+                               public juce::DragAndDropTarget,
+                               public juce::FileDragAndDropTarget,
                                private juce::ChangeListener,
                                private juce::Timer,
                                private juce::AsyncUpdater
@@ -41,6 +43,14 @@ public:
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
+
+    // A sample dropped on a channel makes it a sampler channel on that sample;
+    // dropped below the channels, it makes a new one. From the browser or from
+    // the system, the way FL takes both.
+    bool isInterestedInDragSource(const SourceDetails& details) override;
+    void itemDropped(const SourceDetails& details) override;
+    bool isInterestedInFileDrag(const juce::StringArray& files) override;
+    void filesDropped(const juce::StringArray& files, int x, int y) override;
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -96,6 +106,7 @@ private:
     [[nodiscard]] std::optional<int> playheadStep() const;
 
     void createPattern();
+    void dropSample(const juce::File& file, int y);
     void rebuildPatternChooser();
     void editChannelPitch(int row);
 
@@ -106,6 +117,7 @@ private:
     ProjectObserver& project_;
     Selection& selection_;
     const TransportClock& clock_;
+    SampleHost& samples_;
 
     // How finely the pattern is cut on screen. A screen setting and nothing
     // else: changing it writes no command and moves no note.

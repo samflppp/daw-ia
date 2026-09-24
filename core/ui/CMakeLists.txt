@@ -78,6 +78,7 @@ target_sources(daw_ui INTERFACE
     src/panels/PianoRollPanel.cpp
     src/panels/ChannelRackPanel.cpp
     src/panels/PlaylistPanel.cpp
+    src/panels/BrowserPanel.cpp
     src/panels/PluginChainPanel.cpp
     src/panels/HistoryPanel.cpp
     src/panels/CopilotPanel.cpp)

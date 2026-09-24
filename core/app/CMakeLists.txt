@@ -16,6 +16,7 @@ target_sources(daw_app PRIVATE
     src/EditClock.cpp
     src/TransportSync.cpp
     src/Verification.cpp
+    src/SampleLibrary.cpp
     src/WorkspaceSwitch.cpp)
 
 target_include_directories(daw_app PRIVATE src)
