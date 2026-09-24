@@ -19,10 +19,10 @@ audio, plus seulement par une lecture de l'état.
 | 0 | Modèle de placement et bascule pattern/chanson exposés et validés avant de coder | Livré | les quatre points validés : une ligne par pattern, pas de redimensionnement, `transport.set_mode`, quatre verbes |
 | 1 | Panneau `playlist` déclaré dans `beatmaker.json` | Livré | §4 ; huit panneaux |
 | 2 | Poser, déplacer, supprimer, par le bus, annulables, identifiants fournis par l'appelant | Livré | §2 ; pas de redimensionnement, par décision |
-| 3 | **La preuve qui compte** : posé huit fois, modifié une fois, les huit changent | Livré au rendu ; **l'écran reste à vérifier** | §3.2 ; §8, points 3 à 5 |
+| 3 | **La preuve qui compte** : posé huit fois, modifié une fois, les huit changent | Livré, au rendu et dans l'application | §3.2 ; §8, point 5 |
 | 4 | Le transport suit la playlist, les modes pattern et chanson coexistent | Livré | §3.3 |
 | 5 | Projection par identité, sans reconstruire ce qui n'a pas changé, piège du tempo compris | Livré | §3.1, compteurs et identité d'objet |
-| 6 | Commandes dans la table du copilote ; « répète le pattern 1 huit fois puis ajoute le pattern 2 » | Livré côté modèle ; **écran et Ctrl+Z non vérifiés** | §5 |
+| 6 | Commandes dans la table du copilote ; « répète le pattern 1 huit fois puis ajoute le pattern 2 » | Livré : une entrée copilote, un Ctrl+Z | §5 ; §8, point 7 |
 | 7 | Les projets des semaines précédentes se relisent | Livré | §6 ; trois processus, 22 ms puis 28 ms |
 
 ## 2. Le modèle de placement retenu
@@ -106,7 +106,7 @@ n'est touchée.
 
 ## 4. La playlist à l'écran
 
-Elle est placée au-dessus du channel rack et du piano-roll, dans la colonne centrale.
+C'est une page (F5) du beatmaker en fenêtres (§8 bis).
 
 | Geste | Commande |
 |---|---|
@@ -166,8 +166,6 @@ avec les commandes d'aujourd'hui, dont les payloads n'ont pas changé ; le test 
 
 | Point | Pourquoi |
 |---|---|
-| Vérifier à l'écran | j'ai demandé l'accès à l'application et il a été refusé ; je n'ai pas réessayé. En plus, une instance S8 (`C:\dawS9-bin\s8`, lancée à 06:56) tournait déjà : ma propre instance s'est fermée tout de suite, et je n'ai pas arrêté un processus qui n'était pas le mien |
-| Le Ctrl+Z copilote à l'écran | même raison ; §5 |
 | Redimensionner une pose | décision validée ; §2 |
 | Défilement et zoom de la playlist | la timeline s'adapte à la largeur. Au-delà d'une soixantaine de mesures, les blocs deviennent étroits |
 | Lignes libres façon FL (plusieurs patterns sur une ligne) | écarté à la validation : ce serait un état d'écran dans le domaine |
@@ -186,48 +184,81 @@ est interdit dans un panneau. J'avais lancé clang-format, ruff et pytest, mais 
   hygiène, manifestes, ruff, pytest, et s'arrête au premier échec. Il ne compile rien : ça reste
   le rôle des presets.
 
-## 8. Tes vérifications, dans l'ordre
+## 8. Les vérifications, faites par l'application
 
-Sur un projet bac à sable. **Ferme d'abord l'instance S8 qui tourne** : l'application n'accepte
-qu'une seule instance à la fois.
+Tu m'as demandé de faire les vérifications moi-même. Tu as refusé deux fois que je prenne le
+contrôle de l'écran, et je ne l'ai pas redemandé. C'est donc l'application qui les fait :
+`--verify` rejoue la liste par les mêmes chemins qu'une personne. Les clics sont de vrais
+événements souris envoyés au rack et à la playlist. PAT, SONG et « + Pattern » sont de vrais
+boutons. Les Ctrl+Z passent par la vue, et la phrase est posée au vrai copilote. Chaque étape
+laisse une capture de la fenêtre. Chaque étape qui change le son rend l'Edit hors ligne en WAV
+et compte les attaques sur la grille du rack.
+
+Résultat : **60 vérifications, aucune en échec**, sur trois exécutions : la liste (51), la
+réouverture par un autre processus (5), un projet S8 + S9 (4). Les rapports et trois captures sont
+dans `docs/verification-s10/`.
+
+| # | Vérification | Mesuré |
+|---|---|---|
+| 1 | disposition | transport en barre ; Playlist, Channel rack, Historique et Copilote ouverts ; piano-roll fermé ; PAT allumé ; F7 ouvre le piano-roll, F7 le referme |
+| 2 | « + Pattern » ne pose rien | 1 pattern, 0 pose, 1 entrée d'historique |
+| 3 | le mode pattern joue sans pose | rendu de 8 s, 4 attaques aux pas 1, 5, 9, 13 |
+| 4 | poser 8 fois, puis SONG | 8 poses aux mesures 1, 5 … 29 ; rendu de 64 s, 32 kicks ; la tête de lecture avance en lecture réelle |
+| 5 | **la preuve** : 4 pas de hat allumés dans le rack | **64 attaques**, les 4 hats aux mêmes pas dans **chacune** des 8 poses ; 4 Ctrl+Z et on revient à 32 |
+| 6 | glisser, retirer | le 4ᵉ bloc passe au temps 56, les 7 autres ne bougent pas, **une** entrée d'historique ; clic droit : bloc retiré, pattern gardé ; 2 Ctrl+Z : arrangement identique à l'octet près |
+| 7 | copilote | **une** entrée marquée copilote ; pattern 2 posé une fois, après le pattern 1 ; aucun pattern créé ; **un** Ctrl+Z : état d'avant à l'octet près ; Ctrl+Y le refait |
+| 8 | PAT isole le pattern 2 | rendu de 8 s, seulement ses 8 hats |
+| 9 | tempo 120 → 90 | 72 s → 96 s (×4/3), chaque attaque sur son pas |
+| 10 | renommer, supprimer | « Refrain » dans le sélecteur du rack ; supprimé avec ses poses ; Ctrl+Z le remet à sa place |
+| 11 | fermer, rouvrir (autre processus) | même état, même profondeur d'historique (27), rouvert en PAT, même rendu (96 s, 40 attaques) |
+| 12 | un projet S8 + S9 | 2 patterns, 2 poses ; rendu de 8 s, une attaque à chaque temps de 8 à 15, là où les clips commençaient |
+
+**Ce que la vérification a trouvé.** Au premier passage, le copilote ne démarrait pas : il
+cherchait `services/` à partir du **dossier courant**. Lancée ailleurs qu'à la racine du dépôt
+(double-clic sur l'exécutable, par exemple), l'application lançait uv sur un dossier inexistant, et
+le copilote mourait avec le code 2. Corrigé dans `2d7497d` : il cherche aussi en remontant depuis
+l'exécutable. Le second passage a été lancé volontairement hors du dépôt, et le copilote a répondu.
+
+**Ce que le copilote a répondu :** « Le pattern 1 était déjà répété huit fois (0 à 128). J'ai
+ajouté le pattern 2 à la suite ». Huit poses existaient déjà, donc sa lecture est défendable. En
+revanche il a écrit « à partir de la mesure 128 » alors qu'il s'agit du **temps** 128 (mesure 33).
+C'est le prompt qu'il faut reprendre : lui faire donner les positions en mesures.
+
+**Ce qui reste hors de portée d'une vérification automatique :**
+- l'écoute sur les enceintes : le rendu hors ligne en est la mesure, pas l'expérience ;
+- la boîte de dialogue « Renommer » de la playlist : elle est modale, donc le renommage a été
+  vérifié par le bus ;
+- le glissé d'une fenêtre avec la souris : placer et replacer les fenêtres est vérifié, mais pas
+  le geste de la main.
+
+Pour tout relancer :
 
 ```bash
-cmake --build --preset windows-msvc
+"build/windows-msvc/core/app/daw_app_artefacts/Debug/DAW IA.exe" --project verif.dawproj --workspace beatmaker --verify verif
 ```
 
-1. **La disposition.** Workspace beatmaker : 8 panneaux. Au centre, de haut en bas : PLAYLIST,
-   CHANNEL RACK, PIANO-ROLL. Dans le transport, après la signature : **PAT** allumé, SONG éteint.
-2. **« + Pattern » ne pose plus rien.** Ajoute deux pistes (Kick, Hat) et mets un instrument sur
-   chacune. Clique + Pattern. La playlist montre une ligne « Pattern 1 », **vide**. L'historique
-   gagne une ligne.
-3. **Le mode pattern s'entend sans pose.** Allume les pas 1, 5, 9, 13 du Kick et lance la lecture :
-   quatre kicks en boucle, alors que la playlist est vide. **Stop.**
-4. **Poser huit fois.** Clique 8 fois dans la ligne Pattern 1, aux mesures 1, 5, 9 … 29 (le
-   pattern dure 4 mesures). Huit blocs en couleur pleine. Passe en **SONG**, puis lecture : les
-   kicks durent 32 mesures et la tête de lecture traverse la playlist.
-5. **LA preuve.** En SONG, pendant la lecture, allume dans le rack les pas 3, 7, 11, 15 du Hat.
-   **Les huit blocs le jouent.** À l'oreille : le hat arrive dès la pose suivante, et partout.
-   Ctrl+Z : il disparaît des huit d'un coup.
-6. **Glisser, retirer.** Glisse le 4ᵉ bloc vers la droite : il suit à la mesure près, les autres
-   ne bougent pas, **une seule** ligne d'historique. Clic droit sur un bloc : il disparaît, le
-   pattern reste. Ctrl+Z deux fois : tout revient à sa place.
-7. **La preuve copilote.** Crée un 2ᵉ pattern (+ Pattern), allume quelques pas. Dans le copilote :
-   `répète le pattern 1 huit fois puis ajoute le pattern 2`. Attendu : les blocs apparaissent dans
-   la playlist, **une** entrée « copilote » dans l'historique, et **un** Ctrl+Z qui les retire
-   tous. Il est normal que la pose existante compte comme la première (§5).
-8. **PAT isole.** Sélectionne Pattern 2 dans le rack, puis PAT et lecture : **seul** le pattern 2
-   sonne, en boucle, même s'il chevauche le pattern 1 dans la chanson. Repasse en SONG : tout
-   l'arrangement revient.
-9. **Le tempo.** En SONG, passe le tempo de 120 à 90 pendant la lecture : les blocs gardent leur
-   place en mesures et le morceau ralentit sans décalage entre les pistes.
-10. **Renommer, supprimer.** Double-clic sur l'en-tête « Pattern 2 », tape « Refrain » : le nom
-    change dans la playlist **et** dans le sélecteur du rack. Clic droit, puis Supprimer : la
-    ligne et ses blocs disparaissent. Ctrl+Z : ils reviennent au même endroit.
-11. **Ça survit à une fermeture.** Ferme, puis rouvre : même playlist, mêmes noms, même
-    historique, ouverture en PAT sur le premier pattern.
-12. **Un vieux projet se relit.** Ouvre un projet de la S8 ou de la S9 : chaque ancien clip est
-    une ligne de playlist avec son bloc là où il commençait, et en SONG **le morceau sonne comme
-    avant**.
+## 8 bis. Beatmaker en fenêtres, façon FL
+
+Tu as jugé les panneaux découpés trop brouillons. Tu as validé des fenêtres internes, et c'est fait :
+
+- une barre fixe (le transport), puis une rangée d'onglets, un par page ;
+- chaque page est une fenêtre qu'on peut déplacer, redimensionner, agrandir (bouton ou double-clic
+  sur le titre), fermer, ou mettre devant d'un clic ;
+- **F5** playlist, **F6** channel rack, **F7** piano-roll, **F8** plugins, **F9** pistes. Chaque
+  touche ouvre sa page, la met devant, ou la ferme si elle y est déjà ;
+- la place des fenêtres est gardée en fractions de l'écran dans `DAW IA.layout`, jamais dans le
+  projet ;
+- un panneau dans une fenêtre ne répète plus son titre sous celui de la fenêtre ;
+- les trois autres workspaces gardent leurs découpes pour l'instant.
+
+L'architecture n'est pas rouverte : c'est toujours le manifeste qui dit quelles pages existent.
+Il accepte simplement une mise en page `bar` + `pages`, validée par le schéma, par
+`validate_workspaces.py` et par le lecteur de manifeste.
+
+**Encore brouillon, et je préfère le dire :** chaque panneau garde sa bande d'en-tête, désormais
+vide pour la playlist et le copilote. Et un pattern de 4 mesures affiche 64 pas minuscules dans le
+rack. FL ouvre un pattern sur 1 mesure ; le passer à 1 mesure par défaut serait un choix à
+valider.
 
 ## 9. Ce que la S11 hérite
 
@@ -244,7 +275,7 @@ cmake --build --preset windows-msvc
 |---|---|---|
 | S1–S8 | Socle, bus, moteur, plugins, persistance, UI, domaine, copilote | Acquis |
 | S9 | Channel rack, modèle de pattern | Acquis |
-| S10 | La playlist | Livré ; vérification écran et oreille : §8 |
+| S10 | La playlist, puis le beatmaker en fenêtres | Livré ; 60 vérifications automatiques : §8 |
 
 Aucune décision d'architecture n'a été rouverte. La règle des identifiants tient : chaque
 `PlacementId` est tiré par l'appelant (la playlist, le copilote avec `$new:`), jamais par une
