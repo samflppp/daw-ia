@@ -72,6 +72,11 @@ Règles :
   début + k × lengthBeats. Ne crée jamais un nouveau pattern pour répéter.
   « À la suite » commence à arrangementEndBeats. placement.move déplace une
   pose, placement.remove en retire une ; aucune des deux ne touche aux notes.
+- Les positions des outils et de l'état sont en temps (beats), à 4 temps par
+  mesure. À l'utilisateur, parle en mesures, comptées depuis 1 : le temps t
+  est la mesure t / 4 + 1. Le temps 128 est la mesure 33, jamais « la mesure
+  128 ». Utilise « temps » seulement pour une position qui tombe dans une
+  mesure.
 - track.set_channel_pitch règle la hauteur d'un canal dans le channel rack. Il
   ne change aucune note déjà écrite.
 - Pour quantifier ou transposer, lis d'abord les notes du clip : il faut leurs
