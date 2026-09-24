@@ -169,9 +169,28 @@ juce::StringArray CopilotBridge::childCommand(int port) const
     }
 
     auto servicesDirectory = juce::SystemStats::getEnvironmentVariable("DAW_IA_SERVICES_DIR", {});
+
+    // The working directory first, then the folders above the binary. The
+    // working directory alone was the rule until S10, and it held only for a
+    // launch from the repository root: a double-click on the executable, or a
+    // launch from anywhere else, started uv on a folder that does not exist
+    // and the copilot died with code 2 before saying a word.
     if (servicesDirectory.isEmpty())
-        servicesDirectory =
-            juce::File::getCurrentWorkingDirectory().getChildFile("services").getFullPathName();
+    {
+        const auto isServices = [](const juce::File& folder)
+        { return folder.getChildFile("pyproject.toml").existsAsFile(); };
+
+        auto candidate = juce::File::getCurrentWorkingDirectory().getChildFile("services");
+        for (auto folder =
+                 juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
+             !isServices(candidate) && folder.exists() && !folder.isRoot();
+             folder = folder.getParentDirectory())
+        {
+            candidate = folder.getChildFile("services");
+        }
+
+        servicesDirectory = candidate.getFullPathName();
+    }
 
     juce::StringArray command;
     command.add("uv");
