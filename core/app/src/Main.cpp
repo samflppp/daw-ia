@@ -212,6 +212,7 @@ public:
                 ui::Tokens::builtIn(),
                 engineHost_->edit(),
                 *sampleLibrary_,
+                *levels_,
                 *window_,
                 *window_->getContentComponent(),
                 *titleBar_,

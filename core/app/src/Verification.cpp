@@ -5,6 +5,8 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/serialization/Json.h"
+#include "daw/engine/MeterTap.h"
+#include "daw/engine/Rendering.h"
 #include "daw/ui/panels/BrowserPanel.h"
 #include "daw/ui/panels/PlaylistPanel.h"
 
@@ -45,6 +47,7 @@ Verification::Verification(Wiring wiring)
     , tokens_(wiring.tokens)
     , edit_(wiring.edit)
     , samples_(wiring.samples)
+    , levels_(wiring.levels)
     , window_(wiring.window)
     , shell_(wiring.shell)
     , titleBar_(wiring.titleBar)
@@ -60,7 +63,14 @@ Verification::Verification(Wiring wiring)
 
 Verification::~Verification()
 {
+    levels_.removeChangeListener(this);
     stopTimer();
+}
+
+void Verification::changeListenerCallback(juce::ChangeBroadcaster* source)
+{
+    if (source == &levels_ && recordingMaster_)
+        masterSeen_.push_back(levelOf(engine::MeterTapPlugin::masterStrip.toStdString()).peakDb);
 }
 
 void Verification::start()
@@ -83,7 +93,7 @@ void Verification::start()
         break;
     }
 
-    report_.add(juce::String::fromUTF8("# Vérification S10 — ") +
+    report_.add(juce::String::fromUTF8("# Vérification S11 — ") +
                 juce::Time::getCurrentTime().toString(true, true));
     report_.add({});
     startTimer(tickMs);
@@ -172,7 +182,9 @@ Verification::Heard Verification::listen(const std::string& name, double beatsPe
     static_cast<void>(file.deleteFile());
 
     Heard heard{};
-    if (!tracktion::Renderer::renderToFile(edit_, file, false))
+    // As it plays: the freeze path of Tracktion's renderToFile unmutes
+    // every track, and a muted track would be heard here.
+    if (!engine::renderAsPlayed(edit_, file))
     {
         check(false, "le rendu hors ligne a échoué");
         return heard;
@@ -220,6 +232,12 @@ Verification::Heard Verification::listen(const std::string& name, double beatsPe
 
 void Verification::finish()
 {
+    // The drumkit folder was given to this machine's browser for the run, and
+    // is taken back: the next run, and the person after it, find the browser
+    // as it was.
+    if (kit_ != juce::File{})
+        samples_.removeFolder(kit_);
+
     report_.add({});
     report_.add(juce::String::fromUTF8("## Résultat"));
     report_.add("- " + juce::String(passed_) + juce::String::fromUTF8(" vérifications passées, ") +
@@ -435,6 +453,26 @@ void Verification::writeHit(const juce::File& file, double seconds)
 void Verification::key(const juce::KeyPress& press)
 {
     static_cast<void>(view_.keyPressed(press));
+}
+
+engine::StripLevel Verification::levelIn(const std::vector<engine::StripLevel>& levels,
+                                         const std::string& strip)
+{
+    const auto found =
+        std::find_if(levels.begin(),
+                     levels.end(),
+                     [&strip](const engine::StripLevel& level) { return level.strip == strip; });
+    if (found != levels.end())
+        return *found;
+
+    engine::StripLevel silent{};
+    silent.strip = strip;
+    return silent;
+}
+
+engine::StripLevel Verification::levelOf(const std::string& strip) const
+{
+    return levelIn(levels_.levels(), strip);
 }
 
 juce::Point<int> Verification::rackCell(int row, int step) const
@@ -843,13 +881,22 @@ void Verification::buildList()
             for (auto* child : browser->getChildren())
                 tree = tree != nullptr ? tree : dynamic_cast<juce::TreeView*>(child);
 
-            check(tree != nullptr && tree->getRootItem() != nullptr &&
-                      tree->getRootItem()->getNumSubItems() == 1,
-                  "le dossier du drumkit est dans l'arbre");
-            if (tree != nullptr && tree->getRootItem() != nullptr &&
-                tree->getRootItem()->getNumSubItems() == 1)
+            // Found by its path, not by its rank: the browser shows every
+            // folder this machine was given, and a run that stopped before
+            // its end leaves its own behind.
+            juce::TreeViewItem* kitItem = nullptr;
+            for (int index = 0; tree != nullptr && tree->getRootItem() != nullptr &&
+                                index < tree->getRootItem()->getNumSubItems();
+                 ++index)
             {
-                auto* kitItem = tree->getRootItem()->getSubItem(0);
+                auto* item = tree->getRootItem()->getSubItem(index);
+                if (item->getUniqueName() == kit_.getFullPathName())
+                    kitItem = item;
+            }
+
+            check(kitItem != nullptr, "le dossier du drumkit est dans l'arbre");
+            if (kitItem != nullptr)
+            {
                 kitItem->setOpen(true);
                 check(kitItem->getNumSubItems() == 2, "ses deux samples y sont");
                 check(kitItem->getNumSubItems() == 2 &&
@@ -1065,6 +1112,8 @@ void Verification::buildList()
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(domain::json::write(state_.toValue()) == savedState_, "Ctrl+Z le remet, à l'octet près");
         });
+
+    addMeterSteps();
 
     // --- the title bar -----------------------------------------------------------
 
@@ -1332,6 +1381,243 @@ void Verification::buildFile()
             static_cast<void>(folder_.getChildFile("Copie.dawproj").deleteRecursively());
             note("à la fin de ce rapport : copie vers `Copie.dawproj`, puis ce processus se ferme et un "
                  "autre s'ouvre sur la copie. Ce qu'elle contient se vérifie par --verify-reopen sur elle.");
+        });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+void Verification::addMeterSteps()
+{
+    // --- the meters ---------------------------------------------------------
+    //
+    // What a person does, in the order they do it: play before looking, look
+    // while it plays, cut a track in the middle, ask the copilot, stop. No
+    // figure below is read from a volume field: every one is measured.
+
+    const auto master = engine::MeterTapPlugin::masterStrip.toStdString();
+
+    // The first bar of the song, looped: a kick on every beat. The pattern
+    // itself holds its hits in its first bar only and loops over four, so in
+    // PAT a meter reads eight seconds of true silence out of eleven — right,
+    // and useless to tell a copilot reading from a copilot guessing.
+    add(
+        "boucler la première mesure, Espace : les vu-mètres bougent",
+        [this]
+        {
+            press("SONG");
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(true, 0.0, 4.0)));
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.0)));
+            droppedBefore_ = levels_.meters().droppedBlocks();
+            key(juce::KeyPress{juce::KeyPress::spaceKey});
+        },
+        [this, master] { return clock_.isPlaying() && levelOf(master).peakDb > -60.0f; },
+        6000.0);
+
+    add("chaque piste mesure ce qu'elle joue, et seulement ça",
+        [this, master]
+        {
+            const auto levels = levels_.levels();
+            const auto onMaster = levelIn(levels, master);
+            note("master : crête " + juce::String(onMaster.peakDb, 1).toStdString() + " dBFS, RMS " +
+                 juce::String(onMaster.rmsDb, 1).toStdString() + " dBFS");
+            check(onMaster.peakDb > -60.0f, "le master mesure la lecture");
+
+            float loudest = engine::StripLevel::floorDb;
+            for (const auto& track : state_.tracks())
+            {
+                const auto level = levelIn(levels, track.id.toString());
+                note(track.name + " : crête " + juce::String(level.peakDb, 1).toStdString() + " dBFS");
+                if (level.peakDb > loudest)
+                {
+                    loudest = level.peakDb;
+                    loudest_ = track.id.toString();
+                }
+            }
+            check(loudest > -60.0f, "au moins une piste de la mesure bouclée mesure un signal");
+
+            // The clap is laid after the end of the patterns, far outside the
+            // loop: its meter must not move.
+            if (!state_.audioClips().empty())
+            {
+                const auto clap = levelIn(levels, state_.audioClips().front().trackId.toString());
+                check(clap.peakDb <= engine::StripLevel::floorDb + 1.0f,
+                      "la piste du clap, hors de la boucle, reste à -100 dBFS");
+            }
+
+            check(onMaster.peakDb >= loudest - 0.1f, "le master n'est jamais sous sa piste la plus forte");
+        });
+
+    add(
+        "couper la piste la plus forte pendant la lecture",
+        [this]
+        {
+            const auto trackId = domain::TrackId::parse(loudest_);
+            if (trackId)
+                static_cast<void>(
+                    bus_.execute(std::make_unique<domain::SetTrackMuted>(trackId.value(), true)));
+        },
+        [this] { return levelOf(loudest_).peakDb <= engine::StripLevel::floorDb + 1.0f; },
+        2000.0);
+
+    add(
+        "la rendre : son vu-mètre repart au coup suivant",
+        [this]
+        {
+            check(levelOf(loudest_).peakDb <= engine::StripLevel::floorDb + 1.0f,
+                  "coupée, elle mesure -100 dBFS en moins de 2 s");
+            const auto trackId = domain::TrackId::parse(loudest_);
+            if (trackId)
+                static_cast<void>(
+                    bus_.execute(std::make_unique<domain::SetTrackMuted>(trackId.value(), false)));
+        },
+        [this] { return levelOf(loudest_).peakDb > -60.0f; },
+        3000.0);
+
+    add(
+        "le copilote lit les vu-mètres",
+        [this]
+        {
+            check(levelOf(loudest_).peakDb > -60.0f, "rendue, elle mesure de nouveau");
+            masterSeen_.clear();
+            recordingMaster_ = true;
+            levels_.addChangeListener(this);
+            savedDepth_ = depth();
+            transcriptBefore_ = copilot_.transcript().size();
+            copilot_.ask(
+                "Mesure le niveau crête du master maintenant et donne-le en dBFS, sans rien modifier.");
+        },
+        [this]
+        {
+            return copilot_.transcript().size() > transcriptBefore_ + 1 &&
+                   copilot_.status() != ui::CopilotHost::Status::working;
+        },
+        120000.0);
+
+    add("ce qu'il a lu est ce que le vu-mètre mesure",
+        [this, master]
+        {
+            recordingMaster_ = false;
+            levels_.removeChangeListener(this);
+
+            const auto& lines = copilot_.transcript();
+            const auto answer = lines.empty() ? std::string{} : lines.back().text;
+            note("réponse : « " + answer + " »");
+            note(std::to_string(masterSeen_.size()) + " lectures du vu-mètre du master pendant la demande");
+            check(depth() == savedDepth_, "aucune entrée d'historique : une lecture ne modifie rien");
+
+            // Every figure the answer gives in dB, against what the master
+            // meter read while the copilot was working.
+            const auto text = juce::String::fromUTF8(answer.c_str())
+                                  .replaceCharacter(',', '.')
+                                  .replaceCharacter(static_cast<juce::juce_wchar>(0x2212), '-');
+            bool close = false;
+            for (int at = text.indexOf("dB"); at > 0; at = text.indexOf(at + 2, "dB"))
+            {
+                auto start = at;
+                while (start > 0 &&
+                       (juce::CharacterFunctions::isDigit(text[start - 1]) || text[start - 1] == '.' ||
+                        text[start - 1] == '-' || text[start - 1] == ' '))
+                    --start;
+                const auto figure = text.substring(start, at).trim();
+                if (!figure.containsAnyOf("0123456789"))
+                    continue;
+                // The copilot is handed the meter rounded to a tenth of a dB.
+                for (const auto seen : masterSeen_)
+                    close = close || std::abs(figure.getFloatValue() - seen) <= 0.06f;
+            }
+
+            float quietest = 0.0f;
+            float loudest = engine::StripLevel::floorDb;
+            for (const auto seen : masterSeen_)
+            {
+                quietest = std::min(quietest, seen);
+                loudest = std::max(loudest, seen);
+            }
+            check(loudest > -60.0f, "le master sonnait pendant la demande");
+            check(close,
+                  "la réponse donne, au dixième de dB, une crête que le vu-mètre du master a lue pendant la "
+                  "demande (entre " +
+                      juce::String(quietest, 1).toStdString() + " et " +
+                      juce::String(loudest, 1).toStdString() + " dBFS)");
+        });
+
+    add(
+        "Espace arrête : tout retombe à -100",
+        [this]
+        {
+            check(levels_.meters().droppedBlocks() == droppedBefore_,
+                  "aucun bloc perdu pendant la lecture en direct");
+            key(juce::KeyPress{juce::KeyPress::spaceKey});
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(false, 0.0, 0.0)));
+        },
+        [this, master]
+        { return !clock_.isPlaying() && levelOf(master).peakDb <= engine::StripLevel::floorDb + 1.0f; },
+        2000.0);
+
+    add("au rendu, le master mesure ce que le fichier contient",
+        [this, master]
+        {
+            levels_.meters().resetTotals();
+            const auto file = folder_.getChildFile("22-vu-metres.wav");
+            if (!engine::renderAsPlayed(edit_, file))
+            {
+                check(false, "le rendu hors ligne a échoué");
+                return;
+            }
+
+            juce::AudioFormatManager formats;
+            formats.registerBasicFormats();
+            std::unique_ptr<juce::AudioFormatReader> reader{formats.createReaderFor(file)};
+            if (reader == nullptr || reader->lengthInSamples <= 0)
+            {
+                check(false, "le rendu est vide");
+                return;
+            }
+
+            juce::AudioBuffer<float> buffer{static_cast<int>(reader->numChannels),
+                                            static_cast<int>(reader->lengthInSamples)};
+            reader->read(&buffer, 0, buffer.getNumSamples(), 0, true, true);
+
+            double peak = 0.0;
+            double sum = 0.0;
+            for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+            {
+                const auto* samples = buffer.getReadPointer(channel);
+                for (int index = 0; index < buffer.getNumSamples(); ++index)
+                {
+                    peak = std::max(peak, static_cast<double>(std::abs(samples[index])));
+                    sum += static_cast<double>(samples[index]) * samples[index];
+                }
+            }
+            const auto seconds = static_cast<double>(buffer.getNumSamples()) / reader->sampleRate;
+            const auto filePeakDb = static_cast<float>(20.0 * std::log10(std::max(peak, 1e-9)));
+
+            // An RMS is an energy over a duration, and the render processes a
+            // few silent blocks past the end of the file: energies compare.
+            const auto fileEnergyDb = static_cast<float>(
+                10.0 * std::log10(std::max(sum / buffer.getNumChannels() / reader->sampleRate, 1e-18)));
+
+            const auto totals = levels_.meters().totals();
+            const auto onMaster = levelIn(totals, master);
+            const auto meterEnergyDb =
+                onMaster.rmsDb + static_cast<float>(10.0 * std::log10(std::max(onMaster.seconds, 1e-9)));
+
+            note("fichier : " + juce::String(seconds, 2).toStdString() + " s, crête " +
+                 juce::String(filePeakDb, 2).toStdString() +
+                 " dBFS ; vu-mètre du master : " + juce::String(onMaster.seconds, 2).toStdString() +
+                 " s, crête " + juce::String(onMaster.peakDb, 2).toStdString() + " dBFS");
+            check(std::abs(onMaster.peakDb - filePeakDb) < 0.1f, "même crête, à 0,1 dB près");
+            check(std::abs(meterEnergyDb - fileEnergyDb) < 0.1f, "même énergie, à 0,1 dB près");
+
+            if (!state_.audioClips().empty())
+            {
+                const auto clap = levelIn(totals, state_.audioClips().front().trackId.toString());
+                check(clap.peakDb > -60.0f,
+                      "en SONG, la piste du clap mesure son clip : sa piste compagnon a sa prise");
+            }
         });
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "LevelMonitor.h"
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/ui/TitleBarView.h"
@@ -42,7 +43,7 @@ namespace daw::app
 //                    same history depth
 //   --verify-legacy  a project of the first nine weeks: it plays where it
 //                    always did
-class Verification final : private juce::Timer
+class Verification final : private juce::Timer, private juce::ChangeListener
 {
 public:
     enum class Run
@@ -65,6 +66,7 @@ public:
         const ui::Tokens& tokens;
         tracktion::Edit& edit;
         ui::SampleHost& samples;
+        LevelMonitor& levels;
 
         // The whole window: the title bar above the workspace. Snapshots are
         // taken of it, and the File shortcuts are pressed on it.
@@ -116,10 +118,22 @@ private:
 
     void timerCallback() override;
 
+    // Every reading of the master meter while recordingMaster_ is set, at the
+    // rate the meters are refreshed: what the copilot reads is one of them.
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+
     void buildList();
     void buildReopen();
     void buildLegacy();
     void buildFile();
+
+    // The meters, live and rendered, and the copilot reading them. Part of
+    // the list, after the samples: a project with a sampler channel and a
+    // clip on a companion track is the one that has something to measure.
+    void addMeterSteps();
+    [[nodiscard]] engine::StripLevel levelOf(const std::string& strip) const;
+    [[nodiscard]] static engine::StripLevel levelIn(const std::vector<engine::StripLevel>& levels,
+                                                    const std::string& strip);
     void dragWindow(juce::Point<int> by);
     void add(std::string title,
              std::function<void()> act,
@@ -167,6 +181,7 @@ private:
     const ui::Tokens& tokens_;
     tracktion::Edit& edit_;
     ui::SampleHost& samples_;
+    LevelMonitor& levels_;
     juce::DocumentWindow& window_;
     juce::Component& shell_;
     ui::TitleBarView& titleBar_;
@@ -192,6 +207,10 @@ private:
     juce::File kit_;
     double audioStart_{0.0};
     juce::Rectangle<int> savedBounds_;
+    std::string loudest_;
+    std::vector<float> masterSeen_;
+    bool recordingMaster_{false};
+    std::size_t droppedBefore_{0};
     std::function<bool(const juce::File&)> newProjectAt_;
     std::function<bool(const juce::File&)> openProjectAt_;
     std::function<bool(const juce::File&)> saveAsTo_;
