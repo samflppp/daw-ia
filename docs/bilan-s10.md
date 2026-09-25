@@ -204,10 +204,15 @@ boutons. Les Ctrl+Z passent par la vue, et la phrase est posée au vrai copilote
 laisse une capture de la fenêtre. Chaque étape qui change le son rend l'Edit hors ligne en WAV
 et compte les attaques sur la grille du rack.
 
-Résultat : **107 vérifications, aucune en échec**, sur trois exécutions du build final : la liste
-(98 : 51 pour la playlist, 34 pour la seconde demande (§8 ter), 13 pour la barre de titre
-(§8 quater)), la réouverture par un autre processus (5), un projet S8 + S9 (4). Les rapports et
-six captures sont dans `docs/verification-s10/`. Les captures montrent maintenant toute la fenêtre,
+Résultat : **123 vérifications, aucune en échec**, sur cinq exécutions du build final :
+- la liste : 98 (51 pour la playlist, 34 pour la seconde demande (§8 ter), 13 pour la barre de
+  titre (§8 quater)) ;
+- la réouverture par un autre processus : 5 ;
+- un projet S8 + S9 : 4 ;
+- le menu Fichier et la fenêtre : 11 ;
+- la copie faite par « Enregistrer sous », rouverte : 5.
+
+Les rapports et six captures sont dans `docs/verification-s10/`. Les captures montrent maintenant toute la fenêtre,
 barre de titre comprise.
 
 Un premier passage de la liste a eu 5 échecs, tous au copilote, parce que l'appel au modèle a
@@ -373,10 +378,34 @@ transport n'a plus les workspaces ; Ctrl+S affiche « enregistré » ; le double
 second rend exactement la place d'avant ; Découverte s'allume depuis la barre, puis retour au
 beatmaker.
 
-**Pas vérifié automatiquement :** Nouveau, Ouvrir et Enregistrer sous passent par la boîte de
-dialogue de fichiers de Windows. Une vérification automatique ne sait pas la remplir, et le
-redémarrage terminerait la vérification. Le lancement `--relaunched` a été testé à part, comme dit
-plus haut. Le geste de glisser la fenêtre à la souris n'est pas vérifié non plus. L'aimantation de
+**Le menu Fichier et la fenêtre, vérifiés à part** (`--verify-file`, 11 vérifications, puis une
+réouverture de la copie) :
+
+- La boîte de dialogue de Windows ne se remplit pas par script. La vérification appelle donc
+  directement ce qui la suit, avec le dossier qu'une personne aurait choisi.
+- **Ouvrir** refuse un dossier qui n'est pas un projet, avec le message « … n'est pas un projet
+  DAW IA : choisis un dossier .dawproj. »
+- **Nouveau** et **Enregistrer sous** refusent un nom déjà pris, et le dossier existant n'est pas
+  touché.
+- **Glisser la barre** déplace la fenêtre de 60 px à droite et 40 px vers le bas, exactement comme
+  le pointeur, puis la ramène à sa place. Une fenêtre agrandie ne se glisse pas, et un double-clic
+  lui rend sa taille.
+- **Enregistrer sous, pour de vrai :** la vérification finit par une copie vers `Copie.dawproj`.
+  Le processus se ferme et un autre s'ouvre sur la copie (`--relaunched --project …Copie.dawproj
+  --workspace beatmaker`). Son journal dit « project Copie: 50 commands replayed, 10 undone », comme
+  l'original. Rouverte par `--verify-reopen`, la copie donne le même état, la même profondeur
+  d'historique (34) et le même son (100,17 s, 45 attaques, clap compris) : les samples ont suivi.
+- **Nouveau** et **Ouvrir**, une fois le dialogue passé, finissent par le même redémarrage. Le
+  redémarrage sur un dossier qui n'existe pas crée un projet vide ; il a été testé à part.
+
+**Ce que ces tests ont trouvé :**
+- Un refus s'affichait dans une boîte de message Windows. Cette boîte tourne dans sa propre boucle,
+  et pendant une vérification les étapes continuaient dessous sans que personne la ferme. Pendant
+  une vérification, le message va maintenant au rapport. Pour une personne, rien ne change.
+- JUCE déplace une fenêtre en suivant le vrai pointeur, pas l'événement souris qu'on lui passe. La
+  vérification déplace donc le vrai pointeur pendant le geste, puis le remet où il était.
+
+**Reste hors de portée d'un script :** la boîte de dialogue de fichiers elle-même. L'aimantation de
 Windows aux bords de l'écran est perdue, comme annoncé.
 
 ## 8 quinquies. Ce qui reste pour clore la S10
@@ -388,7 +417,7 @@ Windows aux bords de l'écran est perdue, comme annoncé.
 | Un sample déposé sur la playlist restait muet | corrigé (§8 ter) |
 | Longueur par défaut d'un pattern | **tranché par toi : 4 mesures**, c'est déjà le cas |
 | Barre de titre : fermer, réduire, agrandir, Fichier | fait (§8 quater) |
-| Essayer Nouveau, Ouvrir, Enregistrer sous à la main | **à faire par toi** : c'est la boîte de dialogue Windows |
+| Nouveau, Ouvrir, Enregistrer sous, glisser la fenêtre | vérifiés par l'application, jusqu'au redémarrage réel sur la copie ; seule la boîte de dialogue Windows ne l'est pas |
 | Bandes d'en-tête vides dans les pages | cosmétique, reste |
 | Écoute sur les enceintes | à faire par toi : seul point qu'aucun rendu ne remplace |
 
@@ -409,7 +438,7 @@ Windows aux bords de l'écran est perdue, comme annoncé.
 |---|---|---|
 | S1–S8 | Socle, bus, moteur, plugins, persistance, UI, domaine, copilote | Acquis |
 | S9 | Channel rack, modèle de pattern | Acquis |
-| S10 | La playlist, le beatmaker en fenêtres, les samples, la barre de titre | Livré ; 107 vérifications automatiques (§8) ; reste l'essai à la main de Fichier et l'écoute (§8 quinquies) |
+| S10 | La playlist, le beatmaker en fenêtres, les samples, la barre de titre | Livré ; 123 vérifications automatiques (§8) ; reste l'écoute sur les enceintes (§8 quinquies) |
 
 Aucune décision d'architecture n'a été rouverte. La règle des identifiants tient : chaque
 `PlacementId` est tiré par l'appelant (la playlist, le copilote avec `$new:`), jamais par une

@@ -1,4 +1,4 @@
-# Vérification S10 — 25 Sep 2026 8:47:07pm
+# Vérification S10 — 25 Sep 2026 8:59:32pm
 
 
 ## 1. disposition
@@ -82,7 +82,7 @@
 - capture : `14-«-répète-le-pattern-1-huit-fois-puis-ajoute-le-pattern-2-».png`
 
 ## 15. ce que le copilote a fait
-- réponse : « Le pattern 1 était déjà posé huit fois (mesures 1 à 33). J'ai ajouté le pattern 2 à la suite, à partir de la mesure 33. »
+- réponse : « Le pattern 1 était déjà posé huit fois (0 à 112). J'ai ajouté le pattern 2 à la suite, à partir de la mesure 33. »
 - OK : une seule entrée d'historique
 - OK : marquée copilote
 - poses du pattern 1 : 8, du pattern 2 : 1
