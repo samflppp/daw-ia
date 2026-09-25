@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daw/ui/PanelRegistry.h"
+#include "daw/ui/model/PatternPreviews.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -99,6 +100,11 @@ public:
     [[nodiscard]] double beatWidth() const;
     [[nodiscard]] double firstBeat() const;
 
+    // How many pattern previews were built since the panel was made: one per
+    // pattern and per change of its notes, never per repaint and never per
+    // placement. Read by the verification.
+    [[nodiscard]] std::size_t previewBuilds() const noexcept { return previews_.builds(); }
+
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
@@ -150,6 +156,16 @@ private:
     void paintRuler(juce::Graphics& g, juce::Rectangle<int> area) const;
     void paintLanes(juce::Graphics& g, juce::Rectangle<int> grid, juce::Rectangle<int> headers) const;
     void paintBlocks(juce::Graphics& g, juce::Rectangle<int> grid) const;
+
+    // What a block shows of its content, under its name: the notes of its
+    // pattern, or the waveform of its sample. Nothing under the width below
+    // which a picture would be a smear.
+    void paintPreview(juce::Graphics& g, const PatternPreview& preview, juce::Rectangle<int> area) const;
+    void paintWaveform(juce::Graphics& g,
+                       const WaveformPeaks& peaks,
+                       juce::Rectangle<int> block,
+                       juce::Rectangle<int> area,
+                       juce::Rectangle<int> visible) const;
     void paintPlayhead(juce::Graphics& g) const;
     void paintEmpty(juce::Graphics& g) const;
 
@@ -206,6 +222,9 @@ private:
     std::vector<Copied> clipboard_;
 
     std::optional<int> paintedPlayheadX_;
+
+    // Built when the project changes, read when painting.
+    PatternPreviews previews_;
 
     // The view. No zoom means "fit": the width follows the song.
     std::optional<double> zoom_;

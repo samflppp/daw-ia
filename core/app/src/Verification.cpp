@@ -109,6 +109,15 @@ void Verification::add(std::string title,
 
 void Verification::timerCallback()
 {
+    // How long the message thread went without ticking, while a step is
+    // watching for a freeze.
+    if (watchTicks_)
+    {
+        const auto now = juce::Time::getMillisecondCounterHiRes();
+        longestTickMs_ = std::max(longestTickMs_, now - lastTickMs_);
+        lastTickMs_ = now;
+    }
+
     if (current_ >= steps_.size())
     {
         stopTimer();
@@ -1161,6 +1170,7 @@ void Verification::buildList()
         });
 
     addPlaylistViewSteps();
+    addPreviewSteps();
     addMeterSteps();
 
     // --- the title bar -----------------------------------------------------------
@@ -1826,6 +1836,268 @@ void Verification::addPlaylistViewSteps()
             const auto back = playlistBeat(0, 2.0);
             check(playlist->timelineArea().contains(back), "la molette ramène au début de la chanson");
             check(playlist->firstBeat() <= 2.0, "la vue montre de nouveau le début");
+        });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+void Verification::writeSong(const juce::File& file, double seconds)
+{
+    // Long, stereo, and with a shape an eye can check: four swells of a tone,
+    // louder each time, the right channel a little quieter than the left.
+    constexpr double rate = 44100.0;
+    const auto length = static_cast<int>(seconds * rate);
+    juce::AudioBuffer<float> buffer{2, length};
+    for (int index = 0; index < length; ++index)
+    {
+        const auto t = static_cast<double>(index) / rate;
+        const auto swell = static_cast<float>(std::abs(std::sin(t / seconds * 4.0 * 3.14159265358979)));
+        const auto loudness = 0.4f + 0.2f * static_cast<float>(std::floor(t / seconds * 4.0));
+        const auto tone = static_cast<float>(std::sin(t * 2.0 * 3.14159265358979 * 110.0));
+        buffer.setSample(0, index, swell * loudness * tone);
+        buffer.setSample(1, index, 0.7f * swell * loudness * tone);
+    }
+
+    static_cast<void>(file.deleteFile());
+    std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream>(file);
+    juce::WavAudioFormat wav;
+    auto writer = wav.createWriterFor(
+        stream,
+        juce::AudioFormatWriterOptions{}.withSampleRate(rate).withNumChannels(2).withBitsPerSample(16));
+    if (writer != nullptr)
+        static_cast<void>(writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples()));
+}
+
+void Verification::addPreviewSteps()
+{
+    // --- what the blocks show -----------------------------------------------------
+    //
+    // Measured, not only looked at: how many previews were built, and whether
+    // the message thread kept ticking while a long sample was measured. The
+    // project notifies the panels asynchronously, so every count is read one
+    // step after the gesture that should have moved it.
+
+    add("déplacer un bloc",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            static_cast<void>(playlistBeat(0, 0.5));
+            previewBuilds_ = playlist->previewBuilds();
+            note("aperçus construits jusqu'ici : " + std::to_string(previewBuilds_));
+
+            // The last laying of pattern 1, a bar to the right.
+            const auto from = playlistBeat(0, 112.5);
+            drag(*playlist, from, from.translated(static_cast<int>(playlist->beatWidth() * beatsPerBar), 0));
+        });
+
+    add("aucun aperçu reconstruit ; Ctrl+Z",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            check(playlist->previewBuilds() == previewBuilds_, "un bloc déplacé : aucun aperçu reconstruit");
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+        });
+
+    add("toujours aucun ; allumer une case du pattern 1 dans le rack",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            auto* rack = panel("channel_rack");
+            if (playlist == nullptr || rack == nullptr)
+                return;
+
+            check(playlist->previewBuilds() == previewBuilds_, "le Ctrl+Z du déplacement non plus");
+
+            selection_.selectPattern(state_.patterns().front().id);
+            savedDepth_ = depth();
+            click(*rack, rackCell(1, 7));
+            check(depth() == savedDepth_ + 1, "la case est allumée : une entrée d'historique");
+            static_cast<void>(playlistBeat(0, 0.5));
+        });
+
+    add("un aperçu reconstruit, pour les huit poses ; Ctrl+Z",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            note("aperçus construits : " + std::to_string(playlist->previewBuilds()));
+            check(playlist->previewBuilds() == previewBuilds_ + 1,
+                  "une note ajoutée au pattern 1 : exactement un aperçu reconstruit, pour ses huit poses");
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+        });
+
+    add("le Ctrl+Z reconstruit l'aperçu une fois",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            check(playlist->previewBuilds() == previewBuilds_ + 2, "une construction de plus, pas davantage");
+        });
+
+    add(
+        "mesurer un sample de deux minutes : le thread message continue",
+        [this]
+        {
+            // The measurement alone, before any drop: the engine laying a clip
+            // of two minutes is another cost, noted in the next steps.
+            const auto song = kit_.getChildFile("Morceau.wav");
+            writeSong(song, 120.0);
+
+            const auto started = juce::Time::getMillisecondCounterHiRes();
+            const auto imported = samples_.import(song);
+            note("copie de 21 Mo dans le projet : " +
+                 juce::String(juce::Time::getMillisecondCounterHiRes() - started, 0).toStdString() + " ms");
+            if (!imported)
+            {
+                check(false, "le sample est importé");
+                return;
+            }
+
+            measuredBefore_ = samples_.waveformsMeasured();
+            measuringSince_ = juce::Time::getMillisecondCounterHiRes();
+            check(samples_.waveform(imported.value()) == nullptr,
+                  "la première demande rend la main tout de suite, sans forme d'onde");
+            note("durée de la demande : " +
+                 juce::String(juce::Time::getMillisecondCounterHiRes() - measuringSince_, 1).toStdString() +
+                 " ms");
+
+            longestTickMs_ = 0.0;
+            lastTickMs_ = juce::Time::getMillisecondCounterHiRes();
+            watchTicks_ = true;
+        },
+        [this]
+        {
+            // Watching stops the moment the waveform is back: what follows is
+            // the verification taking its own snapshot, not the application.
+            const auto done = samples_.waveformsMeasured() > measuredBefore_;
+            if (done)
+                watchTicks_ = false;
+            return done;
+        },
+        30000.0);
+
+    add(
+        "aucun gel pendant la mesure ; déposer un autre long sample sur la playlist",
+        [this]
+        {
+            watchTicks_ = false;
+            note("mesure faite en " +
+                 juce::String(juce::Time::getMillisecondCounterHiRes() - measuringSince_, 0).toStdString() +
+                 " ms ; plus long écart entre deux tics : " + juce::String(longestTickMs_, 0).toStdString() +
+                 " ms (un tic toutes les 120 ms)");
+            check(longestTickMs_ < 400.0, "aucun gel : jamais plus de 400 ms sans tic");
+            check(samples_.waveformsMeasured() == measuredBefore_ + 1, "une mesure");
+
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            // Another two minutes, another digest: this one is dropped the way a
+            // person drops it, and measured after the drop.
+            const auto other = kit_.getChildFile("Morceau 2.wav");
+            writeSong(other, 121.0);
+            savedDepth_ = depth();
+            measuredBefore_ = samples_.waveformsMeasured();
+
+            const auto at = playlistBeat(0, audioStart_ + 16.5);
+            const auto started = juce::Time::getMillisecondCounterHiRes();
+            playlist->itemDropped(juce::DragAndDropTarget::SourceDetails{
+                "sample:" + other.getFullPathName(), panel("browser"), at});
+            note("dépôt, copie et pose du clip par le moteur comprises : " +
+                 juce::String(juce::Time::getMillisecondCounterHiRes() - started, 0).toStdString() + " ms");
+
+            check(depth() == savedDepth_ + 1, "un dépôt, une entrée d'historique");
+            if (!state_.audioClips().empty())
+                check(samples_.waveform(state_.audioClips().back().sample) == nullptr,
+                      "juste après le dépôt, la forme d'onde est en cours de mesure : le bloc est vide");
+            playlist->repaint();
+
+            longestTickMs_ = 0.0;
+            lastTickMs_ = juce::Time::getMillisecondCounterHiRes();
+            watchTicks_ = true;
+        },
+        [this]
+        {
+            // Watching stops the moment the waveform is back: what follows is
+            // the verification taking its own snapshot, not the application.
+            const auto done = samples_.waveformsMeasured() > measuredBefore_;
+            if (done)
+                watchTicks_ = false;
+            return done;
+        },
+        30000.0);
+
+    add("le bloc s'est rempli",
+        [this]
+        {
+            watchTicks_ = false;
+            note("après le dépôt, plus long écart entre deux tics : " +
+                 juce::String(longestTickMs_, 0).toStdString() +
+                 " ms — le moteur reconstruit son graphe pour le nouveau clip sur le thread message, comme à "
+                 "chaque dépôt depuis la S10 ; la mesure seule est à l'étape d'avant");
+            check(samples_.waveformsMeasured() == measuredBefore_ + 1, "une mesure pour ce sample");
+
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr || state_.audioClips().empty())
+                return;
+
+            const auto& clip = state_.audioClips().back();
+            const auto peaks = samples_.waveform(clip.sample);
+            check(peaks != nullptr && std::abs(peaks->seconds - 121.0) < 0.01,
+                  "la forme d'onde couvre 121 s");
+
+            // For the eye: zoomed out to the readable floor, the start of the
+            // clip on the left, so that its first swells are in sight.
+            const auto lane = static_cast<int>(state_.patterns().size()) + 1;
+            const auto at = playlistBeat(lane, clip.startBeats + 1.0);
+            for (int turn = 0; turn < 60; ++turn)
+                wheel(*playlist, at, -0.25f, false, true);
+            static_cast<void>(playlistBeat(lane, clip.startBeats + 1.0));
+            for (int turn = 0; turn < 40 && playlist->firstBeat() + 1.0 < clip.startBeats; ++turn)
+                wheel(*playlist, at, -0.25f, true);
+        });
+
+    add("neuf dépôts de plus du même sample",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            const auto other = kit_.getChildFile("Morceau 2.wav");
+            for (int drop = 0; drop < 9; ++drop)
+            {
+                const auto at = playlistBeat(0, audioStart_ + 16.5);
+                playlist->itemDropped(juce::DragAndDropTarget::SourceDetails{
+                    "sample:" + other.getFullPathName(), panel("browser"), at});
+            }
+            playlist->repaint();
+        });
+
+    add("dix clips, une seule mesure ; dix Ctrl+Z",
+        [this]
+        {
+            check(samples_.waveformsMeasured() == measuredBefore_ + 1,
+                  "toujours une seule mesure pour dix clips du même sample (" +
+                      std::to_string(samples_.waveformsMeasured() - measuredBefore_) + ")");
+
+            for (int undo = 0; undo < 10; ++undo)
+                key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(depth() == savedDepth_, "les dix dépôts défaits");
+            check(state_.audioClips().size() == 1, "il reste le clap");
         });
 }
 

@@ -1,6 +1,7 @@
 #include "SampleLibrary.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <utility>
 
@@ -18,6 +19,95 @@ SampleLibrary::SampleLibrary(std::function<engine::ContentStore*()> store, juce:
     , settings_(settings)
 {
     formats_.registerBasicFormats();
+}
+
+SampleLibrary::~SampleLibrary()
+{
+    alive_->store(false);
+    pool_.removeAllJobs(true, 10000);
+}
+
+std::shared_ptr<const ui::WaveformPeaks> SampleLibrary::waveform(const domain::SampleRef& sample)
+{
+    const auto& digest = sample.blob.digest;
+    if (const auto found = waveforms_.find(digest); found != waveforms_.end())
+        return found->second;
+
+    if (measuring_.count(digest) != 0)
+        return nullptr;
+
+    auto* store = store_ ? store_() : nullptr;
+    auto* format = formats_.findFormatForFileExtension(juce::String::fromUTF8(sample.format.c_str()));
+    if (store == nullptr || format == nullptr)
+        return nullptr;
+
+    measuring_.insert(digest);
+
+    // Off the message thread: a sample of several minutes takes seconds to
+    // read and decode, and the playlist must go on answering meanwhile. The
+    // block is drawn empty and fills in when this comes back.
+    pool_.addJob(
+        [this, store, format, blob = sample.blob, alive = alive_]
+        {
+            auto peaks = std::make_shared<ui::WaveformPeaks>();
+
+            if (auto bytes = store->get(blob); bytes)
+            {
+                // The stream owns its copy of the bytes, and the reader owns
+                // the stream.
+                juce::MemoryBlock block = std::move(bytes).value();
+                std::unique_ptr<juce::AudioFormatReader> reader{
+                    format->createReaderFor(new juce::MemoryInputStream(std::move(block)), true)};
+
+                if (reader != nullptr && reader->sampleRate > 0.0 && reader->lengthInSamples > 0)
+                {
+                    // Bucket by bucket, straight from the reader: the whole
+                    // sample is never held decoded.
+                    const auto length = reader->lengthInSamples;
+                    peaks->seconds = static_cast<double>(length) / reader->sampleRate;
+                    const auto buckets = std::max<juce::int64>(
+                        1,
+                        static_cast<juce::int64>(std::ceil(
+                            peaks->seconds * static_cast<double>(ui::WaveformPeaks::bucketsPerSecond))));
+                    peaks->minimum.assign(static_cast<std::size_t>(buckets), 0.0f);
+                    peaks->maximum.assign(static_cast<std::size_t>(buckets), 0.0f);
+
+                    const auto channels = static_cast<int>(std::min<unsigned int>(reader->numChannels, 2U));
+                    const auto perBucket = static_cast<double>(length) / static_cast<double>(buckets);
+                    for (juce::int64 bucket = 0; bucket < buckets && alive->load(); ++bucket)
+                    {
+                        const auto from = static_cast<juce::int64>(static_cast<double>(bucket) * perBucket);
+                        const auto to = static_cast<juce::int64>(static_cast<double>(bucket + 1) * perBucket);
+                        juce::Range<float> levels[2];
+                        reader->readMaxLevels(from, std::max<juce::int64>(1, to - from), levels, channels);
+
+                        auto low = levels[0].getStart();
+                        auto high = levels[0].getEnd();
+                        if (channels > 1)
+                        {
+                            low = std::min(low, levels[1].getStart());
+                            high = std::max(high, levels[1].getEnd());
+                        }
+                        peaks->minimum[static_cast<std::size_t>(bucket)] = low;
+                        peaks->maximum[static_cast<std::size_t>(bucket)] = high;
+                    }
+                }
+            }
+
+            juce::MessageManager::callAsync(
+                [this, alive, digest = blob.digest, peaks]
+                {
+                    if (!alive->load())
+                        return;
+
+                    waveforms_[digest] = peaks;
+                    measuring_.erase(digest);
+                    ++measured_;
+                    sendChangeMessage();
+                });
+        });
+
+    return nullptr;
 }
 
 domain::Result<domain::SampleRef> SampleLibrary::import(const juce::File& file)

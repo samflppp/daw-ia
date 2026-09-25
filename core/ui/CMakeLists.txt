@@ -1,7 +1,8 @@
 # core/ui — everything the screen is made of.
 #
-#   daw_ui_workspace  the manifests, the layout arithmetic and the history
-#                     log. Pure C++20, no
+#   daw_ui_workspace  the manifests, the layout arithmetic, the history log,
+#                     the playlist's pattern previews and waveform peaks.
+#                     Pure C++20, no
 #                     JUCE: it is the only part of the interface with a right
 #                     answer, so it is the part a test can pin down. Always
 #                     built, always tested.
@@ -14,7 +15,9 @@
 add_library(daw_ui_workspace STATIC
     src/workspace/WorkspaceManifest.cpp
     src/workspace/LayoutTree.cpp
-    src/history/HistoryLog.cpp)
+    src/history/HistoryLog.cpp
+    src/model/PatternPreviews.cpp
+    src/model/WaveformPeaks.cpp)
 add_library(daw::ui_workspace ALIAS daw_ui_workspace)
 
 target_include_directories(daw_ui_workspace PUBLIC include)

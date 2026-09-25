@@ -134,6 +134,11 @@ private:
 
     // The playlist on a song longer than the screen: scroll, zoom, follow.
     void addPlaylistViewSteps();
+
+    // What the blocks show: previews built only when notes change, waveforms
+    // measured once per sample and off the message thread.
+    void addPreviewSteps();
+    static void writeSong(const juce::File& file, double seconds);
     [[nodiscard]] engine::StripLevel levelOf(const std::string& strip) const;
     [[nodiscard]] static engine::StripLevel levelIn(const std::vector<engine::StripLevel>& levels,
                                                     const std::string& strip);
@@ -217,6 +222,12 @@ private:
     std::string loudest_;
     std::vector<float> masterSeen_;
     double farBeats_{0.0};
+    std::size_t previewBuilds_{0};
+    std::size_t measuredBefore_{0};
+    bool watchTicks_{false};
+    double lastTickMs_{0.0};
+    double longestTickMs_{0.0};
+    double measuringSince_{0.0};
     bool recordingMaster_{false};
     std::size_t droppedBefore_{0};
     std::function<bool(const juce::File&)> newProjectAt_;

@@ -88,6 +88,8 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context)
 
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
+    samples_.addChangeListener(this);
+    static_cast<void>(previews_.refresh(state_));
     startTimer(playheadRefreshMs);
 }
 
@@ -96,6 +98,7 @@ PlaylistPanel::~PlaylistPanel()
     stopTimer();
     horizontal_.removeListener(this);
     vertical_.removeListener(this);
+    samples_.removeChangeListener(this);
     selection_.removeChangeListener(this);
     project_.removeChangeListener(this);
     setLookAndFeel(nullptr);
@@ -120,7 +123,17 @@ void PlaylistPanel::resized()
 
 void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
-    juce::ignoreUnused(source);
+    // A waveform came back from its thread: draw it, nothing else changed.
+    if (source == &samples_)
+    {
+        repaint();
+        return;
+    }
+
+    // The project changed: the previews whose notes changed are rebuilt, the
+    // others are kept. Here, and never at paint time.
+    if (source == &project_)
+        static_cast<void>(previews_.refresh(state_));
 
     // A block an undo took away is no longer selectable.
     const auto all = items();
@@ -689,6 +702,34 @@ void PlaylistPanel::paintBlocks(juce::Graphics& g, juce::Rectangle<int> grid) co
         g.setColour(tokens_.colour(fill));
         g.fillRoundedRectangle(block.toFloat(), radius);
 
+        // The content, under the name band, when the block is wide enough to
+        // show it as more than a smear.
+        auto content = block.reduced(tokens_.integer("space.xs"), tokens_.integer("stroke.hairline"));
+        content.removeFromTop(tokens_.integer("metric.playlist.labelHeight"));
+        if (block.getWidth() >= tokens_.integer("metric.playlist.previewMinWidth") && !content.isEmpty())
+        {
+            if (item.audio)
+            {
+                const auto id = domain::AudioClipId::parse(item.id);
+                if (const auto* clip = id ? state_.findAudioClip(id.value()) : nullptr; clip != nullptr)
+                {
+                    // Nothing yet the first time: the sample is being measured
+                    // on another thread, and the block fills in when it is.
+                    if (const auto peaks = samples_.waveform(clip->sample); peaks != nullptr)
+                        paintWaveform(g, *peaks, block, content, grid);
+                }
+            }
+            else
+            {
+                const auto id = domain::PlacementId::parse(item.id);
+                const auto* placement = id ? state_.findPlacement(id.value()) : nullptr;
+                if (const auto* preview =
+                        placement != nullptr ? previews_.find(placement->patternId) : nullptr;
+                    preview != nullptr)
+                    paintPreview(g, *preview, content);
+            }
+        }
+
         // A selected block is outlined, so a selection of twenty reads at a
         // glance and a single one does not look like the pattern being edited.
         if (isSelected(item))
@@ -700,11 +741,65 @@ void PlaylistPanel::paintBlocks(juce::Graphics& g, juce::Rectangle<int> grid) co
 
         g.setColour(tokens_.colour("color.note.label"));
         g.setFont(lookAndFeel_.typography().sans("font.size.micro", "font.weight.medium"));
-        g.drawText(
-            label, block.reduced(tokens_.integer("space.xs"), 0), juce::Justification::centredLeft, true);
+        g.drawText(label,
+                   block.reduced(tokens_.integer("space.xs"), 0)
+                       .removeFromTop(tokens_.integer("metric.playlist.labelHeight") +
+                                      tokens_.integer("stroke.hairline")),
+                   juce::Justification::centredLeft,
+                   true);
     }
 
     g.restoreState();
+}
+
+void PlaylistPanel::paintPreview(juce::Graphics& g,
+                                 const PatternPreview& preview,
+                                 juce::Rectangle<int> area) const
+{
+    // The geometry was computed once, when the notes changed; a repaint only
+    // scales it to the block.
+    const auto box = area.toFloat();
+    const auto thinnest = static_cast<float>(tokens_.integer("metric.playlist.previewNoteMinHeight"));
+
+    g.setColour(tokens_.colour("color.preview.note"));
+    for (const auto& note : preview.notes)
+    {
+        g.fillRect(box.getX() + note.x * box.getWidth(),
+                   box.getY() + note.y * box.getHeight(),
+                   std::max(thinnest, note.width * box.getWidth()),
+                   std::max(thinnest, note.height * box.getHeight()));
+    }
+}
+
+void PlaylistPanel::paintWaveform(juce::Graphics& g,
+                                  const WaveformPeaks& peaks,
+                                  juce::Rectangle<int> block,
+                                  juce::Rectangle<int> area,
+                                  juce::Rectangle<int> visible) const
+{
+    // Only the columns on screen: a sample of several minutes laid under a
+    // zoomed view draws the few hundred pixels that show, not the whole of it.
+    const auto shown = area.getIntersection(visible);
+    if (shown.isEmpty() || block.getWidth() <= 0 || peaks.seconds <= 0.0)
+        return;
+
+    const auto secondsPerPixel = peaks.seconds / static_cast<double>(block.getWidth());
+    const auto from = static_cast<double>(shown.getX() - block.getX()) * secondsPerPixel;
+    const auto to = static_cast<double>(shown.getRight() - block.getX()) * secondsPerPixel;
+    const auto columns = peaks.columns(from, to, shown.getWidth());
+
+    const auto middle = static_cast<float>(area.getCentreY());
+    const auto half = static_cast<float>(area.getHeight()) * 0.5f;
+    const auto stroke = static_cast<float>(tokens_.integer("metric.playlist.waveStroke"));
+
+    g.setColour(tokens_.colour("color.preview.wave"));
+    for (std::size_t column = 0; column < columns.size(); ++column)
+    {
+        const auto x = static_cast<float>(shown.getX()) + static_cast<float>(column);
+        const auto top = middle - std::clamp(columns[column].maximum, -1.0f, 1.0f) * half;
+        const auto bottom = middle - std::clamp(columns[column].minimum, -1.0f, 1.0f) * half;
+        g.fillRect(x, top, stroke, std::max(stroke, bottom - top));
+    }
 }
 
 std::optional<int> PlaylistPanel::playheadX() const

@@ -2,9 +2,13 @@
 
 #include "daw/domain/Result.h"
 #include "daw/domain/project/ProjectState.h"
+#include "daw/ui/model/WaveformPeaks.h"
 
 #include <juce_core/juce_core.h>
+#include <juce_events/juce_events.h>
 
+#include <cstddef>
+#include <memory>
 #include <vector>
 
 namespace daw::ui
@@ -21,11 +25,13 @@ namespace daw::ui
 //
 // The folders are not project state either: they are this machine's, like the
 // plugins it has installed, and they are kept with the application's settings.
-class SampleHost
+//
+// It broadcasts when a waveform it was measuring is ready.
+class SampleHost : public juce::ChangeBroadcaster
 {
 public:
     SampleHost() = default;
-    virtual ~SampleHost() = default;
+    ~SampleHost() override = default;
 
     SampleHost(const SampleHost&) = delete;
     SampleHost& operator=(const SampleHost&) = delete;
@@ -47,6 +53,17 @@ public:
     [[nodiscard]] virtual std::vector<juce::File> folders() const = 0;
     virtual void addFolder(const juce::File& folder) = 0;
     virtual void removeFolder(const juce::File& folder) = 0;
+
+    // The shape of a sample the project holds, measured from its bytes.
+    //
+    // Nothing while it is being measured: the first call starts the work on
+    // another thread and returns at once, and the host broadcasts when it is
+    // done. Measured once per digest, however many clips play the sample.
+    [[nodiscard]] virtual std::shared_ptr<const WaveformPeaks> waveform(const domain::SampleRef& sample) = 0;
+
+    // How many samples were measured since the start, for the verification,
+    // which has to prove that ten clips of one sample cost one measurement.
+    [[nodiscard]] virtual std::size_t waveformsMeasured() const = 0;
 };
 
 } // namespace daw::ui
