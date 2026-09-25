@@ -246,6 +246,8 @@ class ScriptedProvider:
         self._turns = list(turns)
         self._model = model
         self.calls: list[list[dict[str, Any]]] = []
+        # What each turn was shown: a test checks what a read handed back.
+        self.messages: list[list[dict[str, Any]]] = []
 
     @property
     def model(self) -> str:
@@ -259,6 +261,7 @@ class ScriptedProvider:
     ) -> Turn:
         del system
         self.calls.append([dict(tool) for tool in tools])
+        self.messages.append(list(messages))
 
         if not self._turns:
             return Turn(text="Je n'ai rien de plus à dire.")

@@ -1,6 +1,7 @@
 #include "AppShellView.h"
 #include "CopilotBridge.h"
 #include "EditClock.h"
+#include "LevelMonitor.h"
 #include "MainWindow.h"
 #include "PluginRack.h"
 #include "PluginWindow.h"
@@ -102,6 +103,7 @@ public:
         // state. No panel is notified of what a command did.
         bus_.addObserver(projectObserver_);
         clock_ = std::make_unique<EditClock>(engineHost_->edit());
+        levels_ = std::make_unique<LevelMonitor>(engineHost_->edit());
         rack_ = std::make_unique<PluginRack>(
             engineHost_->edit(), engineHost_->catalogue(), ui::Tokens::builtIn());
 
@@ -557,7 +559,11 @@ private:
         // it, and started after: a process that answers before there is a
         // panel to show the answer has nowhere to put it.
         copilot_ = std::make_unique<CopilotBridge>(
-            CopilotBridge::Wiring{bus_, state_, registry_, [this] { return rack_->available(); }});
+            CopilotBridge::Wiring{bus_,
+                                  state_,
+                                  registry_,
+                                  [this] { return rack_->available(); },
+                                  [this] { return levels_->toValue(state_); }});
 
         // Where the pages of a windowed workspace were left, kept next to the
         // other settings of this machine and never in the project: a window's
@@ -872,6 +878,7 @@ private:
     ui::Selection selection_;
     ui::History history_;
     std::unique_ptr<EditClock> clock_;
+    std::unique_ptr<LevelMonitor> levels_;
     std::unique_ptr<WorkspaceSwitch> switch_;
     std::unique_ptr<CopilotBridge> copilot_;
     std::unique_ptr<PluginRack> rack_;

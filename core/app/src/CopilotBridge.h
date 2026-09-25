@@ -35,7 +35,7 @@ namespace daw::app
 // fight over a port. Once connected, both sides ask:
 //
 //   the copilot asks the DAW    state.get, clip.notes, plugins.find,
-//                               tools.list, commands.execute
+//                               mix.levels, tools.list, commands.execute
 //   the DAW asks the copilot    copilot.ask, once per request typed by the user
 //
 // The frame is one JSON object per line, UTF-8. Content-Length framing would
@@ -62,6 +62,10 @@ public:
         // What this machine holds, asked for when the copilot wants it rather
         // than kept here: a scan can happen while the application runs.
         std::function<std::vector<domain::PluginRef>()> installedPlugins;
+
+        // What the meters read now, as mix.levels answers it. Run on the
+        // message thread, where the meters live.
+        std::function<domain::Value()> levels;
     };
 
     explicit CopilotBridge(Wiring wiring);

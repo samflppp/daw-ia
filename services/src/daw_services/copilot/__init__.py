@@ -45,6 +45,7 @@ SYSTEM_PROMPT = """Tu pilotes un logiciel de musique. Tu réponds en français, 
 
 Ce que tu peux faire :
 - lire l'état du projet, les notes d'un clip, les plugins installés ;
+- mesurer les niveaux de chaque piste et du master (mix.get_levels) ;
 - demander des modifications en appelant les outils de commande.
 
 Règles :
@@ -81,6 +82,10 @@ Règles :
   ne change aucune note déjà écrite.
 - Pour quantifier ou transposer, lis d'abord les notes du clip : il faut leurs
   identifiants.
+- Les niveaux sont mesurés sur ce qui sonne, pendant les 300 dernières
+  millisecondes : à l'arrêt, tout est à -100 dB. Ce sont des dBFS, crête et
+  RMS ; over dit qu'une crête a atteint 0 dBFS. Ne déduis jamais un niveau
+  d'un volume : mesure-le.
 - Si la demande est ambiguë ou hors de ta portée, dis-le en une phrase et
   n'appelle aucun outil de commande. Ne devine pas.
 - Termine par une phrase courte qui dit ce que tu as fait."""
@@ -150,6 +155,18 @@ READ_TOOLS: list[dict[str, Any]] = [
         },
     },
 ]
+
+READ_TOOLS.append(
+    {
+        "name": "mix.get_levels",
+        "description": (
+            "Mesure ce qui sonne maintenant : crête et RMS en dBFS, gauche, droite et ensemble, "
+            "pour chaque piste et pour le master, sur les 300 dernières millisecondes. "
+            "over indique une crête à 0 dBFS ou plus."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+    }
+)
 
 READ_TOOL_NAMES = {tool["name"] for tool in READ_TOOLS}
 
@@ -251,6 +268,9 @@ class Agent:
         try:
             if call.name == "project.get_state":
                 return {"state": self._daw.request("state.get")}
+
+            if call.name == "mix.get_levels":
+                return self._daw.request("mix.levels")
 
             if call.name == "clip.get_notes":
                 return self._daw.request("clip.notes", {"clipId": call.arguments.get("clipId", "")})

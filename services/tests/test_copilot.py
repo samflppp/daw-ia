@@ -48,6 +48,22 @@ NOTES: dict[str, Any] = {
 }
 
 
+LEVELS: dict[str, Any] = {
+    "playing": True,
+    "windowSeconds": 0.3,
+    "strips": [
+        {
+            "strip": "01JBWQ7Z0000000000000TRACK",
+            "name": "Basse",
+            "peakDb": -9.5,
+            "rmsDb": -18.2,
+            "over": False,
+        },
+        {"strip": "master", "name": "Master", "peakDb": -3.0, "rmsDb": -12.4, "over": False},
+    ],
+}
+
+
 class FakeDaw:
     """A DAW that answers the four methods the copilot uses, and remembers."""
 
@@ -76,6 +92,7 @@ class FakeDaw:
                     ],
                     "clip.notes": lambda _params: NOTES,
                     "plugins.find": lambda params: {"query": params.get("query", ""), "found": []},
+                    "mix.levels": lambda _params: LEVELS,
                     "commands.execute": self._execute,
                 },
             )
@@ -186,6 +203,25 @@ def test_a_read_is_answered_before_the_commands_are_staged(daw: FakeDaw) -> None
         "01JBWQ7Z0000000000000N0TE1",
         "01JBWQ7Z0000000000000N0TE2",
     ]
+
+
+def test_levels_are_read_from_the_daw_and_handed_to_the_model(daw: FakeDaw) -> None:
+    provider = ScriptedProvider(
+        [
+            tool_turn(ToolCall("a", "mix.get_levels", {})),
+            Turn(text="Le master culmine à -3 dBFS, sans saturation."),
+        ]
+    )
+
+    answer = Agent(connected(daw), provider).answer("le master sature ?")
+
+    assert not answer.failed
+    assert daw.executed == []
+
+    # What the model was handed back is what the DAW measured, not a summary.
+    handed = provider.messages[-1][-1]["content"][0]["content"]
+    assert '"peakDb":-3.0' in handed
+    assert '"strip":"master"' in handed
 
 
 def test_a_request_out_of_reach_changes_nothing(daw: FakeDaw) -> None:

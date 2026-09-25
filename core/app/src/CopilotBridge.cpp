@@ -335,6 +335,20 @@ void CopilotBridge::handleRequest(const Value& message)
             }
         }
     }
+    else if (method.value() == "mix.levels")
+    {
+        auto levels = onMessageThread(
+            [this]() -> domain::Result<Value>
+            {
+                if (!wiring_.levels)
+                    return domain::fail(domain::ErrorCode::notFound, "no meters in this process");
+                return wiring_.levels();
+            });
+        if (levels)
+            result = std::move(levels).value();
+        else
+            failure = errorValue("levels", levels.error().message);
+    }
     else if (method.value() == "plugins.find")
     {
         const auto query = arguments.stringAt("query");
