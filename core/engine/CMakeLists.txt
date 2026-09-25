@@ -20,6 +20,7 @@ target_sources(daw_engine INTERFACE
     src/PluginCatalogue.cpp
     src/ContentStore.cpp
     src/ProjectProjector.cpp
+    src/Rendering.cpp
     src/TransportController.cpp
     src/clap/ClapPluginEditor.cpp
     src/clap/ClapPluginInstance.cpp)

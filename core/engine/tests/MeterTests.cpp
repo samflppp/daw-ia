@@ -2,6 +2,7 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/engine/LevelMeters.h"
 #include "daw/engine/MeterTap.h"
+#include "daw/engine/Rendering.h"
 
 #include <tracktion_engine/utilities/tracktion_TestUtilities.h>
 
@@ -40,37 +41,10 @@ float toDb(double gain)
                        : std::max(StripLevel::floorDb, static_cast<float>(20.0 * std::log10(gain)));
 }
 
-// Renders the whole Edit the way it plays.
-//
-// Not through test_utilities::renderToAudioBuffer: that one goes through the
-// freeze path, which unmutes every track it renders — a muted track is heard
-// in it. Found by these meters at S11; the other suites never rendered a mute.
 tracktion::test_utilities::BufferAndSampleRate renderAsPlayed(tracktion::Edit& edit)
 {
     auto file = std::make_unique<juce::TemporaryFile>(".wav");
-
-    tracktion::Renderer::Parameters parameters{edit};
-    parameters.destFile = file->getFile();
-    parameters.audioFormat = edit.engine.getAudioFileFormatManager().getWavFormat();
-    parameters.bitDepth = 32;
-    parameters.sampleRateForAudio = edit.engine.getDeviceManager().getSampleRate();
-    parameters.blockSizeForAudio = edit.engine.getDeviceManager().getBlockSize();
-    parameters.time = tracktion::TimeRange{tracktion::TimePosition{}, edit.getLength()};
-    parameters.tracksToDo = tracktion::toBitSet(tracktion::getAllTracks(edit));
-    parameters.usePlugins = true;
-    parameters.useMasterPlugins = true;
-    parameters.canRenderInMono = false;
-
-    // Run here, on this thread, the way Renderer::renderToFile runs its own
-    // task when asked not to use a thread.
-    auto task = tracktion::render_utils::createRenderTask(parameters, "meters", nullptr, nullptr);
-    REQUIRE(task != nullptr);
-    while (task->runJob() == juce::ThreadPoolJob::jobNeedsRunningAgain)
-    {
-    }
-    tracktion::Renderer::turnOffAllPlugins(edit);
-
-    REQUIRE(file->getFile().existsAsFile());
+    REQUIRE(daw::engine::renderAsPlayed(edit, file->getFile()));
     return tracktion::test_utilities::loadBufferAndSampleRate(std::move(file));
 }
 
