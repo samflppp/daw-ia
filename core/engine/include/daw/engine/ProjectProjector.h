@@ -130,6 +130,18 @@ private:
     // The audio clips of a track, on its companion.
     void reconcileAudioTrack(tracktion::AudioTrack& companion, domain::TrackId trackId, bool retimed);
     void removeUnknownTracks();
+
+    // The level tap of a chain, last in it, measuring `strip`: a domain
+    // TrackId, or the master. Placed when missing, put back at the end when a
+    // plugin landed after it, never duplicated. `audible` is what the
+    // projection decided about the strip — see MeterTapPlugin::setAudible.
+    void ensureMeterTap(tracktion::PluginList& list, const juce::String& strip, bool audible);
+
+    // The master leaves the Edit at unity. Tracktion's own master fader does
+    // not start at 0 dB, and nothing in the domain asked it to be anything
+    // else: a mix 3 dB quieter than its meters, measured at S11, is the
+    // difference.
+    void reconcileMaster();
     void ensureInstrument(tracktion::AudioTrack& track, const domain::Track& source);
 
     // Brings the clips of one track into agreement with what it plays.

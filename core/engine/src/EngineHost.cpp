@@ -1,6 +1,7 @@
 #include "daw/engine/EngineHost.h"
 
 #include "daw/engine/ClapPluginFormat.h"
+#include "daw/engine/MeterTap.h"
 
 namespace daw::engine
 {
@@ -34,6 +35,10 @@ EngineHost::EngineHost(const juce::String& applicationName)
     // here, it becomes just another juce::AudioPluginFormat, so scanning,
     // instantiation and the projection treat VST3 and CLAP the same way.
     pluginManager.pluginFormatManager.addFormat(std::make_unique<ClapPluginFormat>());
+
+    // The level taps the projector places at the end of every chain. A type
+    // Tracktion has to know before an Edit can hold one.
+    pluginManager.createBuiltInType<MeterTapPlugin>();
 
     // A plugin that crashes must take a scanner process down, never the DAW.
     pluginManager.setUsesSeparateProcessForScanning(true);

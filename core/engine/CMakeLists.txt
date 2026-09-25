@@ -14,6 +14,8 @@ target_sources(daw_engine INTERFACE
     src/ClapPluginFormat.cpp
     src/EngineHost.cpp
     src/HostedParameters.cpp
+    src/LevelMeters.cpp
+    src/MeterTap.cpp
     src/ParameterBridge.cpp
     src/PluginCatalogue.cpp
     src/ContentStore.cpp

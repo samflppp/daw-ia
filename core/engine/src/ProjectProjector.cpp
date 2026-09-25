@@ -2,6 +2,7 @@
 
 #include "HostedParameters.h"
 #include "daw/domain/commands/TransportCommands.h"
+#include "daw/engine/MeterTap.h"
 
 #include <algorithm>
 #include <string>
@@ -220,6 +221,56 @@ void ProjectProjector::removeUnknownTracks()
                                        { return toJuce(source.id.toString()) == marker; });
         if (!known)
             edit_.deleteTrack(track);
+    }
+}
+
+void ProjectProjector::reconcileMaster()
+{
+    if (auto volume = edit_.getMasterVolumePlugin(); volume != nullptr)
+    {
+        if (volume->getVolumeDb() != 0.0f)
+            volume->setVolumeDb(0.0f);
+
+        // A master pan is a balance, not a placement: unity at the centre,
+        // which only the linear law gives. Written, never left to the global.
+        if (volume->getPanLaw() != tracktion::PanLawLinear)
+            volume->setPanLaw(tracktion::PanLawLinear);
+        if (volume->getPan() != 0.0f)
+            volume->setPan(0.0f);
+    }
+
+    // The master measures what leaves the Edit. Its list is before Tracktion's
+    // master volume, which stays at unity: the day the domain has a master
+    // fader, it goes in front of this tap, not behind it.
+    ensureMeterTap(edit_.getMasterPluginList(), MeterTapPlugin::masterStrip, true);
+}
+
+void ProjectProjector::ensureMeterTap(tracktion::PluginList& list, const juce::String& strip, bool audible)
+{
+    const auto taps = list.getPluginsOfType<MeterTapPlugin>();
+    const auto plugins = list.getPlugins();
+
+    // Last, so that it measures what the strip sends out: after the plugins,
+    // after the fader and the pan.
+    if (taps.size() == 1 && taps.getFirst() != nullptr && taps.getFirst()->strip() == strip &&
+        plugins.getLast() == taps.getFirst())
+    {
+        taps.getFirst()->setAudible(audible);
+        return;
+    }
+
+    for (auto* tap : taps)
+    {
+        if (tap != nullptr)
+            tap->deleteFromParent();
+    }
+
+    if (auto plugin = edit_.getPluginCache().createNewPlugin(MeterTapPlugin::create(strip));
+        plugin != nullptr)
+    {
+        if (auto* tap = dynamic_cast<MeterTapPlugin*>(plugin.get()); tap != nullptr)
+            tap->setAudible(audible);
+        list.insertPlugin(plugin, -1, nullptr);
     }
 }
 
@@ -959,6 +1010,8 @@ void ProjectProjector::reconcile()
             reconcilePlugins(*target, source);
         }
 
+        ensureMeterTap(target->pluginList, toJuce(source.id.toString()), !source.muted);
+
         // Clips are the expensive part, so they are looked at only when what
         // the track plays changed, or when the tempo moved the seconds under
         // them. Even then each one is bound by its key and touched only in
@@ -981,10 +1034,13 @@ void ProjectProjector::reconcile()
                 applyMix(*companion, source);
             if (playedChanged || retimed || needsCompanion)
                 reconcileAudioTrack(*companion, source.id, retimed);
+            ensureMeterTap(companion->pluginList, toJuce(source.id.toString()), !source.muted);
         }
 
         stillProjected.emplace_back(source.id, snapshot);
     }
+
+    reconcileMaster();
 
     projected_ = std::move(stillProjected);
     forgetClipsNotLaidOut();
