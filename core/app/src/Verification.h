@@ -49,7 +49,8 @@ public:
     {
         list,
         reopen,
-        legacy
+        legacy,
+        file
     };
 
     struct Wiring
@@ -76,6 +77,12 @@ public:
 
         // Called once the report is written, on the message thread.
         std::function<void(bool passed)> finished;
+
+        // What the File menu does once its dialog has answered.
+        std::function<bool(const juce::File&)> newProjectAt;
+        std::function<bool(const juce::File&)> openProjectAt;
+        std::function<bool(const juce::File&)> saveAsTo;
+        std::function<juce::String()> lastRefusal;
     };
 
     explicit Verification(Wiring wiring);
@@ -112,6 +119,8 @@ private:
     void buildList();
     void buildReopen();
     void buildLegacy();
+    void buildFile();
+    void dragWindow(juce::Point<int> by);
     void add(std::string title,
              std::function<void()> act,
              std::function<bool()> ready = {},
@@ -183,6 +192,10 @@ private:
     juce::File kit_;
     double audioStart_{0.0};
     juce::Rectangle<int> savedBounds_;
+    std::function<bool(const juce::File&)> newProjectAt_;
+    std::function<bool(const juce::File&)> openProjectAt_;
+    std::function<bool(const juce::File&)> saveAsTo_;
+    std::function<juce::String()> lastRefusal_;
 };
 
 } // namespace daw::app

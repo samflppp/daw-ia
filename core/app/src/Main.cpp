@@ -187,6 +187,8 @@ public:
                 run = Verification::Run::reopen;
             else if (tokens[index] == "--verify-legacy")
                 run = Verification::Run::legacy;
+            else if (tokens[index] == "--verify-file")
+                run = Verification::Run::file;
             else if (tokens[index] != "--verify")
                 continue;
 
@@ -213,11 +215,24 @@ public:
                 *titleBar_,
                 juce::File{tokens[index + 1].unquoted()},
                 run,
-                [](bool passed)
+                [this, run, folder = juce::File{tokens[index + 1].unquoted()}](bool passed)
                 {
                     juce::Logger::writeToLog(juce::String("verify: ") + (passed ? "passed" : "FAILED"));
+
+                    // The file run ends the way a person ends "Enregistrer
+                    // sous": the copy is made and this process hands over to
+                    // one opened on it. What the copy holds is checked by a
+                    // --verify-reopen run on it.
+                    if (run == Verification::Run::file && passed &&
+                        saveAs(folder.getChildFile("Copie.dawproj")))
+                        return;
+
                     juce::JUCEApplication::getInstance()->systemRequestedQuit();
-                }});
+                },
+                [this](const juce::File& target) { return newProjectAt(target); },
+                [this](const juce::File& target) { return openProjectAt(target); },
+                [this](const juce::File& target) { return saveAs(target); },
+                [this] { return lastRefusal_; }});
 
             verification_->start();
             return;
@@ -348,9 +363,17 @@ private:
         return file.hasFileExtension("dawproj") ? file : file.withFileExtension("dawproj");
     }
 
-    static void tell(const juce::String& title, const juce::String& message)
+    // A refusal is said in a message box. Not during a scripted verification:
+    // Windows runs that box in a loop of its own, the verification's steps
+    // would go on under it, and nobody would be there to close it. The
+    // verification reads the message instead.
+    void tell(const juce::String& title, const juce::String& message)
     {
-        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, title, message);
+        lastRefusal_ = title + " : " + message;
+        juce::Logger::writeToLog("refused: " + lastRefusal_);
+
+        if (verification_ == nullptr)
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, title, message);
     }
 
     // "Enregistrer": the commands are on disk already, one transaction each;
@@ -385,45 +408,53 @@ private:
             juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
             [this](const juce::FileChooser& chooser)
             {
-                if (chooser.getResult() == juce::File{})
-                    return;
-
-                const auto target = withProjectExtension(chooser.getResult());
-                if (target.exists())
-                {
-                    tell("Nouveau projet",
-                         target.getFileName() +
-                             juce::String(u8" existe déjà : « Ouvrir » pour le reprendre."));
-                    return;
-                }
-
-                switchTo(target);
+                if (chooser.getResult() != juce::File{})
+                    static_cast<void>(newProjectAt(withProjectExtension(chooser.getResult())));
             });
+    }
+
+    // What follows each dialog, apart from it: the dialog is Windows', and the
+    // scripted verification calls these directly with the folder a person
+    // would have picked. Each one refuses with a message, or hands over.
+    bool newProjectAt(const juce::File& target)
+    {
+        if (target.exists())
+        {
+            tell("Nouveau projet",
+                 target.getFileName() + juce::String(u8" existe déjà : « Ouvrir » pour le reprendre."));
+            return false;
+        }
+
+        switchTo(target);
+        return true;
+    }
+
+    bool openProjectAt(const juce::File& folder)
+    {
+        const persistence::ProjectFolder project{folder.getFullPathName().toStdString()};
+        if (!juce::File{juce::String{project.databaseFile().string()}}.existsAsFile())
+        {
+            tell("Ouvrir un projet",
+                 folder.getFileName() +
+                     juce::String(u8" n'est pas un projet DAW IA : choisis un dossier .dawproj."));
+            return false;
+        }
+
+        switchTo(folder);
+        return true;
     }
 
     void chooseProjectToOpen()
     {
         chooser_ = std::make_unique<juce::FileChooser>("Ouvrir un projet", projectsFolder());
 
-        chooser_->launchAsync(
-            juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-            [this](const juce::FileChooser& chooser)
-            {
-                const auto folder = chooser.getResult();
-                if (folder == juce::File{})
-                    return;
-
-                const persistence::ProjectFolder project{folder.getFullPathName().toStdString()};
-                if (!juce::File{juce::String{project.databaseFile().string()}}.existsAsFile())
-                {
-                    tell("Ouvrir un projet",
-                         folder.getFileName() +
-                             juce::String(u8" n'est pas un projet DAW IA : choisis un dossier .dawproj."));
-                    return;
-                }
-
-                switchTo(folder);
-            });
+        chooser_->launchAsync(juce::FileBrowserComponent::openMode |
+                                  juce::FileBrowserComponent::canSelectDirectories,
+                              [this](const juce::FileChooser& chooser)
+                              {
+                                  if (chooser.getResult() != juce::File{})
+                                      static_cast<void>(openProjectAt(chooser.getResult()));
+                              });
     }
 
     // "Enregistrer sous": a copy of the whole folder — journal, history and
@@ -440,25 +471,25 @@ private:
                               [this](const juce::FileChooser& chooser)
                               {
                                   if (chooser.getResult() != juce::File{})
-                                      saveAs(withProjectExtension(chooser.getResult()));
+                                      static_cast<void>(saveAs(withProjectExtension(chooser.getResult())));
                               });
     }
 
-    void saveAs(const juce::File& target)
+    bool saveAs(const juce::File& target)
     {
         if (store_ == nullptr)
-            return;
+            return false;
 
         if (target.exists())
         {
             tell("Enregistrer sous", target.getFileName() + juce::String(u8" existe déjà."));
-            return;
+            return false;
         }
 
         if (const auto saved = store_->save(); !saved)
         {
             tell("Enregistrer sous", juce::String(saved.error().message));
-            return;
+            return false;
         }
 
         const juce::File source{juce::String{store_->folder().root().string()}};
@@ -467,10 +498,11 @@ private:
             static_cast<void>(target.deleteRecursively());
             tell("Enregistrer sous",
                  juce::String(u8"la copie vers ") + target.getFullPathName() + juce::String(u8" a échoué."));
-            return;
+            return false;
         }
 
         switchTo(target);
+        return true;
     }
 
     // The application is built around one project, from the journal up, so
@@ -852,6 +884,7 @@ private:
     std::unique_ptr<juce::FileChooser> chooser_;
     std::optional<juce::File> relaunchProject_;
     juce::String lastWorkspace_;
+    juce::String lastRefusal_;
     std::unique_ptr<MainWindow> window_;
 };
 

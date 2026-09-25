@@ -51,6 +51,10 @@ Verification::Verification(Wiring wiring)
     , folder_(std::move(wiring.folder))
     , run_(wiring.run)
     , finished_(std::move(wiring.finished))
+    , newProjectAt_(std::move(wiring.newProjectAt))
+    , openProjectAt_(std::move(wiring.openProjectAt))
+    , saveAsTo_(std::move(wiring.saveAsTo))
+    , lastRefusal_(std::move(wiring.lastRefusal))
 {
 }
 
@@ -73,6 +77,9 @@ void Verification::start()
         break;
     case Run::legacy:
         buildLegacy();
+        break;
+    case Run::file:
+        buildFile();
         break;
     }
 
@@ -1210,6 +1217,121 @@ void Verification::buildLegacy()
             check(std::abs(heard.seconds - 8.0) < 0.2, "il dure jusqu'au temps 16, 8 s");
             check(heard.onsets == std::vector<int>({32, 36, 40, 44, 48, 52, 56, 60}),
                   "une attaque sur chaque temps de 8 à 15 : là où les clips commençaient");
+        });
+}
+
+// A hand on the title bar: the pointer moves across the screen, and each event
+// is expressed where the bar is at that moment, since the bar moves with the
+// window it drags. A fixed point in the bar's coordinates would not be a hand.
+void Verification::dragWindow(juce::Point<int> by)
+{
+    auto source = juce::Desktop::getInstance().getMainMouseSource();
+    const auto now = juce::Time::getCurrentTime();
+    const auto held = juce::ModifierKeys{juce::ModifierKeys::leftButtonModifier};
+
+    const auto grip = juce::Point<int>{titleBar_.getWidth() / 2, titleBar_.getHeight() / 2};
+    const auto onScreen = titleBar_.localPointToGlobal(grip);
+
+    // JUCE moves a window after the real pointer, not after the event it is
+    // handed: an event queued behind a move would carry a stale position. So
+    // the real pointer is moved, and put back where it was afterwards.
+    const auto pointerWas = juce::Desktop::getMousePosition();
+
+    const auto event = [&](juce::Point<int> screen, int clicks)
+    {
+        source.setScreenPosition(screen.toFloat());
+        const auto local = titleBar_.getLocalPoint(nullptr, screen).toFloat();
+        return juce::MouseEvent{source,
+                                local,
+                                held,
+                                juce::MouseInputSource::defaultPressure,
+                                0.0f,
+                                0.0f,
+                                0.0f,
+                                0.0f,
+                                &titleBar_,
+                                &titleBar_,
+                                now,
+                                grip.toFloat(),
+                                now,
+                                clicks,
+                                clicks == 0};
+    };
+
+    titleBar_.mouseDown(event(onScreen, 1));
+
+    const auto steps = std::max(std::abs(by.x), std::abs(by.y));
+    for (int index = 1; index <= steps; ++index)
+    {
+        const auto offset =
+            (by.toFloat() * (static_cast<float>(index) / static_cast<float>(steps))).roundToInt();
+        titleBar_.mouseDrag(event(onScreen + offset, 0));
+    }
+
+    titleBar_.mouseUp(event(onScreen + by, 0));
+    juce::Desktop::setMousePosition(pointerWas);
+}
+
+// The File menu and the window, past the dialogs: Windows' file dialog is not
+// something a script can fill, so each step hands the function behind it the
+// folder a person would have picked. The run ends on a real "Enregistrer
+// sous", which closes this process and starts another on the copy.
+void Verification::buildFile()
+{
+    add("Ouvrir refuse un dossier qui n'est pas un projet",
+        [this]
+        {
+            const auto notAProject = folder_.getChildFile("pas-un-projet");
+            static_cast<void>(notAProject.createDirectory());
+            check(openProjectAt_ && !openProjectAt_(notAProject), "refusé");
+            check(lastRefusal_ && lastRefusal_().contains("n'est pas un projet"),
+                  "le message : « " + (lastRefusal_ ? lastRefusal_().toStdString() : std::string{}) + " »");
+        });
+
+    add("Nouveau et Enregistrer sous refusent un projet qui existe",
+        [this]
+        {
+            const auto existing = folder_.getChildFile("Existant.dawproj");
+            static_cast<void>(existing.createDirectory());
+            check(newProjectAt_ && !newProjectAt_(existing), "Nouveau refuse : le nom est pris");
+            check(lastRefusal_ && lastRefusal_().contains(juce::String(u8"existe déjà")),
+                  "le message : « " + (lastRefusal_ ? lastRefusal_().toStdString() : std::string{}) + " »");
+            check(saveAsTo_ && !saveAsTo_(existing), "Enregistrer sous refuse : rien n'est écrasé");
+            check(existing.getNumberOfChildFiles(juce::File::findFilesAndDirectories) == 0,
+                  "le dossier existant n'a pas été touché");
+        });
+
+    add("glisser la barre déplace la fenêtre",
+        [this]
+        {
+            const auto before = window_.getPosition();
+            dragWindow({60, 40});
+            check(window_.getPosition() == before + juce::Point<int>{60, 40},
+                  "de 60 px à droite et 40 px vers le bas, comme la souris");
+            dragWindow({-60, -40});
+            check(window_.getPosition() == before, "et revient à sa place");
+        });
+
+    add("agrandie, la fenêtre ne se glisse pas",
+        [this]
+        {
+            doubleClick(titleBar_, titleBar_.getLocalBounds().getCentre());
+            check(window_.isFullScreen(), "agrandie");
+            savedBounds_ = window_.getBounds();
+
+            dragWindow({60, 40});
+            check(window_.getBounds() == savedBounds_, "elle reste à sa place, plein écran");
+
+            doubleClick(titleBar_, titleBar_.getLocalBounds().getCentre());
+            check(!window_.isFullScreen(), "le double-clic lui rend sa taille");
+        });
+
+    add("Enregistrer sous, la suite",
+        [this]
+        {
+            static_cast<void>(folder_.getChildFile("Copie.dawproj").deleteRecursively());
+            note("à la fin de ce rapport : copie vers `Copie.dawproj`, puis ce processus se ferme et un "
+                 "autre s'ouvre sur la copie. Ce qu'elle contient se vérifie par --verify-reopen sur elle.");
         });
 }
 
