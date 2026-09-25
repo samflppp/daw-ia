@@ -131,6 +131,9 @@ private:
     // the list, after the samples: a project with a sampler channel and a
     // clip on a companion track is the one that has something to measure.
     void addMeterSteps();
+
+    // The playlist on a song longer than the screen: scroll, zoom, follow.
+    void addPlaylistViewSteps();
     [[nodiscard]] engine::StripLevel levelOf(const std::string& strip) const;
     [[nodiscard]] static engine::StripLevel levelIn(const std::vector<engine::StripLevel>& levels,
                                                     const std::string& strip);
@@ -167,7 +170,11 @@ private:
     // Where a cell of the rack and a beat of a playlist lane are, read from the
     // same tokens the panels draw with.
     [[nodiscard]] juce::Point<int> rackCell(int row, int step) const;
-    [[nodiscard]] juce::Point<int> playlistBeat(int lane, double beats) const;
+    // Where a beat of a lane is, brought into sight first with the wheel the
+    // way a person scrolls, when the view does not show it.
+    [[nodiscard]] juce::Point<int> playlistBeat(int lane, double beats);
+    void
+    wheel(juce::Component& target, juce::Point<int> at, float deltaY, bool shift = false, bool ctrl = false);
 
     [[nodiscard]] std::size_t depth() const { return bus_.undoDepth(); }
 
@@ -209,6 +216,7 @@ private:
     juce::Rectangle<int> savedBounds_;
     std::string loudest_;
     std::vector<float> masterSeen_;
+    double farBeats_{0.0};
     bool recordingMaster_{false};
     std::size_t droppedBefore_{0};
     std::function<bool(const juce::File&)> newProjectAt_;

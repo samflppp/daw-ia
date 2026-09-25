@@ -26,11 +26,23 @@ namespace daw::ui
 //   drag a block               the whole selection moves, one history entry
 //   right-click a block        removes it, or the whole selection
 //   Ctrl + drag on empty       selects every block the rectangle touches
-//   Ctrl + Shift + click       adds a block to the selection, or takes it out
+//   Ctrl + click               adds a block to the selection, or takes it out
+//                              (Ctrl + Shift + click, the S10 gesture, too)
 //   Ctrl+C, Ctrl+V             copies the selection, pastes it at the playhead
 //   Ctrl+B                     duplicates the selection right after itself
 //   Delete                     removes the selection
 // Placing and moving snap to the bar; Shift snaps to the beat.
+//
+// The view, which is this screen's and never the project's:
+//   wheel                      scrolls the lanes
+//   Shift + wheel              scrolls the timeline (a trackpad's sideways
+//                              swipe does too)
+//   Ctrl + wheel               zooms the timeline around the pointer
+//   the two scroll bars        what they always do
+// At rest the whole song fits the width, as it did before there was a zoom —
+// but never narrower than a readable bar: past that, the timeline scrolls.
+// Zooming out stops there. In song mode, while playing, the view turns the
+// page when the playhead leaves it.
 //
 // There is no resize. A pattern's length belongs to the pattern, and an audio
 // clip lasts as long as its sample.
@@ -38,6 +50,7 @@ class PlaylistPanel final : public juce::Component,
                             public juce::DragAndDropTarget,
                             public juce::FileDragAndDropTarget,
                             private juce::ChangeListener,
+                            private juce::ScrollBar::Listener,
                             private juce::Timer
 {
 public:
@@ -45,11 +58,13 @@ public:
     ~PlaylistPanel() override;
 
     void paint(juce::Graphics& g) override;
+    void resized() override;
 
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
     void mouseDoubleClick(const juce::MouseEvent& event) override;
+    void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
     bool keyPressed(const juce::KeyPress& key) override;
 
     // A sample from the browser, or a file from the system.
@@ -74,8 +89,19 @@ public:
     // verification, which checks what a Ctrl + drag caught.
     [[nodiscard]] const std::vector<Item>& selected() const noexcept { return selected_; }
 
+    // Where a beat of a lane is drawn now, scrolled and zoomed as the view is,
+    // and the area blocks are drawn in. The verification aims its clicks with
+    // them, and scrolls with the wheel when a target is out of sight.
+    [[nodiscard]] juce::Point<int> pointFor(int lane, double beats) const;
+    [[nodiscard]] juce::Rectangle<int> timelineArea() const { return gridArea(); }
+
+    // The view: pixels per beat, and the first beat on the left.
+    [[nodiscard]] double beatWidth() const;
+    [[nodiscard]] double firstBeat() const;
+
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+    void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
     void timerCallback() override;
 
     // --- lanes
@@ -89,10 +115,23 @@ private:
     [[nodiscard]] juce::Rectangle<int> rulerArea() const;
     [[nodiscard]] juce::Rectangle<int> gridArea() const;
 
-    // How many beats the grid shows: the arrangement and four bars of room
-    // after it, never fewer than sixteen bars. Read at paint time, so the
-    // timeline grows as the song does.
-    [[nodiscard]] double visibleBeats() const;
+    // How long the timeline is: the arrangement and four bars of room after
+    // it, never fewer than sixteen bars. Read at paint time, so the timeline
+    // grows as the song does.
+    [[nodiscard]] double timelineBeats() const;
+
+    // The width at which the whole timeline fits, never under the readable
+    // floor. The narrowest a beat can be drawn, and the width at rest.
+    [[nodiscard]] double fitBeatWidth() const;
+    [[nodiscard]] double viewBeats() const; // how many beats the grid shows
+    [[nodiscard]] int lanesHeight() const;
+    [[nodiscard]] int firstLanePixel() const;
+
+    // Moves the view, clamped to the timeline, and the scroll bars with it.
+    void setView(double firstBeat, std::optional<double> zoom);
+    void setFirstLanePixel(int pixel);
+    void updateScrollBars();
+    void followPlayhead();
     [[nodiscard]] double beatAtX(int x) const;
     [[nodiscard]] int xForBeat(double beats) const;
     [[nodiscard]] int laneAtY(int y) const; // -1 outside any lane
@@ -167,6 +206,13 @@ private:
     std::vector<Copied> clipboard_;
 
     std::optional<int> paintedPlayheadX_;
+
+    // The view. No zoom means "fit": the width follows the song.
+    std::optional<double> zoom_;
+    double firstBeat_{0.0};
+    int firstLanePixel_{0};
+    juce::ScrollBar horizontal_{false};
+    juce::ScrollBar vertical_{true};
 
     // True in a page window, whose title bar names the panel already.
     bool titled_{false};

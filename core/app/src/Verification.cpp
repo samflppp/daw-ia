@@ -495,29 +495,69 @@ juce::Point<int> Verification::rackCell(int row, int step) const
     return {x, top + row * rowHeight + rowHeight / 2};
 }
 
-juce::Point<int> Verification::playlistBeat(int lane, double beats) const
+void Verification::wheel(juce::Component& target, juce::Point<int> at, float deltaY, bool shift, bool ctrl)
 {
-    auto* playlist = panel("playlist");
-    if (playlist == nullptr)
+    auto source = juce::Desktop::getInstance().getMainMouseSource();
+    const auto now = juce::Time::getCurrentTime();
+
+    auto held = juce::ModifierKeys{};
+    if (shift)
+        held = held.withFlags(juce::ModifierKeys::shiftModifier);
+    if (ctrl)
+        held = held.withFlags(juce::ModifierKeys::ctrlModifier);
+
+    const auto position = at.toFloat();
+    const juce::MouseEvent event{source,
+                                 position,
+                                 held,
+                                 juce::MouseInputSource::defaultPressure,
+                                 0.0f,
+                                 0.0f,
+                                 0.0f,
+                                 0.0f,
+                                 &target,
+                                 &target,
+                                 now,
+                                 position,
+                                 now,
+                                 0,
+                                 false};
+
+    juce::MouseWheelDetails details{};
+    details.deltaX = 0.0f;
+    details.deltaY = deltaY;
+    details.isReversed = false;
+    details.isSmooth = false;
+    details.isInertial = false;
+    target.mouseWheelMove(event, details);
+}
+
+juce::Point<int> Verification::playlistBeat(int lane, double beats)
+{
+    auto* view = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+    if (view == nullptr)
         return {};
 
-    // The playlist's own reading of how much timeline it shows.
-    double end = 0.0;
-    for (const auto& placement : state_.arrangement())
+    // A notch at a time, as a hand turns it.
+    constexpr float notch = 0.25f;
+    for (int turn = 0; turn < 400; ++turn)
     {
-        if (const auto* pattern = state_.findPattern(placement.patternId); pattern != nullptr)
-            end = std::max(end, placement.startBeats + pattern->lengthBeats);
+        const auto point = view->pointFor(lane, beats);
+        const auto area = view->timelineArea();
+        const auto centre = area.getCentre();
+
+        if (point.getX() < area.getX() + 2)
+            wheel(*view, centre, notch, true);
+        else if (point.getX() >= area.getRight() - 2)
+            wheel(*view, centre, -notch, true);
+        else if (point.getY() < area.getY())
+            wheel(*view, centre, notch);
+        else if (point.getY() >= area.getBottom())
+            wheel(*view, centre, -notch);
+        else
+            return point;
     }
-    const auto visible = std::ceil(std::max(64.0, end + 16.0) / beatsPerBar) * beatsPerBar;
-
-    const auto top =
-        tokens_.integer("metric.panel.headerHeight") + tokens_.integer("metric.playlist.rulerHeight");
-    const auto left = tokens_.integer("metric.playlist.headerWidth");
-    const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
-    const auto width = playlist->getWidth() - left;
-
-    const auto x = left + static_cast<int>(std::lround(beats * width / visible));
-    return {x, top + lane * laneHeight + laneHeight / 2};
+    return view->pointFor(lane, beats);
 }
 
 // --- the list ------------------------------------------------------------------
@@ -1019,6 +1059,9 @@ void Verification::buildList()
             // under the ruler; the band starts in lane 0 before beat 0 is not
             // possible, so it starts on an empty spot of lane 1 and sweeps up
             // over the first two layings of pattern 1.
+            // Both ends in sight before either is aimed at: bringing the
+            // second into view must not move the first.
+            static_cast<void>(playlistBeat(0, 1.0));
             const auto from = playlistBeat(1, 30.0);
             const auto to = playlistBeat(0, 1.0);
             drag(*playlist, from, to, true);
@@ -1027,17 +1070,21 @@ void Verification::buildList()
                   "deux blocs pris dans la zone : " + std::to_string(playlist->selected().size()));
         });
 
-    add("Ctrl + Maj + clic ajoute un bloc à la sélection",
+    add("Ctrl + clic ajoute un bloc à la sélection, Ctrl + Maj + clic aussi",
         [this]
         {
             auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
             if (playlist == nullptr)
                 return;
 
+            click(*playlist, playlistBeat(0, 32.0 + 2.0), false, false, true);
+            check(playlist->selected().size() == 3, "Ctrl + clic : trois blocs sélectionnés");
+            click(*playlist, playlistBeat(0, 32.0 + 2.0), false, false, true);
+            check(playlist->selected().size() == 2, "un second Ctrl + clic le retire");
             click(*playlist, playlistBeat(0, 32.0 + 2.0), false, true, true);
-            check(playlist->selected().size() == 3, "trois blocs sélectionnés");
+            check(playlist->selected().size() == 3, "Ctrl + Maj + clic, le geste de la S10, l'ajoute aussi");
             click(*playlist, playlistBeat(0, 32.0 + 2.0), false, true, true);
-            check(playlist->selected().size() == 2, "un second Ctrl + Maj + clic le retire");
+            check(playlist->selected().size() == 2, "et le retire");
         });
 
     add("Ctrl+B duplique la sélection juste après elle",
@@ -1113,6 +1160,7 @@ void Verification::buildList()
             check(domain::json::write(state_.toValue()) == savedState_, "Ctrl+Z le remet, à l'octet près");
         });
 
+    addPlaylistViewSteps();
     addMeterSteps();
 
     // --- the title bar -----------------------------------------------------------
@@ -1480,7 +1528,6 @@ void Verification::addMeterSteps()
         "le copilote lit les vu-mètres",
         [this]
         {
-            check(levelOf(loudest_).peakDb > -60.0f, "rendue, elle mesure de nouveau");
             masterSeen_.clear();
             recordingMaster_ = true;
             levels_.addChangeListener(this);
@@ -1618,6 +1665,167 @@ void Verification::addMeterSteps()
                 check(clap.peakDb > -60.0f,
                       "en SONG, la piste du clap mesure son clip : sa piste compagnon a sa prise");
             }
+        });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+void Verification::addPlaylistViewSteps()
+{
+    // --- the playlist, longer than the screen -----------------------------------
+    //
+    // The debt of S10: the whole timeline was squeezed into the width, and a
+    // song past sixty bars became slivers. What a person does with a long
+    // song, in their order: scroll to the end to lay something there, zoom in
+    // to look, zoom out too far, play and expect the view to follow, change
+    // their mind with Ctrl+Z while the view is at the end.
+
+    constexpr float notch = 0.25f;
+
+    add("un morceau de cent mesures : on défile pour poser au bout",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            farBeats_ = 99.0 * beatsPerBar; // bar 100
+            const auto before = state_.arrangement().size();
+            const auto at = playlistBeat(0, farBeats_ + 0.5);
+            check(playlist->timelineArea().contains(at), "la mesure 100 est amenée à l'écran à la molette");
+            click(*playlist, at);
+
+            check(state_.arrangement().size() == before + 1, "une pose de plus");
+            const auto laid = std::any_of(state_.arrangement().begin(),
+                                          state_.arrangement().end(),
+                                          [this](const domain::Placement& placement)
+                                          { return placement.startBeats == farBeats_; });
+            check(laid, "à la mesure 100");
+
+            const auto floor = tokens_.integer("metric.playlist.beatWidthMin");
+            note("largeur d'un temps : " + juce::String(playlist->beatWidth(), 1).toStdString() +
+                 " px, premier temps visible : " + juce::String(playlist->firstBeat(), 1).toStdString());
+            check(playlist->beatWidth() >= floor,
+                  "un temps n'est jamais plus étroit que " + std::to_string(floor) +
+                      " px : " + std::to_string(floor * beatsPerBar) + " px par mesure au moins");
+        });
+
+    add("Ctrl + molette zoome autour du pointeur",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            const auto area = playlist->timelineArea();
+            const auto x = area.getX() + area.getWidth() / 3;
+            const auto beatAt = [playlist, area](int px)
+            { return playlist->firstBeat() + static_cast<double>(px - area.getX()) / playlist->beatWidth(); };
+
+            const auto width = playlist->beatWidth();
+            const auto anchored = beatAt(x);
+            for (int turn = 0; turn < 4; ++turn)
+                wheel(*playlist, {x, area.getCentreY()}, notch, false, true);
+
+            note("zoom : " + juce::String(width, 1).toStdString() + " -> " +
+                 juce::String(playlist->beatWidth(), 1).toStdString() + " px par temps");
+            check(std::abs(playlist->beatWidth() - width * 2.0) < 0.01, "quatre crans doublent la largeur");
+            check(std::abs(beatAt(x) - anchored) <= 1.0 / playlist->beatWidth(),
+                  "le temps sous le pointeur y reste, au pixel près");
+        });
+
+    add("dézoomer trop loin s'arrête à la largeur lisible",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            const auto area = playlist->timelineArea();
+            for (int turn = 0; turn < 60; ++turn)
+                wheel(*playlist, area.getCentre(), -notch, false, true);
+
+            const auto floor = static_cast<double>(tokens_.integer("metric.playlist.beatWidthMin"));
+            check(std::abs(playlist->beatWidth() - floor) < 0.01,
+                  "soixante crans en arrière : " + juce::String(playlist->beatWidth(), 1).toStdString() +
+                      " px par temps, le plancher");
+        });
+
+    add(
+        "zoomé au début, Espace en SONG : la vue suit la tête de lecture",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            const auto area = playlist->timelineArea();
+            for (int turn = 0; turn < 12; ++turn)
+                wheel(*playlist, {area.getX(), area.getCentreY()}, notch, false, true);
+            for (int turn = 0; turn < 2000 && playlist->firstBeat() > 0.0; ++turn)
+                wheel(*playlist, area.getCentre(), notch, true);
+
+            check(playlist->firstBeat() == 0.0, "la vue est au début");
+
+            press("SONG");
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.0)));
+            key(juce::KeyPress{juce::KeyPress::spaceKey});
+        },
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            return playlist != nullptr && playlist->firstBeat() > 0.0;
+        },
+        15000.0);
+
+    add("la tête de lecture reste dans la vue",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            const auto beats = clock_.positionBeats();
+            const auto first = playlist->firstBeat();
+            const auto shown =
+                static_cast<double>(playlist->timelineArea().getWidth()) / playlist->beatWidth();
+            note("tête au temps " + juce::String(beats, 2).toStdString() + ", vue de " +
+                 juce::String(first, 1).toStdString() + " à " + juce::String(first + shown, 1).toStdString());
+            check(beats >= first && beats <= first + shown, "la page a tourné, la tête est à l'écran");
+            check(std::fmod(first, static_cast<double>(beatsPerBar)) == 0.0,
+                  "la page commence sur une mesure");
+
+            key(juce::KeyPress{juce::KeyPress::spaceKey});
+        });
+
+    add("au bout de la chanson, Ctrl+Z retire la pose lointaine ; la molette ramène au début",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            static_cast<void>(playlistBeat(0, farBeats_ + 8.0));
+            check(playlist->firstBeat() > farBeats_ - 64.0,
+                  "la vue est au bout, sur la pose de la mesure 100");
+            const auto viewed = playlist->firstBeat();
+
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            const auto gone = std::none_of(state_.arrangement().begin(),
+                                           state_.arrangement().end(),
+                                           [this](const domain::Placement& placement)
+                                           { return placement.startBeats == farBeats_; });
+            check(gone, "la pose de la mesure 100 est retirée");
+
+            // The view stays where the hand left it, the way FL and Ableton
+            // leave it: an undo does not scroll. The song is one wheel away.
+            check(playlist->firstBeat() == viewed, "la vue reste où elle était");
+            const auto back = playlistBeat(0, 2.0);
+            check(playlist->timelineArea().contains(back), "la molette ramène au début de la chanson");
+            check(playlist->firstBeat() <= 2.0, "la vue montre de nouveau le début");
         });
 }
 

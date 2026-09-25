@@ -24,6 +24,18 @@ constexpr int beatsPerBar = 4;
 constexpr double minimumVisibleBeats = 64.0;
 constexpr double roomAfterSongBeats = 16.0;
 
+// A notch of the wheel is about a quarter of a unit in JUCE. Zoom doubles over
+// four notches; a scroll moves an eighth of the view per notch, the lanes two
+// lanes' worth.
+constexpr double zoomPerWheelUnit = 2.0;
+constexpr double viewPerWheelUnit = 0.5;
+constexpr double lanesPerWheelUnit = 8.0;
+
+// How far right the view may go: 999 bars. The timeline itself ends four bars
+// after the song, but a person lays the next thing beyond it, the way FL's
+// playlist lets them: scrolling past the end extends the view.
+constexpr double longestViewBeats = 999.0 * beatsPerBar;
+
 enum LaneMenu
 {
     renameItem = 1,
@@ -67,6 +79,13 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context)
     // after a click here.
     setWantsKeyboardFocus(true);
 
+    for (auto* bar : {&horizontal_, &vertical_})
+    {
+        bar->setAutoHide(false);
+        bar->addListener(this);
+        addAndMakeVisible(*bar);
+    }
+
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
     startTimer(playheadRefreshMs);
@@ -75,9 +94,28 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context)
 PlaylistPanel::~PlaylistPanel()
 {
     stopTimer();
+    horizontal_.removeListener(this);
+    vertical_.removeListener(this);
     selection_.removeChangeListener(this);
     project_.removeChangeListener(this);
     setLookAndFeel(nullptr);
+}
+
+void PlaylistPanel::resized()
+{
+    const auto thickness = tokens_.integer("metric.scrollbar.thickness");
+    auto area = getLocalBounds();
+    area.removeFromTop(tokens_.integer("metric.panel.headerHeight"));
+
+    auto bottom = area.removeFromBottom(thickness);
+    bottom.removeFromLeft(tokens_.integer("metric.playlist.headerWidth"));
+    bottom.removeFromRight(thickness);
+    horizontal_.setBounds(bottom);
+
+    area.removeFromTop(tokens_.integer("metric.playlist.rulerHeight"));
+    vertical_.setBounds(area.removeFromRight(thickness));
+
+    updateScrollBars();
 }
 
 void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
@@ -91,6 +129,10 @@ void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
                                    [&all](const Item& item)
                                    { return std::find(all.begin(), all.end(), item) == all.end(); }),
                     selected_.end());
+
+    // A song that grew or shrank moves the bounds of the view: an undo that
+    // takes the last bars away must not leave the view past the end.
+    updateScrollBars();
     repaint();
 }
 
@@ -138,6 +180,7 @@ juce::Rectangle<int> PlaylistPanel::headerArea() const
     auto area = getLocalBounds();
     area.removeFromTop(tokens_.integer("metric.panel.headerHeight") +
                        tokens_.integer("metric.playlist.rulerHeight"));
+    area.removeFromBottom(tokens_.integer("metric.scrollbar.thickness"));
     return area.removeFromLeft(tokens_.integer("metric.playlist.headerWidth"));
 }
 
@@ -146,6 +189,7 @@ juce::Rectangle<int> PlaylistPanel::rulerArea() const
     auto area = getLocalBounds();
     area.removeFromTop(tokens_.integer("metric.panel.headerHeight"));
     area.removeFromLeft(tokens_.integer("metric.playlist.headerWidth"));
+    area.removeFromRight(tokens_.integer("metric.scrollbar.thickness"));
     return area.removeFromTop(tokens_.integer("metric.playlist.rulerHeight"));
 }
 
@@ -155,10 +199,12 @@ juce::Rectangle<int> PlaylistPanel::gridArea() const
     area.removeFromTop(tokens_.integer("metric.panel.headerHeight") +
                        tokens_.integer("metric.playlist.rulerHeight"));
     area.removeFromLeft(tokens_.integer("metric.playlist.headerWidth"));
+    area.removeFromRight(tokens_.integer("metric.scrollbar.thickness"));
+    area.removeFromBottom(tokens_.integer("metric.scrollbar.thickness"));
     return area;
 }
 
-double PlaylistPanel::visibleBeats() const
+double PlaylistPanel::timelineBeats() const
 {
     double end = 0.0;
     for (const auto& item : items())
@@ -171,30 +217,166 @@ double PlaylistPanel::visibleBeats() const
     return std::ceil(wanted / beatsPerBar) * beatsPerBar;
 }
 
+double PlaylistPanel::fitBeatWidth() const
+{
+    const auto width = static_cast<double>(std::max(1, gridArea().getWidth()));
+    const auto floor = static_cast<double>(tokens_.integer("metric.playlist.beatWidthMin"));
+    return std::max(floor, width / timelineBeats());
+}
+
+double PlaylistPanel::beatWidth() const
+{
+    const auto fit = fitBeatWidth();
+    const auto widest = std::max(fit, static_cast<double>(tokens_.integer("metric.playlist.beatWidthMax")));
+    return std::clamp(zoom_.value_or(fit), fit, widest);
+}
+
+double PlaylistPanel::viewBeats() const
+{
+    return static_cast<double>(std::max(1, gridArea().getWidth())) / beatWidth();
+}
+
+double PlaylistPanel::firstBeat() const
+{
+    // Past the end of the song is allowed, up to the longest view: a view
+    // left there by an undo stays where the hand left it, as in FL.
+    return std::clamp(firstBeat_, 0.0, std::max(0.0, longestViewBeats - viewBeats()));
+}
+
 double PlaylistPanel::beatAtX(int x) const
 {
-    const auto grid = gridArea();
-    if (grid.getWidth() <= 0)
-        return 0.0;
-
-    return static_cast<double>(x - grid.getX()) * visibleBeats() / static_cast<double>(grid.getWidth());
+    return firstBeat() + static_cast<double>(x - gridArea().getX()) / beatWidth();
 }
 
 int PlaylistPanel::xForBeat(double beats) const
 {
-    const auto grid = gridArea();
-    return grid.getX() + static_cast<int>(std::lround(beats * grid.getWidth() / visibleBeats()));
+    return gridArea().getX() + static_cast<int>(std::lround((beats - firstBeat()) * beatWidth()));
+}
+
+int PlaylistPanel::lanesHeight() const
+{
+    return laneCount() * tokens_.integer("metric.playlist.laneHeight");
+}
+
+int PlaylistPanel::firstLanePixel() const
+{
+    return std::clamp(firstLanePixel_, 0, std::max(0, lanesHeight() - gridArea().getHeight()));
+}
+
+juce::Point<int> PlaylistPanel::pointFor(int lane, double beats) const
+{
+    const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
+    return {xForBeat(beats), gridArea().getY() + lane * laneHeight + laneHeight / 2 - firstLanePixel()};
 }
 
 int PlaylistPanel::laneAtY(int y) const
 {
     const auto grid = gridArea();
     const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
-    if (y < grid.getY() || laneHeight <= 0)
+    if (y < grid.getY() || y >= grid.getBottom() || laneHeight <= 0)
         return -1;
 
-    const auto lane = (y - grid.getY()) / laneHeight;
+    const auto lane = (y - grid.getY() + firstLanePixel()) / laneHeight;
     return lane < laneCount() ? lane : -1;
+}
+
+void PlaylistPanel::setView(double first, std::optional<double> zoom)
+{
+    zoom_ = zoom;
+
+    // Zooming out stops at the width that fits: past it there is nothing
+    // more to see, and "fit" becomes the state again, so the view follows
+    // the song as it grows.
+    if (zoom_.has_value() && *zoom_ <= fitBeatWidth())
+        zoom_.reset();
+
+    firstBeat_ = first;
+    firstBeat_ = firstBeat();
+    updateScrollBars();
+    repaint();
+}
+
+void PlaylistPanel::setFirstLanePixel(int pixel)
+{
+    firstLanePixel_ = pixel;
+    firstLanePixel_ = firstLanePixel();
+    updateScrollBars();
+    repaint();
+}
+
+void PlaylistPanel::updateScrollBars()
+{
+    // The bar covers the song, and the view when it went past the song.
+    horizontal_.setRangeLimits(
+        0.0, std::max(timelineBeats(), firstBeat() + viewBeats()), juce::dontSendNotification);
+    horizontal_.setCurrentRange(firstBeat(), viewBeats(), juce::dontSendNotification);
+    horizontal_.setSingleStepSize(static_cast<double>(beatsPerBar));
+
+    vertical_.setRangeLimits(0.0,
+                             static_cast<double>(std::max(lanesHeight(), gridArea().getHeight())),
+                             juce::dontSendNotification);
+    vertical_.setCurrentRange(static_cast<double>(firstLanePixel()),
+                              static_cast<double>(gridArea().getHeight()),
+                              juce::dontSendNotification);
+    vertical_.setSingleStepSize(static_cast<double>(tokens_.integer("metric.playlist.laneHeight")));
+}
+
+void PlaylistPanel::scrollBarMoved(juce::ScrollBar* bar, double newRangeStart)
+{
+    if (bar == &horizontal_)
+        setView(newRangeStart, zoom_);
+    else if (bar == &vertical_)
+        setFirstLanePixel(static_cast<int>(std::lround(newRangeStart)));
+}
+
+void PlaylistPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
+{
+    const auto grid = gridArea();
+
+    if (event.mods.isCtrlDown() || event.mods.isCommandDown())
+    {
+        // Around the pointer: the beat under it stays under it.
+        const auto x = std::clamp(event.getPosition().getX(), grid.getX(), grid.getRight());
+        const auto anchor = beatAtX(x);
+        const auto width = beatWidth() * std::pow(zoomPerWheelUnit, static_cast<double>(wheel.deltaY));
+        const auto widest =
+            std::max(fitBeatWidth(), static_cast<double>(tokens_.integer("metric.playlist.beatWidthMax")));
+        const auto clamped = std::clamp(width, fitBeatWidth(), widest);
+        setView(anchor - static_cast<double>(x - grid.getX()) / clamped, clamped);
+        return;
+    }
+
+    // Sideways: a trackpad's own horizontal swipe, or Shift and the wheel.
+    const auto sideways =
+        wheel.deltaX != 0.0f ? wheel.deltaX : (event.mods.isShiftDown() ? wheel.deltaY : 0.0f);
+    if (sideways != 0.0f)
+    {
+        setView(firstBeat() - static_cast<double>(sideways) * viewPerWheelUnit * viewBeats(), zoom_);
+        return;
+    }
+
+    const auto laneHeight = static_cast<double>(tokens_.integer("metric.playlist.laneHeight"));
+    setFirstLanePixel(firstLanePixel() - static_cast<int>(std::lround(static_cast<double>(wheel.deltaY) *
+                                                                      lanesPerWheelUnit * laneHeight)));
+}
+
+void PlaylistPanel::followPlayhead()
+{
+    // Only while the song plays, only when the song does not fit, and never
+    // under a hand that is moving blocks or drawing a band.
+    const auto fits = fitBeatWidth() * timelineBeats() <= static_cast<double>(gridArea().getWidth()) + 0.5;
+    if (!clock_.isPlaying() || state_.transport().mode != domain::PlayMode::song || move_.has_value() ||
+        band_.has_value() || (!zoom_.has_value() && fits))
+        return;
+
+    const auto beats = clock_.positionBeats();
+    const auto first = firstBeat();
+    if (beats >= first && beats < first + viewBeats())
+        return;
+
+    // A page turn, the way FL turns it: the playhead goes back to the left
+    // edge, on a bar line.
+    setView(std::floor(beats / beatsPerBar) * beatsPerBar, zoom_);
 }
 
 double PlaylistPanel::snap(double beats, bool fine)
@@ -280,7 +462,8 @@ juce::Rectangle<int> PlaylistPanel::bounds(const Item& item, double offsetBeats)
     const auto left = xForBeat(std::max(0.0, *start + offsetBeats));
     const auto right = xForBeat(std::max(0.0, *start + offsetBeats) + lengthOf(item));
 
-    return juce::Rectangle<int>{left, grid.getY() + lane * laneHeight, std::max(1, right - left), laneHeight}
+    return juce::Rectangle<int>{
+        left, grid.getY() + lane * laneHeight - firstLanePixel(), std::max(1, right - left), laneHeight}
         .withTrimmedTop(tokens_.integer("metric.playlist.blockInset"))
         .withTrimmedBottom(tokens_.integer("metric.playlist.blockInset"));
 }
@@ -357,13 +540,18 @@ void PlaylistPanel::paintRuler(juce::Graphics& g, juce::Rectangle<int> area) con
 
     g.setFont(lookAndFeel_.typography().mono("font.size.micro", "font.weight.regular"));
 
-    const auto bars = static_cast<int>(visibleBeats()) / beatsPerBar;
+    g.saveState();
+    g.reduceClipRegion(area);
 
-    // A number every bar while they fit, every fourth bar when they would not.
-    const auto barWidth = area.getWidth() / std::max(1, bars);
-    const auto every = barWidth >= tokens_.integer("space.xl") ? 1 : 4;
+    // A number every bar while they fit, every fourth bar, every sixteenth.
+    const auto barWidth = static_cast<int>(beatWidth() * beatsPerBar);
+    const auto roomy = tokens_.integer("space.xl");
+    const auto every = barWidth >= roomy ? 1 : (barWidth * 4 >= roomy ? 4 : 16);
 
-    for (int bar = 0; bar < bars; bar += every)
+    const auto firstBar = static_cast<int>(firstBeat()) / beatsPerBar / every * every;
+    const auto lastBar = static_cast<int>(std::ceil((firstBeat() + viewBeats()) / beatsPerBar));
+
+    for (int bar = firstBar; bar <= lastBar; bar += every)
     {
         const auto x = xForBeat(static_cast<double>(bar * beatsPerBar));
         g.setColour(tokens_.colour("color.text.tertiary"));
@@ -373,6 +561,8 @@ void PlaylistPanel::paintRuler(juce::Graphics& g, juce::Rectangle<int> area) con
                    juce::Justification::centredLeft,
                    false);
     }
+
+    g.restoreState();
 
     g.setColour(tokens_.colour("color.border.hairline"));
     g.fillRect(area.getX(),
@@ -389,9 +579,13 @@ void PlaylistPanel::paintLanes(juce::Graphics& g,
     const auto hairline = tokens_.integer("stroke.hairline");
     const auto* shown = patternEditing::current(state_, selection_);
 
-    // Bar lines first, under everything.
-    const auto bars = static_cast<int>(visibleBeats()) / beatsPerBar;
-    for (int bar = 0; bar <= bars; ++bar)
+    g.saveState();
+    g.reduceClipRegion(grid.getUnion(headers));
+
+    // Bar lines first, under everything, and only the ones in sight.
+    const auto firstBar = static_cast<int>(firstBeat()) / beatsPerBar;
+    const auto lastBar = static_cast<int>(std::ceil((firstBeat() + viewBeats()) / beatsPerBar));
+    for (int bar = firstBar; bar <= lastBar; ++bar)
     {
         const auto x = xForBeat(static_cast<double>(bar * beatsPerBar));
         g.setColour(tokens_.colour(bar % 4 == 0 ? "color.grid.bar" : "color.grid.beat"));
@@ -404,7 +598,9 @@ void PlaylistPanel::paintLanes(juce::Graphics& g,
     const auto tracks = audioTracks();
     for (int lane = 0; lane < laneCount(); ++lane)
     {
-        const auto y = grid.getY() + lane * laneHeight;
+        const auto y = grid.getY() + lane * laneHeight - firstLanePixel();
+        if (y + laneHeight <= grid.getY())
+            continue;
         if (y >= grid.getBottom())
             break;
 
@@ -442,6 +638,8 @@ void PlaylistPanel::paintLanes(juce::Graphics& g,
             label, name.reduced(tokens_.integer("space.sm"), 0), juce::Justification::centredLeft, true);
     }
 
+    g.restoreState();
+
     g.setColour(tokens_.colour("color.border.hairline"));
     g.fillRect(headers.getRight() - hairline, headers.getY(), hairline, headers.getHeight());
 }
@@ -458,7 +656,7 @@ void PlaylistPanel::paintBlocks(juce::Graphics& g, juce::Rectangle<int> grid) co
     {
         const auto moving = move_.has_value() && isSelected(item);
         const auto block = bounds(item, moving ? move_->offsetBeats : 0.0);
-        if (block.isEmpty())
+        if (block.isEmpty() || !block.intersects(grid))
             continue;
 
         juce::String label;
@@ -515,7 +713,7 @@ std::optional<int> PlaylistPanel::playheadX() const
         return {};
 
     const auto beats = clock_.positionBeats();
-    if (beats < 0.0 || beats > visibleBeats())
+    if (beats < firstBeat() || beats > firstBeat() + viewBeats())
         return {};
 
     return xForBeat(beats);
@@ -535,6 +733,8 @@ void PlaylistPanel::paintPlayhead(juce::Graphics& g) const
 
 void PlaylistPanel::timerCallback()
 {
+    followPlayhead();
+
     // Only the two columns the playhead leaves and reaches are repainted.
     const auto wanted = playheadX();
     if (wanted == paintedPlayheadX_)
@@ -870,7 +1070,7 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
 
     if (hit.has_value())
     {
-        if (mods.isCtrlDown() && mods.isShiftDown())
+        if (mods.isCtrlDown())
         {
             // Added to the selection, or taken out of it.
             if (isSelected(*hit))
