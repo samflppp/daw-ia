@@ -334,8 +334,7 @@ s'ouvre en mode pattern, et le mode pattern ne joue que le pattern écouté : le
 bien posé, mais muet tant qu'on n'appuyait pas sur SONG. La vérification ne l'avait pas vu, parce
 qu'elle appuyait sur SONG juste avant le dépôt. Maintenant, un dépôt sur la playlist passe en mode
 chanson. La vérification dépose désormais en PAT et contrôle que SONG est pris et que le clap
-s'entend. Si tu n'entends toujours rien en direct, c'est un autre bug : le rendu hors ligne, lui,
-entend le clap.
+s'entend. **Confirmé à l'écoute par toi, en direct.**
 
 **Trouvé en vérifiant :** le coller prenait l'horloge du moteur même à l'arrêt ; il prend
 maintenant la position du transport quand rien ne joue. La page Navigateur était plus étroite que
