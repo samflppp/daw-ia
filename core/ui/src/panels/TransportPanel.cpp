@@ -145,7 +145,6 @@ TransportPanel::TransportPanel(const PanelContext& context)
     , state_(context.state)
     , project_(context.project)
     , clock_(context.clock)
-    , workspaces_(context.workspaces)
     , selection_(context.selection)
 {
     setLookAndFeel(&lookAndFeel_);
@@ -194,18 +193,6 @@ TransportPanel::TransportPanel(const PanelContext& context)
             std::make_unique<domain::TransportSetMode>(domain::PlayMode::song, domain::PatternId{})));
     };
 
-    for (const auto& entry : workspaces_.available())
-    {
-        auto button = std::make_unique<juce::TextButton>(juce::String(entry.label));
-        const auto id = entry.id;
-
-        button->setClickingTogglesState(false);
-        button->onClick = [this, id] { workspaces_.request(id); };
-
-        addAndMakeVisible(*button);
-        workspaceButtons_.push_back(std::move(button));
-    }
-
     project_.addChangeListener(this);
     refresh();
     startTimer(readoutRefreshMs);
@@ -251,12 +238,6 @@ void TransportPanel::refresh()
     const auto patternMode = state_.transport().mode == domain::PlayMode::pattern;
     patternMode_.setToggleState(patternMode, juce::dontSendNotification);
     songMode_.setToggleState(!patternMode, juce::dontSendNotification);
-
-    const auto current = workspaces_.current();
-    const auto entries = workspaces_.available();
-
-    for (std::size_t index = 0; index < workspaceButtons_.size() && index < entries.size(); ++index)
-        workspaceButtons_[index]->setToggleState(entries[index].id == current, juce::dontSendNotification);
 
     lastPosition_ = positionText();
 }
@@ -355,17 +336,6 @@ void TransportPanel::resized()
         patternMode_.setBounds(modes.removeFromLeft(size * 2));
         modes.removeFromLeft(gap);
         songMode_.setBounds(modes.removeFromLeft(size * 2));
-    }
-
-    // The workspace switch is pushed to the far right: it is the one control
-    // here that does not act on the music.
-    auto right = area.withSizeKeepingCentre(area.getWidth(), size);
-    const auto switchWidth = size * 3;
-
-    for (auto button = workspaceButtons_.rbegin(); button != workspaceButtons_.rend(); ++button)
-    {
-        (*button)->setBounds(right.removeFromRight(switchWidth));
-        right.removeFromRight(gap);
     }
 }
 

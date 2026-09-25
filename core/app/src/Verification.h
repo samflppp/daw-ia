@@ -2,6 +2,7 @@
 
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/project/ProjectState.h"
+#include "daw/ui/TitleBarView.h"
 #include "daw/ui/Tokens.h"
 #include "daw/ui/WorkspaceView.h"
 #include "daw/ui/model/CopilotHost.h"
@@ -63,6 +64,13 @@ public:
         const ui::Tokens& tokens;
         tracktion::Edit& edit;
         ui::SampleHost& samples;
+
+        // The whole window: the title bar above the workspace. Snapshots are
+        // taken of it, and the File shortcuts are pressed on it.
+        juce::DocumentWindow& window;
+        juce::Component& shell;
+        ui::TitleBarView& titleBar;
+
         juce::File folder;
         Run run{Run::list};
 
@@ -128,6 +136,8 @@ private:
 
     // A short burst and silence, as a WAV file: a drum hit an onset detector
     // cannot miss.
+    void doubleClick(juce::Component& target, juce::Point<int> at);
+
     static void writeHit(const juce::File& file, double seconds);
     void key(const juce::KeyPress& press);
 
@@ -148,6 +158,9 @@ private:
     const ui::Tokens& tokens_;
     tracktion::Edit& edit_;
     ui::SampleHost& samples_;
+    juce::DocumentWindow& window_;
+    juce::Component& shell_;
+    ui::TitleBarView& titleBar_;
     juce::File folder_;
     Run run_;
     std::function<void(bool)> finished_;
@@ -169,6 +182,7 @@ private:
     std::size_t transcriptBefore_{0};
     juce::File kit_;
     double audioStart_{0.0};
+    juce::Rectangle<int> savedBounds_;
 };
 
 } // namespace daw::app

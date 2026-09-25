@@ -45,6 +45,9 @@ Verification::Verification(Wiring wiring)
     , tokens_(wiring.tokens)
     , edit_(wiring.edit)
     , samples_(wiring.samples)
+    , window_(wiring.window)
+    , shell_(wiring.shell)
+    , titleBar_(wiring.titleBar)
     , folder_(std::move(wiring.folder))
     , run_(wiring.run)
     , finished_(std::move(wiring.finished))
@@ -146,7 +149,7 @@ void Verification::note(const std::string& what)
 
 void Verification::snapshot(const std::string& name)
 {
-    const auto image = view_.createComponentSnapshot(view_.getLocalBounds(), true, 1.0f);
+    const auto image = shell_.createComponentSnapshot(shell_.getLocalBounds(), true, 1.0f);
     const auto file = folder_.getChildFile(fileSafe(name) + ".png");
     static_cast<void>(file.deleteFile());
 
@@ -263,6 +266,28 @@ void Verification::press(const juce::String& text)
     // through the message queue.
     if (found->onClick)
         found->onClick();
+}
+
+void Verification::doubleClick(juce::Component& target, juce::Point<int> at)
+{
+    const auto now = juce::Time::getCurrentTime();
+    const auto position = at.toFloat();
+    const juce::MouseEvent event{juce::Desktop::getInstance().getMainMouseSource(),
+                                 position,
+                                 juce::ModifierKeys{juce::ModifierKeys::leftButtonModifier},
+                                 juce::MouseInputSource::defaultPressure,
+                                 0.0f,
+                                 0.0f,
+                                 0.0f,
+                                 0.0f,
+                                 &target,
+                                 &target,
+                                 now,
+                                 position,
+                                 now,
+                                 2,
+                                 false};
+    target.mouseDoubleClick(event);
 }
 
 void Verification::click(juce::Component& target, juce::Point<int> at, bool right, bool shift, bool ctrl)
@@ -1032,6 +1057,113 @@ void Verification::buildList()
 
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(domain::json::write(state_.toValue()) == savedState_, "Ctrl+Z le remet, à l'octet près");
+        });
+
+    // --- the title bar -----------------------------------------------------------
+
+    add("la barre de titre remplace celle du système",
+        [this]
+        {
+            check(!window_.isUsingNativeTitleBar(), "plus de barre de titre Windows");
+            check(titleBar_.isShowing(), "la barre de DAW IA est affichée");
+            check(titleBar_.projectName().isNotEmpty(),
+                  "elle porte le nom du projet : « " + titleBar_.projectName().toStdString() + " »");
+
+            int buttons = 0;
+            bool beatmakerLit = false;
+            juce::StringArray labels;
+            for (auto* child : titleBar_.getChildren())
+            {
+                if (auto* button = dynamic_cast<juce::TextButton*>(child); button != nullptr)
+                {
+                    ++buttons;
+                    labels.add(button->getButtonText());
+                    beatmakerLit =
+                        beatmakerLit || (button->getButtonText() == "Beatmaker" && button->getToggleState());
+                }
+            }
+            check(labels.contains("Fichier"), "le menu Fichier");
+            check(beatmakerLit, "le bouton Beatmaker, allumé");
+            check(buttons == 1 + 4 + 3, "Fichier, quatre workspaces, réduire, agrandir, fermer");
+
+            bool transportSwitch = false;
+            if (auto* transport = panel("transport"); transport != nullptr)
+            {
+                for (auto* child : transport->getChildren())
+                {
+                    if (auto* button = dynamic_cast<juce::TextButton*>(child); button != nullptr)
+                        transportSwitch = transportSwitch || button->getButtonText() == "Beatmaker";
+                }
+            }
+            check(!transportSwitch, "le transport ne porte plus les workspaces");
+        });
+
+    add("Ctrl+S enregistre",
+        [this]
+        {
+            static_cast<void>(shell_.keyPressed(juce::KeyPress{'s', juce::ModifierKeys::ctrlModifier, 0}));
+            check(titleBar_.status() == juce::String(u8"enregistré"), "la barre dit « enregistré »");
+        });
+
+    add("double-clic sur la barre : agrandir, puis rendre sa taille",
+        [this]
+        {
+            const auto before = window_.getBounds();
+            doubleClick(titleBar_, titleBar_.getLocalBounds().getCentre());
+            check(window_.isFullScreen(), "la fenêtre est agrandie");
+            savedBounds_ = before;
+        });
+
+    add("le second double-clic rend la taille d'avant",
+        [this]
+        {
+            doubleClick(titleBar_, titleBar_.getLocalBounds().getCentre());
+            check(!window_.isFullScreen(), "elle ne l'est plus");
+            check(window_.getBounds() == savedBounds_, "et elle a repris sa place");
+        });
+
+    add("les workspaces se changent depuis la barre",
+        [this]
+        {
+            juce::TextButton* discovery = nullptr;
+            juce::TextButton* beatmaker = nullptr;
+            for (auto* child : titleBar_.getChildren())
+            {
+                if (auto* button = dynamic_cast<juce::TextButton*>(child); button != nullptr)
+                {
+                    if (button->getButtonText() == juce::String(u8"Découverte"))
+                        discovery = button;
+                    if (button->getButtonText() == "Beatmaker")
+                        beatmaker = button;
+                }
+            }
+            check(discovery != nullptr && beatmaker != nullptr, "les deux boutons existent");
+            if (discovery == nullptr || beatmaker == nullptr)
+                return;
+
+            discovery->triggerClick();
+        });
+
+    add("Découverte est affiché, puis retour au beatmaker",
+        [this]
+        {
+            juce::TextButton* discovery = nullptr;
+            juce::TextButton* beatmaker = nullptr;
+            for (auto* child : titleBar_.getChildren())
+            {
+                if (auto* button = dynamic_cast<juce::TextButton*>(child); button != nullptr)
+                {
+                    if (button->getButtonText() == juce::String(u8"Découverte"))
+                        discovery = button;
+                    if (button->getButtonText() == "Beatmaker")
+                        beatmaker = button;
+                }
+            }
+            if (discovery == nullptr || beatmaker == nullptr)
+                return;
+
+            check(discovery->getToggleState() && !beatmaker->getToggleState(), "Découverte est allumé");
+            beatmaker->triggerClick();
         });
 }
 

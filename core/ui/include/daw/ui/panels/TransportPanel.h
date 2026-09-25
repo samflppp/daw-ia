@@ -10,7 +10,8 @@
 namespace daw::ui
 {
 
-// Play, stop, the playhead, the tempo, undo and redo, and the workspace switch.
+// Play, stop, the playhead, the tempo, undo and redo. The workspace switch has
+// moved to the title bar: it does not act on the music.
 //
 // Every button goes through the bus, including undo and redo: the panel holds
 // no state of its own about the project, and asks the bus what it is allowed to
@@ -67,7 +68,6 @@ private:
     const domain::ProjectState& state_;
     ProjectObserver& project_;
     const TransportClock& clock_;
-    WorkspaceHost& workspaces_;
     Selection& selection_;
 
     class IconButton;
@@ -77,8 +77,6 @@ private:
     std::unique_ptr<IconButton> stop_;
     std::unique_ptr<IconButton> undo_;
     std::unique_ptr<IconButton> redo_;
-
-    std::vector<std::unique_ptr<juce::TextButton>> workspaceButtons_;
 
     juce::TextButton patternMode_{"PAT"};
     juce::TextButton songMode_{"SONG"};

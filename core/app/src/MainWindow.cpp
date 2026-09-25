@@ -8,10 +8,14 @@ namespace daw::app
 
 MainWindow::MainWindow(const juce::String& title,
                        const ui::Tokens& tokens,
-                       std::unique_ptr<juce::Component> content)
-    : juce::DocumentWindow(title, tokens.colour("color.surface.base"), juce::DocumentWindow::allButtons)
+                       std::unique_ptr<juce::Component> content,
+                       bool ownTitleBar)
+    : juce::DocumentWindow(
+          title, tokens.colour("color.surface.base"), ownTitleBar ? 0 : juce::DocumentWindow::allButtons)
 {
-    setUsingNativeTitleBar(true);
+    setUsingNativeTitleBar(!ownTitleBar);
+    if (ownTitleBar)
+        setTitleBarHeight(0);
     setContentOwned(content.release(), false);
 
     // The tokens say what the interface was drawn for; the display says what

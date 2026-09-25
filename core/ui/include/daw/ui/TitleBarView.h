@@ -1,0 +1,106 @@
+#pragma once
+
+#include "daw/ui/DawLookAndFeel.h"
+#include "daw/ui/Tokens.h"
+#include "daw/ui/model/WorkspaceHost.h"
+
+#include <juce_gui_basics/juce_gui_basics.h>
+
+#include <functional>
+#include <memory>
+#include <vector>
+
+namespace daw::ui
+{
+
+// The band across the top of the main window, in place of the system's title
+// bar: the File menu, the project's name, the workspace switch, and the three
+// window buttons.
+//
+// It is a layout host: it moves the window it sits in, which is asking where it
+// is, and nothing else in the interface may. It does nothing itself. Every
+// button calls one of the actions the application hands it, so the band knows
+// neither the project on disk nor how a window is minimised.
+class TitleBarView final : public juce::Component
+{
+public:
+    struct Actions
+    {
+        std::function<void()> newProject;
+        std::function<void()> openProject;
+        std::function<void()> save;
+        std::function<void()> saveAs;
+
+        std::function<void()> minimise;
+        std::function<void()> toggleMaximise;
+        std::function<void()> close;
+
+        // A maximised window is not dragged: it fills the screen, and moving it
+        // would leave it maximised somewhere else.
+        std::function<bool()> maximised;
+    };
+
+    TitleBarView(const Tokens& tokens,
+                 DawLookAndFeel& lookAndFeel,
+                 WorkspaceHost& workspaces,
+                 Actions actions);
+    ~TitleBarView() override;
+
+    void setProjectName(const juce::String& name);
+
+    // A short word after the name — "enregistré", or why it was not — that
+    // fades back to nothing after a few seconds when it is good news.
+    void setStatus(const juce::String& status, bool lasting);
+
+    [[nodiscard]] const juce::String& status() const noexcept { return status_; }
+    [[nodiscard]] const juce::String& projectName() const noexcept { return projectName_; }
+
+    // Re-reads which workspace is shown.
+    void refresh();
+
+    // The menu as the verification opens it: the same items, without a popup.
+    void runMenuItem(int item);
+
+    enum MenuItem
+    {
+        newItem = 1,
+        openItem,
+        saveItem,
+        saveAsItem,
+    };
+
+    void paint(juce::Graphics& g) override;
+    void resized() override;
+
+    void mouseDown(const juce::MouseEvent& event) override;
+    void mouseDrag(const juce::MouseEvent& event) override;
+    void mouseDoubleClick(const juce::MouseEvent& event) override;
+
+private:
+    void showFileMenu();
+
+    const Tokens& tokens_;
+    DawLookAndFeel& lookAndFeel_;
+    WorkspaceHost& workspaces_;
+    Actions actions_;
+
+    juce::TextButton file_{"Fichier"};
+    std::vector<std::unique_ptr<juce::TextButton>> workspaceButtons_;
+    juce::TextButton minimise_;
+    juce::TextButton maximise_;
+    juce::TextButton close_;
+
+    juce::String projectName_;
+    juce::String status_;
+    juce::Rectangle<int> textArea_;
+
+    juce::ComponentDragger dragger_;
+    bool dragging_{false};
+
+    class StatusFade;
+    std::unique_ptr<StatusFade> fade_;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TitleBarView)
+};
+
+} // namespace daw::ui

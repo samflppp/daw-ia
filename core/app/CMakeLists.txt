@@ -10,6 +10,7 @@ juce_add_gui_app(daw_app
 target_sources(daw_app PRIVATE
     src/Main.cpp
     src/MainWindow.cpp
+    src/AppShellView.cpp
     src/CopilotBridge.cpp
     src/PluginWindow.cpp
     src/PluginRack.cpp

@@ -14,7 +14,13 @@ class MainWindow final : public juce::DocumentWindow
 public:
     // The window owns what it shows and knows nothing else about it: the
     // application decides whether that is the workspace or the style gallery.
-    MainWindow(const juce::String& title, const ui::Tokens& tokens, std::unique_ptr<juce::Component> content);
+    //
+    // With ownTitleBar, the system's title bar is gone: the content draws its
+    // own, with the File menu and the window buttons, and moves the window.
+    MainWindow(const juce::String& title,
+               const ui::Tokens& tokens,
+               std::unique_ptr<juce::Component> content,
+               bool ownTitleBar);
 
     void closeButtonPressed() override;
 
