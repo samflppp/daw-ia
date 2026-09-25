@@ -1,4 +1,4 @@
-# Vérification S10 — 25 Sep 2026 12:35:53am
+# Vérification S10 — 25 Sep 2026 8:47:07pm
 
 
 ## 1. disposition
@@ -82,7 +82,7 @@
 - capture : `14-«-répète-le-pattern-1-huit-fois-puis-ajoute-le-pattern-2-».png`
 
 ## 15. ce que le copilote a fait
-- réponse : « Le pattern 1 était déjà posé huit fois (temps 0 à 128), j'ai ajouté le pattern 2 à la suite, à partir de la mesure 33. »
+- réponse : « Le pattern 1 était déjà posé huit fois (mesures 1 à 33). J'ai ajouté le pattern 2 à la suite, à partir de la mesure 33. »
 - OK : une seule entrée d'historique
 - OK : marquée copilote
 - poses du pattern 1 : 8, du pattern 2 : 1
@@ -195,5 +195,36 @@
 - OK : Ctrl+Z le remet, à l'octet près
 - capture : `31-Suppr-retire-la-sélection-Ctrl+Z-la-rend.png`
 
+## 32. la barre de titre remplace celle du système
+- OK : plus de barre de titre Windows
+- OK : la barre de DAW IA est affichée
+- OK : elle porte le nom du projet : « V »
+- OK : le menu Fichier
+- OK : le bouton Beatmaker, allumé
+- OK : Fichier, quatre workspaces, réduire, agrandir, fermer
+- OK : le transport ne porte plus les workspaces
+- capture : `32-la-barre-de-titre-remplace-celle-du-système.png`
+
+## 33. Ctrl+S enregistre
+- OK : la barre dit « enregistré »
+- capture : `33-Ctrl+S-enregistre.png`
+
+## 34. double-clic sur la barre : agrandir, puis rendre sa taille
+- OK : la fenêtre est agrandie
+- capture : `34-double-clic-sur-la-barre--agrandir-puis-rendre-sa-taille.png`
+
+## 35. le second double-clic rend la taille d'avant
+- OK : elle ne l'est plus
+- OK : et elle a repris sa place
+- capture : `35-le-second-double-clic-rend-la-taille-d'avant.png`
+
+## 36. les workspaces se changent depuis la barre
+- OK : les deux boutons existent
+- capture : `36-les-workspaces-se-changent-depuis-la-barre.png`
+
+## 37. Découverte est affiché, puis retour au beatmaker
+- OK : Découverte est allumé
+- capture : `37-Découverte-est-affiché-puis-retour-au-beatmaker.png`
+
 ## Résultat
-- 85 vérifications passées, 0 en échec
+- 98 vérifications passées, 0 en échec

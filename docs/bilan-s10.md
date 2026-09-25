@@ -204,9 +204,11 @@ boutons. Les Ctrl+Z passent par la vue, et la phrase est posée au vrai copilote
 laisse une capture de la fenêtre. Chaque étape qui change le son rend l'Edit hors ligne en WAV
 et compte les attaques sur la grille du rack.
 
-Résultat : **94 vérifications, aucune en échec**, sur trois exécutions du build final : la liste
-(85, dont les 34 de la seconde demande, §8 ter), la réouverture par un autre processus (5), un
-projet S8 + S9 (4). Les rapports et cinq captures sont dans `docs/verification-s10/`.
+Résultat : **107 vérifications, aucune en échec**, sur trois exécutions du build final : la liste
+(98 : 51 pour la playlist, 34 pour la seconde demande (§8 ter), 13 pour la barre de titre
+(§8 quater)), la réouverture par un autre processus (5), un projet S8 + S9 (4). Les rapports et
+six captures sont dans `docs/verification-s10/`. Les captures montrent maintenant toute la fenêtre,
+barre de titre comprise.
 
 Un premier passage de la liste a eu 5 échecs, tous au copilote, parce que l'appel au modèle a
 expiré (« The handshake operation timed out »). C'était le réseau, pas le code : le second passage
@@ -237,7 +239,9 @@ l'exécutable. Le second passage a été lancé volontairement hors du dépôt, 
 ajouté le pattern 2 à la suite ». Huit poses existaient déjà, donc sa lecture est défendable. En
 revanche il a d'abord écrit « à partir de la mesure 128 » alors qu'il s'agit du **temps** 128
 (mesure 33). Le prompt dit maintenant que les outils parlent en temps et l'utilisateur en mesures,
-avec la conversion. Au passage suivant : « à partir de la mesure 33 ».
+avec la conversion. Au passage suivant : « à partir de la mesure 33 », juste. Il a aussi écrit
+« posé huit fois (mesures 1 à 33) » : huit poses de 4 mesures vont de la mesure 1 à la 32. La
+position est bonne, le compte de fin est faux d'une mesure.
 
 **Ce qui reste hors de portée d'une vérification automatique :**
 - l'écoute sur les enceintes : le rendu hors ligne en est la mesure, pas l'expérience ;
@@ -338,7 +342,45 @@ maintenant la position du transport quand rien ne joue. La page Navigateur étai
 sa largeur minimale, et une fenêtre se cachait sous la playlist. Elle est élargie, et la mémoire
 des fenêtres se remet à zéro d'elle-même quand la disposition du manifeste change.
 
-## 8 quater. Ce qui reste pour clore la S10
+## 8 quater. La barre de titre
+
+Tes trois choix : notre propre barre, un redémarrage pour ouvrir un autre projet, et le menu Fichier
+proposé.
+
+- La barre de titre Windows est remplacée par une bande aux couleurs de l'app. Elle contient le
+  menu **Fichier**, le nom du projet, un mot d'état, les boutons Beatmaker / Découverte / Film /
+  UGC, et **réduire, agrandir, fermer**. On la glisse pour déplacer la fenêtre, et un double-clic
+  agrandit la fenêtre ou lui rend sa taille. Les bords restent redimensionnables.
+- Les boutons de workspace quittent le transport : ils n'agissent pas sur la musique.
+- **Fichier** :
+
+| Entrée | Raccourci | Effet |
+|---|---|---|
+| Nouveau projet… | Ctrl+N | choisir un nom, puis l'app redémarre sur un projet vide |
+| Ouvrir… | Ctrl+O | choisir un dossier `.dawproj`, puis l'app redémarre dessus. Un dossier qui n'est pas un projet est refusé avec un message |
+| Enregistrer | Ctrl+S | écrit tout de suite ce que la sauvegarde automatique écrirait dans 30 s ; la barre dit « enregistré » |
+| Enregistrer sous… | Ctrl+Maj+S | copie tout le dossier (journal, historique, samples), puis l'app redémarre sur la copie |
+
+**Pourquoi un redémarrage.** L'application est construite autour d'un seul projet, du journal
+jusqu'à l'écran. Le processus en cours enregistre et ferme le projet, écrit ses réglages, puis
+lance le suivant avec `--relaunched`. Ce drapeau est la seule exception à « une seule instance » :
+le nouveau processus démarre pendant que l'ancien finit de se fermer. Testé : une seconde instance
+normale est refusée, une instance `--relaunched` démarre. Changer de projet sans redémarrer est un
+chantier du démarrage de l'app, pour plus tard.
+
+**Vérifié par l'application (13 des 98) :** plus de barre Windows, la barre de DAW IA affichée avec
+le nom du projet, 8 boutons (Fichier, 4 workspaces, 3 boutons de fenêtre), Beatmaker allumé ; le
+transport n'a plus les workspaces ; Ctrl+S affiche « enregistré » ; le double-clic agrandit, le
+second rend exactement la place d'avant ; Découverte s'allume depuis la barre, puis retour au
+beatmaker.
+
+**Pas vérifié automatiquement :** Nouveau, Ouvrir et Enregistrer sous passent par la boîte de
+dialogue de fichiers de Windows. Une vérification automatique ne sait pas la remplir, et le
+redémarrage terminerait la vérification. Le lancement `--relaunched` a été testé à part, comme dit
+plus haut. Le geste de glisser la fenêtre à la souris n'est pas vérifié non plus. L'aimantation de
+Windows aux bords de l'écran est perdue, comme annoncé.
+
+## 8 quinquies. Ce qui reste pour clore la S10
 
 | Reste | Nature |
 |---|---|
@@ -346,8 +388,9 @@ des fenêtres se remet à zéro d'elle-même quand la disposition du manifeste c
 | Prompt du copilote en mesures | fait ; il dit « mesure 33 » |
 | Un sample déposé sur la playlist restait muet | corrigé (§8 ter) |
 | Longueur par défaut d'un pattern | **tranché par toi : 4 mesures**, c'est déjà le cas |
-| Bande d'en-tête de la fenêtre principale : fermer, réduire, agrandir, ouvrir, enregistrer | demandée ; décision de structure à valider avant de coder |
-| Bandes d'en-tête vides dans les pages | cosmétique ; à traiter avec la bande ci-dessus |
+| Barre de titre : fermer, réduire, agrandir, Fichier | fait (§8 quater) |
+| Essayer Nouveau, Ouvrir, Enregistrer sous à la main | **à faire par toi** : c'est la boîte de dialogue Windows |
+| Bandes d'en-tête vides dans les pages | cosmétique, reste |
 | Écoute sur les enceintes | à faire par toi : seul point qu'aucun rendu ne remplace |
 
 ## 9. Ce que la S11 hérite
@@ -367,7 +410,7 @@ des fenêtres se remet à zéro d'elle-même quand la disposition du manifeste c
 |---|---|---|
 | S1–S8 | Socle, bus, moteur, plugins, persistance, UI, domaine, copilote | Acquis |
 | S9 | Channel rack, modèle de pattern | Acquis |
-| S10 | La playlist, le beatmaker en fenêtres, les samples | Livré ; 94 vérifications automatiques (§8) ; reste la bande d'en-tête (§8 quater) |
+| S10 | La playlist, le beatmaker en fenêtres, les samples, la barre de titre | Livré ; 107 vérifications automatiques (§8) ; reste l'essai à la main de Fichier et l'écoute (§8 quinquies) |
 
 Aucune décision d'architecture n'a été rouverte. La règle des identifiants tient : chaque
 `PlacementId` est tiré par l'appelant (la playlist, le copilote avec `$new:`), jamais par une
