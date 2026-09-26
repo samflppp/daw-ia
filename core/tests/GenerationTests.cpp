@@ -6,8 +6,10 @@
 
 #include <chrono>
 #include <cmath>
+#include <fstream>
 #include <ostream>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -394,4 +396,40 @@ TEST_CASE("the backoff trusts a context in proportion to what it saw")
     CHECK(rhythmContexts(4, {2, 2, 1, 3}) ==
           std::vector<std::string>{"p4|2,1,3", "p4|1,3", "p4|3", "p4|", "|"});
     CHECK(intervalContexts({1, -2}) == std::vector<std::string>{"1,-2", "-2", ""});
+}
+
+TEST_CASE("the style model the corpus pipeline writes is the one the generator reads")
+{
+    // services/tests/test_corpus.py writes this file from a corpus of two
+    // phrases, the same line in A minor and in F# minor, and checks it is
+    // what the pipeline writes. Here it is read, and asked what it counted.
+    std::ifstream file{std::string{DAW_SERVICES_FIXTURES} + "/style-small.json"};
+    REQUIRE(file.good());
+    std::stringstream text;
+    text << file.rdbuf();
+
+    auto value = json::read(text.str());
+    REQUIRE(value.ok());
+    auto model = StyleModel::fromValue(value.value());
+    REQUIRE(model.ok());
+    CHECK(model.value().origin() == "corpus");
+
+    // The phrase goes up a third twice, in both keys: four times.
+    const auto& melody = model.value().role(Role::melody);
+    REQUIRE(melody.interval.count("") == 1);
+    CHECK(melody.interval.at("").at(2) == doctest::Approx(4.0));
+    // i VI VII i: after i then VI, always VII.
+    CHECK(model.value().role(Role::chords).progression.at("0,5").at(6) == doctest::Approx(2.0));
+
+    // And what it generates is as legal as what the hand-written model does.
+    const Song song;
+    Constraints wanted{};
+    wanted.key = Key{6, Mode::minor};
+    const auto context = song.context();
+    const auto resolved = resolve(wanted, context);
+    for (int variant = 0; variant < 8; ++variant)
+    {
+        for (const auto& ghost : generate(context, resolved, model.value(), variant))
+            CHECK(inScale(ghost.pitch, Key{6, Mode::minor}));
+    }
 }
