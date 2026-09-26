@@ -234,3 +234,64 @@ TEST_CASE("the four tempo verbs are in the registry, under the names a caller se
     CHECK(registry.contains("tempo.set_bpm"));
     CHECK(registry.contains("tempo.move"));
 }
+
+TEST_CASE("the time signature is a command: undone, redone, and a wheel turn is one entry")
+{
+    Harness harness;
+    CHECK(harness.state.timeSignature() == TimeSignature{});
+    CHECK(harness.state.beatsPerBar() == doctest::Approx(4.0));
+
+    const auto before = harness.bus.undoDepth();
+    const auto gesture = harness.bus.beginGesture("molette sur la signature");
+    for (int numerator = 5; numerator <= 7; ++numerator)
+        REQUIRE(harness.bus
+                    .execute(std::make_unique<SetTimeSignature>(TimeSignature{numerator, 8}),
+                             ExecuteOptions{gesture})
+                    .ok());
+    REQUIRE(harness.bus.endGesture(gesture).ok());
+
+    CHECK(harness.bus.undoDepth() == before + 1);
+    CHECK(harness.state.timeSignature() == TimeSignature{7, 8});
+    // A beat stays a quarter note: seven eighths are three and a half beats.
+    CHECK(harness.state.beatsPerBar() == doctest::Approx(3.5));
+
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(harness.state.timeSignature() == TimeSignature{});
+    REQUIRE(harness.bus.redo().ok());
+    CHECK(harness.state.timeSignature() == TimeSignature{7, 8});
+}
+
+TEST_CASE("a time signature out of range is refused and leaves no history")
+{
+    Harness harness;
+    const auto before = harness.bus.undoDepth();
+
+    for (const auto wrong :
+         {TimeSignature{0, 4}, TimeSignature{17, 4}, TimeSignature{4, 3}, TimeSignature{4, 32}})
+        CHECK(harness.bus.execute(std::make_unique<SetTimeSignature>(wrong)).error().code ==
+              ErrorCode::invalidArgument);
+
+    CHECK(harness.bus.undoDepth() == before);
+    CHECK(harness.state.timeSignature() == TimeSignature{});
+}
+
+TEST_CASE("4/4 is not written, any other signature survives the round-trip")
+{
+    ProjectState untouched;
+    CHECK(untouched.toValue().find("timeSignature") == nullptr);
+
+    ProjectState state;
+    REQUIRE(state.setTimeSignature(TimeSignature{6, 8}).ok());
+    const auto text = json::write(state.toValue());
+    auto parsed = json::read(text);
+    REQUIRE(parsed.ok());
+    auto reread = ProjectState::fromValue(parsed.value());
+    REQUIRE(reread.ok());
+    CHECK(reread.value().timeSignature() == TimeSignature{6, 8});
+    CHECK(reread.value() == state);
+
+    auto command = CommandRegistry::withBuiltinCommands().create(
+        "project.set_time_signature", Value::object({{"numerator", Value{3}}, {"denominator", Value{4}}}));
+    REQUIRE(command.ok());
+    CHECK(command.value()->payload() == TimeSignature{3, 4}.toValue());
+}

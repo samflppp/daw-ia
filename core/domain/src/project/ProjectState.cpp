@@ -38,6 +38,47 @@ Result<void> requireFinitePositive(double length, std::string_view what)
 } // namespace
 
 // ---------------------------------------------------------------------------
+// TimeSignature
+// ---------------------------------------------------------------------------
+
+Result<void> TimeSignature::validate() const
+{
+    if (numerator < lowestNumerator || numerator > highestNumerator)
+        return fail(ErrorCode::invalidArgument, "numerator out of range: " + std::to_string(numerator));
+    if (denominator != 1 && denominator != 2 && denominator != 4 && denominator != 8 && denominator != 16)
+        return fail(ErrorCode::invalidArgument,
+                    "denominator must be 1, 2, 4, 8 or 16: " + std::to_string(denominator));
+    return {};
+}
+
+Value TimeSignature::toValue() const
+{
+    return Value::object({{"numerator", Value{numerator}}, {"denominator", Value{denominator}}});
+}
+
+Result<TimeSignature> TimeSignature::fromValue(const Value& value)
+{
+    auto numerator = value.intAt("numerator");
+    if (!numerator)
+        return numerator.error();
+
+    auto denominator = value.intAt("denominator");
+    if (!denominator)
+        return denominator.error();
+
+    // Read as 64 bits and checked before narrowing, so a huge number is
+    // refused instead of wrapping into a valid one.
+    const auto fits = [](std::int64_t number) { return number >= 0 && number <= 64; };
+    if (!fits(numerator.value()) || !fits(denominator.value()))
+        return fail(ErrorCode::invalidArgument, "time signature out of range");
+
+    TimeSignature signature{static_cast<int>(numerator.value()), static_cast<int>(denominator.value())};
+    if (auto valid = signature.validate(); !valid)
+        return valid.error();
+    return signature;
+}
+
+// ---------------------------------------------------------------------------
 // TempoPoint
 // ---------------------------------------------------------------------------
 
@@ -1149,6 +1190,14 @@ Result<void> ProjectState::removeTempoPoint(TempoPointId id)
         return fail(ErrorCode::notFound, "no tempo point " + id.toString());
 
     tempo_.erase(found);
+    return {};
+}
+
+Result<void> ProjectState::setTimeSignature(TimeSignature signature)
+{
+    if (auto valid = signature.validate(); !valid)
+        return valid.error();
+    timeSignature_ = signature;
     return {};
 }
 
@@ -2480,6 +2529,11 @@ Value ProjectState::toValue() const
                           {"patterns", Value::array(std::move(serialisedPatterns))},
                           {"arrangement", Value::array(std::move(serialisedArrangement))}};
 
+    // Only when it is not 4/4: a project that never changed it serialises the
+    // way it did before S12, byte for byte.
+    if (!(timeSignature_ == TimeSignature{}))
+        members.emplace_back("timeSignature", timeSignature_.toValue());
+
     // Only when there is some: a project without audio serialises the way it
     // did before audio clips existed, byte for byte.
     if (!audio_.empty())
@@ -2535,6 +2589,14 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
         auto applied = state.setTempoPointBpm(originTempoPointId(), scalar.value());
         if (!applied)
             return applied.error();
+    }
+
+    if (const auto* signatureValue = value.find("timeSignature"); signatureValue != nullptr)
+    {
+        auto signature = TimeSignature::fromValue(*signatureValue);
+        if (!signature)
+            return fail(signature.error().code, "timeSignature: " + signature.error().message);
+        state.timeSignature_ = signature.value();
     }
 
     const auto* tracksValue = value.find("tracks");
@@ -2662,7 +2724,8 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
 
 bool operator==(const ProjectState& lhs, const ProjectState& rhs)
 {
-    return lhs.tempo_ == rhs.tempo_ && lhs.tracks_ == rhs.tracks_ && lhs.patterns_ == rhs.patterns_ &&
+    return lhs.tempo_ == rhs.tempo_ && lhs.timeSignature_ == rhs.timeSignature_ &&
+           lhs.tracks_ == rhs.tracks_ && lhs.patterns_ == rhs.patterns_ &&
            lhs.arrangement_ == rhs.arrangement_ && lhs.audio_ == rhs.audio_ && lhs.buses_ == rhs.buses_ &&
            lhs.master_ == rhs.master_;
 }

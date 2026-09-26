@@ -65,6 +65,34 @@ struct TempoPoint
     friend bool operator==(const TempoPoint& lhs, const TempoPoint& rhs);
 };
 
+// How the beats of the project group into bars: 3/4, 4/4, 6/8.
+//
+// One for the whole project. A song that changes meter halfway is rare in the
+// music this DAW is for, and a sequence of signatures would ask every grid to
+// find its bar lines by search. Adding one later is additive: this becomes the
+// signature at the origin, as the tempo did.
+//
+// A beat of the domain is a quarter note, whatever the signature: notes and
+// clips do not move when the meter changes, only the bar lines drawn over
+// them do. A bar of 6/8 is therefore three beats long.
+struct TimeSignature
+{
+    static constexpr int lowestNumerator = 1;
+    static constexpr int highestNumerator = 16;
+
+    int numerator{4};
+    int denominator{4};
+
+    // The denominators a score writes: a whole note down to a sixteenth.
+    [[nodiscard]] Result<void> validate() const;
+    [[nodiscard]] double beatsPerBar() const noexcept { return numerator * 4.0 / denominator; }
+
+    [[nodiscard]] Value toValue() const;
+    [[nodiscard]] static Result<TimeSignature> fromValue(const Value& value);
+
+    friend bool operator==(const TimeSignature& lhs, const TimeSignature& rhs) = default;
+};
+
 // What one track plays inside one pattern. Content, and only content.
 //
 // It used to carry its own start and length and to belong to a track. Both
@@ -449,6 +477,10 @@ public:
     Result<void> setTempoPointBpm(TempoPointId id, double beatsPerMinute);
     Result<void> moveTempoPoint(TempoPointId id, double startBeats);
 
+    [[nodiscard]] const TimeSignature& timeSignature() const noexcept { return timeSignature_; }
+    [[nodiscard]] double beatsPerBar() const noexcept { return timeSignature_.beatsPerBar(); }
+    Result<void> setTimeSignature(TimeSignature signature);
+
     static constexpr int lowestChannelPitch = Note::lowestPitch;
     static constexpr int highestChannelPitch = Note::highestPitch;
 
@@ -711,6 +743,7 @@ private:
     Result<void> readTempoSequence(const Value::Array& points);
 
     std::vector<TempoPoint> tempo_{TempoPoint{originTempoPointId(), 0.0, 120.0}};
+    TimeSignature timeSignature_;
     std::vector<Track> tracks_;
     std::vector<Pattern> patterns_;
     std::vector<Placement> arrangement_;

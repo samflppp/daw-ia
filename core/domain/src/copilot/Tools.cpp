@@ -509,6 +509,17 @@ std::vector<Tool> builtinTools()
              schema({{"pointId", pointId}, {"startBeats", field("number", "Nouvelle position, en temps.")}},
                     {"pointId", "startBeats"})));
 
+    tools.push_back(
+        make("project.set_time_signature",
+             "Change la signature rythmique du projet (3/4, 4/4, 6/8…). Aucune note ne bouge : un temps "
+             "reste une noire, seules les barres de mesure changent.",
+             schema({{"numerator",
+                      integer("Nombre de temps par mesure.",
+                              TimeSignature::lowestNumerator,
+                              TimeSignature::highestNumerator)},
+                     {"denominator", integer("Valeur du temps : 1, 2, 4, 8 ou 16.", 1, 16)}},
+                    {"numerator", "denominator"})));
+
     // --- transport
     tools.push_back(make("transport.play", "Lance la lecture.", schema({}, {})));
     tools.push_back(make("transport.stop", "Arrête la lecture et ramène la tête au début.", schema({}, {})));

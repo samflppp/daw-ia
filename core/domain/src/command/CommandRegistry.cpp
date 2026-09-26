@@ -49,6 +49,7 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<RemoveTempoPoint>());
     static_cast<void>(registry.add<SetTempoPointBpm>());
     static_cast<void>(registry.add<MoveTempoPoint>());
+    static_cast<void>(registry.add<SetTimeSignature>());
     static_cast<void>(registry.add<CreatePattern>());
     static_cast<void>(registry.add<PlacePattern>());
     static_cast<void>(registry.add<AddPatternTrack>());

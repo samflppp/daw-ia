@@ -113,3 +113,18 @@ TEST_CASE("Moving a tempo point moves where the music speeds up")
     REQUIRE(harness.bus.execute(std::make_unique<RemoveTempoPoint>(pointId)).ok());
     CHECK(renderedSeconds(harness.host.edit()) == doctest::Approx(4.0).epsilon(0.02));
 }
+
+TEST_CASE("A time signature moves bar lines and nothing that sounds")
+{
+    EngineHarness harness;
+    fillEightBeats(harness);
+
+    const auto inFourFour = renderedSeconds(harness.host.edit());
+
+    // 6/8 at 120: if a beat became an eighth, eight beats would last 2 s.
+    REQUIRE(harness.bus.execute(std::make_unique<SetTimeSignature>(TimeSignature{6, 8})).ok());
+
+    const auto inSixEight = renderedSeconds(harness.host.edit());
+    MESSAGE("8 beats in 4/4 = " << inFourFour << " s, in 6/8 = " << inSixEight << " s");
+    CHECK(inSixEight == doctest::Approx(inFourFour).epsilon(0.02));
+}

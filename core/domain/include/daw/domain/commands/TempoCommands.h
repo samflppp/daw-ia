@@ -129,4 +129,32 @@ private:
     double startBeats_;
 };
 
+// project.set_time_signature — how the beats group into bars.
+//
+// Moves no note and no clip: a beat is a quarter note whatever the signature,
+// so only the bar lines drawn over the music change. Like tempo.set_bpm it
+// coalesces, because a wheel turned over the readout sends one command per
+// notch and the user undoes the turn, not each notch.
+class SetTimeSignature final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "project.set_time_signature";
+
+    explicit SetTimeSignature(TimeSignature signature);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+    [[nodiscard]] bool canCoalesceWith(const Command& newer) const noexcept override;
+
+    [[nodiscard]] const TimeSignature& signature() const noexcept { return signature_; }
+
+private:
+    TimeSignature signature_;
+};
+
 } // namespace daw::domain

@@ -1143,6 +1143,13 @@ bool ProjectProjector::reconcileTempo()
     if (auto* first = sequence.getTempo(0); first != nullptr)
         first->setBpm(points.front().beatsPerMinute);
 
+    // The time signature is not projected, on purpose. Tracktion reads a beat
+    // as the signature's unit: under 6/8 an eighth, so every clip would play
+    // twice as fast. Told to count quarter notes instead, it makes a bar of
+    // 6/8 six quarter notes long, not three. Nothing it renders depends on
+    // bars — no metronome yet — so the Edit stays in 4/4 and the bars live in
+    // the domain, which the grids read.
+
     for (std::size_t index = 1; index < points.size(); ++index)
     {
         // remapEdit is false throughout, and insertTempo takes beats: the

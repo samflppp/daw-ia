@@ -45,6 +45,7 @@ constexpr std::pair<std::string_view, std::string_view> labels[] = {
     {"tempo.remove", "Tempo retiré"},
     {"tempo.set_bpm", "Tempo"},
     {"tempo.move", "Tempo déplacé"},
+    {"project.set_time_signature", "Signature rythmique"},
     {"plugin.insert", "Plugin inséré"},
     {"plugin.remove", "Plugin retiré"},
     {"plugin.set_bypassed", "Plugin contourné"},

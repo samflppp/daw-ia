@@ -191,7 +191,8 @@ Value tempoValue(const ProjectState& state)
     // sent whole. The point at the origin is named, because "set the tempo to
     // 140" aims at it and nothing else tells the model which one it is.
     return Value::object({{"originPointId", Value{ProjectState::originTempoPointId().toString()}},
-                          {"points", Value::array(std::move(points))}});
+                          {"points", Value::array(std::move(points))},
+                          {"timeSignature", state.timeSignature().toValue()}});
 }
 
 Value transportValue(const ProjectState& state)

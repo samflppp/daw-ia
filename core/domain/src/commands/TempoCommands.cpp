@@ -249,4 +249,50 @@ bool MoveTempoPoint::canCoalesceWith(const Command& newer) const noexcept
     return other != nullptr && other->pointId_ == pointId_;
 }
 
+// ---------------------------------------------------------------------------
+// project.set_time_signature
+// ---------------------------------------------------------------------------
+
+SetTimeSignature::SetTimeSignature(TimeSignature signature)
+    : signature_{signature}
+{
+}
+
+Result<std::unique_ptr<Command>> SetTimeSignature::fromPayload(const Value& payload)
+{
+    auto signature = TimeSignature::fromValue(payload);
+    if (!signature)
+        return signature.error();
+
+    return std::unique_ptr<Command>{new SetTimeSignature{signature.value()}};
+}
+
+Value SetTimeSignature::payload() const
+{
+    return signature_.toValue();
+}
+
+Result<Value> SetTimeSignature::apply(ProjectState& state) const
+{
+    const auto previous = state.timeSignature();
+    if (auto applied = state.setTimeSignature(signature_); !applied)
+        return applied.error();
+
+    return previous.toValue();
+}
+
+Result<void> SetTimeSignature::revert(ProjectState& state, const Value& undoRecord) const
+{
+    auto previous = TimeSignature::fromValue(undoRecord);
+    if (!previous)
+        return previous.error();
+
+    return state.setTimeSignature(previous.value());
+}
+
+bool SetTimeSignature::canCoalesceWith(const Command& newer) const noexcept
+{
+    return dynamic_cast<const SetTimeSignature*>(&newer) != nullptr;
+}
+
 } // namespace daw::domain
