@@ -35,7 +35,7 @@ S en S13, avec 7 échecs en cascade.
 - **Espace, le bouton lecture et le bouton stop** journalisent leur décision (`ui: Space -> stop/play`, avec
   l'état du moteur et celui du domaine).
 
-**Passages.** Huit passages complets de `--verify`, avec et sans copilote. Le bug décrit ne s'est pas
+**Passages.** Dix passages complets de `--verify`, avec et sans copilote. Le bug décrit ne s'est pas
 reproduit. Le bus n'a refusé aucune commande pendant une lecture.
 
 **Un indice, un seul.** Au premier passage, l'étape 62 (« Espace arrête ») a échoué. La sonde montre ceci :
