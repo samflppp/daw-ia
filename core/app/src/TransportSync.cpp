@@ -34,6 +34,7 @@ void TransportSync::onExecuted(const domain::Receipt& receipt)
     // called. What is left to wait for is the device.
     measuring_ = true;
     askedAtMs_ = juce::Time::getMillisecondCounterHiRes();
+    remember("transport.play vu, départ attendu");
     positionAtAsk_ = edit_.getTransport().getPosition().inSeconds();
     startTimer(measuringIntervalMs);
 }
@@ -68,6 +69,7 @@ void TransportSync::timerCallback()
         if (enginePlaying && control.getPosition().inSeconds() > positionAtAsk_)
         {
             juce::Logger::writeToLog("transport: playing after " + juce::String(elapsed, 1) + " ms");
+            remember("moteur parti après " + juce::String(elapsed, 1).toStdString() + " ms");
             measuring_ = false;
             startTimer(idleIntervalMs);
         }
@@ -75,6 +77,7 @@ void TransportSync::timerCallback()
         {
             juce::Logger::writeToLog("transport: still not playing after " + juce::String(elapsed, 1) +
                                      " ms");
+            remember("moteur toujours arrêté après " + juce::String(elapsed, 1).toStdString() + " ms");
             measuring_ = false;
             startTimer(idleIntervalMs);
         }
@@ -88,7 +91,21 @@ void TransportSync::timerCallback()
     if (enginePlaying || !state_.transport().playing)
         return;
 
-    static_cast<void>(bus_.execute(std::make_unique<domain::TransportStop>()));
+    // Written down every time: this is the one command the application
+    // issues that no hand asked for, and it lands in the middle of whatever
+    // the user is doing while the song plays.
+    const auto stopped = bus_.execute(std::make_unique<domain::TransportStop>());
+    remember(stopped ? "arrêt du moteur porté au domaine"
+                     : "arrêt du moteur refusé : " + stopped.error().message);
+    juce::Logger::writeToLog("transport: engine stopped on its own, " +
+                             juce::String(stopped ? "domain told" : "domain refused: ") +
+                             juce::String::fromUTF8(stopped ? "" : stopped.error().message.c_str()));
+}
+
+void TransportSync::remember(std::string what)
+{
+    last_.what = std::move(what);
+    last_.atMs = juce::Time::getMillisecondCounterHiRes();
 }
 
 } // namespace daw::app

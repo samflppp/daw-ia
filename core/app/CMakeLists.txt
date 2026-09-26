@@ -17,6 +17,7 @@ target_sources(daw_app PRIVATE
     src/EditClock.cpp
     src/LevelMonitor.cpp
     src/TransportSync.cpp
+    src/PlaybackProbe.cpp
     src/Verification.cpp
     src/SampleLibrary.cpp
     src/SamplePreview.cpp

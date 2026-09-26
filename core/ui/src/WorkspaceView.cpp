@@ -385,7 +385,15 @@ bool WorkspaceView::keyPressed(const juce::KeyPress& key)
     // starts the song.
     if (key == juce::KeyPress{juce::KeyPress::spaceKey})
     {
-        if (services_.clock.isPlaying())
+        // The toggle decides on the engine, not on the domain: the engine is
+        // what is heard. The decision is logged with both, because a Space
+        // that started the song instead of stopping it is one of the shapes
+        // of the S12/S13 intermittent "no effect".
+        const auto enginePlaying = services_.clock.isPlaying();
+        juce::Logger::writeToLog(juce::String("ui: Space -> ") + (enginePlaying ? "stop" : "play") +
+                                 " (engine " + (enginePlaying ? "playing" : "stopped") + ", domain " +
+                                 (services_.state.transport().playing ? "playing" : "stopped") + ")");
+        if (enginePlaying)
             static_cast<void>(services_.bus.execute(std::make_unique<domain::TransportStop>()));
         else
             static_cast<void>(services_.bus.execute(std::make_unique<domain::TransportPlay>()));

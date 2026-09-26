@@ -3,6 +3,7 @@
 #include "EditClock.h"
 #include "LevelMonitor.h"
 #include "MainWindow.h"
+#include "PlaybackProbe.h"
 #include "PluginRack.h"
 #include "PluginWindow.h"
 #include "SampleLibrary.h"
@@ -140,6 +141,11 @@ public:
         // the domain would go on saying "playing" over a silent engine.
         transportSync_ = std::make_unique<TransportSync>(bus_, state_, engineHost_->edit());
 
+        // Every refused action goes to the log with the transport and the bus
+        // as they were: the S12 and S13 "no effect during playback" is
+        // chased with this, not by rerunning until it shows.
+        probe_ = std::make_unique<PlaybackProbe>(bus_, state_, engineHost_->edit(), *transportSync_);
+
         // The beatmaker opens in pattern mode, on the first pattern: what a
         // beatmaker hears first is the loop being written, not the song. The
         // rack moves the audition to whatever pattern it shows, and a project
@@ -237,7 +243,8 @@ public:
                 [this](const juce::File& target) { return openProjectAt(target); },
                 [this](const juce::File& target) { return saveAs(target); },
                 [this] { return lastRefusal_; },
-                exporter_.get()});
+                exporter_.get(),
+                probe_.get()});
 
             if (exporter_ != nullptr)
                 exporter_->writeInto(juce::File{tokens[index + 1].unquoted()}.getChildFile("export"));
@@ -263,6 +270,7 @@ public:
 
         // The plugin windows go before the Edit that owns the plugins they
         // draw: an editor outliving its plugin by one line is a crash.
+        probe_.reset();
         transportSync_.reset();
         rack_.reset();
         window_.reset();
@@ -905,6 +913,7 @@ private:
     std::unique_ptr<CopilotBridge> copilot_;
     std::unique_ptr<PluginRack> rack_;
     std::unique_ptr<TransportSync> transportSync_;
+    std::unique_ptr<PlaybackProbe> probe_;
     std::unique_ptr<juce::PropertiesFile> layoutSettings_;
     std::unique_ptr<SampleLibrary> sampleLibrary_;
     ui::WorkspaceView* view_{nullptr};

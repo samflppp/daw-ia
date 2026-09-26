@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LevelMonitor.h"
+#include "PlaybackProbe.h"
 #include "SongExporter.h"
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/project/ProjectState.h"
@@ -90,6 +91,11 @@ public:
         // Fichier > Exporter...: its dialog is answered like any other; the
         // files it writes land in the run's folder, not behind a save dialog.
         SongExporter* exporter{nullptr};
+
+        // The instrument of the intermittent "no effect during playback":
+        // its state is written next to every failed check, and every refusal
+        // the bus made during a step is written in that step.
+        const PlaybackProbe* probe{nullptr};
     };
 
     explicit Verification(Wiring wiring);
@@ -263,6 +269,11 @@ private:
     std::size_t current_{0};
     bool acted_{false};
     bool timedOut_{false};
+
+    // Per step: whether the probe was already written after a failure, and
+    // how many refusals the bus had made when the step began.
+    bool probed_{false};
+    std::size_t refusalsAtStart_{0};
     double startedAtMs_{0.0};
     int settle_{0};
 
@@ -300,6 +311,7 @@ private:
     std::function<bool(const juce::File&)> openProjectAt_;
     std::function<bool(const juce::File&)> saveAsTo_;
     std::function<juce::String()> lastRefusal_;
+    const PlaybackProbe* probe_{nullptr};
 };
 
 } // namespace daw::app

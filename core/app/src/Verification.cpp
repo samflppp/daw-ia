@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <memory>
 #include <utility>
 
@@ -64,6 +65,7 @@ Verification::Verification(Wiring wiring)
     , openProjectAt_(std::move(wiring.openProjectAt))
     , saveAsTo_(std::move(wiring.saveAsTo))
     , lastRefusal_(std::move(wiring.lastRefusal))
+    , probe_(wiring.probe)
 {
     exporter_ = wiring.exporter;
 }
@@ -140,6 +142,8 @@ void Verification::timerCallback()
         report_.add("## " + juce::String(static_cast<int>(current_) + 1) + ". " +
                     juce::String::fromUTF8(step.title.c_str()));
         acted_ = true;
+        probed_ = false;
+        refusalsAtStart_ = probe_ != nullptr ? probe_->refusalCount() : 0;
         settle_ = settleTicks;
         startedAtMs_ = juce::Time::getMillisecondCounterHiRes();
         if (step.act)
@@ -160,6 +164,16 @@ void Verification::timerCallback()
     if (--settle_ > 0)
         return;
 
+    // Whatever the bus refused during the step, even when every check passed:
+    // a refusal nobody asserted on is how an action gets lost quietly.
+    if (probe_ != nullptr && probe_->refusalCount() > refusalsAtStart_)
+    {
+        const auto& recent = probe_->recentRefusals();
+        const auto count = std::min(probe_->refusalCount() - refusalsAtStart_, recent.size());
+        for (auto line = recent.end() - static_cast<std::ptrdiff_t>(count); line != recent.end(); ++line)
+            note("refus du bus : " + *line);
+    }
+
     snapshot(std::to_string(current_ + 1) + "-" + step.title);
     acted_ = false;
     timedOut_ = false;
@@ -173,6 +187,14 @@ void Verification::check(bool passed, const std::string& what)
     (passed ? passed_ : failed_)++;
     report_.add(juce::String::fromUTF8(passed ? "- OK : " : "- **ÉCHEC** : ") +
                 juce::String::fromUTF8(what.c_str()));
+
+    // The first failure of a step carries the state it happened in: the
+    // intermittent failures of S12 and S13 left nothing else to go on.
+    if (!passed && !probed_ && probe_ != nullptr)
+    {
+        probed_ = true;
+        note("état au premier échec : " + probe_->describe());
+    }
 }
 
 void Verification::note(const std::string& what)
@@ -336,6 +358,28 @@ void Verification::doubleClick(juce::Component& target, juce::Point<int> at)
 
 void Verification::click(juce::Component& target, juce::Point<int> at, bool right, bool shift, bool ctrl)
 {
+    // A button that cannot take the click drops it without a word: disabled,
+    // hidden, or under a modal component. That is one way an action during
+    // playback has "no effect", so it is said where it happens.
+    if (auto* button = dynamic_cast<juce::Button*>(&target); button != nullptr)
+    {
+        std::string why;
+        if (!button->isEnabled())
+            why += " désactivé";
+        // JUCE asks isVisible(), the component's own flag, not isShowing():
+        // a button on a page behind another window still takes the click.
+        if (!button->isVisible())
+            why += " invisible";
+        if (button->isCurrentlyBlockedByAnotherModalComponent())
+        {
+            auto* modal = juce::Component::getCurrentlyModalComponent();
+            why += " sous un composant modal « " +
+                   (modal != nullptr ? modal->getName().toStdString() : std::string{}) + " »";
+        }
+        if (!why.empty())
+            note("clic sur « " + button->getButtonText().toStdString() + " » perdu :" + why);
+    }
+
     auto source = juce::Desktop::getInstance().getMainMouseSource();
     const auto now = juce::Time::getCurrentTime();
 

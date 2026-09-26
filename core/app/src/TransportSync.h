@@ -7,6 +7,8 @@
 #include <juce_events/juce_events.h>
 #include <tracktion_engine/tracktion_engine.h>
 
+#include <string>
+
 namespace daw::app
 {
 
@@ -35,6 +37,16 @@ namespace daw::app
 class TransportSync final : private juce::Timer, private domain::BusObserver
 {
 public:
+    // The last thing this saw or did, and when, on the millisecond counter.
+    // Read by PlaybackProbe when an action is refused during playback: the
+    // intermittent "no effect" of S12 and S13 looks like a race with the stop
+    // this pushes, and this is the half of the evidence only it holds.
+    struct Event
+    {
+        std::string what{"rien encore"};
+        double atMs{0.0};
+    };
+
     TransportSync(domain::CommandBus& bus, const domain::ProjectState& state, tracktion::Edit& edit);
     ~TransportSync() override;
 
@@ -42,6 +54,8 @@ public:
     TransportSync& operator=(const TransportSync&) = delete;
     TransportSync(TransportSync&&) = delete;
     TransportSync& operator=(TransportSync&&) = delete;
+
+    [[nodiscard]] const Event& lastEvent() const noexcept { return last_; }
 
 private:
     // Ten times a second is enough to notice a stop. While a start is being
@@ -61,6 +75,8 @@ private:
     void onUndone(const domain::Receipt& receipt) override;
     void onRedone(const domain::Receipt& receipt) override;
 
+    void remember(std::string what);
+
     domain::CommandBus& bus_;
     const domain::ProjectState& state_;
     tracktion::Edit& edit_;
@@ -70,6 +86,8 @@ private:
     bool measuring_{false};
     double askedAtMs_{0.0};
     double positionAtAsk_{0.0};
+
+    Event last_{};
 };
 
 } // namespace daw::app

@@ -1,5 +1,7 @@
 #include "TestSupport.h"
 
+#include <vector>
+
 #include <doctest/doctest.h>
 
 using namespace daw::domain;
@@ -145,6 +147,63 @@ TEST_CASE("An observer cannot re-enter the bus")
     CHECK(observer.undoCode == ErrorCode::reentrantCall);
     CHECK(observer.redoCode == ErrorCode::reentrantCall);
     CHECK(harness.bus.undoDepth() == 1);
+}
+
+TEST_CASE("Every refusal reaches the refusal listener, with the bus as it was")
+{
+    Harness harness;
+    std::vector<Refusal> refusals;
+    harness.bus.setRefusalListener([&refusals](const Refusal& refusal) { refusals.push_back(refusal); });
+
+    // A success says nothing.
+    REQUIRE(harness.bus.execute(harness.createClip(ClipId::generate())).ok());
+    CHECK(refusals.empty());
+
+    // Refused by the command itself: the type is named.
+    CHECK_FALSE(harness.bus.execute(harness.setVolume(99.0)).ok());
+    REQUIRE(refusals.size() == 1);
+    CHECK(refusals.back().operation == "execute");
+    const auto volume = harness.setVolume(0.0);
+    CHECK(refusals.back().commandType == volume->type());
+    CHECK(refusals.back().error.code == ErrorCode::invalidArgument);
+    CHECK(refusals.back().caller == refusals.back().owner);
+    CHECK_FALSE(refusals.back().mutating);
+    CHECK(refusals.back().undoDepth == 1);
+
+    // Refused by the history.
+    REQUIRE(harness.bus.undo().ok());
+    CHECK_FALSE(harness.bus.undo().ok());
+    REQUIRE(refusals.size() == 2);
+    CHECK(refusals.back().operation == "undo");
+    CHECK(refusals.back().error.code == ErrorCode::nothingToUndo);
+    CHECK(refusals.back().redoDepth == 1);
+
+    // Refused because another command is being applied: mutating says so.
+    class ReentrantObserver final : public BusObserver
+    {
+    public:
+        explicit ReentrantObserver(CommandBus& bus)
+            : bus_{bus}
+        {
+        }
+
+        void onExecuted(const Receipt& receipt) override
+        {
+            static_cast<void>(receipt);
+            static_cast<void>(bus_.redo());
+        }
+
+    private:
+        CommandBus& bus_;
+    };
+
+    ReentrantObserver observer{harness.bus};
+    harness.bus.addObserver(observer);
+    REQUIRE(harness.bus.execute(harness.createClip(ClipId::generate())).ok());
+    REQUIRE(refusals.size() == 3);
+    CHECK(refusals.back().operation == "redo");
+    CHECK(refusals.back().error.code == ErrorCode::reentrantCall);
+    CHECK(refusals.back().mutating);
 }
 
 TEST_CASE("A removed observer is no longer notified")

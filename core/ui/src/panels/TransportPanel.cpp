@@ -170,8 +170,18 @@ TransportPanel::TransportPanel(const PanelContext& context)
     rewind_->onClick = [this]
     { static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.0))); };
 
-    play_->onClick = [this] { static_cast<void>(bus_.execute(std::make_unique<domain::TransportPlay>())); };
-    stop_->onClick = [this] { static_cast<void>(bus_.execute(std::make_unique<domain::TransportStop>())); };
+    // Logged: the transport buttons are one of the doors a stop comes in by,
+    // and the log has to say which door when a song stops by itself.
+    play_->onClick = [this]
+    {
+        juce::Logger::writeToLog("ui: play button");
+        static_cast<void>(bus_.execute(std::make_unique<domain::TransportPlay>()));
+    };
+    stop_->onClick = [this]
+    {
+        juce::Logger::writeToLog("ui: stop button");
+        static_cast<void>(bus_.execute(std::make_unique<domain::TransportStop>()));
+    };
 
     // Undo and redo are bus calls, not panel logic. The panel never decides
     // what can be undone; it asks, and it asks again after every change.

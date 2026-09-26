@@ -9,6 +9,7 @@
 #include "daw/domain/project/ProjectState.h"
 
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -51,6 +52,23 @@ struct BusLimits
 {
     // Beyond this depth the oldest entry is dropped and observers are told.
     std::size_t maxUndoDepth{512};
+};
+
+// A command, an undo or a redo the bus turned down, with the bus as it was at
+// that moment. It exists for one reason: an action that "had no effect" during
+// playback, twice, never reproduced. Whatever refused it, and in which state,
+// is now written down instead of discarded by a static_cast<void>.
+struct Refusal
+{
+    std::string operation;   // "execute", "group", "undo" or "redo"
+    std::string commandType; // empty for an undo or a redo
+    Error error;
+    std::thread::id caller;
+    std::thread::id owner;
+    bool mutating{false}; // true when refused from inside another command
+    std::string openGesture;
+    std::size_t undoDepth{0};
+    std::size_t redoDepth{0};
 };
 
 // Executes commands, keeps the undo and redo stacks, notifies observers, and
@@ -155,6 +173,13 @@ public:
     ObserverToken addObserver(BusObserver& observer);
     void removeObserver(ObserverToken token) noexcept;
 
+    // --- diagnostics -------------------------------------------------------
+    // Told of every refusal of execute, executeGroup, undo and redo. It is
+    // called on the thread that was refused, which is not the owner's when
+    // the refusal is wrongThread, and possibly from inside another command:
+    // it must write the refusal down and never call the bus back.
+    void setRefusalListener(std::function<void(const Refusal&)> listener);
+
     // --- journal -----------------------------------------------------------
     // The envelopes that build the current state, oldest first, after merging.
     // Replaying them on an empty project reproduces the state exactly.
@@ -188,6 +213,14 @@ private:
         ObserverToken token;
         BusObserver* observer{nullptr};
     };
+
+    // The public entry points, before a refusal is reported.
+    Result<Receipt> executeChecked(std::unique_ptr<Command> command, ExecuteOptions options);
+    Result<std::vector<Receipt>> executeGroupChecked(std::vector<std::unique_ptr<Command>> commands,
+                                                     GroupOptions options);
+    Result<Receipt> undoChecked(Provenance by);
+    Result<Receipt> redoChecked(Provenance by);
+    void reportRefusal(std::string_view operation, std::string commandType, const Error& error) const;
 
     Result<Receipt> executeEntry(std::unique_ptr<Command> command,
                                  CommandId id,
@@ -231,6 +264,7 @@ private:
     std::uint64_t nextObserverToken_{1};
     bool mutating_{false};
     std::thread::id owningThread_{std::this_thread::get_id()};
+    std::function<void(const Refusal&)> refusalListener_;
 };
 
 } // namespace daw::domain

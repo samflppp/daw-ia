@@ -61,6 +61,15 @@ CommandBus::CommandBus(ProjectState& state, const CommandRegistry& registry, Bus
 
 Result<Receipt> CommandBus::execute(std::unique_ptr<Command> command, ExecuteOptions options)
 {
+    auto type = command != nullptr ? std::string{command->type()} : std::string{};
+    auto result = executeChecked(std::move(command), std::move(options));
+    if (!result)
+        reportRefusal("execute", std::move(type), result.error());
+    return result;
+}
+
+Result<Receipt> CommandBus::executeChecked(std::unique_ptr<Command> command, ExecuteOptions options)
+{
     if (auto owned = checkThread(); !owned)
         return owned.error();
 
@@ -210,6 +219,19 @@ Result<Receipt> CommandBus::executeEntry(std::unique_ptr<Command> command,
 
 Result<std::vector<Receipt>> CommandBus::executeGroup(std::vector<std::unique_ptr<Command>> commands,
                                                       GroupOptions options)
+{
+    std::string types;
+    for (const auto& command : commands)
+        types +=
+            (types.empty() ? "" : ",") + (command != nullptr ? std::string{command->type()} : std::string{});
+    auto result = executeGroupChecked(std::move(commands), std::move(options));
+    if (!result)
+        reportRefusal("group", std::move(types), result.error());
+    return result;
+}
+
+Result<std::vector<Receipt>> CommandBus::executeGroupChecked(std::vector<std::unique_ptr<Command>> commands,
+                                                             GroupOptions options)
 {
     if (auto owned = checkThread(); !owned)
         return owned.error();
@@ -426,6 +448,14 @@ void CommandBus::clearHistory() noexcept
 
 Result<Receipt> CommandBus::undo(Provenance by)
 {
+    auto result = undoChecked(std::move(by));
+    if (!result)
+        reportRefusal("undo", {}, result.error());
+    return result;
+}
+
+Result<Receipt> CommandBus::undoChecked(Provenance by)
+{
     if (auto owned = checkThread(); !owned)
         return owned.error();
 
@@ -465,6 +495,14 @@ Result<Receipt> CommandBus::undo(Provenance by)
 }
 
 Result<Receipt> CommandBus::redo(Provenance by)
+{
+    auto result = redoChecked(std::move(by));
+    if (!result)
+        reportRefusal("redo", {}, result.error());
+    return result;
+}
+
+Result<Receipt> CommandBus::redoChecked(Provenance by)
 {
     if (auto owned = checkThread(); !owned)
         return owned.error();
@@ -632,6 +670,30 @@ std::vector<Value> CommandBus::journal() const
     }
 
     return envelopes;
+}
+
+void CommandBus::setRefusalListener(std::function<void(const Refusal&)> listener)
+{
+    assert(std::this_thread::get_id() == owningThread_);
+    refusalListener_ = std::move(listener);
+}
+
+void CommandBus::reportRefusal(std::string_view operation, std::string commandType, const Error& error) const
+{
+    if (!refusalListener_)
+        return;
+
+    Refusal refusal{};
+    refusal.operation = std::string{operation};
+    refusal.commandType = std::move(commandType);
+    refusal.error = error;
+    refusal.caller = std::this_thread::get_id();
+    refusal.owner = owningThread_;
+    refusal.mutating = mutating_;
+    refusal.openGesture = openGestureLabel_;
+    refusal.undoDepth = undoStack_.size();
+    refusal.redoDepth = redoStack_.size();
+    refusalListener_(refusal);
 }
 
 Result<void> CommandBus::checkThread() const
