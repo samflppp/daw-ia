@@ -106,10 +106,12 @@ void PianoRollPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     // Another row on screen: bring its notes into the window. The same row
     // edited keeps the window where the wheel left it.
     const auto* edited = clip();
-    const auto shownClip = edited != nullptr ? std::optional<domain::ClipId>{edited->id} : std::nullopt;
-    if (shownClip != revealedClip_)
+    const auto* owner = track();
+    const auto shown = (owner != nullptr ? owner->id.toString() : std::string{}) + "/" +
+                       (edited != nullptr ? edited->id.toString() : std::string{});
+    if (shown != revealedRow_)
     {
-        revealedClip_ = shownClip;
+        revealedRow_ = shown;
         picked_.clear();
         revealNotes();
     }
@@ -135,7 +137,16 @@ void PianoRollPanel::revealNotes()
 {
     const auto* edited = clip();
     if (edited == nullptr || edited->notes.empty())
+    {
+        // Nothing written yet: the channel's own pitch in the middle, where
+        // the first note of a kick or a snare is going to be drawn.
+        const auto* owner = track();
+        const auto rows = rowsVisible();
+        if (owner != nullptr && (owner->channelPitch > topPitch_ || owner->channelPitch <= topPitch_ - rows))
+            topPitch_ = std::clamp(
+                owner->channelPitch + rows / 2, std::min(rows - 1, highestVisiblePitch), highestVisiblePitch);
         return;
+    }
 
     const auto [lowest, highest] = std::minmax_element(edited->notes.begin(),
                                                        edited->notes.end(),
@@ -166,11 +177,38 @@ void PianoRollPanel::resized()
 
 void PianoRollPanel::addRow()
 {
+    auto opening = openRow();
+    if (opening.commands.empty())
+        return; // the row is already open, or no track is chosen
+
+    domain::GroupOptions group{};
+    group.label = "ouvrir une ligne";
+
+    if (!bus_.executeGroup(std::move(opening.commands), group).ok())
+        return;
+
+    selectOpened(opening);
+}
+
+void PianoRollPanel::selectOpened(const RowOpening& opening)
+{
     const auto* owner = track();
     if (owner == nullptr)
         return;
 
-    std::vector<std::unique_ptr<domain::Command>> commands;
+    selection_.selectPattern(opening.patternId);
+    selection_.selectClip(owner->id, opening.clipId);
+    followCurrentPattern();
+}
+
+PianoRollPanel::RowOpening PianoRollPanel::openRow() const
+{
+    RowOpening opening;
+    const auto* owner = track();
+    if (owner == nullptr)
+        return opening;
+
+    auto& commands = opening.commands;
 
     auto patternId = pattern() != nullptr ? pattern()->id : domain::PatternId{};
 
@@ -196,18 +234,9 @@ void PianoRollPanel::addRow()
     for (auto& command : row.opening)
         commands.push_back(std::move(command));
 
-    if (commands.empty())
-        return; // the row is already open
-
-    domain::GroupOptions group{};
-    group.label = "ouvrir une ligne";
-
-    if (!bus_.executeGroup(std::move(commands), group).ok())
-        return;
-
-    selection_.selectPattern(patternId);
-    selection_.selectClip(owner->id, row.clipId);
-    followCurrentPattern();
+    opening.patternId = patternId;
+    opening.clipId = row.clipId;
+    return opening;
 }
 
 void PianoRollPanel::timerCallback()
@@ -399,8 +428,10 @@ void PianoRollPanel::paint(juce::Graphics& g)
                    false);
     }
 
+    // A track whose row is not open yet shows an empty grid, as FL does: the
+    // first click opens the row and writes the note, in one gesture.
     const auto* edited = clip();
-    if (edited == nullptr)
+    if (track() == nullptr || pattern() == nullptr)
     {
         paintEmpty(g);
         return;
@@ -418,7 +449,7 @@ void PianoRollPanel::paint(juce::Graphics& g)
     // The pattern is named and not chosen here: the rack chooses, this panel
     // follows. Saying which one is on screen is what keeps the two readable
     // as one thing.
-    const auto count = static_cast<int>(edited->notes.size());
+    const auto count = edited != nullptr ? static_cast<int>(edited->notes.size()) : 0;
     const auto patternName = shown != nullptr ? patternEditing::displayName(state_, *shown) : std::string{};
 
     g.drawText(juce::String(patternName) + juce::String(u8"  ·  ") +
@@ -549,6 +580,13 @@ void PianoRollPanel::paintNotes(juce::Graphics& g, juce::Rectangle<int> area) co
 bool PianoRollPanel::isPicked(domain::NoteId id) const
 {
     return std::find(picked_.begin(), picked_.end(), id) != picked_.end();
+}
+
+juce::Point<int> PianoRollPanel::pointFor(double beats, int pitch) const
+{
+    // A pixel into the cell, so the click does not fall on the line before.
+    return {xForBeat(beats) + tokens_.integer("stroke.hairline") * 2,
+            yForPitch(pitch) + tokens_.integer("metric.pianoRoll.keyHeight") / 2};
 }
 
 juce::Rectangle<int> PianoRollPanel::noteBounds(const domain::Note& note) const
@@ -781,19 +819,31 @@ void PianoRollPanel::addNoteAt(juce::Point<int> point)
     // is one group and one Ctrl+Z — the note and the row it needed go back
     // together, because a row left behind by an undone note is a row nobody
     // asked for.
-    if (clip() == nullptr)
-    {
-        addRow();
-        if (clip() == nullptr)
-            return;
-    }
-
     domain::Note note{};
     note.id = domain::NoteId::generate();
     note.pitch = pitchAtY(point.getY());
     note.velocity = defaultVelocity;
     note.startBeats = quantise(beatAtX(point.getX()));
     note.lengthBeats = gridStepBeats;
+
+    if (clip() == nullptr)
+    {
+        auto opening = openRow();
+        if (opening.commands.empty())
+            return;
+
+        opening.commands.push_back(std::make_unique<domain::AddNote>(opening.clipId, note));
+        domain::GroupOptions group{};
+        group.label = "poser une note";
+        if (!bus_.executeGroup(std::move(opening.commands), group).ok())
+            return;
+
+        selectOpened(opening);
+        selectedNote_ = note.id;
+        picked_ = {note.id};
+        repaint();
+        return;
+    }
 
     if (bus_.execute(std::make_unique<domain::AddNote>(clip()->id, note)).ok())
     {

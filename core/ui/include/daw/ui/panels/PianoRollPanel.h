@@ -4,7 +4,9 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -52,6 +54,9 @@ public:
 
     // Where a note is drawn: the verification aims its clicks with it.
     [[nodiscard]] juce::Rectangle<int> noteBounds(const domain::Note& note) const;
+
+    // Where a click lands on that beat and that pitch.
+    [[nodiscard]] juce::Point<int> pointFor(double beats, int pitch) const;
 
     // The velocity lane, and where a note's stem would reach at a velocity.
     [[nodiscard]] juce::Rectangle<int> velocityLane() const { return velocityArea(); }
@@ -131,6 +136,18 @@ private:
     // when the project holds none. One group, therefore one Ctrl+Z.
     void addRow();
 
+    // What opening the chosen track's row takes: the commands, and the
+    // pattern and row they make. Empty when the row is open already. A first
+    // note drawn in a closed row sends these and the note as one group.
+    struct RowOpening
+    {
+        std::vector<std::unique_ptr<domain::Command>> commands;
+        domain::PatternId patternId{};
+        domain::ClipId clipId{};
+    };
+    [[nodiscard]] RowOpening openRow() const;
+    void selectOpened(const RowOpening& opening);
+
     // Makes pattern mode play the pattern on screen. Called when the user
     // picks a pattern, which is the only moment what pattern mode plays
     // changes.
@@ -152,7 +169,7 @@ private:
     // Moves the window onto the notes of the row when none of them is in
     // sight: on a change of row, and when the panel is resized.
     void revealNotes();
-    std::optional<domain::ClipId> revealedClip_;
+    std::string revealedRow_; // the track and the row last revealed
 
     domain::NoteId selectedNote_{};
 
