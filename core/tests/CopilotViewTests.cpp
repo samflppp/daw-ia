@@ -1,4 +1,5 @@
 #include "TestSupport.h"
+#include "daw/domain/commands/AutomationCommands.h"
 #include "daw/domain/commands/NoteEditCommands.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
@@ -223,4 +224,22 @@ TEST_CASE("the summary says the rank a user reads, where the song ends, and the 
     const auto* transport = summary.find("transport");
     CHECK(transport->stringAt("mode").value() == "pattern");
     CHECK(transport->stringAt("auditionedPatternId").value() == second.toString());
+}
+
+TEST_CASE("the summary carries the automation lines, and nothing when there are none")
+{
+    Harness harness;
+    CHECK(summarise(harness.state, machineWith(0)).find("automation") == nullptr);
+
+    const auto line = AutomationLineId::generate();
+    REQUIRE(harness.bus
+                .execute(std::make_unique<CreateAutomationLine>(
+                    line, AutomationTarget::volumeOf(ProjectState::masterTrackId())))
+                .ok());
+
+    const auto summary = summarise(harness.state, machineWith(0));
+    const auto* lines = summary.find("automation");
+    REQUIRE(lines != nullptr);
+    REQUIRE(lines->asArray()->size() == 1);
+    CHECK(lines->asArray()->front().stringAt("id").value() == line.toString());
 }

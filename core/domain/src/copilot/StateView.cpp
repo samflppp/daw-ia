@@ -240,18 +240,31 @@ Value summarise(const ProjectState& state, const MachinePlugins& plugins)
             arrangementEnd = std::max(arrangementEnd, placement.startBeats + pattern->lengthBeats);
     }
 
-    return Value::object(
-        {{"tempo", tempoValue(state)},
-         {"tracks", Value::array(std::move(tracks))},
-         {"buses", busesValue(state)},
-         {"master", stripValue(state.master())},
-         {"patterns", Value::array(std::move(patterns))},
-         {"arrangementEndBeats", Value{arrangementEnd}},
-         {"audioClips", audioValue(state)},
-         {"transport", transportValue(state)},
-         {"machinePlugins",
-          Value::object({{"total", Value{static_cast<std::int64_t>(plugins.available.size())}},
-                         {"listed", Value::array(std::move(installed))}})}});
+    auto summary =
+        Value::object({{"tempo", tempoValue(state)},
+                       {"tracks", Value::array(std::move(tracks))},
+                       {"buses", busesValue(state)},
+                       {"master", stripValue(state.master())},
+                       {"patterns", Value::array(std::move(patterns))},
+                       {"arrangementEndBeats", Value{arrangementEnd}},
+                       {"audioClips", audioValue(state)},
+                       {"transport", transportValue(state)},
+                       {"machinePlugins",
+                        Value::object({{"total", Value{static_cast<std::int64_t>(plugins.available.size())}},
+                                       {"listed", Value::array(std::move(installed))}})}});
+
+    // The automation lines, whole: "fade the master out" has to know whether
+    // the master already has a line, and a line is a handful of points. Only
+    // when there is one, so a project without automation reads as before.
+    if (!state.automation().empty())
+    {
+        Value::Array lines;
+        lines.reserve(state.automation().size());
+        for (const auto& line : state.automation())
+            lines.push_back(line.toValue());
+        static_cast<void>(summary.set("automation", Value::array(std::move(lines))));
+    }
+    return summary;
 }
 
 Result<Value> clipNotes(const ProjectState& state, ClipId clipId)
