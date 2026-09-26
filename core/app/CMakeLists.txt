@@ -19,6 +19,7 @@ target_sources(daw_app PRIVATE
     src/TransportSync.cpp
     src/PlaybackProbe.cpp
     src/Verification.cpp
+    src/VerificationAutomation.cpp
     src/SampleLibrary.cpp
     src/SamplePreview.cpp
     src/SongExporter.cpp

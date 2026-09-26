@@ -1260,6 +1260,7 @@ void Verification::buildList()
     addWorkflowSteps();
     addNavigationSteps();
     addExportSteps();
+    addAutomationSteps();
 
     // --- the title bar -----------------------------------------------------------
 

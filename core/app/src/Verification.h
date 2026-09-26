@@ -183,6 +183,32 @@ private:
     // S13: Fichier > Exporter..., in the four formats, read back and measured.
     void addExportSteps();
     void openExportDialog();
+
+    // S13: the automation (VerificationAutomation.cpp). The copilot's
+    // fade-out, the right-click on a slider, points laid with the mouse, each
+    // heard window by window on a render; then the disorder: the tempo
+    // changed under the points, undo and redo while the song plays.
+    void addAutomationSteps();
+
+    // A render of the Edit as it plays, kept whole in memory, and its level
+    // window by window between two beats of the song: the RMS of each
+    // channel, in dB.
+    struct Rendered
+    {
+        juce::AudioBuffer<float> audio;
+        double sampleRate{0.0};
+    };
+    struct Window
+    {
+        double fromBeats{0.0};
+        double leftDb{0.0};
+        double rightDb{0.0};
+        [[nodiscard]] double meanDb() const;
+    };
+    [[nodiscard]] Rendered render(const std::string& name);
+    [[nodiscard]] std::vector<Window>
+    windowsOf(const Rendered& rendered, double fromBeats, double toBeats, double windowBeats) const;
+    [[nodiscard]] double songEndBeats() const;
     [[nodiscard]] std::vector<int> kickVelocities() const;
     [[nodiscard]] juce::TreeViewItem* browserItem(const juce::File& file) const;
     void clickBrowserItem(juce::TreeViewItem& item);
@@ -299,6 +325,14 @@ private:
     juce::File exportsBefore_;
     double exportSeconds_{0.0};
     double exportRmsDb_{0.0};
+    Rendered plain_{};
+    double songEnd_{0.0};
+    domain::AutomationLineId masterLine_{};
+    domain::AutomationLineId panLine_{};
+    std::string playedState_;
+    std::string untouchedState_;
+    std::size_t playedDepth_{0};
+    double stepStartedMs_{0.0};
     std::size_t previewBuilds_{0};
     std::size_t measuredBefore_{0};
     bool watchTicks_{false};
