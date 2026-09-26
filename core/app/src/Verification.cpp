@@ -13,6 +13,7 @@
 #include "daw/ui/panels/MixerPanel.h"
 #include "daw/ui/panels/PianoRollPanel.h"
 #include "daw/ui/panels/PlaylistPanel.h"
+#include "daw/ui/panels/TransportPanel.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1179,6 +1180,7 @@ void Verification::buildList()
     addClipboardSteps();
     addMeterSteps();
     addMixerSteps();
+    addTempoSteps();
 
     // --- the title bar -----------------------------------------------------------
 
@@ -2636,6 +2638,271 @@ void Verification::addAuditionSteps()
             samples_.stopAudition();
             check(samples_.auditioned() == juce::File{}, "plus rien en écoute");
             check(depth() == savedDepth_, "toujours aucune entrée d'historique");
+        });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+void Verification::chooseMenuItem(int position)
+{
+    // The menu is a window of its own, modal while it is open. A person picks
+    // with the mouse; the keyboard reaches the same item and does not depend
+    // on where the window landed on the screen.
+    auto* menu = juce::Component::getCurrentlyModalComponent();
+    if (menu == nullptr)
+    {
+        check(false, "un menu est ouvert");
+        return;
+    }
+    for (int index = 0; index < position; ++index)
+        static_cast<void>(menu->keyPressed(juce::KeyPress{juce::KeyPress::downKey}));
+    static_cast<void>(menu->keyPressed(juce::KeyPress{juce::KeyPress::returnKey}));
+}
+
+void Verification::answerDialog(const juce::String& field, const juce::String& typed)
+{
+    auto* dialog = dynamic_cast<juce::AlertWindow*>(juce::Component::getCurrentlyModalComponent());
+    if (dialog == nullptr || dialog->getTextEditor(field) == nullptr)
+    {
+        check(false, "une boîte de saisie est ouverte");
+        return;
+    }
+    dialog->getTextEditor(field)->setText(typed);
+    dialog->exitModalState(1);
+}
+
+void Verification::addTempoSteps()
+{
+    // --- the tempo and the signature -----------------------------------------------
+    //
+    // FL's readouts, in the order a person discovers them: the wheel over the
+    // tempo, a click that offers to type it, the signature the same way, then
+    // "Automatiser le tempo" and the lane it opens in the playlist. What
+    // changes the sound is measured on a render; what must not change it too.
+
+    constexpr float notch = 0.25f;
+
+    add("le morceau tel qu'il est, au rendu, avant de toucher au tempo",
+        [this]
+        {
+            savedState_ = domain::json::write(state_.toValue());
+            savedDepth_ = depth();
+            tempoBefore_ = state_.tempoPoints().front().beatsPerMinute;
+            heardBefore_ = listen("s12-tempo-avant", tempoBefore_);
+        });
+
+    add(
+        "trois crans de molette sur le tempo : +3 BPM, une seule entrée d'historique",
+        [this]
+        {
+            auto* transport = dynamic_cast<ui::TransportPanel*>(panel("transport"));
+            if (transport == nullptr)
+                return;
+
+            for (int turn = 0; turn < 3; ++turn)
+                wheel(*transport, transport->tempoArea().getCentre(), notch);
+            check(state_.tempoPoints().front().beatsPerMinute == std::floor(tempoBefore_) + 3.0,
+                  "le tempo du projet passe de " + juce::String(tempoBefore_, 1).toStdString() + " à " +
+                      juce::String(state_.tempoPoints().front().beatsPerMinute, 1).toStdString());
+            wheelAt_ = juce::Time::getMillisecondCounterHiRes();
+        },
+        // The turn is over when the wheel has rested: then the entry is closed.
+        [this] { return juce::Time::getMillisecondCounterHiRes() - wheelAt_ > 800.0; },
+        3000.0);
+
+    const auto dialogOpen = []
+    { return dynamic_cast<juce::AlertWindow*>(juce::Component::getCurrentlyModalComponent()) != nullptr; };
+
+    add(
+        "un clic sur le tempo ouvre le menu ; « Saisir le tempo… »",
+        [this]
+        {
+            check(depth() == savedDepth_ + 1, "le tour de molette est une seule entrée");
+
+            auto* transport = dynamic_cast<ui::TransportPanel*>(panel("transport"));
+            if (transport == nullptr)
+                return;
+            click(*transport, transport->tempoArea().getCentre());
+            chooseMenuItem(ui::TransportPanel::typeTempoItem);
+        },
+        dialogOpen,
+        3000.0);
+
+    add(
+        "la boîte de saisie : 97,5 avec une virgule",
+        [this] { answerDialog("tempo", "97,5"); },
+        [this] { return state_.tempoPoints().front().beatsPerMinute == 97.5; },
+        3000.0);
+
+    add("97,5 BPM, lu au rendu",
+        [this]
+        {
+            check(state_.tempoPoints().front().beatsPerMinute == 97.5, "le tempo du projet est 97,5");
+            // Two renders: 90 before this group, 97.5 now. The song is shorter
+            // by the ratio of the tempos.
+            const auto heard = listen("s12-tempo-97-5", 97.5);
+            const auto expected = heardBefore_.seconds * tempoBefore_ / 97.5;
+            check(std::abs(heard.seconds - expected) < 0.5,
+                  "le morceau dure " + juce::String(heard.seconds, 2).toStdString() + " s, " +
+                      juce::String(expected, 2).toStdString() + " attendues");
+            heardBefore_ = heard;
+        });
+
+    add(
+        "la molette sur la signature : 5/4, puis un clic pour taper 6/8",
+        [this]
+        {
+            auto* transport = dynamic_cast<ui::TransportPanel*>(panel("transport"));
+            if (transport == nullptr)
+                return;
+
+            wheel(*transport, transport->signatureArea().getCentre(), notch);
+            check(state_.timeSignature() == domain::TimeSignature{5, 4}, "un cran : 5/4");
+
+            click(*transport, transport->signatureArea().getCentre());
+        },
+        dialogOpen,
+        3000.0);
+
+    add(
+        "la boîte de saisie : 6/8",
+        [this] { answerDialog("signature", "6/8"); },
+        [this] { return state_.timeSignature() == domain::TimeSignature{6, 8}; },
+        3000.0);
+
+    add("en 6/8 rien ne bouge au rendu ; un clic dans la playlist se cale sur la mesure de trois temps",
+        [this]
+        {
+            check(state_.timeSignature() == domain::TimeSignature{6, 8}, "la signature est 6/8");
+
+            const auto heard = listen("s12-signature-6-8", 97.5);
+            check(std::abs(heard.seconds - heardBefore_.seconds) < 0.05,
+                  "même durée qu'en 4/4 : " + juce::String(heard.seconds, 2).toStdString() + " s");
+            check(heard.onsets == heardBefore_.onsets, "chaque attaque reste à sa place");
+
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            // Past the song, on the first lane, a beat and a half into the
+            // third bar of 6/8 (beat 6): the pattern lands on beat 6, where
+            // 4/4 would have put it on beat 4.
+            double songEnd = 0.0;
+            for (const auto& placement : state_.arrangement())
+            {
+                if (const auto* pattern = state_.findPattern(placement.patternId); pattern != nullptr)
+                    songEnd = std::max(songEnd, placement.startBeats + pattern->lengthBeats);
+            }
+            const auto before = state_.arrangement().size();
+            const auto far = std::ceil((songEnd + 1.0) / 12.0) * 12.0 + 6.0;
+            const auto at = playlistBeat(0, far + 1.5);
+            click(*playlist, at);
+            const auto laid = std::any_of(state_.arrangement().begin(),
+                                          state_.arrangement().end(),
+                                          [far](const domain::Placement& placement)
+                                          { return placement.startBeats == far; });
+            check(state_.arrangement().size() == before + 1 && laid,
+                  "posé au temps " + juce::String(far, 0).toStdString() + ", début d'une mesure de 6/8");
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(state_.arrangement().size() == before, "Ctrl+Z retire la pose");
+        });
+
+    add(
+        "« Automatiser le tempo », depuis le menu du tempo",
+        [this]
+        {
+            auto* transport = dynamic_cast<ui::TransportPanel*>(panel("transport"));
+            if (transport == nullptr)
+                return;
+
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.0)));
+            click(*transport, transport->tempoArea().getCentre());
+            chooseMenuItem(ui::TransportPanel::automateTempoItem);
+        },
+        [this] { return state_.tempoPoints().size() == 2; },
+        3000.0);
+
+    add("un premier changement de tempo, sur la deuxième mesure",
+        [this]
+        {
+            check(state_.tempoPoints().size() == 2, "un changement de tempo de plus");
+            if (state_.tempoPoints().size() == 2)
+            {
+                const auto& added = state_.tempoPoints().back();
+                check(added.startBeats == 3.0, "sur la deuxième mesure de 6/8, au temps 3");
+                check(added.beatsPerMinute == 97.5, "au tempo qui joue déjà : rien ne s'entend encore");
+            }
+        });
+
+    add("la ligne de tempo s'affiche ; on tire le changement vers le haut",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr || state_.tempoPoints().size() != 2)
+                return;
+
+            check(!playlist->tempoLane().isEmpty(), "la ligne TEMPO est sous la règle");
+            snapshot("s12-ligne-de-tempo");
+
+            // Out of sight to the left? Bring the start of the song back.
+            static_cast<void>(playlistBeat(0, 0.0));
+            const auto& added = state_.tempoPoints().back();
+            const auto from = playlist->tempoPointFor(added.startBeats, added.beatsPerMinute);
+            const auto depthBefore = depth();
+            drag(*playlist, from, from.translated(0, -40));
+
+            check(state_.tempoPoints().back().beatsPerMinute > 97.5 + 20.0,
+                  "le changement monte à " +
+                      juce::String(state_.tempoPoints().back().beatsPerMinute, 1).toStdString() + " BPM");
+            check(state_.tempoPoints().back().startBeats == 3.0, "sans bouger dans le temps");
+            check(depth() == depthBefore + 1, "le geste est une seule entrée");
+        });
+
+    add("l'accélération s'entend : le morceau raccourcit",
+        [this]
+        {
+            if (state_.tempoPoints().size() != 2)
+                return;
+            const auto faster = state_.tempoPoints().back().beatsPerMinute;
+            const auto heard = listen("s12-automation-tempo", 97.5);
+
+            // Three beats at 97.5, the rest at the new tempo.
+            const auto total = heardBefore_.seconds * 97.5 / 60.0;
+            const auto expected = 3.0 * 60.0 / 97.5 + (total - 3.0) * 60.0 / faster;
+            check(std::abs(heard.seconds - expected) < 0.5,
+                  "le morceau dure " + juce::String(heard.seconds, 2).toStdString() + " s au lieu de " +
+                      juce::String(heardBefore_.seconds, 2).toStdString() + ", " +
+                      juce::String(expected, 2).toStdString() + " attendues");
+        });
+
+    add("clic droit sur le changement : il part, et la ligne avec",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr || state_.tempoPoints().size() != 2)
+                return;
+
+            const auto& added = state_.tempoPoints().back();
+            click(*playlist, playlist->tempoPointFor(added.startBeats, added.beatsPerMinute), true);
+            check(state_.tempoPoints().size() == 1, "il ne reste que le tempo du projet");
+        });
+
+    add("la ligne est partie ; tout défaire au Ctrl+Z",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            check(playlist != nullptr && playlist->tempoLane().isEmpty(), "plus de ligne de tempo");
+
+            while (depth() > savedDepth_)
+                key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == savedState_,
+                  "le projet d'avant, à l'octet près : tempo " +
+                      juce::String(state_.tempoPoints().front().beatsPerMinute, 1).toStdString() +
+                      ", signature " + std::to_string(state_.timeSignature().numerator) + "/" +
+                      std::to_string(state_.timeSignature().denominator));
         });
 }
 

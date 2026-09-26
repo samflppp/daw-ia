@@ -146,6 +146,12 @@ private:
     [[nodiscard]] juce::Component* mixerStrip(const domain::TrackId& id) const;
     [[nodiscard]] double renderedMasterPeakDb(const std::string& name);
 
+    // The tempo and the signature readouts: wheel, menu, typing, and the
+    // tempo lane "Automatiser le tempo" opens in the playlist.
+    void addTempoSteps();
+    void chooseMenuItem(int position);
+    void answerDialog(const juce::String& field, const juce::String& typed);
+
     // The playlist on a song longer than the screen: scroll, zoom, follow.
     void addPlaylistViewSteps();
 
@@ -236,6 +242,9 @@ private:
     std::string loudest_;
     std::vector<float> masterSeen_;
     double farBeats_{0.0};
+    double tempoBefore_{0.0};
+    double wheelAt_{0.0};
+    Heard heardBefore_{};
     std::size_t previewBuilds_{0};
     std::size_t measuredBefore_{0};
     bool watchTicks_{false};
