@@ -18,6 +18,7 @@ add_library(daw_ui_workspace STATIC
     src/history/HistoryLog.cpp
     src/model/NoteClipboard.cpp
     src/model/PatternPreviews.cpp
+    src/model/SampleSearch.cpp
     src/model/TempoEditing.cpp
     src/model/WaveformPeaks.cpp)
 add_library(daw::ui_workspace ALIAS daw_ui_workspace)
