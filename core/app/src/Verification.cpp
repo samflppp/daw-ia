@@ -1181,6 +1181,7 @@ void Verification::buildList()
     addMeterSteps();
     addMixerSteps();
     addTempoSteps();
+    addSearchSteps();
 
     // --- the title bar -----------------------------------------------------------
 
@@ -2903,6 +2904,239 @@ void Verification::addTempoSteps()
                       juce::String(state_.tempoPoints().front().beatsPerMinute, 1).toStdString() +
                       ", signature " + std::to_string(state_.timeSignature().numerator) + "/" +
                       std::to_string(state_.timeSignature().denominator));
+        });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+juce::TreeViewItem* Verification::browserItem(const juce::File& file) const
+{
+    auto* browser = dynamic_cast<ui::BrowserPanel*>(panel("browser"));
+    if (browser == nullptr)
+        return nullptr;
+
+    juce::TreeView* tree = nullptr;
+    for (auto* child : browser->getChildren())
+        tree = tree != nullptr ? tree : dynamic_cast<juce::TreeView*>(child);
+    if (tree == nullptr || tree->getRootItem() == nullptr)
+        return nullptr;
+
+    // Down the tree the way the eye goes: only through what is open.
+    std::function<juce::TreeViewItem*(juce::TreeViewItem*)> find =
+        [&](juce::TreeViewItem* item) -> juce::TreeViewItem*
+    {
+        for (int index = 0; index < item->getNumSubItems(); ++index)
+        {
+            auto* sub = item->getSubItem(index);
+            if (sub->getUniqueName() == file.getFullPathName())
+                return sub;
+            if (sub->isOpen())
+            {
+                if (auto* deeper = find(sub); deeper != nullptr)
+                    return deeper;
+            }
+        }
+        return nullptr;
+    };
+    return find(tree->getRootItem());
+}
+
+void Verification::clickBrowserItem(juce::TreeViewItem& item)
+{
+    auto* browser = panel("browser");
+    auto source = juce::Desktop::getInstance().getMainMouseSource();
+    const auto now = juce::Time::getCurrentTime();
+    const juce::MouseEvent event{source,
+                                 {},
+                                 juce::ModifierKeys{juce::ModifierKeys::leftButtonModifier},
+                                 juce::MouseInputSource::defaultPressure,
+                                 0.0f,
+                                 0.0f,
+                                 0.0f,
+                                 0.0f,
+                                 browser,
+                                 browser,
+                                 now,
+                                 {},
+                                 now,
+                                 1,
+                                 false};
+    item.setSelected(true, true);
+    item.itemClicked(event);
+}
+
+juce::TextEditor* Verification::browserSearch() const
+{
+    auto* browser = panel("browser");
+    if (browser == nullptr)
+        return nullptr;
+    for (auto* child : browser->getChildren())
+    {
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child); editor != nullptr)
+            return editor;
+    }
+    return nullptr;
+}
+
+void Verification::addSearchSteps()
+{
+    // --- the browser: one click on a folder, and the search ---------------------------
+    //
+    // A pack with a folder of its own, the way sample packs come: "Kicks",
+    // three kicks in it, and a house snare next to it. The person opens it with one click each, then types
+    // "kick house" and expects the house kick first and the club and techno
+    // ones right after — the example they gave.
+
+    add("un dossier « Kicks » dans le kit ; un clic ouvre le kit, un clic ouvre « Kicks »",
+        [this]
+        {
+            savedState_ = domain::json::write(state_.toValue());
+            savedDepth_ = depth();
+
+            const auto kicks = kit_.getChildFile("Kicks");
+            static_cast<void>(kicks.createDirectory());
+            for (const auto* name : {"Kick House.wav", "Kick Club 01.wav", "Kick Techno.wav"})
+                writeHit(kicks.getChildFile(name), 0.3);
+            writeHit(kit_.getChildFile("Snare House.wav"), 0.3);
+
+            auto* browser = dynamic_cast<ui::BrowserPanel*>(panel("browser"));
+            if (browser == nullptr)
+                return;
+            browser->refresh();
+
+            auto* kit = browserItem(kit_);
+            if (kit == nullptr)
+            {
+                check(false, "le kit est dans le navigateur");
+                return;
+            }
+            kit->setOpen(false);
+            clickBrowserItem(*kit);
+            check(kit->isOpen(), "un clic ouvre le kit");
+
+            auto* folder = browserItem(kicks);
+            if (folder == nullptr)
+            {
+                check(false, "« Kicks » est dans le kit");
+                return;
+            }
+            clickBrowserItem(*folder);
+            check(folder->isOpen() && folder->getNumSubItems() == 3, "un clic ouvre « Kicks » : trois kicks");
+            snapshot("s12-dossier-ouvert-d-un-clic");
+
+            clickBrowserItem(*folder);
+            check(!folder->isOpen(), "un second clic le referme");
+        });
+
+    add(
+        "on tape « kick house » dans la recherche",
+        [this]
+        {
+            auto* search = browserSearch();
+            if (search == nullptr)
+            {
+                check(false, "une barre de recherche en haut du navigateur");
+                return;
+            }
+            search->setText("kick house", true);
+        },
+        [this]
+        {
+            auto* browser = dynamic_cast<ui::BrowserPanel*>(panel("browser"));
+            return browser != nullptr && !browser->results().empty();
+        },
+        5000.0);
+
+    add(
+        "le kick house d'abord, puis le club et le techno, puis ce qui ne répond qu'à moitié",
+        [this]
+        {
+            auto* browser = dynamic_cast<ui::BrowserPanel*>(panel("browser"));
+            if (browser == nullptr)
+                return;
+
+            juce::StringArray names;
+            for (const auto& file : browser->results())
+                names.add(file.getFileName());
+            note("résultats : " + names.joinIntoString(", ").toStdString());
+
+            check(names.size() >= 5, "au moins cinq résultats");
+            if (names.size() < 5)
+                return;
+            check(names[0] == "Kick House.wav", "premier : Kick House");
+            check(juce::StringArray{names[1], names[2]}.contains("Kick Club 01.wav") &&
+                      juce::StringArray{names[1], names[2]}.contains("Kick Techno.wav"),
+                  "puis Kick Club 01 et Kick Techno : house, club et techno sont de la même famille");
+            check(names.indexOf("Snare House.wav") > 2 && names.indexOf("Kick 808.wav") > 2,
+                  "Snare House et Kick 808, qui n'ont qu'un mot sur deux, après");
+            check(!names.contains("Clap.wav"), "le Clap n'y est pas");
+            snapshot("s12-recherche-kick-house");
+
+            // One click on the second result plays it, as in the tree.
+            if (auto* row = browser->resultRow(1); row != nullptr)
+                click(*row, row->getLocalBounds().getCentre());
+            check(samples_.auditioned() == browser->results()[1],
+                  "un clic sur le deuxième résultat le fait entendre : « " +
+                      samples_.auditioned().getFileName().toStdString() + " »");
+        },
+        [this] { return samples_.auditionPeakDb() > -60.0f; },
+        3000.0);
+
+    add(
+        "deux fautes de frappe : « kcik clbu »",
+        [this]
+        {
+            check(samples_.auditionPeakDb() > -60.0f,
+                  "l'écoute sort à " + juce::String(samples_.auditionPeakDb(), 1).toStdString() + " dBFS");
+            samples_.stopAudition();
+            if (auto* search = browserSearch(); search != nullptr)
+                search->setText("kcik clbu", true);
+        },
+        [this]
+        {
+            auto* browser = dynamic_cast<ui::BrowserPanel*>(panel("browser"));
+            return browser != nullptr && !browser->results().empty() &&
+                   browser->results().front().getFileName() == "Kick Club 01.wav";
+        },
+        3000.0);
+
+    add("Kick Club 01 en tête ; Échap ramène l'arbre",
+        [this]
+        {
+            auto* browser = dynamic_cast<ui::BrowserPanel*>(panel("browser"));
+            if (browser == nullptr)
+                return;
+            check(browser->results().front().getFileName() == "Kick Club 01.wav", "Kick Club 01 en tête");
+
+            if (auto* search = browserSearch(); search != nullptr)
+                static_cast<void>(search->keyPressed(juce::KeyPress{juce::KeyPress::escapeKey}));
+        });
+
+    add("l'arbre est revenu ; le projet n'a pas bougé",
+        [this]
+        {
+            auto* browser = dynamic_cast<ui::BrowserPanel*>(panel("browser"));
+            auto* search = browserSearch();
+            if (browser == nullptr || search == nullptr)
+                return;
+
+            check(search->isEmpty() && browser->results().empty(), "la recherche est vide");
+            bool treeShown = false;
+            for (auto* child : browser->getChildren())
+                treeShown =
+                    treeShown || (dynamic_cast<juce::TreeView*>(child) != nullptr && child->isVisible());
+            check(treeShown, "l'arbre est de nouveau affiché");
+
+            check(depth() == savedDepth_, "aucune entrée d'historique");
+            check(domain::json::write(state_.toValue()) == savedState_,
+                  "le projet est identique, à l'octet près");
+
+            static_cast<void>(kit_.getChildFile("Kicks").deleteRecursively());
+            static_cast<void>(kit_.getChildFile("Snare House.wav").deleteFile());
+            browser->refresh();
         });
 }
 

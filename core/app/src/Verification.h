@@ -149,6 +149,13 @@ private:
     // The tempo and the signature readouts: wheel, menu, typing, and the
     // tempo lane "Automatiser le tempo" opens in the playlist.
     void addTempoSteps();
+
+    // The browser: one click opens a folder, the search finds "kick house"
+    // and what is close to it.
+    void addSearchSteps();
+    [[nodiscard]] juce::TreeViewItem* browserItem(const juce::File& file) const;
+    void clickBrowserItem(juce::TreeViewItem& item);
+    [[nodiscard]] juce::TextEditor* browserSearch() const;
     void chooseMenuItem(int position);
     void answerDialog(const juce::String& field, const juce::String& typed);
 
