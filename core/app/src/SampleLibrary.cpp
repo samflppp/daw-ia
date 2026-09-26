@@ -12,6 +12,10 @@ namespace
 
 constexpr const char* foldersKey = "samples.folders";
 
+// Past this many samples the listing stops: a whole disk given as a folder
+// must not fill the memory with names.
+constexpr std::size_t mostIndexed = 200000;
+
 } // namespace
 
 SampleLibrary::SampleLibrary(std::function<engine::ContentStore*()> store, juce::PropertySet* settings)
@@ -19,11 +23,13 @@ SampleLibrary::SampleLibrary(std::function<engine::ContentStore*()> store, juce:
     , settings_(settings)
 {
     formats_.registerBasicFormats();
+    indexSamples();
 }
 
 SampleLibrary::~SampleLibrary()
 {
     alive_->store(false);
+    indexPool_.removeAllJobs(true, 10000);
     pool_.removeAllJobs(true, 10000);
 }
 
@@ -47,6 +53,51 @@ juce::File SampleLibrary::auditioned() const
 float SampleLibrary::auditionPeakDb() const
 {
     return preview_ != nullptr ? preview_->peakDb() : -100.0f;
+}
+
+void SampleLibrary::indexSamples()
+{
+    const auto asked = ++indexAsked_;
+
+    indexPool_.addJob(
+        [this, asked, alive = alive_, roots = folders()]
+        {
+            auto entries = std::make_shared<std::vector<ui::SearchEntry>>();
+
+            for (const auto& rootFolder : roots)
+            {
+                // The words of the folders count from the one the user gave,
+                // its own name included: "Club Pack/Kicks/01.wav".
+                const auto base = rootFolder.getParentDirectory();
+                for (const auto& found : juce::RangedDirectoryIterator(
+                         rootFolder, true, "*", juce::File::findFiles | juce::File::ignoreHiddenFiles))
+                {
+                    if (!alive->load() || entries->size() >= mostIndexed)
+                        break;
+
+                    const auto& file = found.getFile();
+                    if (!isSampleFile(file))
+                        continue;
+
+                    ui::SearchEntry entry;
+                    entry.path = file.getFullPathName().toStdString();
+                    entry.nameWords = ui::searchWords(file.getFileNameWithoutExtension().toStdString());
+                    entry.folderWords =
+                        ui::searchWords(file.getParentDirectory().getRelativePathFrom(base).toStdString());
+                    entries->push_back(std::move(entry));
+                }
+            }
+
+            juce::MessageManager::callAsync(
+                [this, alive, asked, entries]
+                {
+                    if (!alive->load() || asked != indexAsked_)
+                        return;
+
+                    index_ = entries;
+                    sendChangeMessage();
+                });
+        });
 }
 
 std::shared_ptr<const ui::WaveformPeaks> SampleLibrary::waveform(const domain::SampleRef& sample)
@@ -196,6 +247,7 @@ void SampleLibrary::addFolder(const juce::File& folder)
 
     current.push_back(folder);
     writeFolders(current);
+    indexSamples();
 }
 
 void SampleLibrary::removeFolder(const juce::File& folder)
@@ -203,6 +255,7 @@ void SampleLibrary::removeFolder(const juce::File& folder)
     auto current = folders();
     current.erase(std::remove(current.begin(), current.end(), folder), current.end());
     writeFolders(current);
+    indexSamples();
 }
 
 void SampleLibrary::writeFolders(const std::vector<juce::File>& folders)

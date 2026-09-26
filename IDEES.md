@@ -39,6 +39,22 @@ le prend pas explicitement dans son périmètre.
   réel, et une allocation dans le callback est un craquement garanti (règle tenue depuis la S2). Le
   système propose la suite en avance de phase, il ne l'insère jamais au moment où elle doit sonner.
 
+## Recherche de samples par l'IA (après la S12)
+
+La S12 livre une recherche par les noms : mots, préfixes, une faute de frappe, et une table de
+familles écrite à la main (house ≈ club ≈ techno, kick ≈ bd). Elle ne trouve que ce que les noms
+disent. Ce qu'un modèle ajouterait :
+
+- des familles apprises plutôt qu'écrites, en plongeant les noms de fichiers et de dossiers dans un
+  espace de vecteurs (un petit modèle d'embeddings local) : « kick house » trouverait « Thump 04 »
+  rangé dans « Deep Tech » ;
+- une recherche par le son, pas par le nom : des descripteurs mesurés sur l'audio (attaque,
+  brillance, longueur, hauteur) pour « un kick sec et court », « un 808 qui glisse » ;
+- le copilote comme interface : « trouve-moi un clap plus clair que celui du pattern 2 ».
+
+Garder le principe S12 : local, déterministe à entrée égale, et l'index calculé hors du thread
+message. Un appel au modèle distant par frappe de clavier serait trop lent et trop cher.
+
 ## Réserve sur les sources
 
 Chiffres issus d'un blog commercial (vendeur de NAS) reprenant la documentation du projet Laya. À

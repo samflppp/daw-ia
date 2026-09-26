@@ -2,6 +2,7 @@
 
 #include "daw/domain/Result.h"
 #include "daw/domain/project/ProjectState.h"
+#include "daw/ui/model/SampleSearch.h"
 #include "daw/ui/model/WaveformPeaks.h"
 
 #include <juce_core/juce_core.h>
@@ -26,7 +27,8 @@ namespace daw::ui
 // The folders are not project state either: they are this machine's, like the
 // plugins it has installed, and they are kept with the application's settings.
 //
-// It broadcasts when a waveform it was measuring is ready.
+// It broadcasts when a waveform it was measuring is ready, and when the list
+// of samples the search reads has been built again.
 class SampleHost : public juce::ChangeBroadcaster
 {
 public:
@@ -74,6 +76,13 @@ public:
     // for the verification, which cannot listen.
     [[nodiscard]] virtual juce::File auditioned() const = 0;
     [[nodiscard]] virtual float auditionPeakDb() const = 0;
+
+    // Every sample of the folders, as the search reads them. Built on another
+    // thread when the folders change or when asked, because a sample library
+    // of fifty thousand files takes seconds to list; until then the last
+    // list built, or nothing.
+    [[nodiscard]] virtual std::shared_ptr<const std::vector<SearchEntry>> searchIndex() const = 0;
+    virtual void indexSamples() = 0;
 };
 
 } // namespace daw::ui

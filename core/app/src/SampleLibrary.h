@@ -8,6 +8,7 @@
 #include <juce_data_structures/juce_data_structures.h>
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -54,6 +55,12 @@ public:
     [[nodiscard]] juce::File auditioned() const override;
     [[nodiscard]] float auditionPeakDb() const override;
 
+    [[nodiscard]] std::shared_ptr<const std::vector<ui::SearchEntry>> searchIndex() const override
+    {
+        return index_;
+    }
+    void indexSamples() override;
+
 private:
     void writeFolders(const std::vector<juce::File>& folders);
 
@@ -74,6 +81,14 @@ private:
     juce::ThreadPool pool_{1};
 
     std::unique_ptr<SamplePreview> preview_;
+
+    // The search's list, replaced whole when a listing comes back. Listings
+    // run on a thread of their own, so a big library never holds up the
+    // waveforms; one asked while another runs makes the older one's result
+    // stale, and it is dropped.
+    std::shared_ptr<const std::vector<ui::SearchEntry>> index_;
+    std::uint64_t indexAsked_{0};
+    juce::ThreadPool indexPool_{1};
 };
 
 } // namespace daw::app
