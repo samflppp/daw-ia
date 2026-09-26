@@ -77,6 +77,14 @@ public:
 
     void itemClicked(const juce::MouseEvent& event) override
     {
+        // A click on a sample plays it, the way FL's browser does: the kick is
+        // chosen by ear before it is dropped. Nothing enters the project.
+        if (!file_.isDirectory() && !event.mods.isRightButtonDown())
+        {
+            owner_.samples_.audition(file_);
+            return;
+        }
+
         if (!isRoot_ || !event.mods.isRightButtonDown())
             return;
 

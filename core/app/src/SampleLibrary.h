@@ -1,5 +1,6 @@
 #pragma once
 
+#include "SamplePreview.h"
 #include "daw/engine/ContentStore.h"
 #include "daw/ui/model/SampleHost.h"
 
@@ -41,6 +42,18 @@ public:
     [[nodiscard]] std::shared_ptr<const ui::WaveformPeaks> waveform(const domain::SampleRef& sample) override;
     [[nodiscard]] std::size_t waveformsMeasured() const override { return measured_.load(); }
 
+    // The browser's preview, on the engine's audio device. Without one,
+    // auditions are silently refused.
+    void attachPreview(juce::AudioDeviceManager& device)
+    {
+        preview_ = std::make_unique<SamplePreview>(device);
+    }
+
+    void audition(const juce::File& file) override;
+    void stopAudition() override;
+    [[nodiscard]] juce::File auditioned() const override;
+    [[nodiscard]] float auditionPeakDb() const override;
+
 private:
     void writeFolders(const std::vector<juce::File>& folders);
 
@@ -59,6 +72,8 @@ private:
     // One thread: measuring waits on the disk, and two samples measured at
     // once would only take turns on it.
     juce::ThreadPool pool_{1};
+
+    std::unique_ptr<SamplePreview> preview_;
 };
 
 } // namespace daw::app

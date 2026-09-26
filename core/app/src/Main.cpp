@@ -580,6 +580,7 @@ private:
         // settings as the pages, because both are this machine's.
         sampleLibrary_ =
             std::make_unique<SampleLibrary>([this] { return contentStore_.get(); }, layoutSettings_.get());
+        sampleLibrary_->attachPreview(engineHost_->engine().getDeviceManager().deviceManager);
 
         const ui::PanelServices services{tokens,
                                          *lookAndFeel_,

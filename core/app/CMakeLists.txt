@@ -19,6 +19,7 @@ target_sources(daw_app PRIVATE
     src/TransportSync.cpp
     src/Verification.cpp
     src/SampleLibrary.cpp
+    src/SamplePreview.cpp
     src/WorkspaceSwitch.cpp)
 
 target_include_directories(daw_app PRIVATE src)

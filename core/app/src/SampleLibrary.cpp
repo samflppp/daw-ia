@@ -27,6 +27,28 @@ SampleLibrary::~SampleLibrary()
     pool_.removeAllJobs(true, 10000);
 }
 
+void SampleLibrary::audition(const juce::File& file)
+{
+    if (preview_ != nullptr && isSampleFile(file))
+        static_cast<void>(preview_->play(file));
+}
+
+void SampleLibrary::stopAudition()
+{
+    if (preview_ != nullptr)
+        preview_->stop();
+}
+
+juce::File SampleLibrary::auditioned() const
+{
+    return preview_ != nullptr ? preview_->current() : juce::File{};
+}
+
+float SampleLibrary::auditionPeakDb() const
+{
+    return preview_ != nullptr ? preview_->peakDb() : -100.0f;
+}
+
 std::shared_ptr<const ui::WaveformPeaks> SampleLibrary::waveform(const domain::SampleRef& sample)
 {
     const auto& digest = sample.blob.digest;

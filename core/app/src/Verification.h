@@ -138,6 +138,10 @@ private:
 
     // Ctrl + click, Ctrl+C, Ctrl+V, Ctrl+B in the piano roll and the rack.
     void addClipboardSteps();
+
+    // A click on a sample of the browser plays it, and nothing else.
+    void addAuditionSteps();
+    void clickBrowserSample(const juce::String& name);
     [[nodiscard]] juce::Point<int> rackChannel(int row) const;
     [[nodiscard]] juce::Component* mixerStrip(const domain::TrackId& id) const;
     [[nodiscard]] double renderedMasterPeakDb(const std::string& name);

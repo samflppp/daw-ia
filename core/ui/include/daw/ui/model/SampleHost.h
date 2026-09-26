@@ -64,6 +64,16 @@ public:
     // How many samples were measured since the start, for the verification,
     // which has to prove that ten clips of one sample cost one measurement.
     [[nodiscard]] virtual std::size_t waveformsMeasured() const = 0;
+
+    // Plays a sample of the machine to the speakers, before it is dropped:
+    // nothing enters the project. A second audition stops the first.
+    virtual void audition(const juce::File& file) = 0;
+    virtual void stopAudition() = 0;
+
+    // The sample being heard, and how loud what it sends out is now, in dBFS:
+    // for the verification, which cannot listen.
+    [[nodiscard]] virtual juce::File auditioned() const = 0;
+    [[nodiscard]] virtual float auditionPeakDb() const = 0;
 };
 
 } // namespace daw::ui

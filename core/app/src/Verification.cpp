@@ -1173,6 +1173,7 @@ void Verification::buildList()
             check(domain::json::write(state_.toValue()) == savedState_, "Ctrl+Z le remet, à l'octet près");
         });
 
+    addAuditionSteps();
     addPlaylistViewSteps();
     addPreviewSteps();
     addClipboardSteps();
@@ -2524,6 +2525,117 @@ void Verification::addClipboardSteps()
                 key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(domain::json::write(state_.toValue()) == savedState_, "à l'octet près");
             key(juce::KeyPress{juce::KeyPress::F7Key});
+        });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+void Verification::clickBrowserSample(const juce::String& name)
+{
+    auto* browser = dynamic_cast<ui::BrowserPanel*>(panel("browser"));
+    if (browser == nullptr)
+        return;
+
+    juce::TreeView* tree = nullptr;
+    for (auto* child : browser->getChildren())
+        tree = tree != nullptr ? tree : dynamic_cast<juce::TreeView*>(child);
+    if (tree == nullptr || tree->getRootItem() == nullptr)
+        return;
+
+    for (int folder = 0; folder < tree->getRootItem()->getNumSubItems(); ++folder)
+    {
+        auto* kit = tree->getRootItem()->getSubItem(folder);
+        if (kit->getUniqueName() != kit_.getFullPathName())
+            continue;
+
+        kit->setOpen(true);
+        for (int index = 0; index < kit->getNumSubItems(); ++index)
+        {
+            auto* item = kit->getSubItem(index);
+            if (!item->getUniqueName().endsWith(name))
+                continue;
+
+            // The click a tree item receives, left button, on the item.
+            auto source = juce::Desktop::getInstance().getMainMouseSource();
+            const auto now = juce::Time::getCurrentTime();
+            const juce::MouseEvent event{source,
+                                         {},
+                                         juce::ModifierKeys{juce::ModifierKeys::leftButtonModifier},
+                                         juce::MouseInputSource::defaultPressure,
+                                         0.0f,
+                                         0.0f,
+                                         0.0f,
+                                         0.0f,
+                                         tree,
+                                         tree,
+                                         now,
+                                         {},
+                                         now,
+                                         1,
+                                         false};
+            item->setSelected(true, true);
+            item->itemClicked(event);
+            return;
+        }
+    }
+}
+
+void Verification::addAuditionSteps()
+{
+    // --- listening in the browser ---------------------------------------------------
+    //
+    // A click on a sample plays it, nothing enters the project. What is heard
+    // is measured where it leaves for the speakers.
+
+    add(
+        "un clic sur « Kick 808.wav » dans le navigateur le fait entendre",
+        [this]
+        {
+            savedState_ = domain::json::write(state_.toValue());
+            savedDepth_ = depth();
+            clickBrowserSample("Kick 808.wav");
+            check(samples_.auditioned().getFileName() == "Kick 808.wav", "le sample est en écoute");
+        },
+        [this] { return samples_.auditionPeakDb() > -60.0f; },
+        3000.0);
+
+    add("le projet n'a pas bougé ; un clic sur « Clap.wav » remplace le premier",
+        [this]
+        {
+            check(samples_.auditionPeakDb() > -60.0f,
+                  "la sortie de l'écoute mesure " + juce::String(samples_.auditionPeakDb(), 1).toStdString() +
+                      " dBFS");
+            check(depth() == savedDepth_, "aucune entrée d'historique");
+            check(domain::json::write(state_.toValue()) == savedState_,
+                  "le projet est identique, à l'octet près");
+            clickBrowserSample("Clap.wav");
+            check(samples_.auditioned().getFileName() == "Clap.wav", "le Clap remplace le Kick");
+        });
+
+    add(
+        "pendant que la chanson joue, l'écoute s'y ajoute",
+        [this]
+        {
+            press("SONG");
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.0)));
+            key(juce::KeyPress{juce::KeyPress::spaceKey});
+            clickBrowserSample("Kick 808.wav");
+        },
+        [this] { return clock_.isPlaying() && samples_.auditionPeakDb() > -60.0f; },
+        3000.0);
+
+    add("arrêter : la lecture et l'écoute",
+        [this]
+        {
+            check(clock_.isPlaying() && samples_.auditionPeakDb() > -60.0f,
+                  "la chanson et l'écoute sonnent ensemble");
+            key(juce::KeyPress{juce::KeyPress::spaceKey});
+            samples_.stopAudition();
+            check(samples_.auditioned() == juce::File{}, "plus rien en écoute");
+            check(depth() == savedDepth_, "toujours aucune entrée d'historique");
         });
 }
 
