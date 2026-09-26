@@ -108,3 +108,66 @@ trouver la cause au prochain échec.
 - L'automation : le modèle (lignes dans la playlist, points et courbes, projection sur les paramètres,
   commandes du copilote, clic droit sur un curseur) à exposer avant de coder.
 - La rampe de tempo entre deux points.
+
+## 9. Prochaines étapes
+
+Ordre validé le 26 septembre 2026. L'IA passe au centre du DAW. Chaque modèle est exposé et validé avant d'être
+codé.
+
+### S13 : workflow, navigation, export (livrés)
+
+| Point | Commit |
+|---|---|
+| Le pattern se choisit dans la barre de transport ; le piano-roll a un menu des canaux du rack ; « + Ligne » retiré | `c6f0a86` |
+| Molette sur la règle : zoom autour du pointeur ; clic molette : déplacer la vue (piano-roll et playlist) | `fb67015` |
+| Fichier > Exporter… : WAV, FLAC, MP3, AAC (MP3 et AAC par Media Foundation, voie A) | `e1a0311` |
+
+310 vérifications. Un nouvel échec intermittent : un clic sur S pendant la lecture est resté sans effet une
+fois, et il a entraîné 7 échecs à sa suite. Le passage suivant n'a eu aucun échec. C'est la même famille que
+l'étape 41 : la cause est à chercher.
+
+### S14 : la génération locale dans le piano-roll
+
+- **Notes fantômes.** On choisit une plage, on lance la génération (Ctrl+G, ou un champ dans l'en-tête), et
+  les notes proposées s'affichent en gris.
+  - Tab accepte la proposition : un seul groupe d'historique « copilote : … ».
+  - Échap la rejette.
+  - Alt+molette passe d'une variante à l'autre.
+  - Tant qu'une proposition n'est pas acceptée, elle ne crée aucune entrée d'historique.
+- **`harmony` en règles déterministes.** Tonalité, gamme et accords, déduits ou imposés. Il énumère les
+  candidats justes : c'est la justesse.
+- **Chaîne de Markov d'ordre 3 ou 4** sur le corpus personnel. Elle classe ces candidats : c'est le style.
+- Tout est local, sans API.
+- **Preuve au rendu :** les attaques sont aux bonnes positions, et une note hors gamme est un échec.
+
+### S15 : le copilote distant dans le workflow
+
+- **Portée.** Le modèle distant reçoit la portée du piano-roll (canal, pattern, plage), pas le projet entier.
+- **Trois niveaux de latence :**
+
+  | Niveau | Budget | Ce qui y tourne |
+  |---|---|---|
+  | T0 | < 16 ms | règles et Markov |
+  | T1 | < 300 ms | ONNX local |
+  | T2 | secondes | le modèle distant, annulable |
+
+- **Version du projet.** Chaque requête la porte. Si le projet a changé entre-temps, la réponse reste en notes
+  fantômes au lieu d'être appliquée.
+- **Beatmaking.** La génération couvre plusieurs canaux à la fois (kick, snare, hat) dans le pattern en cours.
+
+### S16 : sound design et recherche
+
+- **Effets par le copilote.** Il règle les paramètres des effets par des commandes. Il manque encore les noms,
+  les unités et les plages des paramètres : c'est le besoin `plugin.parameters` de la S11.
+- **Recherche de samples.** Elle passe par des embeddings locaux, puis par des descripteurs audio (voir
+  `IDEES.md`).
+
+### Plus tard
+
+- **L'automation.** Son modèle est à exposer : lignes dans la playlist, points et courbes, projection sur les
+  paramètres, commandes du copilote, clic droit sur un curseur. Elle conditionne aussi `automation.write`
+  pour le copilote.
+- **La rampe de tempo** entre deux points.
+- **Le routeur d'intention Laya**, quand le journal SQLite aura assez d'exemples pour l'affiner.
+- **L'export sans bloquer l'interface** : le rendu passe sur un thread, avec une barre de progression.
+- **L'écoute d'une proposition** sans l'écrire dans le projet : il faut un chemin moteur séparé.
