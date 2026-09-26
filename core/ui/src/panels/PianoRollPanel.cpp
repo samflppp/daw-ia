@@ -32,6 +32,12 @@ constexpr int highestVisiblePitch = 127;
 // four bars.
 constexpr double newPatternLengthBeats = 16.0;
 
+// A notch of the wheel is about a quarter of a unit in JUCE: the zoom over the
+// ruler doubles over four notches, as in the playlist, and a sideways notch
+// moves an eighth of the view.
+constexpr double zoomPerWheelUnit = 2.0;
+constexpr double viewPerWheelUnit = 0.5;
+
 // How far the hand travels for the whole velocity range. Three pixels per step
 // would make 1 to 127 a four-hundred-pixel drag; a panel is not that tall.
 constexpr double pixelsPerVelocityStep = 1.5;
@@ -362,26 +368,55 @@ int PianoRollPanel::pitchAtY(int y) const
     return std::clamp(topPitch_ - row, lowestVisiblePitch, highestVisiblePitch);
 }
 
+double PianoRollPanel::fitBeatWidth() const
+{
+    const auto width = static_cast<double>(std::max(1, gridArea().getWidth()));
+    const auto length = patternLength();
+    return length > 0.0 ? width / length : width;
+}
+
+double PianoRollPanel::beatWidth() const
+{
+    const auto fit = fitBeatWidth();
+    const auto widest = std::max(fit, static_cast<double>(tokens_.integer("metric.pianoRoll.beatWidthMax")));
+    return std::clamp(zoom_.value_or(fit), fit, widest);
+}
+
+double PianoRollPanel::firstBeat() const
+{
+    // Never past the end of the pattern: there is nothing to write there.
+    const auto visible = static_cast<double>(std::max(1, gridArea().getWidth())) / beatWidth();
+    return std::clamp(firstBeat_, 0.0, std::max(0.0, patternLength() - visible));
+}
+
+void PianoRollPanel::setView(double first, std::optional<double> zoom)
+{
+    zoom_ = zoom;
+    if (zoom_.has_value() && *zoom_ <= fitBeatWidth())
+        zoom_.reset();
+
+    firstBeat_ = first;
+    firstBeat_ = firstBeat();
+    repaint();
+}
+
 double PianoRollPanel::beatAtX(int x) const
 {
-    const auto area = gridArea();
     const auto length = patternLength();
-    if (length <= 0.0 || area.getWidth() <= 0)
+    if (length <= 0.0)
         return 0.0;
 
-    const auto fraction = static_cast<double>(x - area.getX()) / static_cast<double>(area.getWidth());
-    return std::clamp(fraction, 0.0, 1.0) * length;
+    const auto beats = firstBeat() + static_cast<double>(x - gridArea().getX()) / beatWidth();
+    return std::clamp(beats, 0.0, length);
 }
 
 int PianoRollPanel::xForBeat(double beats) const
 {
     const auto area = gridArea();
-    const auto length = patternLength();
-    if (length <= 0.0)
+    if (patternLength() <= 0.0)
         return area.getX();
 
-    const auto fraction = std::clamp(beats / length, 0.0, 1.0);
-    return area.getX() + static_cast<int>(std::llround(fraction * static_cast<double>(area.getWidth())));
+    return area.getX() + static_cast<int>(std::llround((beats - firstBeat()) * beatWidth()));
 }
 
 double PianoRollPanel::quantise(double beats) const
@@ -504,6 +539,10 @@ void PianoRollPanel::paintEmpty(juce::Graphics& g) const
 
 void PianoRollPanel::paintGrid(juce::Graphics& g, juce::Rectangle<int> area) const
 {
+    // Zoomed in, lines and notes lie left and right of the window.
+    const juce::Graphics::ScopedSaveState saved{g};
+    g.reduceClipRegion(area);
+
     const auto keyHeight = tokens_.integer("metric.pianoRoll.keyHeight");
     const auto hairline = tokens_.integer("stroke.hairline");
 
@@ -541,6 +580,9 @@ void PianoRollPanel::paintGrid(juce::Graphics& g, juce::Rectangle<int> area) con
 
 void PianoRollPanel::paintNotes(juce::Graphics& g, juce::Rectangle<int> area) const
 {
+    const juce::Graphics::ScopedSaveState saved{g};
+    g.reduceClipRegion(area);
+
     const auto* edited = clip();
     if (edited == nullptr)
         return;
@@ -738,6 +780,9 @@ void PianoRollPanel::paintRuler(juce::Graphics& g, juce::Rectangle<int> area) co
     if (length <= 0.0)
         return;
 
+    const juce::Graphics::ScopedSaveState saved{g};
+    g.reduceClipRegion(area);
+
     g.setColour(tokens_.colour("color.surface.panel"));
     g.fillRect(area);
 
@@ -782,7 +827,12 @@ std::optional<int> PianoRollPanel::playheadX() const
     if (!local)
         return {};
 
-    return xForBeat(*local);
+    // Zoomed in, the playhead may be out of the window.
+    const auto x = xForBeat(*local);
+    const auto area = gridArea();
+    if (x < area.getX() || x > area.getRight())
+        return {};
+    return x;
 }
 
 void PianoRollPanel::paintPlayhead(juce::Graphics& g, juce::Rectangle<int> area) const
@@ -882,6 +932,15 @@ void PianoRollPanel::removeNote(domain::NoteId noteId)
 void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
 {
     grabKeyboardFocus();
+
+    // The middle button drags the view, wherever it is pressed: the hand
+    // moves the paper, not the notes.
+    if (event.mods.isMiddleButtonDown())
+    {
+        pan_ = Pan{event.getPosition(), firstBeat(), topPitch_};
+        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+        return;
+    }
 
     // The ruler is where the playhead is moved, by click or by drag. It is a
     // transport command like any other: transient, projected, and visible to
@@ -985,6 +1044,15 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
 
 void PianoRollPanel::mouseDrag(const juce::MouseEvent& event)
 {
+    if (pan_.has_value())
+    {
+        const auto delta = event.getPosition() - pan_->start;
+        const auto keyHeight = std::max(1, tokens_.integer("metric.pianoRoll.keyHeight"));
+        topPitch_ = std::clamp(pan_->topPitch + delta.getY() / keyHeight, rowsVisible(), highestVisiblePitch);
+        setView(pan_->firstBeat - static_cast<double>(delta.getX()) / beatWidth(), zoom_);
+        return;
+    }
+
     if (band_.has_value())
     {
         band_ = juce::Rectangle<int>{bandStart_, event.getPosition()}.getIntersection(gridArea());
@@ -1096,6 +1164,13 @@ void PianoRollPanel::mouseUp(const juce::MouseEvent& event)
 
     draggingPlayhead_ = false;
 
+    if (pan_.has_value())
+    {
+        pan_.reset();
+        setMouseCursor(juce::MouseCursor::NormalCursor);
+        return;
+    }
+
     if (velocityStroke_.has_value())
     {
         commitVelocityStroke();
@@ -1125,7 +1200,9 @@ void PianoRollPanel::mouseUp(const juce::MouseEvent& event)
     drag_.reset();
 }
 
-// The wheel moves the pitch window by semitones, the keys by octaves.
+// The wheel moves the pitch window by semitones, the keys by octaves. Over the
+// ruler it zooms around the pointer; sideways, or with Shift, it moves along
+// the pattern.
 //
 // J7 left the wheel out on the grounds that a trackpad sends it by accident.
 // Using the screen says otherwise: thirty-four rows of a hundred and
@@ -1135,7 +1212,31 @@ void PianoRollPanel::mouseUp(const juce::MouseEvent& event)
 // not a lost position.
 void PianoRollPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
 {
-    juce::ignoreUnused(event);
+    const auto grid = gridArea();
+
+    if (rulerArea().contains(event.getPosition()))
+    {
+        // Around the pointer: the beat under it stays under it.
+        const auto x = std::clamp(event.getPosition().getX(), grid.getX(), grid.getRight());
+        const auto anchor = beatAtX(x);
+        const auto widest =
+            std::max(fitBeatWidth(), static_cast<double>(tokens_.integer("metric.pianoRoll.beatWidthMax")));
+        const auto width =
+            std::clamp(beatWidth() * std::pow(zoomPerWheelUnit, static_cast<double>(wheel.deltaY)),
+                       fitBeatWidth(),
+                       widest);
+        setView(anchor - static_cast<double>(x - grid.getX()) / width, width);
+        return;
+    }
+
+    const auto sideways =
+        wheel.deltaX != 0.0f ? wheel.deltaX : (event.mods.isShiftDown() ? wheel.deltaY : 0.0f);
+    if (sideways != 0.0f)
+    {
+        const auto visible = static_cast<double>(std::max(1, grid.getWidth())) / beatWidth();
+        setView(firstBeat() - static_cast<double>(sideways) * viewPerWheelUnit * visible, zoom_);
+        return;
+    }
 
     const auto steps = static_cast<int>(std::round(wheel.deltaY * static_cast<float>(semitonesPerOctave)));
     if (steps == 0)

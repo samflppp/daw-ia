@@ -165,6 +165,9 @@ private:
 
     // S13: the pattern chosen in the transport, the channel in the piano roll.
     void addWorkflowSteps();
+
+    // S13: the wheel over the ruler zooms, the middle button drags the view.
+    void addNavigationSteps();
     [[nodiscard]] std::vector<int> kickVelocities() const;
     [[nodiscard]] juce::TreeViewItem* browserItem(const juce::File& file) const;
     void clickBrowserItem(juce::TreeViewItem& item);
@@ -205,7 +208,11 @@ private:
                bool right = false,
                bool shift = false,
                bool ctrl = false);
-    void drag(juce::Component& target, juce::Point<int> from, juce::Point<int> to, bool ctrl = false);
+    void drag(juce::Component& target,
+              juce::Point<int> from,
+              juce::Point<int> to,
+              bool ctrl = false,
+              bool middle = false);
 
     // A short burst and silence, as a WAV file: a drum hit an onset detector
     // cannot miss.

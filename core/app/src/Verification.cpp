@@ -380,12 +380,14 @@ void Verification::click(juce::Component& target, juce::Point<int> at, bool righ
     target.mouseUp(up);
 }
 
-void Verification::drag(juce::Component& target, juce::Point<int> from, juce::Point<int> to, bool ctrl)
+void Verification::drag(
+    juce::Component& target, juce::Point<int> from, juce::Point<int> to, bool ctrl, bool middle)
 {
     auto source = juce::Desktop::getInstance().getMainMouseSource();
     const auto now = juce::Time::getCurrentTime();
-    const auto held = juce::ModifierKeys{juce::ModifierKeys::leftButtonModifier |
-                                         (ctrl ? juce::ModifierKeys::ctrlModifier : 0)};
+    const auto held = juce::ModifierKeys{
+        (middle ? juce::ModifierKeys::middleButtonModifier : juce::ModifierKeys::leftButtonModifier) |
+        (ctrl ? juce::ModifierKeys::ctrlModifier : 0)};
     const auto start = from.toFloat();
 
     const juce::MouseEvent down{source,
@@ -1210,6 +1212,7 @@ void Verification::buildList()
     addVelocitySteps();
     addRackSteps();
     addWorkflowSteps();
+    addNavigationSteps();
 
     // --- the title bar -----------------------------------------------------------
 
@@ -3443,6 +3446,123 @@ void Verification::addWorkflowSteps()
             selection_.dispatchPendingMessages();
             check(chooser.getSelectedId() == 1, "un clic sur le premier canal du rack remet le menu dessus");
             snapshot("s13-canal-du-piano-roll");
+        });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+void Verification::addNavigationSteps()
+{
+    // --- S13: zoom on the ruler, the middle button drags the view -----------------
+    //
+    // Four notches over the ruler double the width of a beat, and the beat
+    // under the pointer stays under it. The middle button held down moves
+    // the paper, not the notes. None of it is an edit.
+
+    add("piano-roll : la molette sur la règle zoome autour du pointeur",
+        [this]
+        {
+            if (panel("piano_roll") == nullptr || !panel("piano_roll")->isShowing())
+                key(juce::KeyPress{juce::KeyPress::F7Key});
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            if (roll == nullptr || !roll->isShowing())
+            {
+                check(false, "le piano-roll est ouvert");
+                return;
+            }
+
+            selection_.selectPattern(state_.patterns().front().id);
+            selection_.selectTrack(state_.tracks().front().id);
+            selection_.dispatchPendingMessages();
+
+            savedState_ = domain::json::write(state_.toValue());
+            savedDepth_ = depth();
+
+            const auto ruler = roll->ruler();
+            const auto fit = roll->beatWidth();
+            const auto at = juce::Point<int>{ruler.getX() + ruler.getWidth() / 3, ruler.getCentreY()};
+            const auto beatBefore = roll->firstBeat() + (at.x - ruler.getX()) / roll->beatWidth();
+
+            wheel(*roll, at, 1.0f);
+            const auto beatAfter = roll->firstBeat() + (at.x - ruler.getX()) / roll->beatWidth();
+            check(std::abs(roll->beatWidth() - fit * 2.0) < 0.01,
+                  "quatre crans : un temps passe de " + std::to_string(fit) + " à " +
+                      std::to_string(roll->beatWidth()) + " px");
+            check(std::abs(beatAfter - beatBefore) < 1.0 / roll->beatWidth(),
+                  "le temps sous le pointeur y reste");
+            check(roll->firstBeat() > 0.0, "la vue part de plus loin que le début");
+            check(depth() == savedDepth_, "zoomer n'est pas une édition");
+            snapshot("s13-piano-roll-zoom");
+        });
+
+    add("piano-roll : le clic molette déplace la vue, pas les notes",
+        [this]
+        {
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            if (roll == nullptr)
+                return;
+
+            const auto keyHeight = tokens_.integer("metric.pianoRoll.keyHeight");
+            const auto ruler = roll->ruler();
+            const auto from = juce::Point<int>{ruler.getCentreX(), ruler.getBottom() + keyHeight * 10};
+            const auto first = roll->firstBeat();
+            const auto top = roll->topPitch();
+            const auto width = roll->beatWidth();
+
+            drag(*roll, from, from + juce::Point<int>{-60, keyHeight * 3}, false, true);
+            check(std::abs(roll->firstBeat() - (first + 60.0 / width)) < 0.01,
+                  "60 px vers la gauche : la vue avance de " + std::to_string(60.0 / width) + " temps");
+            check(roll->topPitch() == top + 3, "trois touches vers le bas : trois demi-tons plus haut");
+            check(depth() == savedDepth_ && domain::json::write(state_.toValue()) == savedState_,
+                  "aucune note posée ni bougée, aucune entrée d'historique");
+
+            // Back to the whole pattern: zooming out stops at the width that fits.
+            for (int notch = 0; notch < 4; ++notch)
+                wheel(*roll, ruler.getCentre(), -1.0f);
+            check(roll->firstBeat() == 0.0 && std::abs(roll->beatWidth() - width / 2.0) < 0.01,
+                  "dézoomer revient au pattern entier");
+
+            key(juce::KeyPress{juce::KeyPress::F7Key});
+        });
+
+    add("playlist : la molette sur la règle zoome, le clic molette déplace",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            const auto ruler = playlist->ruler();
+            const auto fit = playlist->beatWidth();
+            const auto at = juce::Point<int>{ruler.getX() + ruler.getWidth() / 3, ruler.getCentreY()};
+            const auto beatBefore = playlist->firstBeat() + (at.x - ruler.getX()) / playlist->beatWidth();
+
+            wheel(*playlist, at, 1.0f);
+            const auto beatAfter = playlist->firstBeat() + (at.x - ruler.getX()) / playlist->beatWidth();
+            check(std::abs(playlist->beatWidth() - fit * 2.0) < 0.01,
+                  "quatre crans sur la règle : deux fois plus large");
+            check(std::abs(beatAfter - beatBefore) < 1.0 / playlist->beatWidth(),
+                  "le temps sous le pointeur y reste");
+
+            // Started on the ruler, where a left click moves the playhead: the
+            // middle button must not.
+            const auto position = state_.transport().positionBeats;
+            const auto first = playlist->firstBeat();
+            const auto width = playlist->beatWidth();
+            drag(*playlist, at, at + juce::Point<int>{-80, 0}, false, true);
+            check(std::abs(playlist->firstBeat() - (first + 80.0 / width)) < 0.01,
+                  "80 px vers la gauche : la vue avance de " + std::to_string(80.0 / width) + " temps");
+            check(state_.transport().positionBeats == position, "la tête de lecture n'a pas bougé");
+            check(depth() == savedDepth_ && domain::json::write(state_.toValue()) == savedState_,
+                  "aucun bloc posé ni bougé, aucune entrée d'historique");
+            snapshot("s13-playlist-zoom");
+
+            for (int notch = 0; notch < 4; ++notch)
+                wheel(*playlist, ruler.getCentre(), -1.0f);
+            check(std::abs(playlist->beatWidth() - fit) < 0.01, "dézoomer revient à la vue entière");
         });
 }
 

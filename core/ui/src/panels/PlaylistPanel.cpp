@@ -363,7 +363,8 @@ void PlaylistPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::Mo
 
     const auto grid = gridArea();
 
-    if (event.mods.isCtrlDown() || event.mods.isCommandDown())
+    // Over the ruler the wheel zooms, as in FL; elsewhere Ctrl makes it zoom.
+    if (rulerArea().contains(event.getPosition()) || event.mods.isCtrlDown() || event.mods.isCommandDown())
     {
         // Around the pointer: the beat under it stays under it.
         const auto x = std::clamp(event.getPosition().getX(), grid.getX(), grid.getRight());
@@ -1148,6 +1149,14 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
     const auto point = event.getPosition();
     const auto& mods = event.mods;
 
+    // The middle button drags the view, wherever it is pressed.
+    if (mods.isMiddleButtonDown())
+    {
+        pan_ = Pan{point, firstBeat(), firstLanePixel()};
+        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+        return;
+    }
+
     // The ruler moves the playhead, in song mode: pattern mode plays from the
     // pattern's own start, which is nowhere on this timeline.
     if (rulerArea().contains(point))
@@ -1246,6 +1255,14 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
 
 void PlaylistPanel::mouseDrag(const juce::MouseEvent& event)
 {
+    if (pan_.has_value())
+    {
+        const auto delta = event.getPosition() - pan_->start;
+        setFirstLanePixel(pan_->firstLanePixel - delta.getY());
+        setView(pan_->firstBeat - static_cast<double>(delta.getX()) / beatWidth(), zoom_);
+        return;
+    }
+
     if (tempoMouseDrag(event))
         return;
 
@@ -1275,6 +1292,13 @@ void PlaylistPanel::mouseDrag(const juce::MouseEvent& event)
 void PlaylistPanel::mouseUp(const juce::MouseEvent& event)
 {
     juce::ignoreUnused(event);
+
+    if (pan_.has_value())
+    {
+        pan_.reset();
+        setMouseCursor(juce::MouseCursor::NormalCursor);
+        return;
+    }
 
     if (tempoMouseUp())
         return;

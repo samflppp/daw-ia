@@ -100,7 +100,11 @@ public:
     [[nodiscard]] juce::Point<int> pointFor(int lane, double beats) const;
     [[nodiscard]] juce::Rectangle<int> timelineArea() const { return gridArea(); }
 
-    // The view: pixels per beat, and the first beat on the left.
+    // The view: pixels per beat, and the first beat on the left. The wheel
+    // zooms over the ruler, or with Ctrl anywhere; the middle button held
+    // down drags the view on both axes. The ruler is read by the verification.
+    [[nodiscard]] juce::Rectangle<int> ruler() const { return rulerArea(); }
+    [[nodiscard]] int firstLane() const { return firstLanePixel(); }
     [[nodiscard]] double beatWidth() const;
     [[nodiscard]] double firstBeat() const;
 
@@ -288,6 +292,15 @@ private:
 
     // The view. No zoom means "fit": the width follows the song.
     std::optional<double> zoom_;
+
+    // A drag of the middle button: where it started, and the view then.
+    struct Pan
+    {
+        juce::Point<int> start;
+        double firstBeat{0.0};
+        int firstLanePixel{0};
+    };
+    std::optional<Pan> pan_;
     double firstBeat_{0.0};
     int firstLanePixel_{0};
     juce::ScrollBar horizontal_{false};

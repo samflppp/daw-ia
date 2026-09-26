@@ -145,8 +145,10 @@ void PianoRollPanel::strokeVelocity(juce::Point<int> from, juce::Point<int> to)
     // A stem is crossed when the pointer passes over it, give or take the
     // width of its head: a click next to a stem still reaches it.
     const auto reach = tokens_.integer("metric.pianoRoll.velocityHandle") * 2;
-    const auto left = std::min(from.getX(), to.getX()) - reach;
-    const auto right = std::max(from.getX(), to.getX()) + reach;
+    // Zoomed in, a stem out of the window cannot be crossed.
+    const auto grid = gridArea();
+    const auto left = std::max(std::min(from.getX(), to.getX()) - reach, grid.getX());
+    const auto right = std::min(std::max(from.getX(), to.getX()) + reach, grid.getRight());
 
     for (const auto& note : edited->notes)
     {

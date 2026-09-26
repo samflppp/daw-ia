@@ -22,7 +22,9 @@ namespace daw::ui
 // file knowing either fact.
 //
 // It shows one row of one pattern: the horizontal axis is the pattern's length,
-// not the timeline. Which pattern is on screen is not chosen here — the
+// not the timeline. The whole pattern fits the width until the wheel over the
+// ruler zooms in; the middle button held down drags the view on both axes.
+// Neither is an edit, and neither leaves a history entry. Which pattern is on screen is not chosen here — the
 // transport chooses it, this panel follows, and both read the same Selection.
 // Two choosers for one choice would be the second truth the S7bis review
 // refused.
@@ -65,6 +67,13 @@ public:
 
     // Where a click lands on that beat and that pitch.
     [[nodiscard]] juce::Point<int> pointFor(double beats, int pitch) const;
+
+    // The horizontal view: pixels per beat, and the first beat on the left.
+    // The ruler is where the wheel zooms. The verification reads them.
+    [[nodiscard]] double beatWidth() const;
+    [[nodiscard]] double firstBeat() const;
+    [[nodiscard]] juce::Rectangle<int> ruler() const { return rulerArea(); }
+    [[nodiscard]] int topPitch() const noexcept { return topPitch_; }
 
     // The velocity lane, and where a note's stem would reach at a velocity.
     [[nodiscard]] juce::Rectangle<int> velocityLane() const { return velocityArea(); }
@@ -173,6 +182,22 @@ private:
     // tall as the panel allows: a piano roll that scrolls when it does not need
     // to is a piano roll that hides notes for nothing.
     int topPitch_{84};
+
+    // The horizontal view. No zoom is the width that fits the pattern, and
+    // a zoom out past it goes back to that state.
+    double firstBeat_{0.0};
+    std::optional<double> zoom_;
+    [[nodiscard]] double fitBeatWidth() const;
+    void setView(double first, std::optional<double> zoom);
+
+    // A drag of the middle button: where it started, and the view then.
+    struct Pan
+    {
+        juce::Point<int> start;
+        double firstBeat{0.0};
+        int topPitch{0};
+    };
+    std::optional<Pan> pan_;
 
     // Moves the window onto the notes of the row when none of them is in
     // sight: on a change of row, and when the panel is resized.
