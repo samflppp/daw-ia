@@ -33,7 +33,8 @@ add_executable(daw_domain_tests
     TempoEditingTests.cpp
     AutomationTests.cpp
     AutomationEditingTests.cpp
-    SampleSearchTests.cpp)
+    SampleSearchTests.cpp
+    GenerationTests.cpp)
 
 target_link_libraries(daw_domain_tests PRIVATE daw::domain daw::ui_workspace doctest::doctest)
 daw_set_warnings(daw_domain_tests)

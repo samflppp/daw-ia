@@ -14,6 +14,10 @@ add_library(daw_domain STATIC
     src/copilot/MixingReadiness.cpp
     src/copilot/StateView.cpp
     src/copilot/Tools.cpp
+    src/generation/Constraints.cpp
+    src/generation/Generator.cpp
+    src/generation/Harmony.cpp
+    src/generation/StyleModel.cpp
     src/commands/AddNote.cpp
     src/commands/AutomationCommands.cpp
     src/commands/NoteCommands.cpp

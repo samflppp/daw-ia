@@ -1,0 +1,558 @@
+#include "daw/domain/generation/Constraints.h"
+
+#include <array>
+#include <cctype>
+#include <utility>
+
+namespace daw::domain::generation
+{
+namespace
+{
+
+constexpr std::array<std::string_view, 12> englishNames{
+    "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
+
+// Plain char and not u8: the domain carries UTF-8 bytes and never decodes them.
+constexpr std::array<std::string_view, 12> frenchNames{
+    "Do", "Do#", "Ré", "Mib", "Mi", "Fa", "Fa#", "Sol", "Lab", "La", "Sib", "Si"};
+
+[[nodiscard]] std::string lowered(std::string_view text)
+{
+    std::string out{text};
+    for (auto& c : out)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
+// "am", "f#m", "bbm", "c", "eb", "amin", "cmaj". Lower case already.
+[[nodiscard]] std::optional<Key> parseKey(std::string_view word)
+{
+    if (word.empty())
+        return std::nullopt;
+
+    static constexpr std::array<std::pair<char, int>, 7> letters{
+        {{'c', 0}, {'d', 2}, {'e', 4}, {'f', 5}, {'g', 7}, {'a', 9}, {'b', 11}}};
+
+    int tonic = -1;
+    for (const auto& [letter, pitchClass] : letters)
+    {
+        if (word.front() == letter)
+            tonic = pitchClass;
+    }
+    if (tonic < 0)
+        return std::nullopt;
+
+    auto rest = word.substr(1);
+    if (!rest.empty() && rest.front() == '#')
+    {
+        tonic += 1;
+        rest.remove_prefix(1);
+    }
+    else if (!rest.empty() && rest.front() == 'b')
+    {
+        tonic += 11;
+        rest.remove_prefix(1);
+    }
+
+    Key key{};
+    key.tonic = tonic % 12;
+    if (rest.empty() || rest == "maj")
+        key.mode = Mode::major;
+    else if (rest == "m" || rest == "min")
+        key.mode = Mode::minor;
+    else
+        return std::nullopt;
+
+    return key;
+}
+
+template <typename T>
+struct Word
+{
+    std::string_view text;
+    T value;
+};
+
+constexpr std::array<Word<Resolution>, 13> resolutionWords{{
+    {"noire", Resolution::quarter},
+    {"noires", Resolution::quarter},
+    {"1/4", Resolution::quarter},
+    {"croche", Resolution::eighth},
+    {"croches", Resolution::eighth},
+    {"1/8", Resolution::eighth},
+    {"double", Resolution::sixteenth},
+    {"doubles", Resolution::sixteenth},
+    {"double-croche", Resolution::sixteenth},
+    {"doubles-croches", Resolution::sixteenth},
+    {"double-croches", Resolution::sixteenth},
+    {"1/16", Resolution::sixteenth},
+    {"16e", Resolution::sixteenth},
+}};
+
+constexpr std::array<Word<Density>, 10> densityWords{{
+    {"clair", Density::sparse},
+    {"claire", Density::sparse},
+    {"aéré", Density::sparse},
+    {"aere", Density::sparse},
+    {"léger", Density::sparse},
+    {"leger", Density::sparse},
+    {"moyen", Density::medium},
+    {"moyenne", Density::medium},
+    {"dense", Density::dense},
+    {"chargé", Density::dense},
+}};
+
+constexpr std::array<Word<Register>, 10> registerWords{{
+    {"grave", Register::low},
+    {"graves", Register::low},
+    {"medium", Register::mid},
+    {"médium", Register::mid},
+    {"milieu", Register::mid},
+    {"aigu", Register::high},
+    {"aigus", Register::high},
+    {"aiguë", Register::high},
+    {"aigue", Register::high},
+    {"haut", Register::high},
+}};
+
+constexpr std::array<Word<Role>, 14> roleWords{{
+    {"mélodie", Role::melody},
+    {"melodie", Role::melody},
+    {"lead", Role::melody},
+    {"topline", Role::melody},
+    {"basse", Role::bass},
+    {"bass", Role::bass},
+    {"808", Role::bass},
+    {"accords", Role::chords},
+    {"accord", Role::chords},
+    {"chords", Role::chords},
+    {"rythme", Role::rhythm},
+    {"rythmique", Role::rhythm},
+    {"drums", Role::rhythm},
+    {"batterie", Role::rhythm},
+}};
+
+template <typename T, std::size_t N>
+[[nodiscard]] std::optional<T> lookup(const std::array<Word<T>, N>& words, std::string_view word)
+{
+    for (const auto& candidate : words)
+    {
+        if (candidate.text == word)
+            return candidate.value;
+    }
+    return std::nullopt;
+}
+
+// Sets a field, and reports it when the field was already set to another value.
+template <typename T>
+void assign(std::optional<T>& field,
+            T value,
+            std::string_view word,
+            std::optional<std::string>& firstWord,
+            Interpretation& out)
+{
+    if (field.has_value() && !(*field == value) && firstWord.has_value())
+        out.conflicts.push_back(*firstWord + " puis " + std::string{word} + " : " + std::string{word} +
+                                " retenu");
+    field = value;
+    firstWord = std::string{word};
+}
+
+// --- Value forms ------------------------------------------------------------
+
+[[nodiscard]] std::string_view resolutionText(Resolution value) noexcept
+{
+    switch (value)
+    {
+    case Resolution::quarter:
+        return "1/4";
+    case Resolution::eighth:
+        return "1/8";
+    case Resolution::sixteenth:
+        return "1/16";
+    }
+    return "1/16";
+}
+
+[[nodiscard]] std::string_view densityText(Density value) noexcept
+{
+    switch (value)
+    {
+    case Density::sparse:
+        return "sparse";
+    case Density::medium:
+        return "medium";
+    case Density::dense:
+        return "dense";
+    }
+    return "medium";
+}
+
+[[nodiscard]] std::string_view registerText(Register value) noexcept
+{
+    switch (value)
+    {
+    case Register::low:
+        return "low";
+    case Register::mid:
+        return "mid";
+    case Register::high:
+        return "high";
+    }
+    return "mid";
+}
+
+[[nodiscard]] std::string_view roleText(Role value) noexcept
+{
+    switch (value)
+    {
+    case Role::melody:
+        return "melody";
+    case Role::bass:
+        return "bass";
+    case Role::chords:
+        return "chords";
+    case Role::rhythm:
+        return "rhythm";
+    }
+    return "melody";
+}
+
+template <typename T, std::size_t N>
+[[nodiscard]] Result<std::optional<T>> optionalEnum(const Value& value,
+                                                    std::string_view key,
+                                                    const std::array<T, N>& all,
+                                                    std::string_view (*text)(T) noexcept)
+{
+    const auto* found = value.find(key);
+    if (found == nullptr || found->isNull())
+        return std::optional<T>{};
+
+    auto word = found->asString();
+    if (!word)
+        return fail(ErrorCode::invalidPayload, std::string{key} + ": " + word.error().message);
+
+    for (const auto candidate : all)
+    {
+        if (text(candidate) == word.value())
+            return std::optional<T>{candidate};
+    }
+    return fail(ErrorCode::invalidPayload, std::string{key} + ": unknown value \"" + word.value() + "\"");
+}
+
+[[nodiscard]] Result<std::vector<std::string>> strings(const Value& value, std::string_view key)
+{
+    std::vector<std::string> out;
+    const auto* found = value.find(key);
+    if (found == nullptr || found->isNull())
+        return out;
+
+    const auto* items = found->asArray();
+    if (items == nullptr)
+        return fail(ErrorCode::invalidPayload, std::string{key} + " must be an array");
+
+    for (const auto& item : *items)
+    {
+        auto text = item.asString();
+        if (!text)
+            return fail(ErrorCode::invalidPayload, std::string{key} + ": " + text.error().message);
+        out.push_back(std::move(text).value());
+    }
+    return out;
+}
+
+[[nodiscard]] Value stringArray(const std::vector<std::string>& items)
+{
+    Value::Array out;
+    for (const auto& item : items)
+        out.emplace_back(item);
+    return Value::array(std::move(out));
+}
+
+} // namespace
+
+std::string_view tonicName(int pitchClass) noexcept
+{
+    return englishNames[static_cast<std::size_t>(((pitchClass % 12) + 12) % 12)];
+}
+
+// --- Constraints -------------------------------------------------------------
+
+Value Constraints::toValue() const
+{
+    Value::Object members;
+    if (key.has_value())
+    {
+        members.emplace_back("key",
+                             Value::object({{"tonic", Value{tonicName(key->tonic)}},
+                                            {"mode", Value{key->mode == Mode::major ? "major" : "minor"}}}));
+    }
+    if (resolution.has_value())
+        members.emplace_back("resolution", Value{resolutionText(*resolution)});
+    if (density.has_value())
+        members.emplace_back("density", Value{densityText(*density)});
+    if (reg.has_value())
+        members.emplace_back("register", Value{registerText(*reg)});
+    if (role.has_value())
+        members.emplace_back("role", Value{roleText(*role)});
+    return Value::object(std::move(members));
+}
+
+Result<Constraints> Constraints::fromValue(const Value& value)
+{
+    if (!value.isObject())
+        return fail(ErrorCode::invalidPayload, "constraints must be an object");
+
+    Constraints out{};
+
+    if (const auto* key = value.find("key"); key != nullptr && !key->isNull())
+    {
+        auto tonic = key->stringAt("tonic");
+        auto mode = key->stringAt("mode");
+        if (!tonic || !mode)
+            return fail(ErrorCode::invalidPayload, "key needs a tonic and a mode");
+        if (mode.value() != "major" && mode.value() != "minor")
+            return fail(ErrorCode::invalidPayload, "key.mode: unknown value \"" + mode.value() + "\"");
+
+        auto parsed = parseKey(lowered(tonic.value()));
+        if (!parsed.has_value())
+            return fail(ErrorCode::invalidPayload, "key.tonic: unknown value \"" + tonic.value() + "\"");
+
+        parsed->mode = mode.value() == "major" ? Mode::major : Mode::minor;
+        out.key = parsed;
+    }
+
+    auto resolution =
+        optionalEnum<Resolution, 3>(value,
+                                    "resolution",
+                                    {Resolution::quarter, Resolution::eighth, Resolution::sixteenth},
+                                    resolutionText);
+    if (!resolution)
+        return resolution.error();
+    out.resolution = resolution.value();
+
+    auto density = optionalEnum<Density, 3>(
+        value, "density", {Density::sparse, Density::medium, Density::dense}, densityText);
+    if (!density)
+        return density.error();
+    out.density = density.value();
+
+    auto reg = optionalEnum<Register, 3>(
+        value, "register", {Register::low, Register::mid, Register::high}, registerText);
+    if (!reg)
+        return reg.error();
+    out.reg = reg.value();
+
+    auto role = optionalEnum<Role, 4>(
+        value, "role", {Role::melody, Role::bass, Role::chords, Role::rhythm}, roleText);
+    if (!role)
+        return role.error();
+    out.role = role.value();
+
+    return out;
+}
+
+// --- Interpretation ----------------------------------------------------------
+
+Value Interpretation::toValue() const
+{
+    auto out = constraints.toValue();
+    static_cast<void>(out.set("ignored", stringArray(ignored)));
+    static_cast<void>(out.set("conflicts", stringArray(conflicts)));
+    return out;
+}
+
+Result<Interpretation> Interpretation::fromValue(const Value& value)
+{
+    auto constraints = Constraints::fromValue(value);
+    if (!constraints)
+        return constraints.error();
+
+    auto ignored = strings(value, "ignored");
+    if (!ignored)
+        return ignored.error();
+
+    auto conflicts = strings(value, "conflicts");
+    if (!conflicts)
+        return conflicts.error();
+
+    Interpretation out{};
+    out.constraints = std::move(constraints).value();
+    out.ignored = std::move(ignored).value();
+    out.conflicts = std::move(conflicts).value();
+    return out;
+}
+
+// --- the local interpreter ---------------------------------------------------
+
+Interpretation LocalInterpreter::parse(std::string_view text)
+{
+    Interpretation out{};
+    std::optional<std::string> keyWord;
+    std::optional<std::string> resolutionWord;
+    std::optional<std::string> densityWord;
+    std::optional<std::string> registerWord;
+    std::optional<std::string> roleWord;
+
+    std::size_t at = 0;
+    while (at < text.size())
+    {
+        while (at < text.size() && (text[at] == ' ' || text[at] == '\t' || text[at] == ','))
+            ++at;
+        auto end = at;
+        while (end < text.size() && text[end] != ' ' && text[end] != '\t' && text[end] != ',')
+            ++end;
+        if (end == at)
+            break;
+
+        const auto original = text.substr(at, end - at);
+        const auto word = lowered(original);
+        at = end;
+
+        if (auto role = lookup(roleWords, word); role.has_value())
+            assign(out.constraints.role, *role, original, roleWord, out);
+        else if (auto resolution = lookup(resolutionWords, word); resolution.has_value())
+            assign(out.constraints.resolution, *resolution, original, resolutionWord, out);
+        else if (auto density = lookup(densityWords, word); density.has_value())
+            assign(out.constraints.density, *density, original, densityWord, out);
+        else if (auto reg = lookup(registerWords, word); reg.has_value())
+            assign(out.constraints.reg, *reg, original, registerWord, out);
+        else if (auto key = parseKey(word); key.has_value())
+            assign(out.constraints.key, *key, original, keyWord, out);
+        else
+            out.ignored.emplace_back(original);
+    }
+
+    return out;
+}
+
+void LocalInterpreter::interpret(std::string_view text, std::function<void(Interpretation)> done)
+{
+    if (done)
+        done(parse(text));
+}
+
+// --- words -------------------------------------------------------------------
+
+std::string describe(Key key)
+{
+    return std::string{frenchNames[static_cast<std::size_t>(((key.tonic % 12) + 12) % 12)]} +
+           (key.mode == Mode::major ? " majeur" : " mineur");
+}
+
+std::string_view describe(Resolution resolution) noexcept
+{
+    switch (resolution)
+    {
+    case Resolution::quarter:
+        return "noires";
+    case Resolution::eighth:
+        return "croches";
+    case Resolution::sixteenth:
+        return "doubles";
+    }
+    return "doubles";
+}
+
+std::string_view describe(Density density) noexcept
+{
+    switch (density)
+    {
+    case Density::sparse:
+        return "clair";
+    case Density::medium:
+        return "moyen";
+    case Density::dense:
+        return "dense";
+    }
+    return "moyen";
+}
+
+std::string_view describe(Register reg) noexcept
+{
+    switch (reg)
+    {
+    case Register::low:
+        return "grave";
+    case Register::mid:
+        return "medium";
+    case Register::high:
+        return "aigu";
+    }
+    return "medium";
+}
+
+std::string_view describe(Role role) noexcept
+{
+    switch (role)
+    {
+    case Role::melody:
+        return "mélodie";
+    case Role::bass:
+        return "basse";
+    case Role::chords:
+        return "accords";
+    case Role::rhythm:
+        return "rythme";
+    }
+    return "mélodie";
+}
+
+std::string_view describe(Source source) noexcept
+{
+    switch (source)
+    {
+    case Source::imposed:
+        return "imposé";
+    case Source::deduced:
+        return "déduit";
+    case Source::defaulted:
+        return "défaut";
+    }
+    return "défaut";
+}
+
+std::string describe(const ResolvedConstraints& constraints)
+{
+    const auto part = [](std::string text, Source source)
+    { return text + " (" + std::string{describe(source)} + ")"; };
+
+    std::string out = part(describe(constraints.key.value), constraints.key.source);
+    // A rhythm channel plays its own pitch: its key and register say nothing.
+    if (constraints.role.value == Role::rhythm)
+        out = {};
+    else
+        out += " · ";
+
+    out += part(std::string{describe(constraints.resolution.value)}, constraints.resolution.source);
+    out += " · " + part(std::string{describe(constraints.density.value)}, constraints.density.source);
+    if (constraints.role.value != Role::rhythm)
+        out += " · " + part(std::string{describe(constraints.reg.value)}, constraints.reg.source);
+    out += " · " + part(std::string{describe(constraints.role.value)}, constraints.role.source);
+    return out;
+}
+
+std::string shortLabel(const ResolvedConstraints& constraints)
+{
+    std::string out;
+    const auto add = [&out](std::string_view word)
+    {
+        if (!out.empty())
+            out += ' ';
+        out += word;
+    };
+
+    if (constraints.key.source == Source::imposed)
+        add(std::string{tonicName(constraints.key.value.tonic)} +
+            (constraints.key.value.mode == Mode::minor ? "m" : ""));
+    if (constraints.resolution.source == Source::imposed)
+        add(describe(constraints.resolution.value));
+    if (constraints.density.source == Source::imposed)
+        add(describe(constraints.density.value));
+    if (constraints.reg.source == Source::imposed)
+        add(describe(constraints.reg.value));
+    add(describe(constraints.role.value));
+    return out;
+}
+
+} // namespace daw::domain::generation
