@@ -5,6 +5,8 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <optional>
+#include <utility>
+#include <vector>
 
 namespace daw::ui
 {
@@ -24,6 +26,10 @@ namespace daw::ui
 //
 // Which note is selected is not project state and stays here: selecting is not
 // an edit, and undoing a move must not undo a click.
+//
+// Under the notes, the velocity lane: one stem per note, drawn over by hand,
+// as in FL's event editor. Its gestures are described in
+// PianoRollVelocityLane.cpp.
 class PianoRollPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
 {
 public:
@@ -46,6 +52,10 @@ public:
 
     // Where a note is drawn: the verification aims its clicks with it.
     [[nodiscard]] juce::Rectangle<int> noteBounds(const domain::Note& note) const;
+
+    // The velocity lane, and where a note's stem would reach at a velocity.
+    [[nodiscard]] juce::Rectangle<int> velocityLane() const { return velocityArea(); }
+    [[nodiscard]] juce::Point<int> velocityPointFor(const domain::Note& note, int velocity) const;
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -99,6 +109,21 @@ private:
     void paintPlayhead(juce::Graphics& g, juce::Rectangle<int> area) const;
     void paintEmpty(juce::Graphics& g) const;
 
+    // --- the velocity lane (PianoRollVelocityLane.cpp)
+    [[nodiscard]] juce::Rectangle<int> velocityArea() const;
+    [[nodiscard]] int yForVelocity(int velocity) const;
+    [[nodiscard]] int velocityAtY(int y) const;
+    [[nodiscard]] bool isVelocityEditable(domain::NoteId id) const;
+    [[nodiscard]] int shownVelocity(const domain::Note& note) const;
+    void paintVelocityLane(juce::Graphics& g) const;
+    void strokeVelocity(juce::Point<int> from, juce::Point<int> to);
+    void commitVelocityStroke();
+
+    // A stroke being drawn over the stems: the velocity each note crossed
+    // will get, shown now and sent on release.
+    std::optional<std::vector<std::pair<domain::NoteId, int>>> velocityStroke_;
+    juce::Point<int> strokeLast_;
+
     void addNoteAt(juce::Point<int> point);
     void removeNote(domain::NoteId noteId);
 
@@ -123,6 +148,11 @@ private:
     // tall as the panel allows: a piano roll that scrolls when it does not need
     // to is a piano roll that hides notes for nothing.
     int topPitch_{84};
+
+    // Moves the window onto the notes of the row when none of them is in
+    // sight: on a change of row, and when the panel is resized.
+    void revealNotes();
+    std::optional<domain::ClipId> revealedClip_;
 
     domain::NoteId selectedNote_{};
 

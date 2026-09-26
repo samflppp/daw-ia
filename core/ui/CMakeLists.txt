@@ -86,6 +86,7 @@ target_sources(daw_ui INTERFACE
     src/panels/ChannelRackPanel.cpp
     src/panels/PlaylistPanel.cpp
     src/panels/PlaylistTempoLane.cpp
+    src/panels/PianoRollVelocityLane.cpp
     src/panels/MixerPanel.cpp
     src/panels/BrowserPanel.cpp
     src/panels/PluginChainPanel.cpp

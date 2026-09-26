@@ -103,7 +103,54 @@ void PianoRollPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     if (source == &selection_)
         followCurrentPattern();
 
+    // Another row on screen: bring its notes into the window. The same row
+    // edited keeps the window where the wheel left it.
+    const auto* edited = clip();
+    const auto shownClip = edited != nullptr ? std::optional<domain::ClipId>{edited->id} : std::nullopt;
+    if (shownClip != revealedClip_)
+    {
+        revealedClip_ = shownClip;
+        picked_.clear();
+        revealNotes();
+    }
+
+    // A note an undo took away is no longer picked: a pick left pointing at
+    // nothing would still count, and the velocity lane would think two notes
+    // are picked when none of those on screen is.
+    picked_.erase(std::remove_if(picked_.begin(),
+                                 picked_.end(),
+                                 [edited](domain::NoteId id)
+                                 {
+                                     return edited == nullptr || std::none_of(edited->notes.begin(),
+                                                                              edited->notes.end(),
+                                                                              [id](const domain::Note& note)
+                                                                              { return note.id == id; });
+                                 }),
+                  picked_.end());
+
     repaint();
+}
+
+void PianoRollPanel::revealNotes()
+{
+    const auto* edited = clip();
+    if (edited == nullptr || edited->notes.empty())
+        return;
+
+    const auto [lowest, highest] = std::minmax_element(edited->notes.begin(),
+                                                       edited->notes.end(),
+                                                       [](const domain::Note& lhs, const domain::Note& rhs)
+                                                       { return lhs.pitch < rhs.pitch; });
+    const auto rows = rowsVisible();
+    if (highest->pitch <= topPitch_ && lowest->pitch > topPitch_ - rows)
+        return;
+
+    // Two semitones of air above the highest note, and the lowest in sight
+    // whenever the window is tall enough for both.
+    auto top = std::min(highestVisiblePitch, highest->pitch + 2);
+    if (lowest->pitch <= top - rows)
+        top = std::max(highest->pitch, lowest->pitch + rows - 1);
+    topPitch_ = std::clamp(top, std::min(rows - 1, highestVisiblePitch), highestVisiblePitch);
 }
 
 void PianoRollPanel::resized()
@@ -112,6 +159,9 @@ void PianoRollPanel::resized()
     header = header.reduced(tokens_.integer("space.md"), tokens_.integer("space.xs"));
 
     addRow_.setBounds(header.removeFromRight(tokens_.integer("metric.pianoRoll.keyboardWidth")));
+
+    // Smaller, the window may have lost the notes it showed.
+    revealNotes();
 }
 
 void PianoRollPanel::addRow()
@@ -242,6 +292,7 @@ juce::Rectangle<int> PianoRollPanel::gridArea() const
     area.removeFromTop(tokens_.integer("metric.panel.headerHeight"));
     area.removeFromLeft(tokens_.integer("metric.pianoRoll.keyboardWidth"));
     area.removeFromTop(tokens_.integer("metric.pianoRoll.rulerHeight"));
+    area.removeFromBottom(tokens_.integer("metric.pianoRoll.velocityLaneHeight"));
     return area;
 }
 
@@ -391,6 +442,7 @@ void PianoRollPanel::paint(juce::Graphics& g)
     paintNotes(g, area);
     paintKeyboard(g, keyboard);
     paintRuler(g, ruler);
+    paintVelocityLane(g);
     paintPlayhead(g, area);
 }
 
@@ -778,6 +830,17 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
         return;
     }
 
+    if (velocityArea().contains(event.getPosition()))
+    {
+        if (!event.mods.isRightButtonDown() && clip() != nullptr)
+        {
+            velocityStroke_.emplace();
+            strokeLast_ = event.getPosition();
+            strokeVelocity(strokeLast_, strokeLast_);
+        }
+        return;
+    }
+
     // Outside the grid there is no music to edit. Without this, a click in the
     // header landed on a pitch clamped to 127 and wrote a note nobody asked
     // for -- and the header now holds two controls, so it is clicked on
@@ -831,9 +894,8 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
     Drag drag{};
     drag.noteId = hit->id;
 
-    // Alt turns the drag into a velocity drag. Velocity is read in the shade of
-    // the note, so it is changed where it is read, on the note itself, rather
-    // than in a lane underneath that would cost a third of the panel.
+    // Alt turns the drag into a velocity drag, on the note itself: quicker
+    // than the lane underneath for one note, since the eye is already there.
     if (event.mods.isAltDown())
         drag.mode = DragMode::velocity;
     else
@@ -870,6 +932,13 @@ void PianoRollPanel::mouseDrag(const juce::MouseEvent& event)
     if (draggingPlayhead_)
     {
         movePlayheadTo(event.getPosition().getX());
+        return;
+    }
+
+    if (velocityStroke_.has_value())
+    {
+        strokeVelocity(strokeLast_, event.getPosition());
+        strokeLast_ = event.getPosition();
         return;
     }
 
@@ -963,6 +1032,12 @@ void PianoRollPanel::mouseUp(const juce::MouseEvent& event)
     juce::ignoreUnused(event);
 
     draggingPlayhead_ = false;
+
+    if (velocityStroke_.has_value())
+    {
+        commitVelocityStroke();
+        return;
+    }
 
     if (band_.has_value())
     {
