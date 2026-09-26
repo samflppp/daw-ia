@@ -23,7 +23,7 @@ std::vector<std::string> offeredToday()
 
 } // namespace
 
-TEST_CASE("The verbs of the mix are all there; the measures to judge it are not yet")
+TEST_CASE("The verbs of the mix are all there, the measures to judge it are not yet")
 {
     const auto gaps = copilot::mixingGaps(offeredToday());
 
@@ -41,7 +41,6 @@ TEST_CASE("The verbs of the mix are all there; the measures to judge it are not 
                                               "mix.masking",
                                               "mix.stereo",
                                               "mix.dynamics",
-                                              "automation.write",
                                               "track.set_sidechain",
                                               "mix.reference"});
 

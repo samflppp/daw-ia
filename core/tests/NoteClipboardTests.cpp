@@ -106,7 +106,7 @@ TEST_CASE("A row goes to the channel selected at paste time, or to its own")
     CHECK(hatRow->notes.size() == 3);
 }
 
-TEST_CASE("Ctrl+V leaves out what falls past the pattern; Ctrl+B lengthens it to the bar")
+TEST_CASE("Ctrl+V leaves out what falls past the pattern, Ctrl+B lengthens it to the bar")
 {
     Rack rack;
     const auto copied = copyNotes(*rack.state.findPattern(rack.first), rack.kick, rack.kicks);

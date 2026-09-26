@@ -172,7 +172,7 @@ TEST_CASE("Removing a send, then undoing, puts the same send back in the same pl
     CHECK(mix.written() == before);
 }
 
-TEST_CASE("Removing a bus sends what went into it back to the master; an undo restores it all")
+TEST_CASE("Removing a bus sends what went into it back to the master, and an undo restores it all")
 {
     Mixer mix;
     REQUIRE(mix.bus.execute(std::make_unique<SetTrackOutput>(mix.kick, mix.drums)).ok());

@@ -58,6 +58,11 @@ TOKEN_LOADER = CORE / "ui" / "src" / "Tokens.cpp"
 
 LINE_COMMENT = re.compile(r"//.*$")
 
+# ctest takes a test's name as a list: a semicolon cuts it, the filter then
+# matches no test case, doctest runs none and the test "passes". Four tests
+# never ran in the CI that way.
+TEST_NAME_WITH_SEMICOLON = re.compile(r'\bTEST_CASE\s*\(\s*"[^"]*;')
+
 
 def cpp_files(base: Path) -> list[Path]:
     if not base.exists():
@@ -104,6 +109,12 @@ def main() -> int:
         for number, line in code_lines(path):
             if DOMAIN_FORBIDDEN_INCLUDE.search(line):
                 violations.append(f"{rel}:{number}: rule 3 (domain includes UI/framework): {line.strip()}")
+
+    for path in sorted(p for p in CORE.rglob("*Tests.cpp")):
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in code_lines(path):
+            if TEST_NAME_WITH_SEMICOLON.search(line):
+                violations.append(f"{rel}:{number}: rule 4 (a semicolon in a test name): {line.strip()}")
 
     if violations:
         print("Hygiene violations:")
