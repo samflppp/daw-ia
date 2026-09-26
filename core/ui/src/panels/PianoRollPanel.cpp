@@ -18,7 +18,6 @@ namespace
 constexpr int playheadRefreshMs = 33;
 
 constexpr int semitonesPerOctave = 12;
-constexpr int beatsPerBar = 4;
 
 // One sixteenth. The grid the beatmaker workspace draws is the grid it snaps
 // to: a note that lands between two lines it can see is a note the user has to
@@ -429,9 +428,11 @@ void PianoRollPanel::paintGrid(juce::Graphics& g, juce::Rectangle<int> area) con
     if (length <= 0.0)
         return;
 
+    const auto barBeats = state_.beatsPerBar();
     for (double beat = 0.0; beat <= length; beat += gridStepBeats)
     {
-        const auto onBar = std::fmod(beat, static_cast<double>(beatsPerBar)) < gridStepBeats / 2.0;
+        const auto intoBar = std::fmod(beat, barBeats);
+        const auto onBar = intoBar < gridStepBeats / 2.0 || barBeats - intoBar < gridStepBeats / 2.0;
         const auto onBeat = std::fmod(beat, 1.0) < gridStepBeats / 2.0;
 
         g.setColour(
@@ -543,7 +544,7 @@ void PianoRollPanel::pasteNotes(bool duplicate)
     const auto& copied = *clipboard_.notes;
     auto at = copied.originBeats;
     if (duplicate)
-        at = duplicateAt(copied, copied.originBeats);
+        at = duplicateAt(copied, copied.originBeats, state_.beatsPerBar());
     else if (const auto local = patternEditing::localBeats(state_, shown->id, clock_.positionBeats());
              local.has_value())
         at = quantise(*local);
@@ -645,14 +646,16 @@ void PianoRollPanel::paintRuler(juce::Graphics& g, juce::Rectangle<int> area) co
 
     g.setFont(lookAndFeel_.typography().mono("font.size.micro", "font.weight.regular"));
 
-    for (double beat = 0.0; beat < length; beat += static_cast<double>(beatsPerBar))
+    const auto barBeats = state_.beatsPerBar();
+    int bar = 1;
+    for (double beat = 0.0; beat < length; beat += barBeats, ++bar)
     {
         const auto x = xForBeat(beat);
         g.setColour(tokens_.colour("color.border.hairline"));
         g.fillRect(x, area.getY(), tokens_.integer("stroke.hairline"), area.getHeight());
 
         g.setColour(tokens_.colour("color.text.disabled"));
-        g.drawText(juce::String(static_cast<int>(beat) / beatsPerBar + 1),
+        g.drawText(juce::String(bar),
                    area.withX(x + tokens_.integer("space.xs")).withWidth(tokens_.integer("space.xl")),
                    juce::Justification::centredLeft,
                    false);

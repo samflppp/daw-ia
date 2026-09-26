@@ -75,7 +75,8 @@ struct PastePlan
 //
 // Notes land at atBeats plus their offset. One starting past the pattern's
 // end is left out, unless `lengthen` — what Ctrl+B asks — in which case the
-// pattern is lengthened to the bar that holds it, in the same group.
+// pattern is lengthened to the bar that holds it, in the same group. The bar
+// is the project's.
 [[nodiscard]] PastePlan planPaste(const domain::ProjectState& state,
                                   domain::PatternId patternId,
                                   const CopiedNotes& copied,
@@ -84,7 +85,8 @@ struct PastePlan
                                   bool lengthen);
 
 // Where Ctrl+B puts the copy: right after the copied span, rounded up to the
-// bar, from the origin of the copy.
-[[nodiscard]] double duplicateAt(const CopiedNotes& copied, double originBeats);
+// bar — barBeats long, from the project's signature — from the origin of the
+// copy.
+[[nodiscard]] double duplicateAt(const CopiedNotes& copied, double originBeats, double barBeats);
 
 } // namespace daw::ui

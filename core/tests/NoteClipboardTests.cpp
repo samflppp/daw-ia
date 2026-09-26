@@ -119,7 +119,7 @@ TEST_CASE("Ctrl+V leaves out what falls past the pattern; Ctrl+B lengthens it to
 
     // Ctrl+B: right after the copied span (1 to 3.25, so 2.25 rounded up to a
     // bar), and the pattern grows to hold it.
-    const auto at = duplicateAt(copied, 1.0);
+    const auto at = duplicateAt(copied, 1.0, 4.0);
     CHECK(at == 5.0);
     const auto before = json::write(rack.state.toValue());
     rack.run(planPaste(rack.state, rack.first, copied, {rack.kick}, at, true));

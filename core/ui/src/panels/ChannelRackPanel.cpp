@@ -18,7 +18,6 @@ namespace
 {
 
 constexpr int playheadRefreshMs = 33;
-constexpr int beatsPerBar = 4;
 constexpr int semitonesPerOctave = 12;
 
 constexpr int defaultVelocity = 100;
@@ -412,7 +411,9 @@ void ChannelRackPanel::paintGrid(juce::Graphics& g, juce::Rectangle<int> area) c
     const auto radius = tokens_.number("radius.sm");
 
     const auto stepsPerBeat = std::max(1, static_cast<int>(std::llround(1.0 / stepBeats())));
-    const auto stepsPerBar = stepsPerBeat * beatsPerBar;
+    // Steps of a bar: twelve for 6/8, fourteen for 7/8, whatever the grid.
+    const auto stepsPerBar =
+        std::max(1, static_cast<int>(std::llround(state_.beatsPerBar() * static_cast<double>(stepsPerBeat))));
 
     const auto soft = tokens_.colour("color.note.fillSoft");
     const auto full = tokens_.colour("color.note.fill");
@@ -754,7 +755,7 @@ void ChannelRackPanel::pasteChannels(bool duplicate)
     double at = 0.0;
     if (duplicate)
     {
-        at = duplicateAt(copied, copied.originBeats);
+        at = duplicateAt(copied, copied.originBeats, state_.beatsPerBar());
     }
     else if (const auto local = patternEditing::localBeats(state_, shown->id, clock_.positionBeats());
              local.has_value())

@@ -18,6 +18,7 @@ add_library(daw_ui_workspace STATIC
     src/history/HistoryLog.cpp
     src/model/NoteClipboard.cpp
     src/model/PatternPreviews.cpp
+    src/model/TempoEditing.cpp
     src/model/WaveformPeaks.cpp)
 add_library(daw::ui_workspace ALIAS daw_ui_workspace)
 
@@ -83,6 +84,7 @@ target_sources(daw_ui INTERFACE
     src/panels/PianoRollPanel.cpp
     src/panels/ChannelRackPanel.cpp
     src/panels/PlaylistPanel.cpp
+    src/panels/PlaylistTempoLane.cpp
     src/panels/MixerPanel.cpp
     src/panels/BrowserPanel.cpp
     src/panels/PluginChainPanel.cpp

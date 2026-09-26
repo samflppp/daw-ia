@@ -47,6 +47,10 @@ namespace daw::ui
 //
 // There is no resize. A pattern's length belongs to the pattern, and an audio
 // clip lasts as long as its sample.
+//
+// Under the ruler, as soon as the tempo changes past the origin, the tempo
+// lane: FL's tempo automation, drawn as the step line it is. Its gestures are
+// described in PlaylistTempoLane.cpp.
 class PlaylistPanel final : public juce::Component,
                             public juce::DragAndDropTarget,
                             public juce::FileDragAndDropTarget,
@@ -105,6 +109,12 @@ public:
     // placement. Read by the verification.
     [[nodiscard]] std::size_t previewBuilds() const noexcept { return previews_.builds(); }
 
+    // The tempo lane, empty while the tempo is not automated, and where a
+    // tempo change at that beat and that tempo is drawn. The verification
+    // aims with them.
+    [[nodiscard]] juce::Rectangle<int> tempoLane() const { return tempoLaneArea(); }
+    [[nodiscard]] juce::Point<int> tempoPointFor(double beats, double bpm) const;
+
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
@@ -141,7 +151,33 @@ private:
     [[nodiscard]] double beatAtX(int x) const;
     [[nodiscard]] int xForBeat(double beats) const;
     [[nodiscard]] int laneAtY(int y) const; // -1 outside any lane
-    [[nodiscard]] static double snap(double beats, bool fine);
+    [[nodiscard]] double snap(double beats, bool fine) const;
+
+    // A bar of the project's signature, in beats: 4 in 4/4, 3 in 6/8.
+    [[nodiscard]] double barBeats() const;
+
+    // --- the tempo lane (PlaylistTempoLane.cpp)
+    struct TempoRange
+    {
+        double low{0.0};
+        double high{0.0};
+    };
+    [[nodiscard]] int tempoLaneHeight() const; // 0 while not automated
+    [[nodiscard]] juce::Rectangle<int> tempoLaneArea() const;
+    [[nodiscard]] juce::Rectangle<int> tempoHeaderArea() const;
+    [[nodiscard]] TempoRange tempoRange() const;
+    [[nodiscard]] int yForTempo(double bpm, TempoRange range) const;
+    [[nodiscard]] double tempoAtY(int y, TempoRange range) const;
+    [[nodiscard]] std::optional<domain::TempoPointId> tempoPointAt(juce::Point<int> point) const;
+    void paintTempoLane(juce::Graphics& g) const;
+
+    // Each answers true when the event was the lane's.
+    bool tempoMouseDown(const juce::MouseEvent& event);
+    bool tempoMouseDrag(const juce::MouseEvent& event);
+    bool tempoMouseUp();
+    bool tempoDoubleClick(juce::Point<int> point);
+    bool tempoWheel(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel);
+    void closeTempoWheel(bool onlyWhenRested = false);
 
     // --- items
     [[nodiscard]] std::vector<Item> items() const;
@@ -195,6 +231,30 @@ private:
     SampleHost& samples_;
 
     std::vector<Item> selected_;
+
+    // A tempo point being dragged, in one gesture. Its tempo follows the hand
+    // relative to where it was grabbed, so a drag is not stopped by the edge
+    // of the lane's range.
+    struct TempoDrag
+    {
+        enum class Axis
+        {
+            none,
+            tempo,
+            position
+        };
+
+        domain::TempoPointId pointId{};
+        juce::Point<int> grab;
+        double grabBpm{0.0};
+        double bpmPerPixel{1.0};
+        Axis axis{Axis::none};
+        domain::GestureId gesture{};
+    };
+    std::optional<TempoDrag> tempoDrag_;
+    std::optional<domain::GestureId> tempoWheelGesture_;
+    juce::uint32 lastTempoWheelMs_{0};
+    bool tempoLaneShown_{false};
 
     // A move in progress: the selection is drawn shifted, and one group of
     // moves leaves when the mouse is released — one history entry however

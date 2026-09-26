@@ -11,15 +11,13 @@ namespace daw::ui
 namespace
 {
 
-constexpr double beatsPerBar = 4.0;
-
 // Two starts closer than this are the same start: a sixty-fourth of a
 // sixty-fourth, far under any grid.
 constexpr double sameStart = 1e-6;
 
-[[nodiscard]] double ceilToBar(double beats)
+[[nodiscard]] double ceilToBar(double beats, double barBeats)
 {
-    return std::ceil(beats / beatsPerBar - 1e-9) * beatsPerBar;
+    return std::ceil(beats / barBeats - 1e-9) * barBeats;
 }
 
 void measureSpan(CopiedNotes& copied)
@@ -97,7 +95,7 @@ PastePlan planPaste(const domain::ProjectState& state,
             {
                 const auto start = atBeats + note.startBeats;
                 if (start >= length)
-                    length = std::max(length, ceilToBar(start + sameStart));
+                    length = std::max(length, ceilToBar(start + sameStart, state.beatsPerBar()));
             }
         }
         if (length > pattern->lengthBeats)
@@ -166,9 +164,9 @@ PastePlan planPaste(const domain::ProjectState& state,
     return plan;
 }
 
-double duplicateAt(const CopiedNotes& copied, double originBeats)
+double duplicateAt(const CopiedNotes& copied, double originBeats, double barBeats)
 {
-    return originBeats + std::max(beatsPerBar, ceilToBar(copied.spanBeats));
+    return originBeats + std::max(barBeats, ceilToBar(copied.spanBeats, barBeats));
 }
 
 } // namespace daw::ui

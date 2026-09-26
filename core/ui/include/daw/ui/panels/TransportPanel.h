@@ -5,6 +5,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace daw::ui
@@ -27,6 +28,15 @@ namespace daw::ui
 // The playhead is the exception, and a deliberate one. It does not come from
 // the project: it comes from the clock, sixty times a second, because that is
 // where it actually is.
+//
+// The tempo and the signature are FL's readouts:
+//   wheel over the tempo       the project's tempo, one BPM a notch
+//   click on the tempo         a menu: type it, or automate it
+//   wheel over the signature   the numerator, one a notch
+//   click on the signature     type it: "6/8"
+// A turn of the wheel is one history entry, however many notches it counted.
+// The tempo shown is the project's — the point at the origin — even where the
+// tempo is automated further on; the caption says when it is.
 class TransportPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
 {
 public:
@@ -48,6 +58,20 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
+    void mouseDown(const juce::MouseEvent& event) override;
+    void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
+
+    // Where the two readouts are drawn. The verification aims at them.
+    [[nodiscard]] juce::Rectangle<int> tempoArea() const { return readoutArea(1); }
+    [[nodiscard]] juce::Rectangle<int> signatureArea() const { return readoutArea(2); }
+
+    // The menu a click on the tempo opens, in its order.
+    enum TempoMenu
+    {
+        typeTempoItem = 1,
+        automateTempoItem = 2
+    };
+
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void timerCallback() override;
@@ -61,6 +85,20 @@ private:
 
     [[nodiscard]] juce::String positionText() const;
     [[nodiscard]] juce::String tempoText() const;
+    [[nodiscard]] juce::String signatureText() const;
+
+    // 0 the position, 1 the tempo, 2 the signature.
+    [[nodiscard]] juce::Rectangle<int> readoutArea(int index) const;
+
+    void showTempoMenu();
+    void typeTempo();
+    void typeSignature();
+    void automateTempo();
+
+    // The gesture a turn of the wheel runs in, opened by its first notch and
+    // closed when the wheel has rested long enough.
+    [[nodiscard]] domain::ExecuteOptions wheelOptions(const char* label);
+    void closeWheelGesture();
 
     const Tokens& tokens_;
     DawLookAndFeel& lookAndFeel_;
@@ -85,6 +123,9 @@ private:
     // nothing. The readout is redrawn thirty times a second and the rest of the
     // panel almost never.
     juce::String lastPosition_;
+
+    std::optional<domain::GestureId> wheelGesture_;
+    juce::uint32 lastWheelMs_{0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TransportPanel)
 };

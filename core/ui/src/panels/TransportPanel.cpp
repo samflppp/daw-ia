@@ -1,7 +1,9 @@
 #include "daw/ui/panels/TransportPanel.h"
 
+#include "daw/domain/commands/TempoCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/ui/model/PatternEditing.h"
+#include "daw/ui/model/TempoEditing.h"
 
 #include <cmath>
 
@@ -14,8 +16,11 @@ namespace
 // would cost twice the repaints to move digits the eye cannot follow.
 constexpr int readoutRefreshMs = 33;
 
-constexpr int beatsPerBar = 4;
 constexpr int sixteenthsPerBeat = 4;
+
+// How long the wheel rests before its turn is over, and the next notch opens
+// a new history entry.
+constexpr juce::uint32 wheelRestMs = 500;
 
 } // namespace
 
@@ -214,6 +219,9 @@ void TransportPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 
 void TransportPanel::timerCallback()
 {
+    if (wheelGesture_.has_value() && juce::Time::getMillisecondCounter() - lastWheelMs_ > wheelRestMs)
+        closeWheelGesture();
+
     const auto position = positionText();
     if (position == lastPosition_)
         return;
@@ -246,10 +254,17 @@ juce::String TransportPanel::positionText() const
 {
     // Bars from one, beats from one, sixteenths from one: what a musician
     // counts out loud. A playhead at zero reads 001.1.01, not 000.0.00.
+    //
+    // The beat is a quarter note whatever the signature, so a bar of 6/8
+    // counts three of them, and one of 7/8 three and a half: its last beat is
+    // an eighth long.
     const auto beats = std::max(0.0, clock_.positionBeats());
+    const auto barBeats = state_.beatsPerBar();
 
-    const auto bar = static_cast<int>(beats) / beatsPerBar + 1;
-    const auto beat = static_cast<int>(beats) % beatsPerBar + 1;
+    const auto barIndex = std::floor(beats / barBeats + 1e-9);
+    const auto inBar = std::max(0.0, beats - barIndex * barBeats);
+    const auto bar = static_cast<int>(barIndex) + 1;
+    const auto beat = static_cast<int>(inBar) + 1;
     const auto sixteenth =
         static_cast<int>((beats - std::floor(beats)) * static_cast<double>(sixteenthsPerBeat)) + 1;
 
@@ -258,9 +273,184 @@ juce::String TransportPanel::positionText() const
 
 juce::String TransportPanel::tempoText() const
 {
-    // The tempo where the playhead is, not the tempo of the project: with a
-    // sequence there is no single project tempo any more.
-    return juce::String(state_.tempoAt(std::max(0.0, clock_.positionBeats())), 1);
+    // The project's tempo, the one the wheel changes: a readout that showed
+    // the tempo under the playhead would not move when turned, the moment the
+    // playhead sits after an automation point.
+    const auto bpm = tempoEditing::projectTempo(state_);
+    return juce::String(bpm, std::abs(bpm - std::round(bpm)) < 1e-9 ? 0 : 1);
+}
+
+juce::String TransportPanel::signatureText() const
+{
+    const auto& signature = state_.timeSignature();
+    return juce::String(signature.numerator) + "/" + juce::String(signature.denominator);
+}
+
+juce::Rectangle<int> TransportPanel::readoutArea(int index) const
+{
+    auto area = getLocalBounds().reduced(tokens_.integer("space.lg"), tokens_.integer("space.sm"));
+
+    // The buttons sit on the left; the readouts start after them. The panel
+    // arranges its own children, so it knows where they are — it just does not
+    // know where itself is.
+    const auto buttonsWidth =
+        (tokens_.integer("metric.transport.buttonSize") + tokens_.integer("space.xs")) * 5;
+    area.removeFromLeft(buttonsWidth + tokens_.integer("space.xl"));
+
+    const auto readoutWidth = tokens_.integer("metric.transport.buttonSize") * 4;
+    area.removeFromLeft((readoutWidth + tokens_.integer("space.lg")) * index);
+    return area.removeFromLeft(readoutWidth);
+}
+
+domain::ExecuteOptions TransportPanel::wheelOptions(const char* label)
+{
+    lastWheelMs_ = juce::Time::getMillisecondCounter();
+    if (!wheelGesture_.has_value() || bus_.openGesture() != wheelGesture_)
+        wheelGesture_ = bus_.beginGesture(label);
+
+    domain::ExecuteOptions options;
+    options.gesture = wheelGesture_;
+    return options;
+}
+
+void TransportPanel::closeWheelGesture()
+{
+    if (wheelGesture_.has_value() && bus_.openGesture() == wheelGesture_)
+        static_cast<void>(bus_.endGesture(*wheelGesture_));
+    wheelGesture_.reset();
+}
+
+void TransportPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
+{
+    const auto point = event.getPosition();
+    const auto notches = wheel.deltaY > 0.0f ? 1 : (wheel.deltaY < 0.0f ? -1 : 0);
+    if (notches == 0)
+        return;
+
+    if (tempoArea().contains(point))
+    {
+        const auto wanted = tempoEditing::stepTempo(tempoEditing::projectTempo(state_), notches);
+        if (wanted != tempoEditing::projectTempo(state_))
+        {
+            static_cast<void>(bus_.execute(std::make_unique<domain::SetTempoPointBpm>(
+                                               domain::ProjectState::originTempoPointId(), wanted),
+                                           wheelOptions("molette sur le tempo")));
+        }
+        return;
+    }
+
+    if (signatureArea().contains(point))
+    {
+        const auto wanted = tempoEditing::stepSignature(state_.timeSignature(), notches);
+        if (!(wanted == state_.timeSignature()))
+        {
+            static_cast<void>(bus_.execute(std::make_unique<domain::SetTimeSignature>(wanted),
+                                           wheelOptions("molette sur la signature")));
+        }
+        return;
+    }
+
+    Component::mouseWheelMove(event, wheel);
+}
+
+void TransportPanel::mouseDown(const juce::MouseEvent& event)
+{
+    const auto point = event.getPosition();
+    if (tempoArea().contains(point))
+        showTempoMenu();
+    else if (signatureArea().contains(point))
+        typeSignature();
+}
+
+void TransportPanel::showTempoMenu()
+{
+    closeWheelGesture();
+
+    juce::PopupMenu menu;
+    menu.addItem(typeTempoItem, u8"Saisir le tempo…");
+    menu.addItem(automateTempoItem,
+                 tempoEditing::isAutomated(state_) ? u8"Ajouter un changement de tempo"
+                                                   : u8"Automatiser le tempo");
+
+    juce::Component::SafePointer<TransportPanel> safe{this};
+    menu.showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(this).withTargetScreenArea(
+                           localAreaToGlobal(tempoArea())),
+                       [safe](int chosen)
+                       {
+                           if (safe == nullptr)
+                               return;
+                           if (chosen == typeTempoItem)
+                               safe->typeTempo();
+                           else if (chosen == automateTempoItem)
+                               safe->automateTempo();
+                       });
+}
+
+void TransportPanel::typeTempo()
+{
+    auto* window = new juce::AlertWindow(
+        u8"Tempo du projet", u8"En BPM, de 20 à 300.", juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("tempo", tempoText());
+    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Annuler", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    juce::Component::SafePointer<TransportPanel> safe{this};
+    window->enterModalState(
+        true,
+        juce::ModalCallbackFunction::create(
+            [safe, window](int result)
+            {
+                if (safe == nullptr || result != 1)
+                    return;
+
+                // A text that is not a tempo changes nothing: the readout
+                // still shows the old one, which says so.
+                const auto typed =
+                    tempoEditing::parseTempo(window->getTextEditorContents("tempo").toStdString());
+                if (typed.has_value())
+                {
+                    static_cast<void>(safe->bus_.execute(std::make_unique<domain::SetTempoPointBpm>(
+                        domain::ProjectState::originTempoPointId(), *typed)));
+                }
+            }),
+        true);
+}
+
+void TransportPanel::typeSignature()
+{
+    closeWheelGesture();
+
+    auto* window = new juce::AlertWindow(
+        u8"Signature rythmique", u8"Par exemple 4/4, 3/4 ou 6/8.", juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("signature", signatureText());
+    window->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Annuler", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    juce::Component::SafePointer<TransportPanel> safe{this};
+    window->enterModalState(
+        true,
+        juce::ModalCallbackFunction::create(
+            [safe, window](int result)
+            {
+                if (safe == nullptr || result != 1)
+                    return;
+
+                const auto typed =
+                    tempoEditing::parseSignature(window->getTextEditorContents("signature").toStdString());
+                if (typed.has_value())
+                    static_cast<void>(safe->bus_.execute(std::make_unique<domain::SetTimeSignature>(*typed)));
+            }),
+        true);
+}
+
+void TransportPanel::automateTempo()
+{
+    // FL's "create automation clip": the tempo lane appears in the playlist
+    // with a first change to drag, at the tempo already playing — so nothing
+    // is heard to change until the user moves it.
+    const auto start = tempoEditing::automationStart(state_, clock_.positionBeats());
+    static_cast<void>(bus_.execute(std::make_unique<domain::InsertTempoPoint>(
+        domain::TempoPointId::generate(), start, state_.tempoAt(start))));
 }
 
 void TransportPanel::paintReadout(juce::Graphics& g,
@@ -286,22 +476,13 @@ void TransportPanel::paint(juce::Graphics& g)
 {
     g.fillAll(tokens_.colour("color.surface.panel"));
 
-    auto area = getLocalBounds().reduced(tokens_.integer("space.lg"), tokens_.integer("space.sm"));
-
-    // The buttons sit on the left; the readouts start after them. The panel
-    // arranges its own children, so it knows where they are — it just does not
-    // know where itself is.
-    const auto buttonsWidth =
-        (tokens_.integer("metric.transport.buttonSize") + tokens_.integer("space.xs")) * 5;
-    area.removeFromLeft(buttonsWidth + tokens_.integer("space.xl"));
-
-    const auto readoutWidth = tokens_.integer("metric.transport.buttonSize") * 4;
-
-    paintReadout(g, area.removeFromLeft(readoutWidth), lastPosition_, "mesure", true);
-    area.removeFromLeft(tokens_.integer("space.lg"));
-    paintReadout(g, area.removeFromLeft(readoutWidth), tempoText(), "tempo", false);
-    area.removeFromLeft(tokens_.integer("space.lg"));
-    paintReadout(g, area.removeFromLeft(readoutWidth), "4/4", "signature", false);
+    paintReadout(g, readoutArea(0), lastPosition_, "mesure", true);
+    paintReadout(g,
+                 readoutArea(1),
+                 tempoText(),
+                 tempoEditing::isAutomated(state_) ? juce::String{u8"tempo · auto"} : juce::String{"tempo"},
+                 false);
+    paintReadout(g, readoutArea(2), signatureText(), "signature", false);
 }
 
 void TransportPanel::resized()
