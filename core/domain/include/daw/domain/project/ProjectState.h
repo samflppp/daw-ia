@@ -240,6 +240,29 @@ struct SampleRef
     friend bool operator==(const SampleRef& lhs, const SampleRef& rhs);
 };
 
+// A send: part of a strip's signal, taken after its fader, going to a bus.
+//
+// Keyed by the bus it goes to, so it needs no identifier of its own: a strip
+// sends to a bus once or not at all, and "the send of the kick to the reverb"
+// names it completely. Post-fader only: a pre-fader send is an additional
+// field, absent means post, the day a monitor mix needs one.
+struct Send
+{
+    TrackId bus{};
+    double levelDb{0.0};
+
+    [[nodiscard]] Result<void> validate() const;
+    [[nodiscard]] Value toValue() const;
+    [[nodiscard]] static Result<Send> fromValue(const Value& value);
+
+    friend bool operator==(const Send& lhs, const Send& rhs);
+};
+
+// A strip of the mixer. What the channel rack calls a channel, what the mixer
+// calls a bus, and the master are all this: a fader, a pan, a mute, a chain of
+// inserts. What tells them apart is where the project keeps them — tracks(),
+// buses(), master() — never a field, so a channel cannot become a bus by
+// accident and every verb of the mix works on the three alike.
 struct Track
 {
     TrackId id{};
@@ -279,6 +302,20 @@ struct Track
     // cell triggers it. The channel pitch is the note that plays it at its own
     // pitch. Absent, the track plays whatever instrument its chain holds.
     std::optional<SampleRef> sample;
+
+    // Where the strip goes: a bus, or, nil, the master. The master itself goes
+    // nowhere, to the outside world.
+    TrackId output{};
+
+    // The buses this strip also feeds, after its fader. One per bus.
+    std::vector<Send> sends;
+
+    // In solo. Not a state of a screen: a command sets it, a copilot reads it,
+    // an undo gives it back. What it silences is decided by
+    // ProjectState::isAudible, once, for the engine and for anyone asking.
+    bool soloed{false};
+
+    [[nodiscard]] const Send* findSend(TrackId bus) const noexcept;
 
     [[nodiscard]] Result<void> validate() const;
     [[nodiscard]] Value toValue() const;
@@ -415,16 +452,73 @@ public:
     static constexpr int lowestChannelPitch = Note::lowestPitch;
     static constexpr int highestChannelPitch = Note::highestPitch;
 
+    // The channels: what the channel rack and the playlist show, what patterns
+    // and audio clips play on. Never a bus, never the master.
     [[nodiscard]] const std::vector<Track>& tracks() const noexcept { return tracks_; }
     [[nodiscard]] const Track* findTrack(TrackId id) const noexcept;
+
+    // --- the mixer
+    //
+    // Buses and the master are strips like the channels, kept apart from
+    // them: no pattern row, no sample, no audio clip can land on one, because
+    // every verb of that kind asks findTrack(), which only knows channels.
+    // The verbs of the mix — volume, pan, mute, name, inserts, output, sends,
+    // solo — ask findStrip(), which knows all three.
+    //
+    // Tracktion gives a project 32 aux buses; a bus is one of them.
+    static constexpr std::size_t maxBuses = 32;
+
+    // Built into every project, like the tempo point at the origin: nobody
+    // creates it, so it is a constant and not a generated ULID.
+    [[nodiscard]] static TrackId masterTrackId() noexcept;
+
+    [[nodiscard]] const std::vector<Track>& buses() const noexcept { return buses_; }
+    [[nodiscard]] const Track& master() const noexcept { return master_; }
+    [[nodiscard]] const Track* findStrip(TrackId id) const noexcept;
+    [[nodiscard]] bool isBus(TrackId id) const noexcept;
+
+    [[nodiscard]] Result<std::size_t> busIndex(TrackId id) const;
+    Result<void> insertBus(Track bus, std::size_t index);
+
+    // Takes the bus out, and what pointed at it: the strips whose output it
+    // was go to the master, and the sends to it are dropped. bus.remove's undo
+    // record carries all three back.
+    Result<void> removeBus(TrackId id);
+
+    // Nil sends the strip to the master. A target that is not a bus, the strip
+    // itself, or a route that would come back to the strip is refused.
+    Result<void> setTrackOutput(TrackId id, TrackId output);
+
+    // Adds the send, or changes its level.
+    Result<void> setTrackSend(TrackId id, TrackId bus, double levelDb);
+    Result<void> insertTrackSend(TrackId id, Send send, std::size_t index);
+    Result<void> removeTrackSend(TrackId id, TrackId bus);
+    [[nodiscard]] Result<std::size_t> sendIndex(TrackId id, TrackId bus) const;
+
+    Result<void> setTrackSoloed(TrackId id, bool soloed);
+
+    // Whether signal leaving `from` can reach `to`, through outputs and sends.
+    [[nodiscard]] bool reaches(TrackId from, TrackId to) const;
+
+    // Whether a strip is heard, mute and solo taken together. The rule, once:
+    //   no solo anywhere    a strip is heard unless muted;
+    //   a solo somewhere    a strip is heard unless muted, and only if it is
+    //                       in solo, or feeds a strip in solo, or is fed by
+    //                       one — soloing a bus keeps what goes into it, and
+    //                       soloing a channel keeps the buses it goes through;
+    //   the master          heard unless muted.
+    // A limit, said: soloing a bus that only receives sends keeps its sources
+    // heard on their own path too, dry. Silencing one path of a strip and not
+    // the other would need a gain per route.
+    [[nodiscard]] bool isAudible(TrackId id) const;
     [[nodiscard]] const Clip* findClip(ClipId id) const noexcept;
 
     // Which pattern holds that clip. The clip alone does not say it, and every
     // caller that has a ClipId and needs the length it is drawn against does.
     [[nodiscard]] Result<PatternId> patternOfClip(ClipId id) const;
 
-    Result<void> addTrack(Track track); // appends
-    Result<void> removeTrack(TrackId id);
+    Result<void> addTrack(Track track);   // appends
+    Result<void> removeTrack(TrackId id); // a channel; a bus goes through removeBus
 
     // Undoing a removal has to put the track back where it was, so the index
     // is readable and writable. Beyond the current count it appends, exactly
@@ -604,6 +698,10 @@ public:
 
 private:
     [[nodiscard]] Track* findTrackMutable(TrackId id) noexcept;
+    [[nodiscard]] Track* findStripMutable(TrackId id) noexcept;
+    [[nodiscard]] std::vector<const Track*> strips() const;
+    [[nodiscard]] std::vector<Track*> stripsMutable();
+    [[nodiscard]] static Track defaultMaster();
     [[nodiscard]] Clip* findClipMutable(ClipId id) noexcept;
     [[nodiscard]] Pattern* findPatternMutable(PatternId id) noexcept;
     [[nodiscard]] PluginInstance* findPluginMutable(PluginId id) noexcept;
@@ -617,6 +715,8 @@ private:
     std::vector<Pattern> patterns_;
     std::vector<Placement> arrangement_;
     std::vector<AudioClip> audio_;
+    std::vector<Track> buses_;
+    Track master_{defaultMaster()};
     TransportState transport_;
 };
 

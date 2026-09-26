@@ -82,6 +82,13 @@ Règles :
   ne change aucune note déjà écrite.
 - Pour quantifier ou transposer, lis d'abord les notes du clip : il faut leurs
   identifiants.
+- Le mixage : chaque piste va au master, ou dans un bus (track.set_output). Un
+  bus est une tranche sans contenu, créée par bus.add ; les envois
+  (track.set_send) en prennent une partie après le fader, pour une réverbe
+  partagée par exemple. Les bus et le master se règlent avec les commandes des
+  pistes (volume, pan, coupure, plugins), en donnant leur identifiant comme
+  trackId : busId pour un bus, master.trackId pour le master. track.set_solo
+  met en solo, sans toucher à la coupure.
 - Les niveaux sont mesurés sur ce qui sonne, pendant les 300 dernières
   millisecondes : à l'arrêt, tout est à -100 dB. Ce sont des dBFS, crête et
   RMS ; over dit qu'une crête a atteint 0 dBFS. Ne déduis jamais un niveau

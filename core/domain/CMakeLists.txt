@@ -19,6 +19,7 @@ add_library(daw_domain STATIC
     src/commands/PatternCommands.cpp
     src/commands/SampleCommands.cpp
     src/commands/CreateMidiClip.cpp
+    src/commands/MixCommands.cpp
     src/commands/PluginCommands.cpp
     src/commands/SetTrackVolume.cpp
     src/commands/TempoCommands.cpp

@@ -43,7 +43,9 @@ private:
     double volumeDb_;
 };
 
-// track.remove — takes the track out, rows, plugins and all.
+// track.remove — takes the track out, rows, plugins and all. A bus too: its
+// record then carries the strips that went into it and the sends it received,
+// all back on an undo. The master cannot be removed.
 //
 // The undo record carries the whole track, not its identifier: a track holds
 // plugin instances and captured state digests, and the command itself knows
@@ -66,6 +68,9 @@ public:
     [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
 
 private:
+    [[nodiscard]] Result<Value> applyToBus(ProjectState& state) const;
+    [[nodiscard]] static Result<void> revertBus(ProjectState& state, const Value& undoRecord);
+
     TrackId trackId_;
 };
 

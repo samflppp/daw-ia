@@ -138,7 +138,12 @@
     "track.set_sample",
     "audio.place",
     "audio.move",
-    "audio.remove"
+    "audio.remove",
+    "bus.add",
+    "track.set_output",
+    "track.set_send",
+    "track.remove_send",
+    "track.set_solo"
   ],
   "services": [
     "mcp",

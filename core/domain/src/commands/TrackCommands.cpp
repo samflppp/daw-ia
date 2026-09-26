@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <utility>
 
 namespace daw::domain
@@ -104,8 +105,116 @@ Value RemoveTrack::payload() const
     return Value::object({{"trackId", Value{trackId_.toString()}}});
 }
 
+Result<Value> RemoveTrack::applyToBus(ProjectState& state) const
+{
+    auto index = state.busIndex(trackId_);
+    if (!index)
+        return index.error();
+
+    // What pointed at the bus goes back to the master, or loses its send.
+    // Both are recorded, or an undo would give back a bus nothing feeds.
+    Value::Array routes;
+    Value::Array sends;
+    for (const auto& list : {std::cref(state.tracks()), std::cref(state.buses())})
+    {
+        for (const auto& strip : list.get())
+        {
+            if (strip.output == trackId_)
+                routes.push_back(Value{strip.id.toString()});
+
+            for (std::size_t rank = 0; rank < strip.sends.size(); ++rank)
+            {
+                if (strip.sends[rank].bus != trackId_)
+                    continue;
+                sends.push_back(Value::object({{"trackId", Value{strip.id.toString()}},
+                                               {"levelDb", Value{strip.sends[rank].levelDb}},
+                                               {"index", Value{static_cast<std::int64_t>(rank)}}}));
+            }
+        }
+    }
+    auto record = Value::object({{"bus", Value{true}},
+                                 {"index", Value{static_cast<std::int64_t>(index.value())}},
+                                 {"track", state.findStrip(trackId_)->toValue()},
+                                 {"routes", Value::array(std::move(routes))},
+                                 {"sends", Value::array(std::move(sends))}});
+
+    if (auto removed = state.removeBus(trackId_); !removed)
+        return removed.error();
+
+    return record;
+}
+
+Result<void> RemoveTrack::revertBus(ProjectState& state, const Value& undoRecord)
+{
+    const auto* busValue = undoRecord.find("track");
+    if (busValue == nullptr)
+        return fail(ErrorCode::invalidPayload, "missing key: track");
+
+    auto bus = Track::fromValue(*busValue);
+    if (!bus)
+        return bus.error();
+
+    auto index = undoRecord.intAt("index");
+    if (!index)
+        return index.error();
+    if (index.value() < 0)
+        return fail(ErrorCode::invalidPayload, "index is negative");
+
+    const auto busId = bus.value().id;
+    if (auto inserted = state.insertBus(std::move(bus).value(), static_cast<std::size_t>(index.value()));
+        !inserted)
+        return inserted;
+
+    if (const auto* routes = undoRecord.find("routes"); routes != nullptr && routes->asArray() != nullptr)
+    {
+        for (const auto& route : *routes->asArray())
+        {
+            auto text = route.asString();
+            if (!text)
+                return text.error();
+            auto strip = TrackId::parse(text.value());
+            if (!strip)
+                return strip.error();
+            if (auto routed = state.setTrackOutput(strip.value(), busId); !routed)
+                return routed;
+        }
+    }
+
+    if (const auto* sends = undoRecord.find("sends"); sends != nullptr && sends->asArray() != nullptr)
+    {
+        for (const auto& entry : *sends->asArray())
+        {
+            auto strip = trackIdAt(entry, "trackId");
+            if (!strip)
+                return strip.error();
+            auto level = entry.doubleAt("levelDb");
+            if (!level)
+                return level.error();
+            auto rank = entry.intAt("index");
+            if (!rank)
+                return rank.error();
+
+            Send send{};
+            send.bus = busId;
+            send.levelDb = level.value();
+            if (auto restored = state.insertTrackSend(
+                    strip.value(), send, static_cast<std::size_t>(std::max<std::int64_t>(0, rank.value())));
+                !restored)
+                return restored;
+        }
+    }
+
+    return {};
+}
+
 Result<Value> RemoveTrack::apply(ProjectState& state) const
 {
+    if (trackId_ == ProjectState::masterTrackId())
+        return fail(ErrorCode::invalidArgument, "the master cannot be removed");
+
+    if (state.isBus(trackId_))
+        return applyToBus(state);
+
     auto index = state.trackIndex(trackId_);
     if (!index)
         return index.error();
@@ -157,6 +266,11 @@ Result<Value> RemoveTrack::apply(ProjectState& state) const
 
 Result<void> RemoveTrack::revert(ProjectState& state, const Value& undoRecord) const
 {
+    // Absent from every record written before buses existed: a channel.
+    if (const auto* bus = undoRecord.find("bus");
+        bus != nullptr && bus->asBool().ok() && bus->asBool().value())
+        return revertBus(state, undoRecord);
+
     const auto* trackValue = undoRecord.find("track");
     if (trackValue == nullptr)
         return fail(ErrorCode::invalidPayload, "missing key: track");
@@ -393,7 +507,8 @@ Value RenameTrack::payload() const
 
 Result<Value> RenameTrack::apply(ProjectState& state) const
 {
-    const auto* track = state.findTrack(trackId_);
+    // A channel, a bus, or the master: every strip has a name to be told by.
+    const auto* track = state.findStrip(trackId_);
     if (track == nullptr)
         return fail(ErrorCode::notFound, "no such track: " + trackId_.toString());
 

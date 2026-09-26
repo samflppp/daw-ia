@@ -116,6 +116,37 @@ Value trackValue(const Track& track, std::size_t index)
     if (track.sample.has_value())
         members.emplace_back("sample", Value{track.sample->name});
 
+    // The mix, only where it says something: an output other than the
+    // master, sends, a solo. A project without buses reads as before.
+    if (!track.output.isNil())
+        members.emplace_back("output", Value{track.output.toString()});
+    if (!track.sends.empty())
+    {
+        Value::Array sends;
+        for (const auto& send : track.sends)
+            sends.push_back(
+                Value::object({{"busId", Value{send.bus.toString()}}, {"levelDb", Value{send.levelDb}}}));
+        members.emplace_back("sends", Value::array(std::move(sends)));
+    }
+    if (track.soloed)
+        members.emplace_back("soloed", Value{true});
+
+    return Value::object(std::move(members));
+}
+
+// A bus or the master, told the way a track is, without what only a channel
+// has: no index in the rack, no channel pitch, no sample.
+Value stripValue(const Track& strip)
+{
+    auto value = trackValue(strip, 0);
+    Value::Object members;
+    for (const auto& [key, member] : *value.asObject())
+    {
+        if (key != "index" && key != "channelPitch" && key != "trackId")
+            members.emplace_back(key, member);
+    }
+    members.emplace_back(strip.id == ProjectState::masterTrackId() ? "trackId" : "busId",
+                         Value{strip.id.toString()});
     return Value::object(std::move(members));
 }
 
@@ -134,6 +165,15 @@ Value audioValue(const ProjectState& state)
                                        {"seconds", Value{clip.sample.seconds}}}));
     }
     return Value::array(std::move(clips));
+}
+
+Value busesValue(const ProjectState& state)
+{
+    Value::Array buses;
+    buses.reserve(state.buses().size());
+    for (const auto& bus : state.buses())
+        buses.push_back(stripValue(bus));
+    return Value::array(std::move(buses));
 }
 
 Value tempoValue(const ProjectState& state)
@@ -202,6 +242,8 @@ Value summarise(const ProjectState& state, const MachinePlugins& plugins)
     return Value::object(
         {{"tempo", tempoValue(state)},
          {"tracks", Value::array(std::move(tracks))},
+         {"buses", busesValue(state)},
+         {"master", stripValue(state.master())},
          {"patterns", Value::array(std::move(patterns))},
          {"arrangementEndBeats", Value{arrangementEnd}},
          {"audioClips", audioValue(state)},

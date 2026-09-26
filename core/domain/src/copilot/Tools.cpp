@@ -229,6 +229,54 @@ std::vector<Tool> builtinTools()
                               ProjectState::highestChannelPitch)}},
                     {"trackId", "pitch"})));
 
+    // --- the mixer
+    //
+    // Un bus et le master sont des tranches comme les pistes : volume, pan,
+    // coupure, renommage et plugins s'y appliquent avec les commandes des
+    // pistes, en donnant l'identifiant du bus ou du master comme trackId.
+    const auto busId = identifier("Identifiant d'un bus, tel que l'état le nomme.");
+
+    tools.push_back(
+        make("bus.add",
+             "Crée un bus : une tranche sans contenu, qui reçoit d'autres pistes (sorties ou envois) "
+             "et va au master. Ses volume, pan, coupure et plugins se règlent avec les commandes "
+             "des pistes. track.remove le retire.",
+             schema({{"busId", newIdentifier("Identifiant du bus à créer.")},
+                     {"name", field("string", "Nom du bus, par exemple Batterie ou Réverbe.")}},
+                    {"busId", "name"})));
+
+    tools.push_back(
+        make("track.set_output",
+             "Envoie toute la sortie d'une piste ou d'un bus dans un bus, ou la rend au master "
+             "(output vide). Une route qui reviendrait à son point de départ est refusée.",
+             schema({{"trackId", trackId},
+                     {"output", field("string", "Identifiant du bus visé, ou chaîne vide pour le master.")}},
+                    {"trackId", "output"})));
+
+    tools.push_back(
+        make("track.set_send",
+             "Envoie une partie d'une piste ou d'un bus vers un bus, après son fader : crée l'envoi "
+             "ou change son niveau. Pour une réverbe partagée : un bus avec la réverbe, puis un "
+             "envoi par piste.",
+             schema({{"trackId", trackId},
+                     {"busId", busId},
+                     {"levelDb",
+                      number("Niveau de l'envoi en décibels.",
+                             ProjectState::minVolumeDb,
+                             ProjectState::maxVolumeDb)}},
+                    {"trackId", "busId", "levelDb"})));
+
+    tools.push_back(make("track.remove_send",
+                         "Retire l'envoi d'une piste ou d'un bus vers un bus.",
+                         schema({{"trackId", trackId}, {"busId", busId}}, {"trackId", "busId"})));
+
+    tools.push_back(
+        make("track.set_solo",
+             "Met une piste ou un bus en solo, ou l'en sort. En solo, seules s'entendent les tranches en "
+             "solo, ce qu'elles reçoivent et les bus par où elles passent. Le master ne se met pas en solo.",
+             schema({{"trackId", trackId}, {"soloed", field("boolean", "Vrai pour mettre en solo.")}},
+                    {"trackId", "soloed"})));
+
     // --- patterns, placements and rows
     //
     // Le contenu et la position sont séparés : un pattern porte ce qui se joue,

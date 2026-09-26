@@ -737,10 +737,73 @@ bool operator==(const AudioClip& lhs, const AudioClip& rhs)
            lhs.startBeats == rhs.startBeats;
 }
 
+Result<void> Send::validate() const
+{
+    if (bus.isNil())
+        return fail(ErrorCode::invalidArgument, "a send goes to a bus, and names it");
+    if (levelDb < ProjectState::minVolumeDb || levelDb > ProjectState::maxVolumeDb)
+        return fail(ErrorCode::invalidArgument, "send level out of range: " + std::to_string(levelDb));
+    return {};
+}
+
+Value Send::toValue() const
+{
+    return Value::object({{"bus", Value{bus.toString()}}, {"levelDb", Value{levelDb}}});
+}
+
+Result<Send> Send::fromValue(const Value& value)
+{
+    auto bus = idAt<TrackId>(value, "bus");
+    if (!bus)
+        return bus.error();
+
+    auto level = value.doubleAt("levelDb");
+    if (!level)
+        return level.error();
+
+    Send send{};
+    send.bus = bus.value();
+    send.levelDb = level.value();
+    if (auto valid = send.validate(); !valid)
+        return valid.error();
+    return send;
+}
+
+bool operator==(const Send& lhs, const Send& rhs)
+{
+    return lhs.bus == rhs.bus && lhs.levelDb == rhs.levelDb;
+}
+
+const Send* Track::findSend(TrackId bus) const noexcept
+{
+    for (const auto& send : sends)
+    {
+        if (send.bus == bus)
+            return &send;
+    }
+    return nullptr;
+}
+
 Result<void> Track::validate() const
 {
     if (id.isNil())
         return fail(ErrorCode::invalidArgument, "track identifier is nil");
+
+    if (output == id)
+        return fail(ErrorCode::invalidArgument, "a strip cannot go into itself");
+
+    for (std::size_t index = 0; index < sends.size(); ++index)
+    {
+        if (auto valid = sends[index].validate(); !valid)
+            return valid;
+        if (sends[index].bus == id)
+            return fail(ErrorCode::invalidArgument, "a strip cannot send to itself");
+        for (std::size_t other = 0; other < index; ++other)
+        {
+            if (sends[other].bus == sends[index].bus)
+                return fail(ErrorCode::invalidArgument, "two sends to the same bus");
+        }
+    }
     if (volumeDb < ProjectState::minVolumeDb || volumeDb > ProjectState::maxVolumeDb)
         return fail(ErrorCode::invalidArgument, "volume out of range: " + std::to_string(volumeDb));
     if (pan < ProjectState::minPan || pan > ProjectState::maxPan)
@@ -782,6 +845,22 @@ Value Track::toValue() const
     // way it always has, byte for byte.
     if (sample.has_value())
         members.emplace_back("sample", sample->toValue());
+
+    // The mix, written only where it differs from a strip that goes to the
+    // master, sends nothing and is not in solo: a project mixed before buses
+    // existed serialises the way it did, byte for byte.
+    if (!output.isNil())
+        members.emplace_back("output", Value{output.toString()});
+    if (!sends.empty())
+    {
+        Value::Array serialisedSends;
+        serialisedSends.reserve(sends.size());
+        for (const auto& send : sends)
+            serialisedSends.push_back(send.toValue());
+        members.emplace_back("sends", Value::array(std::move(serialisedSends)));
+    }
+    if (soloed)
+        members.emplace_back("soloed", Value{true});
 
     return Value::object(std::move(members));
 }
@@ -865,6 +944,38 @@ Result<Track> Track::fromValue(const Value& value)
         track.sample = std::move(sample).value();
     }
 
+    // Absent: the master, no send, no solo — where every project written
+    // before S11 actually was.
+    if (value.find("output") != nullptr)
+    {
+        auto output = idAt<TrackId>(value, "output");
+        if (!output)
+            return output.error();
+        track.output = output.value();
+    }
+
+    if (const auto* sendsValue = value.find("sends"); sendsValue != nullptr)
+    {
+        const auto* items = sendsValue->asArray();
+        if (items == nullptr)
+            return fail(ErrorCode::invalidPayload, "sends must be an array");
+        for (const auto& item : *items)
+        {
+            auto send = Send::fromValue(item);
+            if (!send)
+                return send.error();
+            track.sends.push_back(send.value());
+        }
+    }
+
+    if (value.find("soloed") != nullptr)
+    {
+        auto soloed = value.boolAt("soloed");
+        if (!soloed)
+            return soloed.error();
+        track.soloed = soloed.value();
+    }
+
     auto valid = track.validate();
     if (!valid)
         return valid.error();
@@ -876,7 +987,8 @@ bool operator==(const Track& lhs, const Track& rhs)
 {
     return lhs.id == rhs.id && lhs.name == rhs.name && lhs.volumeDb == rhs.volumeDb && lhs.pan == rhs.pan &&
            lhs.muted == rhs.muted && lhs.channelPitch == rhs.channelPitch && lhs.plugins == rhs.plugins &&
-           lhs.sample == rhs.sample;
+           lhs.sample == rhs.sample && lhs.output == rhs.output && lhs.sends == rhs.sends &&
+           lhs.soloed == rhs.soloed;
 }
 
 // ---------------------------------------------------------------------------
@@ -1129,6 +1241,295 @@ Track* ProjectState::findTrackMutable(TrackId id) noexcept
             return &track;
     }
     return nullptr;
+}
+
+TrackId ProjectState::masterTrackId() noexcept
+{
+    // Like the origin tempo point: not nil, the same in every project, forever.
+    std::array<std::uint8_t, 16> bytes{};
+    bytes[15] = 2;
+    return TrackId{Ulid{bytes}};
+}
+
+Track ProjectState::defaultMaster()
+{
+    Track master{};
+    master.id = masterTrackId();
+    master.name = "Master";
+    return master;
+}
+
+std::vector<const Track*> ProjectState::strips() const
+{
+    std::vector<const Track*> all;
+    all.reserve(tracks_.size() + buses_.size() + 1);
+    for (const auto& track : tracks_)
+        all.push_back(&track);
+    for (const auto& bus : buses_)
+        all.push_back(&bus);
+    all.push_back(&master_);
+    return all;
+}
+
+std::vector<Track*> ProjectState::stripsMutable()
+{
+    std::vector<Track*> all;
+    all.reserve(tracks_.size() + buses_.size() + 1);
+    for (auto& track : tracks_)
+        all.push_back(&track);
+    for (auto& bus : buses_)
+        all.push_back(&bus);
+    all.push_back(&master_);
+    return all;
+}
+
+const Track* ProjectState::findStrip(TrackId id) const noexcept
+{
+    if (id == master_.id)
+        return &master_;
+    if (const auto* track = findTrack(id); track != nullptr)
+        return track;
+    for (const auto& bus : buses_)
+    {
+        if (bus.id == id)
+            return &bus;
+    }
+    return nullptr;
+}
+
+Track* ProjectState::findStripMutable(TrackId id) noexcept
+{
+    if (id == master_.id)
+        return &master_;
+    if (auto* track = findTrackMutable(id); track != nullptr)
+        return track;
+    for (auto& bus : buses_)
+    {
+        if (bus.id == id)
+            return &bus;
+    }
+    return nullptr;
+}
+
+bool ProjectState::isBus(TrackId id) const noexcept
+{
+    return std::any_of(buses_.begin(), buses_.end(), [id](const Track& bus) { return bus.id == id; });
+}
+
+Result<std::size_t> ProjectState::busIndex(TrackId id) const
+{
+    const auto position =
+        std::find_if(buses_.begin(), buses_.end(), [id](const Track& bus) { return bus.id == id; });
+    if (position == buses_.end())
+        return fail(ErrorCode::notFound, "no such bus: " + id.toString());
+    return static_cast<std::size_t>(std::distance(buses_.begin(), position));
+}
+
+Result<void> ProjectState::insertBus(Track bus, std::size_t index)
+{
+    if (auto valid = bus.validate(); !valid)
+        return valid;
+
+    if (findStrip(bus.id) != nullptr)
+        return fail(ErrorCode::conflict, "strip already exists: " + bus.id.toString());
+
+    if (buses_.size() >= maxBuses)
+        return fail(ErrorCode::conflict, "a project holds " + std::to_string(maxBuses) + " buses at most");
+
+    // A bus arrives empty-handed: no sample, no row, nothing a channel plays.
+    if (bus.sample.has_value())
+        return fail(ErrorCode::invalidArgument, "a bus plays no sample");
+
+    const auto position = std::min(index, buses_.size());
+    buses_.insert(buses_.begin() + static_cast<std::ptrdiff_t>(position), std::move(bus));
+    return {};
+}
+
+Result<void> ProjectState::removeBus(TrackId id)
+{
+    auto index = busIndex(id);
+    if (!index)
+        return index.error();
+
+    buses_.erase(buses_.begin() + static_cast<std::ptrdiff_t>(index.value()));
+
+    for (auto* strip : stripsMutable())
+    {
+        if (strip->output == id)
+            strip->output = TrackId{};
+        strip->sends.erase(std::remove_if(strip->sends.begin(),
+                                          strip->sends.end(),
+                                          [id](const Send& send) { return send.bus == id; }),
+                           strip->sends.end());
+    }
+    return {};
+}
+
+bool ProjectState::reaches(TrackId from, TrackId to) const
+{
+    // Depth first over outputs and sends. The routes form a graph without a
+    // loop — every command that adds a route asks this first — so it ends.
+    std::vector<TrackId> pending{from};
+    std::vector<TrackId> seen;
+    while (!pending.empty())
+    {
+        const auto current = pending.back();
+        pending.pop_back();
+        if (current == to)
+            return true;
+        if (std::find(seen.begin(), seen.end(), current) != seen.end())
+            continue;
+        seen.push_back(current);
+
+        const auto* strip = findStrip(current);
+        if (strip == nullptr)
+            continue;
+        if (!strip->output.isNil())
+            pending.push_back(strip->output);
+        for (const auto& send : strip->sends)
+            pending.push_back(send.bus);
+    }
+    return false;
+}
+
+Result<void> ProjectState::setTrackOutput(TrackId id, TrackId output)
+{
+    if (id == master_.id)
+        return fail(ErrorCode::invalidArgument, "the master goes out of the project, nowhere else");
+
+    auto* strip = findStripMutable(id);
+    if (strip == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    if (!output.isNil())
+    {
+        if (output == id)
+            return fail(ErrorCode::invalidArgument, "a strip cannot go into itself");
+        if (!isBus(output))
+            return fail(ErrorCode::invalidArgument,
+                        "an output is a bus, or the master: " + output.toString());
+        if (reaches(output, id))
+            return fail(ErrorCode::conflict, "that route would come back to where it starts");
+    }
+
+    strip->output = output;
+    return {};
+}
+
+Result<std::size_t> ProjectState::sendIndex(TrackId id, TrackId bus) const
+{
+    const auto* strip = findStrip(id);
+    if (strip == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    for (std::size_t index = 0; index < strip->sends.size(); ++index)
+    {
+        if (strip->sends[index].bus == bus)
+            return index;
+    }
+    return fail(ErrorCode::notFound, "no send from " + id.toString() + " to " + bus.toString());
+}
+
+Result<void> ProjectState::insertTrackSend(TrackId id, Send send, std::size_t index)
+{
+    if (auto valid = send.validate(); !valid)
+        return valid;
+
+    if (id == master_.id)
+        return fail(ErrorCode::invalidArgument, "the master sends nothing");
+
+    auto* strip = findStripMutable(id);
+    if (strip == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    if (send.bus == id)
+        return fail(ErrorCode::invalidArgument, "a strip cannot send to itself");
+    if (!isBus(send.bus))
+        return fail(ErrorCode::invalidArgument, "a send goes to a bus: " + send.bus.toString());
+    if (strip->findSend(send.bus) != nullptr)
+        return fail(ErrorCode::conflict, "that send already exists");
+    if (reaches(send.bus, id))
+        return fail(ErrorCode::conflict, "that send would come back to where it starts");
+
+    const auto position = std::min(index, strip->sends.size());
+    strip->sends.insert(strip->sends.begin() + static_cast<std::ptrdiff_t>(position), send);
+    return {};
+}
+
+Result<void> ProjectState::setTrackSend(TrackId id, TrackId bus, double levelDb)
+{
+    const auto* strip = findStrip(id);
+    if (strip == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    if (strip->findSend(bus) == nullptr)
+    {
+        Send send{};
+        send.bus = bus;
+        send.levelDb = levelDb;
+        return insertTrackSend(id, send, strip->sends.size());
+    }
+
+    Send changed{};
+    changed.bus = bus;
+    changed.levelDb = levelDb;
+    if (auto valid = changed.validate(); !valid)
+        return valid;
+
+    auto* mutableStrip = findStripMutable(id);
+    for (auto& send : mutableStrip->sends)
+    {
+        if (send.bus == bus)
+            send.levelDb = levelDb;
+    }
+    return {};
+}
+
+Result<void> ProjectState::removeTrackSend(TrackId id, TrackId bus)
+{
+    auto index = sendIndex(id, bus);
+    if (!index)
+        return index.error();
+
+    auto* strip = findStripMutable(id);
+    strip->sends.erase(strip->sends.begin() + static_cast<std::ptrdiff_t>(index.value()));
+    return {};
+}
+
+Result<void> ProjectState::setTrackSoloed(TrackId id, bool soloed)
+{
+    if (id == master_.id)
+        return fail(ErrorCode::invalidArgument, "the master is always heard; it cannot be put in solo");
+
+    auto* strip = findStripMutable(id);
+    if (strip == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    strip->soloed = soloed;
+    return {};
+}
+
+bool ProjectState::isAudible(TrackId id) const
+{
+    const auto* strip = findStrip(id);
+    if (strip == nullptr || strip->muted)
+        return false;
+    if (id == master_.id)
+        return true;
+
+    std::vector<TrackId> soloed;
+    for (const auto* other : strips())
+    {
+        if (other->soloed)
+            soloed.push_back(other->id);
+    }
+    if (soloed.empty())
+        return true;
+
+    return std::any_of(soloed.begin(),
+                       soloed.end(),
+                       [this, id](TrackId inSolo)
+                       { return inSolo == id || reaches(id, inSolo) || reaches(inSolo, id); });
 }
 
 const Clip* ProjectState::findClip(ClipId id) const noexcept
@@ -1422,7 +1823,7 @@ Result<void> ProjectState::addTrack(Track track)
     if (!valid)
         return valid;
 
-    if (findTrack(track.id) != nullptr)
+    if (findStrip(track.id) != nullptr)
         return fail(ErrorCode::conflict, "track already exists: " + track.id.toString());
 
     tracks_.push_back(std::move(track));
@@ -1445,7 +1846,7 @@ Result<void> ProjectState::insertTrack(Track track, std::size_t index)
     if (!valid)
         return valid;
 
-    if (findTrack(track.id) != nullptr)
+    if (findStrip(track.id) != nullptr)
         return fail(ErrorCode::conflict, "track already exists: " + track.id.toString());
 
     const auto position = std::min(index, tracks_.size());
@@ -1487,7 +1888,7 @@ Result<void> ProjectState::removeTrack(TrackId id)
 
 Result<void> ProjectState::setTrackName(TrackId id, std::string name)
 {
-    auto* track = findTrackMutable(id);
+    auto* track = findStripMutable(id);
     if (track == nullptr)
         return fail(ErrorCode::notFound, "no such track: " + id.toString());
 
@@ -1513,7 +1914,7 @@ Result<void> ProjectState::moveTrack(TrackId id, std::size_t index)
 
 Result<double> ProjectState::trackVolume(TrackId id) const
 {
-    const auto* track = findTrack(id);
+    const auto* track = findStrip(id);
     if (track == nullptr)
         return fail(ErrorCode::notFound, "no such track: " + id.toString());
 
@@ -1525,7 +1926,7 @@ Result<void> ProjectState::setTrackVolume(TrackId id, double volumeDb)
     if (volumeDb < minVolumeDb || volumeDb > maxVolumeDb)
         return fail(ErrorCode::invalidArgument, "volume out of range: " + std::to_string(volumeDb));
 
-    auto* track = findTrackMutable(id);
+    auto* track = findStripMutable(id);
     if (track == nullptr)
         return fail(ErrorCode::notFound, "no such track: " + id.toString());
 
@@ -1535,7 +1936,7 @@ Result<void> ProjectState::setTrackVolume(TrackId id, double volumeDb)
 
 Result<double> ProjectState::trackPan(TrackId id) const
 {
-    const auto* track = findTrack(id);
+    const auto* track = findStrip(id);
     if (track == nullptr)
         return fail(ErrorCode::notFound, "no such track: " + id.toString());
 
@@ -1547,7 +1948,7 @@ Result<void> ProjectState::setTrackPan(TrackId id, double pan)
     if (pan < minPan || pan > maxPan)
         return fail(ErrorCode::invalidArgument, "pan out of range: " + std::to_string(pan));
 
-    auto* track = findTrackMutable(id);
+    auto* track = findStripMutable(id);
     if (track == nullptr)
         return fail(ErrorCode::notFound, "no such track: " + id.toString());
 
@@ -1557,7 +1958,7 @@ Result<void> ProjectState::setTrackPan(TrackId id, double pan)
 
 Result<bool> ProjectState::trackMuted(TrackId id) const
 {
-    const auto* track = findTrack(id);
+    const auto* track = findStrip(id);
     if (track == nullptr)
         return fail(ErrorCode::notFound, "no such track: " + id.toString());
 
@@ -1566,7 +1967,7 @@ Result<bool> ProjectState::trackMuted(TrackId id) const
 
 Result<void> ProjectState::setTrackMuted(TrackId id, bool muted)
 {
-    auto* track = findTrackMutable(id);
+    auto* track = findStripMutable(id);
     if (track == nullptr)
         return fail(ErrorCode::notFound, "no such track: " + id.toString());
 
@@ -1865,9 +2266,9 @@ Result<void> ProjectState::removeNote(ClipId clipId, NoteId noteId)
 
 const PluginInstance* ProjectState::findPlugin(PluginId id) const noexcept
 {
-    for (const auto& track : tracks_)
+    for (const auto* track : strips())
     {
-        for (const auto& plugin : track.plugins)
+        for (const auto& plugin : track->plugins)
         {
             if (plugin.id == id)
                 return &plugin;
@@ -1878,9 +2279,9 @@ const PluginInstance* ProjectState::findPlugin(PluginId id) const noexcept
 
 PluginInstance* ProjectState::findPluginMutable(PluginId id) noexcept
 {
-    for (auto& track : tracks_)
+    for (auto* track : stripsMutable())
     {
-        for (auto& plugin : track.plugins)
+        for (auto& plugin : track->plugins)
         {
             if (plugin.id == id)
                 return &plugin;
@@ -1891,12 +2292,12 @@ PluginInstance* ProjectState::findPluginMutable(PluginId id) noexcept
 
 Result<ProjectState::PluginLocation> ProjectState::pluginLocation(PluginId id) const
 {
-    for (const auto& track : tracks_)
+    for (const auto* track : strips())
     {
-        for (std::size_t index = 0; index < track.plugins.size(); ++index)
+        for (std::size_t index = 0; index < track->plugins.size(); ++index)
         {
-            if (track.plugins[index].id == id)
-                return PluginLocation{track.id, index};
+            if (track->plugins[index].id == id)
+                return PluginLocation{track->id, index};
         }
     }
     return fail(ErrorCode::notFound, "no such plugin: " + id.toString());
@@ -1908,7 +2309,7 @@ Result<void> ProjectState::insertPlugin(TrackId trackId, PluginInstance plugin, 
     if (!valid)
         return valid;
 
-    auto* track = findTrackMutable(trackId);
+    auto* track = findStripMutable(trackId);
     if (track == nullptr)
         return fail(ErrorCode::notFound, "no such track: " + trackId.toString());
 
@@ -1924,14 +2325,14 @@ Result<void> ProjectState::insertPlugin(TrackId trackId, PluginInstance plugin, 
 
 Result<void> ProjectState::removePlugin(PluginId id)
 {
-    for (auto& track : tracks_)
+    for (auto* track : stripsMutable())
     {
-        const auto position = std::find_if(track.plugins.begin(),
-                                           track.plugins.end(),
+        const auto position = std::find_if(track->plugins.begin(),
+                                           track->plugins.end(),
                                            [id](const PluginInstance& plugin) { return plugin.id == id; });
-        if (position != track.plugins.end())
+        if (position != track->plugins.end())
         {
-            track.plugins.erase(position);
+            track->plugins.erase(position);
             return {};
         }
     }
@@ -2090,6 +2491,19 @@ Value ProjectState::toValue() const
         members.emplace_back("audio", Value::array(std::move(serialisedAudio)));
     }
 
+    // The mixer, only where there is one: no bus and an untouched master
+    // serialise the way a project did before S11, byte for byte.
+    if (!buses_.empty())
+    {
+        Value::Array serialisedBuses;
+        serialisedBuses.reserve(buses_.size());
+        for (const auto& bus : buses_)
+            serialisedBuses.push_back(bus.toValue());
+        members.emplace_back("buses", Value::array(std::move(serialisedBuses)));
+    }
+    if (!(master_ == defaultMaster()))
+        members.emplace_back("master", master_.toValue());
+
     return Value::object(std::move(members));
 }
 
@@ -2215,13 +2629,42 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
         }
     }
 
+    if (const auto* busesValue = value.find("buses"); busesValue != nullptr)
+    {
+        const auto* items = busesValue->asArray();
+        if (items == nullptr)
+            return fail(ErrorCode::invalidPayload, "buses must be an array");
+
+        for (const auto& item : *items)
+        {
+            auto bus = Track::fromValue(item);
+            if (!bus)
+                return bus.error();
+
+            auto added = state.insertBus(std::move(bus).value(), state.buses_.size());
+            if (!added)
+                return added.error();
+        }
+    }
+
+    if (const auto* masterValue = value.find("master"); masterValue != nullptr)
+    {
+        auto master = Track::fromValue(*masterValue);
+        if (!master)
+            return master.error();
+        if (master.value().id != masterTrackId())
+            return fail(ErrorCode::invalidPayload, "the master carries the master's identifier");
+        state.master_ = std::move(master).value();
+    }
+
     return state;
 }
 
 bool operator==(const ProjectState& lhs, const ProjectState& rhs)
 {
     return lhs.tempo_ == rhs.tempo_ && lhs.tracks_ == rhs.tracks_ && lhs.patterns_ == rhs.patterns_ &&
-           lhs.arrangement_ == rhs.arrangement_ && lhs.audio_ == rhs.audio_;
+           lhs.arrangement_ == rhs.arrangement_ && lhs.audio_ == rhs.audio_ && lhs.buses_ == rhs.buses_ &&
+           lhs.master_ == rhs.master_;
 }
 
 } // namespace daw::domain
