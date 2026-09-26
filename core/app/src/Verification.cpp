@@ -190,7 +190,7 @@ void Verification::snapshot(const std::string& name)
         report_.add("- capture : `" + file.getFileName() + "`");
 }
 
-Verification::Heard Verification::listen(const std::string& name, double beatsPerMinute)
+Verification::Heard Verification::listen(const std::string& name, double beatsPerMinute, float floor)
 {
     const auto file = folder_.getChildFile(fileSafe(name) + ".wav");
     static_cast<void>(file.deleteFile());
@@ -234,8 +234,11 @@ Verification::Heard Verification::listen(const std::string& name, double beatsPe
         const auto before = step == 0 ? 0.0f : levels[step - 1];
         // A tail only decays, so any rise above the window before is a new
         // note: a hat six decibels under a kick's tail still rises above it.
-        if (levels[step] > loudest * 0.25f && levels[step] > before * 1.25f)
+        if (levels[step] > loudest * floor && levels[step] > before * 1.25f)
+        {
             heard.onsets.push_back(static_cast<int>(step));
+            heard.onsetLevels.push_back(levels[step]);
+        }
     }
 
     report_.add(juce::String::fromUTF8("- écoute : `") + file.getFileName() + "`, " +
@@ -1182,6 +1185,7 @@ void Verification::buildList()
     addMixerSteps();
     addTempoSteps();
     addSearchSteps();
+    addVelocitySteps();
 
     // --- the title bar -----------------------------------------------------------
 
@@ -3137,6 +3141,153 @@ void Verification::addSearchSteps()
             static_cast<void>(kit_.getChildFile("Kicks").deleteRecursively());
             static_cast<void>(kit_.getChildFile("Snare House.wav").deleteFile());
             browser->refresh();
+        });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+std::vector<int> Verification::kickVelocities() const
+{
+    std::vector<int> velocities;
+    if (state_.patterns().empty() || state_.tracks().empty())
+        return velocities;
+    if (const auto* row = state_.patterns().front().findClipForTrack(state_.tracks().front().id);
+        row != nullptr)
+    {
+        for (const auto& note : row->notes)
+            velocities.push_back(note.velocity);
+    }
+    return velocities;
+}
+
+void Verification::addVelocitySteps()
+{
+    // --- the velocity lane, under the piano roll --------------------------------------
+    //
+    // FL's event editor: a click sets the note under it, a stroke across the
+    // stems draws a crescendo, a selection limits the stroke to itself. Each
+    // stroke is one Ctrl+Z. The crescendo is measured on a render, kick alone.
+
+    add("F7 sur les kicks : la zone de vélocité est sous les notes ; un clic met le premier à 40",
+        [this]
+        {
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportStop>()));
+            press("PAT");
+            savedState_ = domain::json::write(state_.toValue());
+            savedDepth_ = depth();
+
+            selection_.selectPattern(state_.patterns().front().id);
+            if (auto* rack = panel("channel_rack"); rack != nullptr)
+                click(*rack, rackChannel(0));
+            key(juce::KeyPress{juce::KeyPress::F7Key});
+
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            const auto* row = state_.patterns().front().findClipForTrack(state_.tracks().front().id);
+            check(roll != nullptr && row != nullptr && row->notes.size() >= 4,
+                  "le piano-roll montre les kicks");
+            if (roll == nullptr || row == nullptr || row->notes.size() < 4)
+                return;
+
+            check(!roll->velocityLane().isEmpty() &&
+                      roll->velocityLane().getY() > roll->noteBounds(row->notes[0]).getY(),
+                  "la zone VÉLOCITÉ est sous la grille");
+            juce::StringArray before;
+            for (const auto velocity : kickVelocities())
+                before.add(juce::String(velocity));
+            note("vélocités avant : " + before.joinIntoString(", ").toStdString());
+
+            click(*roll, roll->velocityPointFor(row->notes[0], 40));
+            const auto after = kickVelocities();
+            check(std::abs(after[0] - 40) <= 1, "le premier kick passe à " + std::to_string(after[0]));
+            check(depth() == savedDepth_ + 1, "une entrée d'historique");
+            snapshot("s12-velocite-un-clic");
+        });
+
+    add("un trait de gauche à droite, de 60 à 127 : un crescendo, une seule entrée",
+        [this]
+        {
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            const auto* row = state_.patterns().front().findClipForTrack(state_.tracks().front().id);
+            if (roll == nullptr || row == nullptr || row->notes.size() < 4)
+                return;
+
+            const auto from = roll->velocityPointFor(row->notes.front(), 60);
+            const auto to = roll->velocityPointFor(row->notes.back(), 127);
+            const auto depthBefore = depth();
+            drag(*roll, from, to);
+
+            const auto after = kickVelocities();
+            juce::StringArray values;
+            for (const auto v : after)
+                values.add(juce::String(v));
+            note("vélocités après le trait : " + values.joinIntoString(", ").toStdString());
+
+            check(std::abs(after.front() - 60) <= 2 && std::abs(after.back() - 127) <= 2,
+                  "de 60 au premier à 127 au dernier");
+            check(std::is_sorted(after.begin(), after.end()) && after.front() < after.back(),
+                  "chaque kick plus fort que le précédent");
+            check(depth() == depthBefore + 1,
+                  "un seul Ctrl+Z pour les " + std::to_string(after.size()) + " notes du trait");
+            snapshot("s12-velocite-crescendo");
+        });
+
+    add("le crescendo s'entend : le Kick seul, chaque coup plus fort que le précédent",
+        [this]
+        {
+            const auto kick = state_.tracks().front().id;
+            static_cast<void>(bus_.execute(std::make_unique<domain::SetTrackSolo>(kick, true)));
+            // The kick alone, so a quiet first hit is still an onset: the
+            // floor is 34 dB under the loudest rather than 12.
+            const auto heard = listen("s12-crescendo", state_.tempoPoints().front().beatsPerMinute, 0.02f);
+            static_cast<void>(bus_.undo());
+
+            juce::StringArray levels;
+            for (const auto level : heard.onsetLevels)
+                levels.add(juce::String(juce::Decibels::gainToDecibels(level), 1));
+            note("niveau de chaque attaque, en dBFS : " + levels.joinIntoString(", ").toStdString());
+
+            const auto count = kickVelocities().size();
+            check(heard.onsetLevels.size() == count, std::to_string(count) + " attaques, une par kick");
+            check(heard.onsetLevels.size() >= 2 &&
+                      std::is_sorted(heard.onsetLevels.begin(), heard.onsetLevels.end()) &&
+                      heard.onsetLevels.back() > heard.onsetLevels.front() * 1.5f,
+                  "chaque attaque plus forte que la précédente, la dernière nettement");
+        });
+
+    add("deux kicks pris au Ctrl + clic : le trait ne touche qu'eux",
+        [this]
+        {
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            const auto* row = state_.patterns().front().findClipForTrack(state_.tracks().front().id);
+            if (roll == nullptr || row == nullptr || row->notes.size() < 4)
+                return;
+
+            click(*roll, roll->noteBounds(row->notes[1]).getCentre(), false, false, true);
+            click(*roll, roll->noteBounds(row->notes[2]).getCentre(), false, false, true);
+            check(roll->picked().size() == 2, "deux kicks pris");
+
+            const auto before = kickVelocities();
+            const auto lane = roll->velocityLane();
+            const auto y = roll->velocityPointFor(row->notes[0], 64).getY();
+            drag(*roll, {lane.getX() + 1, y}, {lane.getRight() - 2, y});
+
+            const auto after = kickVelocities();
+            check(after[0] == before[0] && after.back() == before.back(),
+                  "le premier et le dernier n'ont pas bougé");
+            check(std::abs(after[1] - 64) <= 1 && std::abs(after[2] - 64) <= 1, "les deux pris passent à 64");
+        });
+
+    add("tout défaire au Ctrl+Z",
+        [this]
+        {
+            while (depth() > savedDepth_)
+                key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == savedState_, "le projet d'avant, à l'octet près");
+            key(juce::KeyPress{juce::KeyPress::F7Key});
+            press("SONG");
         });
 }
 

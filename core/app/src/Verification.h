@@ -114,6 +114,7 @@ private:
     {
         double seconds{0.0};
         std::vector<int> onsets;
+        std::vector<float> onsetLevels; // RMS of the sixteenth each onset starts in
     };
 
     void timerCallback() override;
@@ -153,6 +154,11 @@ private:
     // The browser: one click opens a folder, the search finds "kick house"
     // and what is close to it.
     void addSearchSteps();
+
+    // The velocity lane: a click, a crescendo drawn in one stroke and heard,
+    // a stroke limited to the picked notes.
+    void addVelocitySteps();
+    [[nodiscard]] std::vector<int> kickVelocities() const;
     [[nodiscard]] juce::TreeViewItem* browserItem(const juce::File& file) const;
     void clickBrowserItem(juce::TreeViewItem& item);
     [[nodiscard]] juce::TextEditor* browserSearch() const;
@@ -178,7 +184,9 @@ private:
     void check(bool passed, const std::string& what);
     void note(const std::string& what);
     void snapshot(const std::string& name);
-    [[nodiscard]] Heard listen(const std::string& name, double beatsPerMinute);
+    // An onset is a sixteenth louder than `floor` times the loudest one, and
+    // than the sixteenth before it.
+    [[nodiscard]] Heard listen(const std::string& name, double beatsPerMinute, float floor = 0.25f);
     void finish();
 
     // --- the doors a person uses
