@@ -38,6 +38,10 @@ public:
     // it.
     [[nodiscard]] virtual bool isInstalled(const domain::PluginRef& ref) const = 0;
 
+    // True for an instrument, false for an effect or a plugin not installed
+    // here. The channel rack offers only instruments to start a channel with.
+    [[nodiscard]] virtual bool isInstrument(const domain::PluginRef& ref) const = 0;
+
     [[nodiscard]] virtual bool hasEditor(domain::PluginId pluginId) const = 0;
     [[nodiscard]] virtual bool editorIsOpen(domain::PluginId pluginId) const = 0;
 

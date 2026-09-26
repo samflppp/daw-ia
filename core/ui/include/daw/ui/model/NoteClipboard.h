@@ -12,8 +12,9 @@
 namespace daw::ui
 {
 
-// What Ctrl+C takes in the piano roll and in the channel rack: notes, by
-// value, never a selection of the screen.
+// What Ctrl+C takes in the piano roll: notes, by value, never a selection of
+// the screen. The rack copied whole rows until S12, when it stopped holding
+// notes.
 //
 // Values and not identifiers: a copied note is a pitch, a velocity, a length
 // and a start relative to the copy, so it survives a change of pattern, and
@@ -42,8 +43,9 @@ struct CopiedNotes
     double originBeats{0.0};
 };
 
-// The one clipboard the piano roll and the rack share: notes copied in one
-// paste in the other.
+// The piano roll's clipboard, kept by the application rather than by the
+// panel: notes copied in one pattern paste in another, whichever window the
+// piano roll is shown in.
 class Clipboard
 {
 public:
@@ -53,10 +55,6 @@ public:
 // The piano roll: some notes of one row, the origin at the earliest of them.
 [[nodiscard]] CopiedNotes
 copyNotes(const domain::Pattern& pattern, domain::TrackId track, const std::vector<domain::NoteId>& noteIds);
-
-// The rack: whole rows of some channels, the origin at the pattern's start.
-[[nodiscard]] CopiedNotes copyRows(const domain::Pattern& pattern,
-                                   const std::vector<domain::TrackId>& tracks);
 
 // What a paste does, as commands the caller runs in one group — one Ctrl+Z —
 // with identifiers drawn here, by the caller of the bus, like everywhere.

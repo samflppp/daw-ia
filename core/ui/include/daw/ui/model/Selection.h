@@ -19,8 +19,8 @@ public:
     [[nodiscard]] domain::TrackId track() const noexcept { return track_; }
     [[nodiscard]] domain::ClipId clip() const noexcept { return clip_; }
 
-    // Which pattern is being worked on. The channel rack shows it as a grid,
-    // the piano roll shows one of its rows, and the beatmaker loop follows it:
+    // Which pattern is being worked on. The channel rack chooses it, the
+    // piano roll shows one of its rows, and the beatmaker loop follows it:
     // three screens, one choice, so that switching pattern in the rack moves
     // the piano roll and the loop with it.
     //

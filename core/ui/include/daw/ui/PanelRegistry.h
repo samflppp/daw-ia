@@ -63,7 +63,7 @@ struct PanelServices
     // The levels the meters show, measured by the engine.
     LevelSource& levels;
 
-    // What Ctrl+C took in the piano roll or the rack, for either to paste.
+    // What Ctrl+C took in the piano roll.
     Clipboard& clipboard;
 };
 

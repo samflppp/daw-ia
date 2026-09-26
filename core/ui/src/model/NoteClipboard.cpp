@@ -61,18 +61,6 @@ copyNotes(const domain::Pattern& pattern, domain::TrackId track, const std::vect
     return copied;
 }
 
-CopiedNotes copyRows(const domain::Pattern& pattern, const std::vector<domain::TrackId>& tracks)
-{
-    CopiedNotes copied;
-    for (const auto& track : tracks)
-    {
-        const auto* row = pattern.findClipForTrack(track);
-        copied.rows.push_back(CopiedRow{track, row != nullptr ? row->notes : std::vector<domain::Note>{}});
-    }
-    measureSpan(copied);
-    return copied;
-}
-
 PastePlan planPaste(const domain::ProjectState& state,
                     domain::PatternId patternId,
                     const CopiedNotes& copied,
@@ -129,8 +117,8 @@ PastePlan planPaste(const domain::ProjectState& state,
                 continue;
             }
 
-            // Never two notes of the same pitch at the same start: a cell of
-            // the rack would hold two, and switching it off would leave one.
+            // Never two notes of the same pitch at the same start: one sound,
+            // and two things to click and to delete.
             const bool doubled =
                 std::any_of(landed.begin(),
                             landed.end(),

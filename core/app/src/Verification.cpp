@@ -492,24 +492,52 @@ engine::StripLevel Verification::levelOf(const std::string& strip) const
     return levelIn(levels_.levels(), strip);
 }
 
-juce::Point<int> Verification::rackCell(int row, int step) const
+void Verification::writeNotes(int row, const std::vector<double>& beats)
 {
-    auto* rack = panel("channel_rack");
-    const auto* pattern = state_.patterns().empty() ? nullptr : &state_.patterns().front();
-    if (rack == nullptr || pattern == nullptr)
-        return {};
+    // The way notes are written since S12: the channel chosen in the rack,
+    // then a click per note in the piano roll, on the channel's own pitch.
+    auto* rack = dynamic_cast<ui::ChannelRackPanel*>(panel("channel_rack"));
+    if (rack == nullptr || row < 0 || row >= static_cast<int>(state_.tracks().size()))
+    {
+        check(false, "le rack montre le canal " + std::to_string(row + 1));
+        return;
+    }
+    click(*rack, rackChannel(row));
 
-    if (const auto* current = state_.findPattern(selection_.pattern()); current != nullptr)
-        pattern = current;
+    // A person moves the mouse to the piano roll after choosing the channel,
+    // and the panels have long heard of the choice by then: a ChangeBroadcaster
+    // speaks asynchronously. Here the next click comes at once, so the news is
+    // delivered first.
+    selection_.dispatchPendingMessages();
 
-    const auto top = tokens_.integer("metric.panel.headerHeight");
-    const auto left = tokens_.integer("metric.channelRack.channelWidth");
-    const auto rowHeight = tokens_.integer("metric.channelRack.rowHeight");
-    const auto width = rack->getWidth() - left;
-    const auto steps = std::max(1, static_cast<int>(std::lround(pattern->lengthBeats / stepBeats)));
+    const auto wasShowing = panel("piano_roll") != nullptr && panel("piano_roll")->isShowing();
+    if (!wasShowing)
+        key(juce::KeyPress{juce::KeyPress::F7Key});
 
-    const auto x = left + (step * width) / steps + width / (2 * steps);
-    return {x, top + row * rowHeight + rowHeight / 2};
+    auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+    if (roll != nullptr)
+    {
+        const auto trackId = state_.tracks()[static_cast<std::size_t>(row)].id;
+        const auto count = [this, trackId]
+        {
+            const auto* shown = state_.findPattern(selection_.pattern());
+            const auto* clip = shown != nullptr ? shown->findClipForTrack(trackId) : nullptr;
+            return clip != nullptr ? clip->notes.size() : std::size_t{0};
+        };
+        const auto before = count();
+        const auto pitch = state_.tracks()[static_cast<std::size_t>(row)].channelPitch;
+        for (const auto beat : beats)
+            click(*roll, roll->pointFor(beat, pitch));
+        if (count() != before + beats.size())
+            note("écrire au piano-roll : " + std::to_string(count() - before) + " notes sur " +
+                 std::to_string(beats.size()) + ", piano-roll " + roll->getBounds().toString().toStdString() +
+                 ", premier clic " + roll->pointFor(beats.front(), pitch).toString().toStdString() +
+                 ", piste choisie " + (selection_.track() == trackId ? "oui" : "non") + ", visible " +
+                 (roll->isShowing() ? "oui" : "non"));
+    }
+
+    if (!wasShowing)
+        key(juce::KeyPress{juce::KeyPress::F7Key});
 }
 
 void Verification::wheel(juce::Component& target, juce::Point<int> at, float deltaY, bool shift, bool ctrl)
@@ -638,9 +666,7 @@ void Verification::buildList()
     add("le mode pattern joue le pattern sans pose",
         [this]
         {
-            auto* rack = panel("channel_rack");
-            for (const auto step : {0, 4, 8, 12})
-                click(*rack, rackCell(0, step));
+            writeNotes(0, {0.0, 1.0, 2.0, 3.0});
 
             const auto heard = listen("3-mode-pattern", 120.0);
             check(std::abs(heard.seconds - 8.0) < 0.2,
@@ -676,15 +702,13 @@ void Verification::buildList()
         [this] { return clock_.positionBeats() > 3.0; },
         8000.0);
 
-    add("LA preuve : une édition du rack, huit poses changées",
+    add("LA preuve : une édition du piano-roll, huit poses changées",
         [this]
         {
             static_cast<void>(bus_.execute(std::make_unique<domain::TransportStop>()));
             savedDepth_ = depth();
 
-            auto* rack = panel("channel_rack");
-            for (const auto step : {2, 6, 10, 14})
-                click(*rack, rackCell(1, step));
+            writeNotes(1, {0.5, 1.5, 2.5, 3.5});
 
             check(state_.patterns().front().clips.size() == 2, "la ligne du Hat est ouverte dans le pattern");
             check(state_.arrangement().size() == 8, "toujours huit poses, aucune copiée");
@@ -710,7 +734,7 @@ void Verification::buildList()
         {
             const auto lit = depth() - savedDepth_;
             note("quatre clics séparés = " + std::to_string(lit) +
-                 " entrées d'historique ; autant de Ctrl+Z");
+                 " entrées d'historique (le premier ouvre la ligne du Hat dans la même) ; autant de Ctrl+Z");
             for (std::size_t index = 0; index < lit; ++index)
                 key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
 
@@ -761,9 +785,7 @@ void Verification::buildList()
         [this]
         {
             press("+ Pattern");
-            auto* rack = panel("channel_rack");
-            for (const auto step : {0, 2, 4, 6, 8, 10, 12, 14})
-                click(*rack, rackCell(1, step));
+            writeNotes(1, {0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5});
             check(state_.patterns().size() == 2, "deux patterns");
             check(state_.arrangement().size() == 8, "le pattern 2 n'est pas posé");
         });
@@ -973,7 +995,9 @@ void Verification::buildList()
             const auto tracks = state_.tracks().size();
             savedDepth_ = depth();
 
-            const auto below = rackCell(static_cast<int>(tracks) + 2, 0);
+            const auto below = dynamic_cast<ui::ChannelRackPanel*>(panel("channel_rack"))
+                                   ->channelBounds(static_cast<int>(tracks) + 2)
+                                   .getCentre();
             const juce::DragAndDropTarget::SourceDetails details{
                 "sample:" + kit_.getChildFile("Kick 808.wav").getFullPathName(), panel("browser"), below};
             check(rack->isInterestedInDragSource(details), "un sample du navigateur l'intéresse");
@@ -990,24 +1014,22 @@ void Verification::buildList()
                      ", empreinte " + added.sample->blob.digest.substr(0, 12) + "…");
         });
 
-    add("le canal sampler joue ses cases",
+    add("le canal sampler joue ses notes",
         [this]
         {
             // In pattern mode, on the pattern the rack shows.
             press("PAT");
             const auto row = static_cast<int>(state_.tracks().size()) - 1;
-            auto* rack = panel("channel_rack");
 
             const auto before = listen("20a-avant-sampler", 90.0);
-            for (const auto step : {1, 5, 9, 13})
-                click(*rack, rackCell(row, step));
+            writeNotes(row, {0.25, 1.25, 2.25, 3.25});
             const auto after = listen("20b-canal-sampler", 90.0);
 
             bool heard = true;
             for (const auto step : {1, 5, 9, 13})
                 heard =
                     heard && std::find(after.onsets.begin(), after.onsets.end(), step) != after.onsets.end();
-            check(heard, "le sample s'entend sur les pas 2, 6, 10, 14 qu'on vient d'allumer");
+            check(heard, "le sample s'entend sur les pas 2, 6, 10, 14 qu'on vient d'écrire");
             // The hats on the steps right after a sampler hit sit under its
             // tail and cannot be told apart by level; the ones that follow a
             // silent step can, and they must all still be there.
@@ -1186,6 +1208,7 @@ void Verification::buildList()
     addTempoSteps();
     addSearchSteps();
     addVelocitySteps();
+    addRackSteps();
 
     // --- the title bar -----------------------------------------------------------
 
@@ -1837,6 +1860,12 @@ void Verification::addPlaylistViewSteps()
                   "la vue est au bout, sur la pose de la mesure 100");
             const auto viewed = playlist->firstBeat();
 
+            // What the Ctrl+Z is about to undo, named in the report: if it is
+            // not the far placement, the line says what slipped in between.
+            if (history_.cursor() > 0)
+                note("dernière entrée avant Ctrl+Z : « " +
+                     std::string{history_.entries()[history_.cursor() - 1].label()} + " »");
+
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             const auto gone = std::none_of(state_.arrangement().begin(),
                                            state_.arrangement().end(),
@@ -1921,20 +1950,19 @@ void Verification::addPreviewSteps()
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
         });
 
-    add("toujours aucun ; allumer une case du pattern 1 dans le rack",
+    add("toujours aucun ; une note de plus dans le pattern 1",
         [this]
         {
             auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
-            auto* rack = panel("channel_rack");
-            if (playlist == nullptr || rack == nullptr)
+            if (playlist == nullptr)
                 return;
 
             check(playlist->previewBuilds() == previewBuilds_, "le Ctrl+Z du déplacement non plus");
 
             selection_.selectPattern(state_.patterns().front().id);
             savedDepth_ = depth();
-            click(*rack, rackCell(1, 7));
-            check(depth() == savedDepth_ + 1, "la case est allumée : une entrée d'historique");
+            writeNotes(1, {1.75});
+            check(depth() == savedDepth_ + 1, "la note est écrite : une entrée d'historique");
             static_cast<void>(playlistBeat(0, 0.5));
         });
 
@@ -2375,9 +2403,8 @@ namespace daw::app
 
 juce::Point<int> Verification::rackChannel(int row) const
 {
-    // The channel column of the rack, on the row: where its name is clicked.
-    const auto cell = rackCell(row, 0);
-    return {tokens_.integer("space.md"), cell.getY()};
+    auto* rack = dynamic_cast<ui::ChannelRackPanel*>(panel("channel_rack"));
+    return rack != nullptr ? rack->channelBounds(row).getCentre() : juce::Point<int>{};
 }
 
 void Verification::addClipboardSteps()
@@ -2475,56 +2502,6 @@ void Verification::addClipboardSteps()
             check(state_.findPattern(second)->lengthBeats == length, "quatre Ctrl+Z : la longueur revient");
         });
 
-    add("ce que le piano-roll a copié, collé dans le rack sur le Hat",
-        [this]
-        {
-            auto* rack = dynamic_cast<ui::ChannelRackPanel*>(panel("channel_rack"));
-            if (rack == nullptr)
-                return;
-
-            click(*rack, rackChannel(1));
-            check(rack->picked().size() == 1, "le Hat est pris");
-
-            // The playhead on the second sixteenth, where the Hat has nothing:
-            // the paste lands there, at the head, not on the hats already in.
-            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.25)));
-            const auto hatId = state_.tracks()[1].id;
-            const auto second = state_.patterns()[1].id;
-            const auto* before = state_.findPattern(second)->findClipForTrack(hatId);
-            const auto had = before != nullptr ? before->notes.size() : 0;
-
-            static_cast<void>(rack->keyPressed(juce::KeyPress{'v', juce::ModifierKeys::ctrlModifier, 0}));
-            const auto* after = state_.findPattern(second)->findClipForTrack(hatId);
-            note("notes du Hat dans le pattern 2 : " + std::to_string(had) + " -> " +
-                 std::to_string(after != nullptr ? after->notes.size() : 0) +
-                 " (une note déjà là à la même place et à la même hauteur n'est pas doublée)");
-            check(after != nullptr && after->notes.size() > had, "des notes arrivent sur le Hat");
-            check(depth() == savedDepth_ + 2, "une entrée");
-        });
-
-    add("dans le rack, Kick et Hat pris au Ctrl + clic, copiés, collés dans le pattern 1",
-        [this]
-        {
-            auto* rack = dynamic_cast<ui::ChannelRackPanel*>(panel("channel_rack"));
-            if (rack == nullptr)
-                return;
-
-            click(*rack, rackChannel(0));
-            click(*rack, rackChannel(1), false, false, true);
-            check(rack->picked().size() == 2, "deux canaux pris");
-            static_cast<void>(rack->keyPressed(juce::KeyPress{'c', juce::ModifierKeys::ctrlModifier, 0}));
-
-            selection_.selectPattern(state_.patterns().front().id);
-            const auto before = depth();
-            static_cast<void>(rack->keyPressed(juce::KeyPress{'v', juce::ModifierKeys::ctrlModifier, 0}));
-            check(depth() == before + 1, "le collage de deux lignes est une entrée");
-
-            const auto& lines = history_.entries();
-            if (history_.cursor() > 0 && lines[history_.cursor() - 1].group.has_value())
-                note("historique : « " + lines[history_.cursor() - 1].group->label + " », " +
-                     std::to_string(lines[history_.cursor() - 1].merged) + " commandes");
-        });
-
     add("tout défaire : le projet d'avant le presse-papiers, à l'octet près",
         [this]
         {
@@ -2532,6 +2509,9 @@ void Verification::addClipboardSteps()
                 key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(domain::json::write(state_.toValue()) == savedState_, "à l'octet près");
             key(juce::KeyPress{juce::KeyPress::F7Key});
+            // Back on the pattern the clipboard started from, which the steps
+            // after this one play in pattern mode.
+            selection_.selectPattern(state_.patterns().front().id);
         });
 }
 
@@ -3288,6 +3268,123 @@ void Verification::addVelocitySteps()
             check(domain::json::write(state_.toValue()) == savedState_, "le projet d'avant, à l'octet près");
             key(juce::KeyPress{juce::KeyPress::F7Key});
             press("SONG");
+        });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+void Verification::addRackSteps()
+{
+    // --- the rack, without its grid ---------------------------------------------------
+    //
+    // Since S12 the rack brings sounds in and takes them out; notes are
+    // written in the piano roll. "+ Instrument" makes a channel on the built-in
+    // synth, a double click renames it, the right-click menu removes it, and a
+    // click where the steps used to be writes nothing.
+
+    add("un clic là où étaient les pas n'écrit plus rien",
+        [this]
+        {
+            savedState_ = domain::json::write(state_.toValue());
+            savedDepth_ = depth();
+
+            auto* rack = dynamic_cast<ui::ChannelRackPanel*>(panel("channel_rack"));
+            if (rack == nullptr)
+                return;
+
+            const auto row = rack->channelBounds(0);
+            click(*rack, {row.getRight() - row.getWidth() / 4, row.getCentreY()});
+            check(depth() == savedDepth_, "aucune entrée d'historique");
+            check(domain::json::write(state_.toValue()) == savedState_, "aucune note écrite");
+            check(selection_.track() == state_.tracks().front().id, "le clic choisit le canal, rien d'autre");
+            note("le canal dit ce qui le joue : « " +
+                 rack->instrumentName(state_.tracks().front()).toStdString() + " »");
+            snapshot("s12-rack-sans-grille");
+        });
+
+    // A menu closes itself when the application is not in front, which a
+    // verification running behind other windows often is: it is opened and
+    // answered in the same step.
+    add(
+        "« + Instrument » : le synthé intégré",
+        [this]
+        {
+            tracksBefore_ = state_.tracks().size();
+            press("+ Instrument");
+            chooseMenuItem(ui::ChannelRackPanel::builtInSynthItem);
+        },
+        [this] { return state_.tracks().size() == tracksBefore_ + 1; },
+        3000.0);
+
+    add(
+        "un canal « Synth » de plus, une entrée ; double-clic pour le renommer",
+        [this]
+        {
+            check(state_.tracks().size() == tracksBefore_ + 1, "un canal de plus");
+            check(depth() == savedDepth_ + 1, "une entrée d'historique");
+            check(state_.tracks().back().name == "Synth" && state_.tracks().back().plugins.empty() &&
+                      !state_.tracks().back().sample.has_value(),
+                  "« Synth », sans plugin ni sample : le synthé intégré le joue");
+            check(selection_.track() == state_.tracks().back().id, "il est choisi : le piano-roll l'édite");
+
+            auto* rack = dynamic_cast<ui::ChannelRackPanel*>(panel("channel_rack"));
+            if (rack != nullptr)
+                doubleClick(*rack, rack->channelBounds(static_cast<int>(tracksBefore_)).getCentre());
+        },
+        [] {
+            return dynamic_cast<juce::AlertWindow*>(juce::Component::getCurrentlyModalComponent()) != nullptr;
+        },
+        3000.0);
+
+    add(
+        "on tape « Basse »",
+        [this] { answerDialog("name", "Basse"); },
+        [this] { return !state_.tracks().empty() && state_.tracks().back().name == "Basse"; },
+        3000.0);
+
+    add("une note au piano-roll sur la Basse",
+        [this]
+        {
+            check(state_.tracks().back().name == "Basse", "renommé « Basse »");
+            writeNotes(static_cast<int>(tracksBefore_), {0.0});
+            const auto* row = state_.patterns().front().findClipForTrack(state_.tracks().back().id);
+            check(row != nullptr && row->notes.size() == 1, "le piano-roll écrit sur le nouveau canal");
+        });
+
+    add(
+        "clic droit sur la Basse : « Retirer le canal »",
+        [this]
+        {
+            auto* rack = dynamic_cast<ui::ChannelRackPanel*>(panel("channel_rack"));
+            if (rack == nullptr)
+                return;
+            click(*rack, rack->channelBounds(static_cast<int>(tracksBefore_)).getCentre(), true);
+            chooseMenuItem(ui::ChannelRackPanel::removeItem);
+        },
+        [this] { return state_.tracks().size() == tracksBefore_; },
+        3000.0);
+
+    add("le canal est parti avec ses notes ; tout défaire au Ctrl+Z",
+        [this]
+        {
+            check(state_.tracks().size() == tracksBefore_, "le canal est retiré");
+            const auto kept = std::none_of(state_.patterns().front().clips.begin(),
+                                           state_.patterns().front().clips.end(),
+                                           [this](const domain::Clip& clip)
+                                           {
+                                               return std::none_of(state_.tracks().begin(),
+                                                                   state_.tracks().end(),
+                                                                   [&clip](const domain::Track& track)
+                                                                   { return track.id == clip.trackId; });
+                                           });
+            check(kept, "aucune ligne de pattern ne reste sans canal");
+
+            while (depth() > savedDepth_)
+                key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == savedState_, "le projet d'avant, à l'octet près");
         });
 }
 

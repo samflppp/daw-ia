@@ -88,8 +88,8 @@ TEST_CASE("Copied notes are values: they paste into another pattern, one entry, 
 TEST_CASE("Pasting on notes already there doubles nothing")
 {
     Rack rack;
-    const auto copied = copyRows(*rack.state.findPattern(rack.first), {rack.kick});
-    auto plan = planPaste(rack.state, rack.first, copied, {}, 0.0, false);
+    const auto copied = copyNotes(*rack.state.findPattern(rack.first), rack.kick, rack.kicks);
+    auto plan = planPaste(rack.state, rack.first, copied, {}, copied.originBeats, false);
     CHECK(plan.pasted.empty());
     CHECK(plan.skipped == 3);
     CHECK(plan.commands.empty());
@@ -98,8 +98,8 @@ TEST_CASE("Pasting on notes already there doubles nothing")
 TEST_CASE("A row goes to the channel selected at paste time, or to its own")
 {
     Rack rack;
-    const auto copied = copyRows(*rack.state.findPattern(rack.first), {rack.kick});
-    rack.run(planPaste(rack.state, rack.first, copied, {rack.hat}, 0.0, false));
+    const auto copied = copyNotes(*rack.state.findPattern(rack.first), rack.kick, rack.kicks);
+    rack.run(planPaste(rack.state, rack.first, copied, {rack.hat}, copied.originBeats, false));
 
     const auto* hatRow = rack.state.findPattern(rack.first)->findClipForTrack(rack.hat);
     REQUIRE(hatRow != nullptr);

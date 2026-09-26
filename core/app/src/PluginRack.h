@@ -31,6 +31,7 @@ public:
 
     [[nodiscard]] std::vector<domain::PluginRef> available() const override;
     [[nodiscard]] bool isInstalled(const domain::PluginRef& ref) const override;
+    [[nodiscard]] bool isInstrument(const domain::PluginRef& ref) const override;
 
     [[nodiscard]] bool hasEditor(domain::PluginId pluginId) const override;
     [[nodiscard]] bool editorIsOpen(domain::PluginId pluginId) const override;

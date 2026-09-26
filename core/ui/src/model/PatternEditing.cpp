@@ -12,8 +12,8 @@ namespace daw::ui::patternEditing
 namespace
 {
 
-// The length a pattern gets when the rack makes one: four bars of four beats.
-// The grid the rack draws follows it, never the other way round.
+// The length a pattern gets when the rack or the piano roll makes one: four
+// bars of four beats.
 constexpr double defaultPatternLengthBeats = 16.0;
 
 } // namespace

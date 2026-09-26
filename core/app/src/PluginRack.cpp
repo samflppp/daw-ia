@@ -38,6 +38,12 @@ bool PluginRack::isInstalled(const domain::PluginRef& ref) const
     return catalogue_.find(ref).has_value();
 }
 
+bool PluginRack::isInstrument(const domain::PluginRef& ref) const
+{
+    const auto description = catalogue_.find(ref);
+    return description.has_value() && description->isInstrument;
+}
+
 tracktion::Plugin* PluginRack::find(domain::PluginId pluginId) const
 {
     const auto wanted = juce::String(pluginId.toString());

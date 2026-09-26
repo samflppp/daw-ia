@@ -158,6 +158,10 @@ private:
     // The velocity lane: a click, a crescendo drawn in one stroke and heard,
     // a stroke limited to the picked notes.
     void addVelocitySteps();
+
+    // The rack without its grid: "+ Instrument", rename, remove, and a click
+    // where the steps were that writes nothing.
+    void addRackSteps();
     [[nodiscard]] std::vector<int> kickVelocities() const;
     [[nodiscard]] juce::TreeViewItem* browserItem(const juce::File& file) const;
     void clickBrowserItem(juce::TreeViewItem& item);
@@ -207,9 +211,9 @@ private:
     static void writeHit(const juce::File& file, double seconds);
     void key(const juce::KeyPress& press);
 
-    // Where a cell of the rack and a beat of a playlist lane are, read from the
-    // same tokens the panels draw with.
-    [[nodiscard]] juce::Point<int> rackCell(int row, int step) const;
+    // Writes notes on a channel the way a person does since S12: the channel
+    // clicked in the rack, a click per note in the piano roll.
+    void writeNotes(int row, const std::vector<double>& beats);
     // Where a beat of a lane is, brought into sight first with the wheel the
     // way a person scrolls, when the view does not show it.
     [[nodiscard]] juce::Point<int> playlistBeat(int lane, double beats);
@@ -260,6 +264,7 @@ private:
     double tempoBefore_{0.0};
     double wheelAt_{0.0};
     Heard heardBefore_{};
+    std::size_t tracksBefore_{0};
     std::size_t previewBuilds_{0};
     std::size_t measuredBefore_{0};
     bool watchTicks_{false};

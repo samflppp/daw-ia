@@ -14,9 +14,8 @@ namespace daw::ui::patternEditing
 
 // What the channel rack and the piano roll both need to say, said once.
 //
-// The two panels are two views of the same pattern: a lit cell in the rack is
-// a note in a row, and the same note drawn as a rectangle in the piano roll.
-// Neither owns the pattern, and neither may hold an answer the other would
+// The rack chooses the pattern and the channel, the piano roll writes its
+// notes. Neither owns the pattern, and neither may hold an answer the other would
 // have to duplicate — a second copy of "which pattern are we on" is the very
 // thing the S7bis review said not to build.
 
@@ -29,7 +28,7 @@ namespace daw::ui::patternEditing
 // Pattern mode plays the auditioned pattern from beat 0, so the transport's
 // position is already local. Song mode plays placements, so the position is
 // local to the placement it falls in, if any. Nothing when the pattern is not
-// what is sounding: the rack and the piano roll draw no playhead then, rather
+// what is sounding: the piano roll draws no playhead then, rather
 // than one that moves over a pattern nobody hears.
 [[nodiscard]] std::optional<double>
 localBeats(const domain::ProjectState& state, domain::PatternId patternId, double positionBeats);
