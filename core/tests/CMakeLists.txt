@@ -27,7 +27,8 @@ add_executable(daw_domain_tests
     WorkspaceLayoutTests.cpp
     HistoryLogTests.cpp
     PreviewTests.cpp
-    MixTests.cpp)
+    MixTests.cpp
+    MixingReadinessTests.cpp)
 
 target_link_libraries(daw_domain_tests PRIVATE daw::domain daw::ui_workspace doctest::doctest)
 daw_set_warnings(daw_domain_tests)
