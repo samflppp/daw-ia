@@ -520,6 +520,105 @@ std::vector<Tool> builtinTools()
                      {"denominator", integer("Valeur du temps : 1, 2, 4, 8 ou 16.", 1, 16)}},
                     {"numerator", "denominator"})));
 
+    // --- automation
+    //
+    // The copilot writes a line in one go: automation.write is what a request
+    // like "fade the master out over the last four bars" becomes. The
+    // point-by-point verbs are the screen's gestures; they are described,
+    // because the table describes the registry, and not offered.
+    const auto lineId = identifier("Identifiant de la ligne d'automation, tel que l'état le nomme.");
+    const auto automationPointId = identifier("Identifiant du point d'automation.");
+    const auto curve =
+        number("Forme du segment qui part de ce point : 0 droit, vers -1 ou +1 de plus en plus "
+               "courbé (la courbe de Tracktion).",
+               AutomationPoint::lowestCurve,
+               AutomationPoint::highestCurve);
+    const auto target = Value::object(
+        {{"type", Value{std::string{"object"}}},
+         {"description",
+          Value{std::string{
+              "Ce que la ligne pilote. kind volume ou pan avec strip (une piste, un bus, ou le master tel "
+              "que l'état le nomme) ; kind plugin_parameter avec plugin et paramId (l'identifiant du "
+              "paramètre tel que le plugin le nomme), sans strip."}}},
+         {"properties",
+          Value::object(
+              {{"kind",
+                Value::object({{"type", Value{std::string{"string"}}},
+                               {"enum",
+                                Value::array({Value{std::string{"volume"}},
+                                              Value{std::string{"pan"}},
+                                              Value{std::string{"plugin_parameter"}}})}})},
+               {"strip", identifier("La tranche dont on pilote le volume ou le pan.")},
+               {"plugin", identifier("L'instance de plugin dont on pilote un paramètre.")},
+               {"paramId", field("string", "Identifiant du paramètre, tel que le plugin le nomme.")}})},
+         {"required", Value::array({Value{std::string{"kind"}}})},
+         {"additionalProperties", Value{false}}});
+    const auto writtenPoint = Value::object(
+        {{"type", Value{std::string{"object"}}},
+         {"properties",
+          Value::object({{"id", newIdentifier("Identifiant du point à créer.")},
+                         {"beats", field("number", "Position du point, en temps depuis le début.")},
+                         {"value",
+                          field("number",
+                                "Valeur à ce point : décibels pour un volume (-100 à +6), -1 à +1 pour un "
+                                "pan, 0 à 1 pour un paramètre de plugin.")},
+                         {"curve", curve}})},
+         {"required",
+          Value::array({Value{std::string{"id"}}, Value{std::string{"beats"}}, Value{std::string{"value"}}})},
+         {"additionalProperties", Value{false}}});
+
+    tools.push_back(make(
+        "automation.write",
+        "Écrit une automation : remplace tous les points de la ligne de la cible entre fromBeats et toBeats "
+        "(inclus) par les points donnés, qui doivent tous être dans cette plage. Crée la ligne si la cible "
+        "n'en a pas. L'automation est absolue sur la timeline de la chanson. Une seule entrée d'historique. "
+        "Pour un fondu de sortie sur les quatre dernières mesures, poser un point à la valeur actuelle au "
+        "début des quatre mesures et un point à -100 dB à la fin du morceau.",
+        schema({{"lineId", newIdentifier("Identifiant de la ligne, utilisé seulement si elle est créée.")},
+                {"target", target},
+                {"fromBeats", field("number", "Début de la plage remplacée, en temps.")},
+                {"toBeats", field("number", "Fin de la plage remplacée, en temps.")},
+                {"points", arrayOf(writtenPoint, "Les points, dans la plage.")}},
+               {"lineId", "target", "fromBeats", "toBeats", "points"})));
+
+    tools.push_back(
+        make("automation.remove_line",
+             "Supprime une ligne d'automation et tous ses points : la cible revient à sa valeur fixe.",
+             schema({{"lineId", lineId}}, {"lineId"})));
+
+    tools.push_back(hidden(
+        make("automation.create_line",
+             "Crée une ligne d'automation vide sur une cible. Geste de l'écran.",
+             schema({{"lineId", newIdentifier("Identifiant de la ligne à créer.")}, {"target", target}},
+                    {"lineId", "target"}))));
+
+    tools.push_back(hidden(make("automation.add_point",
+                                "Pose un point sur une ligne. Geste de l'écran.",
+                                schema({{"lineId", lineId},
+                                        {"pointId", newIdentifier("Identifiant du point à créer.")},
+                                        {"beats", field("number", "Position, en temps.")},
+                                        {"value", field("number", "Valeur, dans l'unité de la cible.")},
+                                        {"curve", curve}},
+                                       {"lineId", "pointId", "beats", "value"}))));
+
+    tools.push_back(hidden(make("automation.move_point",
+                                "Déplace un point, en temps et en valeur. Geste de l'écran.",
+                                schema({{"lineId", lineId},
+                                        {"pointId", automationPointId},
+                                        {"beats", field("number", "Nouvelle position, en temps.")},
+                                        {"value", field("number", "Nouvelle valeur.")}},
+                                       {"lineId", "pointId", "beats", "value"}))));
+
+    tools.push_back(
+        hidden(make("automation.remove_point",
+                    "Retire un point d'une ligne. Geste de l'écran.",
+                    schema({{"lineId", lineId}, {"pointId", automationPointId}}, {"lineId", "pointId"}))));
+
+    tools.push_back(hidden(make("automation.set_curve",
+                                "Règle la courbe du segment qui part d'un point. Geste de l'écran.",
+                                schema({{"lineId", lineId}, {"pointId", automationPointId}, {"curve", curve}},
+                                       {"lineId", "pointId", "curve"}))));
+
     // --- transport
     tools.push_back(make("transport.play", "Lance la lecture.", schema({}, {})));
     tools.push_back(make("transport.stop", "Arrête la lecture et ramène la tête au début.", schema({}, {})));

@@ -15,6 +15,7 @@ add_library(daw_domain STATIC
     src/copilot/StateView.cpp
     src/copilot/Tools.cpp
     src/commands/AddNote.cpp
+    src/commands/AutomationCommands.cpp
     src/commands/NoteCommands.cpp
     src/commands/NoteEditCommands.cpp
     src/commands/PatternCommands.cpp
@@ -27,6 +28,7 @@ add_library(daw_domain STATIC
     src/commands/TrackCommands.cpp
     src/commands/TransportCommands.cpp
     src/project/ProjectState.cpp
+    src/project/Automation.cpp
     src/serialization/Json.cpp)
 add_library(daw::domain ALIAS daw_domain)
 

@@ -1400,6 +1400,8 @@ Result<void> ProjectState::removeBus(TrackId id)
     if (!index)
         return index.error();
 
+    // Its automation goes with it: a line aimed at nothing drives nothing.
+    dropAutomation(automationOfStrip(id));
     buses_.erase(buses_.begin() + static_cast<std::ptrdiff_t>(index.value()));
 
     for (auto* strip : stripsMutable())
@@ -1910,6 +1912,10 @@ Result<void> ProjectState::removeTrack(TrackId id)
     if (position == tracks_.end())
         return fail(ErrorCode::notFound, "no such track: " + id.toString());
 
+    // Its automation goes with it, the lines of its plugins included: a line
+    // aimed at nothing drives nothing. Read before the erase, while the
+    // plugins can still be found on the track.
+    dropAutomation(automationOfStrip(id));
     tracks_.erase(position);
 
     // The rows that track held in every pattern go with it: a row names a
@@ -2382,6 +2388,7 @@ Result<void> ProjectState::removePlugin(PluginId id)
         if (position != track->plugins.end())
         {
             track->plugins.erase(position);
+            dropAutomation(automationOfPlugin(id));
             return {};
         }
     }
@@ -2558,6 +2565,18 @@ Value ProjectState::toValue() const
     if (!(master_ == defaultMaster()))
         members.emplace_back("master", master_.toValue());
 
+    // Only when there is some: a project without automation serialises the
+    // way it did before S13, byte for byte. No migration, then: absent means
+    // no line.
+    if (!automation_.empty())
+    {
+        Value::Array serialisedAutomation;
+        serialisedAutomation.reserve(automation_.size());
+        for (const auto& line : automation_)
+            serialisedAutomation.push_back(line.toValue());
+        members.emplace_back("automation", Value::array(std::move(serialisedAutomation)));
+    }
+
     return Value::object(std::move(members));
 }
 
@@ -2719,6 +2738,25 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
         state.master_ = std::move(master).value();
     }
 
+    // Last: a line checks that its strip or its plugin exists.
+    if (const auto* automationValue = value.find("automation"); automationValue != nullptr)
+    {
+        const auto* items = automationValue->asArray();
+        if (items == nullptr)
+            return fail(ErrorCode::invalidPayload, "automation must be an array");
+
+        for (const auto& item : *items)
+        {
+            auto line = AutomationLine::fromValue(item);
+            if (!line)
+                return line.error();
+
+            auto added = state.insertAutomationLine(std::move(line).value(), state.automation_.size());
+            if (!added)
+                return added.error();
+        }
+    }
+
     return state;
 }
 
@@ -2727,7 +2765,7 @@ bool operator==(const ProjectState& lhs, const ProjectState& rhs)
     return lhs.tempo_ == rhs.tempo_ && lhs.timeSignature_ == rhs.timeSignature_ &&
            lhs.tracks_ == rhs.tracks_ && lhs.patterns_ == rhs.patterns_ &&
            lhs.arrangement_ == rhs.arrangement_ && lhs.audio_ == rhs.audio_ && lhs.buses_ == rhs.buses_ &&
-           lhs.master_ == rhs.master_;
+           lhs.master_ == rhs.master_ && lhs.automation_ == rhs.automation_;
 }
 
 } // namespace daw::domain

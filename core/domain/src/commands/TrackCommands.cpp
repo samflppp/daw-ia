@@ -1,5 +1,7 @@
 #include "daw/domain/commands/TrackCommands.h"
 
+#include "daw/domain/commands/AutomationCommands.h"
+
 #include <algorithm>
 #include <cstdint>
 #include <functional>
@@ -137,6 +139,8 @@ Result<Value> RemoveTrack::applyToBus(ProjectState& state) const
                                  {"track", state.findStrip(trackId_)->toValue()},
                                  {"routes", Value::array(std::move(routes))},
                                  {"sends", Value::array(std::move(sends))}});
+    if (auto lines = state.automationOfStrip(trackId_); !lines.empty())
+        static_cast<void>(record.set("automation", recordAutomation(state, lines)));
 
     if (auto removed = state.removeBus(trackId_); !removed)
         return removed.error();
@@ -164,6 +168,9 @@ Result<void> RemoveTrack::revertBus(ProjectState& state, const Value& undoRecord
     if (auto inserted = state.insertBus(std::move(bus).value(), static_cast<std::size_t>(index.value()));
         !inserted)
         return inserted;
+
+    if (auto restored = restoreAutomation(state, undoRecord); !restored)
+        return restored;
 
     if (const auto* routes = undoRecord.find("routes"); routes != nullptr && routes->asArray() != nullptr)
     {
@@ -257,6 +264,10 @@ Result<Value> RemoveTrack::apply(ProjectState& state) const
                                  {"rows", Value::array(std::move(rows))},
                                  {"audio", Value::array(std::move(audio))}});
 
+    // Its automation, its plugins' included: the removal drops the lines.
+    if (auto lines = state.automationOfStrip(trackId_); !lines.empty())
+        static_cast<void>(record.set("automation", recordAutomation(state, lines)));
+
     auto removed = state.removeTrack(trackId_);
     if (!removed)
         return removed.error();
@@ -291,6 +302,9 @@ Result<void> RemoveTrack::revert(ProjectState& state, const Value& undoRecord) c
     auto inserted = state.insertTrack(std::move(track).value(), static_cast<std::size_t>(index.value()));
     if (!inserted)
         return inserted;
+
+    if (auto restored = restoreAutomation(state, undoRecord); !restored)
+        return restored;
 
     // A record written before patterns existed keeps the clips inside the
     // track, each with its own start and length. It means what it has always

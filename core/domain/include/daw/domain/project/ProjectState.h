@@ -4,6 +4,7 @@
 #include "daw/domain/Ids.h"
 #include "daw/domain/Result.h"
 #include "daw/domain/Value.h"
+#include "daw/domain/project/Automation.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -705,6 +706,41 @@ public:
 
     Result<void> setPluginState(PluginId id, StateBlobRef state);
 
+    // --- automation
+    //
+    // In the arrangement, absolute on the timeline (the S13 model, written out
+    // in Automation.h). The lines keep the order they were created in, which
+    // an undo restores; the points of a line are sorted by beat.
+    //
+    // A line whose target goes away goes with it: removeTrack, removeBus and
+    // removePlugin drop the lines of what they remove, and the commands that
+    // call them carry those lines in their undo records.
+    [[nodiscard]] const std::vector<AutomationLine>& automation() const noexcept { return automation_; }
+    [[nodiscard]] const AutomationLine* findAutomationLine(AutomationLineId id) const noexcept;
+    [[nodiscard]] const AutomationLine* findAutomationLineFor(const AutomationTarget& target) const noexcept;
+    [[nodiscard]] Result<std::size_t> automationLineIndex(AutomationLineId id) const;
+
+    // Whether the target names something the project holds: the strip for a
+    // volume or a pan, the plugin for a parameter.
+    [[nodiscard]] Result<void> checkAutomationTarget(const AutomationTarget& target) const;
+
+    // The lines that removing this strip, or this plugin, would drop: a
+    // strip's own volume and pan, and the parameters of every plugin it holds.
+    [[nodiscard]] std::vector<AutomationLineId> automationOfStrip(TrackId strip) const;
+    [[nodiscard]] std::vector<AutomationLineId> automationOfPlugin(PluginId plugin) const;
+
+    // Beyond the current count it appends, like insertTrack.
+    Result<void> insertAutomationLine(AutomationLine line, std::size_t index);
+    Result<void> removeAutomationLine(AutomationLineId id);
+
+    Result<void> insertAutomationPoint(AutomationLineId line, AutomationPoint point);
+    Result<void> removeAutomationPoint(AutomationLineId line, AutomationPointId point);
+
+    // Beat and value together: dragging a point moves it on both axes.
+    Result<void>
+    moveAutomationPoint(AutomationLineId line, AutomationPointId point, double beats, double value);
+    Result<void> setAutomationCurve(AutomationLineId line, AutomationPointId point, double curve);
+
     // --- transport (session state, outside toValue/fromValue and operator==)
     [[nodiscard]] const TransportState& transport() const noexcept { return transport_; }
     Result<void> setPlaying(bool playing);
@@ -737,6 +773,8 @@ private:
     [[nodiscard]] Clip* findClipMutable(ClipId id) noexcept;
     [[nodiscard]] Pattern* findPatternMutable(PatternId id) noexcept;
     [[nodiscard]] PluginInstance* findPluginMutable(PluginId id) noexcept;
+    [[nodiscard]] AutomationLine* findAutomationLineMutable(AutomationLineId id) noexcept;
+    void dropAutomation(const std::vector<AutomationLineId>& lines);
 
     [[nodiscard]] TempoPoint* findTempoPointMutable(TempoPointId id) noexcept;
     void sortTempoPoints();
@@ -750,6 +788,7 @@ private:
     std::vector<AudioClip> audio_;
     std::vector<Track> buses_;
     Track master_{defaultMaster()};
+    std::vector<AutomationLine> automation_;
     TransportState transport_;
 };
 

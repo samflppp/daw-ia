@@ -1,6 +1,7 @@
 #include "daw/domain/command/CommandRegistry.h"
 
 #include "daw/domain/commands/AddNote.h"
+#include "daw/domain/commands/AutomationCommands.h"
 #include "daw/domain/commands/CreateMidiClip.h"
 #include "daw/domain/commands/MixCommands.h"
 #include "daw/domain/commands/NoteCommands.h"
@@ -40,6 +41,13 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<TransportStop>());
     static_cast<void>(registry.add<TransportSetPosition>());
     static_cast<void>(registry.add<TransportSetLoop>());
+    static_cast<void>(registry.add<CreateAutomationLine>());
+    static_cast<void>(registry.add<RemoveAutomationLine>());
+    static_cast<void>(registry.add<AddAutomationPoint>());
+    static_cast<void>(registry.add<MoveAutomationPoint>());
+    static_cast<void>(registry.add<RemoveAutomationPoint>());
+    static_cast<void>(registry.add<SetAutomationCurve>());
+    static_cast<void>(registry.add<WriteAutomation>());
     static_cast<void>(registry.add<TransportSetMode>());
     static_cast<void>(registry.add<InsertPlugin>());
     static_cast<void>(registry.add<RemovePlugin>());

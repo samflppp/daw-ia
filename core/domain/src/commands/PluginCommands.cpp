@@ -1,5 +1,7 @@
 #include "daw/domain/commands/PluginCommands.h"
 
+#include "daw/domain/commands/AutomationCommands.h"
+
 #include <cstdint>
 #include <utility>
 
@@ -125,6 +127,10 @@ Result<Value> RemovePlugin::apply(ProjectState& state) const
                                      {"index", Value{static_cast<std::int64_t>(location.value().index)}},
                                      {"plugin", plugin->toValue()}});
 
+    // The lines of its parameters go with it, and come back with it.
+    if (auto lines = state.automationOfPlugin(pluginId_); !lines.empty())
+        static_cast<void>(undoRecord.set("automation", recordAutomation(state, lines)));
+
     auto removed = state.removePlugin(pluginId_);
     if (!removed)
         return removed.error();
@@ -157,8 +163,12 @@ Result<void> RemovePlugin::revert(ProjectState& state, const Value& undoRecord) 
     if (!plugin)
         return plugin.error();
 
-    return state.insertPlugin(
-        trackId.value(), std::move(plugin).value(), static_cast<std::size_t>(index.value()));
+    if (auto inserted = state.insertPlugin(
+            trackId.value(), std::move(plugin).value(), static_cast<std::size_t>(index.value()));
+        !inserted)
+        return inserted;
+
+    return restoreAutomation(state, undoRecord);
 }
 
 // ---------------------------------------------------------------------------

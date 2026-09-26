@@ -95,6 +95,8 @@ struct TempoPointIdTag;
 struct PatternIdTag;
 struct PlacementIdTag;
 struct AudioClipIdTag;
+struct AutomationLineIdTag;
+struct AutomationPointIdTag;
 
 using CommandId = EntityId<CommandIdTag>;
 using GestureId = EntityId<GestureIdTag>;
@@ -133,5 +135,11 @@ using AudioClipId = EntityId<AudioClipIdTag>;
 // located because it moves: a payload that designated a point by its position
 // in beats would aim at a different point as soon as another command moved it.
 using TempoPointId = EntityId<TempoPointIdTag>;
+
+// Identify one automation line and one point of it. Named rather than located
+// for the reason a tempo point is: a point moves, and a payload that aimed at
+// "the point at beat 12" would aim at another one after a drag.
+using AutomationLineId = EntityId<AutomationLineIdTag>;
+using AutomationPointId = EntityId<AutomationPointIdTag>;
 
 } // namespace daw::domain

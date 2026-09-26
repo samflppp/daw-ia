@@ -31,6 +31,7 @@ add_executable(daw_domain_tests
     MixingReadinessTests.cpp
     NoteClipboardTests.cpp
     TempoEditingTests.cpp
+    AutomationTests.cpp
     SampleSearchTests.cpp)
 
 target_link_libraries(daw_domain_tests PRIVATE daw::domain daw::ui_workspace doctest::doctest)
