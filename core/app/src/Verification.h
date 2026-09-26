@@ -27,7 +27,7 @@ namespace daw::app
 // Launched with --verify <folder>, the application builds its window as usual
 // and then plays the verification list through the same doors a person uses:
 // mouse events sent to the channel rack and the playlist, clicks on the PAT,
-// SONG and "+ Pattern" buttons, Ctrl+Z through the view, a sentence typed to
+// SONG and "+ Pattern" buttons of the transport, Ctrl+Z through the view, a sentence typed to
 // the real copilot. It never reaches into a panel to call a private method.
 //
 // What it cannot do is listen through the speakers. It renders the Edit
@@ -162,6 +162,9 @@ private:
     // The rack without its grid: "+ Instrument", rename, remove, and a click
     // where the steps were that writes nothing.
     void addRackSteps();
+
+    // S13: the pattern chosen in the transport, the channel in the piano roll.
+    void addWorkflowSteps();
     [[nodiscard]] std::vector<int> kickVelocities() const;
     [[nodiscard]] juce::TreeViewItem* browserItem(const juce::File& file) const;
     void clickBrowserItem(juce::TreeViewItem& item);

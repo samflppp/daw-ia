@@ -899,11 +899,11 @@ void Verification::buildList()
     add("le nouveau nom dans le rack, puis supprimer et rétablir",
         [this]
         {
-            // Read a step later: the rack rebuilds its chooser when it hears of
-            // the change, and it hears asynchronously.
-            auto* rack = panel("channel_rack");
+            // Read a step later: the transport rebuilds its chooser when it
+            // hears of the change, and it hears asynchronously.
+            auto* transport = panel("transport");
             bool named = false;
-            for (auto* child : rack->getChildren())
+            for (auto* child : transport->getChildren())
             {
                 if (auto* chooser = dynamic_cast<juce::ComboBox*>(child); chooser != nullptr)
                 {
@@ -911,7 +911,7 @@ void Verification::buildList()
                         named = named || chooser->getItemText(index) == "Refrain";
                 }
             }
-            check(named, "« Refrain » dans le sélecteur du rack");
+            check(named, "« Refrain » dans le sélecteur du transport");
 
             savedState_ = domain::json::write(state_.toValue());
             static_cast<void>(bus_.execute(std::make_unique<domain::RemovePattern>(state_.patterns()[1].id)));
@@ -1209,6 +1209,7 @@ void Verification::buildList()
     addSearchSteps();
     addVelocitySteps();
     addRackSteps();
+    addWorkflowSteps();
 
     // --- the title bar -----------------------------------------------------------
 
@@ -3385,6 +3386,63 @@ void Verification::addRackSteps()
             while (depth() > savedDepth_)
                 key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(domain::json::write(state_.toValue()) == savedState_, "le projet d'avant, à l'octet près");
+        });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+void Verification::addWorkflowSteps()
+{
+    // --- S13: one place for each choice ---------------------------------------------
+    //
+    // The pattern is chosen in the transport, next to PAT; the channel the
+    // piano roll writes for is chosen in the piano roll's header, and that
+    // menu writes the same Selection a click in the rack does.
+
+    add("le pattern se choisit dans le transport, plus dans le rack",
+        [this]
+        {
+            auto* rack = panel("channel_rack");
+            auto* transport = panel("transport");
+            if (rack == nullptr || transport == nullptr)
+                return;
+
+            check(childOfType<juce::ComboBox>(*rack) == nullptr, "le rack n'a plus de sélecteur de pattern");
+            check(button(*rack, "+ Pattern") == nullptr, "ni de « + Pattern »");
+            check(childOfType<juce::ComboBox>(*transport) != nullptr, "le transport a le sélecteur");
+            check(button(*transport, "+ Pattern") != nullptr, "et « + Pattern »");
+            check(button(view_, "+ Ligne") == nullptr, "le « + Ligne » du piano-roll est retiré");
+        });
+
+    add("le piano-roll choisit son canal ; le rack suit, et l'inverse",
+        [this]
+        {
+            auto* rack = dynamic_cast<ui::ChannelRackPanel*>(panel("channel_rack"));
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            if (rack == nullptr || roll == nullptr || state_.tracks().size() < 2)
+            {
+                check(false, "deux canaux, le rack et le piano-roll");
+                return;
+            }
+
+            savedDepth_ = depth();
+            auto& chooser = roll->channelChooser();
+            check(chooser.getNumItems() == static_cast<int>(state_.tracks().size()),
+                  "le menu liste les " + std::to_string(state_.tracks().size()) + " canaux du rack");
+
+            chooser.setSelectedId(2, juce::sendNotificationSync);
+            selection_.dispatchPendingMessages();
+            check(selection_.track() == state_.tracks()[1].id,
+                  "choisir « " + state_.tracks()[1].name + " » dans le menu le choisit");
+            check(depth() == savedDepth_, "choisir n'est pas une édition : aucune entrée d'historique");
+
+            click(*rack, rackChannel(0));
+            selection_.dispatchPendingMessages();
+            check(chooser.getSelectedId() == 1, "un clic sur le premier canal du rack remet le menu dessus");
+            snapshot("s13-canal-du-piano-roll");
         });
 }
 

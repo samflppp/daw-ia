@@ -10,8 +10,8 @@
 namespace daw::ui
 {
 
-// The channel rack: the instruments of the project, and the pattern the whole
-// beatmaker is working on.
+// The channel rack: the instruments of the project. The pattern being edited
+// is chosen in the transport since S13.
 //
 // It writes no note. Since S12 notes are written in the piano roll only, and
 // the rack is where the sounds that play them come in and go out:
@@ -31,8 +31,7 @@ namespace daw::ui
 class ChannelRackPanel final : public juce::Component,
                                public juce::DragAndDropTarget,
                                public juce::FileDragAndDropTarget,
-                               private juce::ChangeListener,
-                               private juce::AsyncUpdater
+                               private juce::ChangeListener
 {
 public:
     explicit ChannelRackPanel(const PanelContext& context);
@@ -77,21 +76,12 @@ public:
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
-    void handleAsyncUpdate() override;
-
-    // Pattern mode plays the pattern this rack shows, and nothing else.
-    void followCurrentPattern();
-
-    [[nodiscard]] const domain::Pattern* pattern() const;
 
     [[nodiscard]] juce::Rectangle<int> channelArea() const;
     [[nodiscard]] int rowAtY(int y) const; // -1 outside any row
 
     void paintChannels(juce::Graphics& g, juce::Rectangle<int> area) const;
     void paintEmpty(juce::Graphics& g) const;
-
-    void createPattern();
-    void rebuildPatternChooser();
 
     void chooseSample();
     void showInstrumentMenu();
@@ -109,8 +99,6 @@ private:
     SampleHost& samples_;
     PluginHost& plugins_;
 
-    juce::ComboBox patternChooser_;
-    juce::TextButton addPattern_{"+ Pattern"};
     juce::TextButton addSample_{"+ Sample"};
     juce::TextButton addInstrument_{"+ Instrument"};
     std::unique_ptr<juce::FileChooser> chooser_;

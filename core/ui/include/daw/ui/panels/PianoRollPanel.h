@@ -22,9 +22,14 @@ namespace daw::ui
 // file knowing either fact.
 //
 // It shows one row of one pattern: the horizontal axis is the pattern's length,
-// not the timeline. Which pattern is on screen is not chosen here — the channel
-// rack chooses it, this panel follows, and both read the same Selection. Two
-// choosers for one choice would be the second truth the S7bis review refused.
+// not the timeline. Which pattern is on screen is not chosen here — the
+// transport chooses it, this panel follows, and both read the same Selection.
+// Two choosers for one choice would be the second truth the S7bis review
+// refused.
+//
+// Which channel it writes for is chosen in its header, as in FL: a menu of the
+// rack's channels. That one is not a second chooser: it writes the same
+// Selection a click in the rack writes, so the two always agree.
 //
 // Which note is selected is not project state and stays here: selecting is not
 // an edit, and undoing a move must not undo a click.
@@ -54,6 +59,9 @@ public:
 
     // Where a note is drawn: the verification aims its clicks with it.
     [[nodiscard]] juce::Rectangle<int> noteBounds(const domain::Note& note) const;
+
+    // The channel menu of the header. The verification chooses with it.
+    [[nodiscard]] juce::ComboBox& channelChooser() noexcept { return channelChooser_; }
 
     // Where a click lands on that beat and that pitch.
     [[nodiscard]] juce::Point<int> pointFor(double beats, int pitch) const;
@@ -132,9 +140,9 @@ private:
     void addNoteAt(juce::Point<int> point);
     void removeNote(domain::NoteId noteId);
 
-    // Opens this track's row in the current pattern, creating the pattern too
-    // when the project holds none. One group, therefore one Ctrl+Z.
-    void addRow();
+    // The channel chooser of the header, FL's: which channel of the rack
+    // this piano roll writes for. The same Selection as a click in the rack.
+    void rebuildChannelChooser();
 
     // What opening the chosen track's row takes: the commands, and the
     // pattern and row they make. Empty when the row is open already. A first
@@ -224,7 +232,7 @@ private:
 
     std::optional<Drag> drag_;
 
-    juce::TextButton addRow_{"+ Ligne"};
+    juce::ComboBox channelChooser_;
 
     // True in a page window, whose title bar names the panel already.
     bool titled_{false};

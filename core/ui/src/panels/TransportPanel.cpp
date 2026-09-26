@@ -1,5 +1,6 @@
 #include "daw/ui/panels/TransportPanel.h"
 
+#include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TempoCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/ui/model/PatternEditing.h"
@@ -21,6 +22,9 @@ constexpr int sixteenthsPerBeat = 4;
 // How long the wheel rests before its turn is over, and the next notch opens
 // a new history entry.
 constexpr juce::uint32 wheelRestMs = 500;
+
+// The length a pattern gets when "+ Pattern" makes one: four bars.
+constexpr double newPatternLengthBeats = 16.0;
 
 } // namespace
 
@@ -198,23 +202,107 @@ TransportPanel::TransportPanel(const PanelContext& context)
             std::make_unique<domain::TransportSetMode>(domain::PlayMode::song, domain::PatternId{})));
     };
 
+    // A chooser or a button that kept the focus after a click would take the
+    // next press of Space instead of play.
+    for (auto* control : std::initializer_list<juce::Component*>{&patternChooser_, &addPattern_})
+    {
+        control->setWantsKeyboardFocus(false);
+        addAndMakeVisible(*control);
+    }
+    patternChooser_.setTextWhenNothingSelected("aucun pattern");
+    patternChooser_.setTooltip(u8"Le pattern que le piano-roll édite et que PAT joue");
+    addPattern_.setTooltip(u8"Un nouveau pattern de quatre mesures");
+
+    patternChooser_.onChange = [this]
+    {
+        const auto index = patternChooser_.getSelectedId() - 1;
+        if (index < 0 || index >= static_cast<int>(state_.patterns().size()))
+            return;
+
+        const auto& chosen = state_.patterns()[static_cast<std::size_t>(index)];
+        if (chosen.id != selection_.pattern())
+        {
+            selection_.selectPattern(chosen.id);
+            patternEditing::follow(bus_, state_, chosen.id);
+        }
+    };
+    addPattern_.onClick = [this] { createPattern(); };
+
     project_.addChangeListener(this);
+    selection_.addChangeListener(this);
     refresh();
+    rebuildPatternChooser();
     startTimer(readoutRefreshMs);
 }
 
 TransportPanel::~TransportPanel()
 {
     stopTimer();
+    cancelPendingUpdate();
+    selection_.removeChangeListener(this);
     project_.removeChangeListener(this);
     setLookAndFeel(nullptr);
 }
 
 void TransportPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
-    juce::ignoreUnused(source);
+    // A selection is changed by a click, never by a command, so pattern mode
+    // can follow it at once. A project change arrives from inside a bus
+    // notification, where calling back into the bus is refused: the check is
+    // put off until the notification is over.
+    if (source == &selection_)
+        followCurrentPattern();
+    else
+        triggerAsyncUpdate();
+
     refresh();
+    rebuildPatternChooser();
     repaint();
+}
+
+void TransportPanel::handleAsyncUpdate()
+{
+    followCurrentPattern();
+}
+
+void TransportPanel::followCurrentPattern()
+{
+    // An undo that removed the pattern shown, or a pattern.remove, leaves the
+    // chooser on another one, and pattern mode has to follow it there rather
+    // than audition a name that finds nothing.
+    const auto* shown = patternEditing::current(state_, selection_);
+    patternEditing::follow(bus_, state_, shown != nullptr ? shown->id : domain::PatternId{});
+}
+
+void TransportPanel::rebuildPatternChooser()
+{
+    const auto* shown = patternEditing::current(state_, selection_);
+
+    patternChooser_.clear(juce::dontSendNotification);
+    for (std::size_t index = 0; index < state_.patterns().size(); ++index)
+    {
+        const auto& candidate = state_.patterns()[index];
+        patternChooser_.addItem(patternEditing::displayName(state_, candidate), static_cast<int>(index) + 1);
+
+        if (shown != nullptr && candidate.id == shown->id)
+            patternChooser_.setSelectedId(static_cast<int>(index) + 1, juce::dontSendNotification);
+    }
+}
+
+void TransportPanel::createPattern()
+{
+    auto created = patternEditing::newPattern(newPatternLengthBeats);
+
+    // Created and not laid down: pattern mode plays it where it is, and the
+    // playlist is where it goes onto the song. A group of one, so the history
+    // names what the user did.
+    domain::GroupOptions group{};
+    group.label = "créer un pattern";
+
+    if (!bus_.executeGroup(std::move(created.commands), group).ok())
+        return;
+
+    selection_.selectPattern(created.patternId);
 }
 
 void TransportPanel::timerCallback()
@@ -517,6 +605,12 @@ void TransportPanel::resized()
         patternMode_.setBounds(modes.removeFromLeft(size * 2));
         modes.removeFromLeft(gap);
         songMode_.setBounds(modes.removeFromLeft(size * 2));
+
+        // The pattern PAT plays, right after it.
+        modes.removeFromLeft(tokens_.integer("space.lg"));
+        patternChooser_.setBounds(modes.removeFromLeft(size * 5));
+        modes.removeFromLeft(gap);
+        addPattern_.setBounds(modes.removeFromLeft(size * 3));
     }
 }
 

@@ -72,8 +72,24 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
     setLookAndFeel(&lookAndFeel_);
     setWantsKeyboardFocus(true);
 
-    addAndMakeVisible(addRow_);
-    addRow_.onClick = [this] { addRow(); };
+    // Choosing a channel is not an edit: it goes to the Selection, the one
+    // the rack writes too, so a click in either moves both.
+    channelChooser_.setWantsKeyboardFocus(false);
+    channelChooser_.setTextWhenNothingSelected("aucun canal");
+    channelChooser_.setTextWhenNoChoicesAvailable("aucun canal");
+    channelChooser_.setTooltip(u8"Le canal du rack sur lequel s'écrivent les notes");
+    channelChooser_.onChange = [this]
+    {
+        const auto index = channelChooser_.getSelectedId() - 1;
+        if (index < 0 || index >= static_cast<int>(state_.tracks().size()))
+            return;
+
+        const auto chosen = state_.tracks()[static_cast<std::size_t>(index)].id;
+        if (chosen != selection_.track())
+            selection_.selectTrack(chosen);
+    };
+    addAndMakeVisible(channelChooser_);
+    rebuildChannelChooser();
 
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
@@ -94,7 +110,7 @@ PianoRollPanel::~PianoRollPanel()
 
 void PianoRollPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
-    addRow_.setEnabled(track() != nullptr);
+    rebuildChannelChooser();
 
     // Only on a selection change, and the distinction matters: the project
     // observer is broadcast from inside a bus notification, and an observer
@@ -169,25 +185,27 @@ void PianoRollPanel::resized()
     auto header = getLocalBounds().removeFromTop(tokens_.integer("metric.panel.headerHeight"));
     header = header.reduced(tokens_.integer("space.md"), tokens_.integer("space.xs"));
 
-    addRow_.setBounds(header.removeFromRight(tokens_.integer("metric.pianoRoll.keyboardWidth")));
+    // After the title, where FL names the channel its piano roll writes for.
+    if (!titled_)
+        header.removeFromLeft(tokens_.integer("metric.pianoRoll.keyboardWidth") * 2);
+    channelChooser_.setBounds(header.removeFromLeft(tokens_.integer("metric.pianoRoll.keyboardWidth") * 2));
 
     // Smaller, the window may have lost the notes it showed.
     revealNotes();
 }
 
-void PianoRollPanel::addRow()
+void PianoRollPanel::rebuildChannelChooser()
 {
-    auto opening = openRow();
-    if (opening.commands.empty())
-        return; // the row is already open, or no track is chosen
+    channelChooser_.clear(juce::dontSendNotification);
+    for (std::size_t index = 0; index < state_.tracks().size(); ++index)
+    {
+        const auto& candidate = state_.tracks()[index];
+        channelChooser_.addItem(juce::String::fromUTF8(candidate.name.c_str()), static_cast<int>(index) + 1);
 
-    domain::GroupOptions group{};
-    group.label = "ouvrir une ligne";
-
-    if (!bus_.executeGroup(std::move(opening.commands), group).ok())
-        return;
-
-    selectOpened(opening);
+        if (candidate.id == selection_.track())
+            channelChooser_.setSelectedId(static_cast<int>(index) + 1, juce::dontSendNotification);
+    }
+    channelChooser_.setEnabled(!state_.tracks().empty());
 }
 
 void PianoRollPanel::selectOpened(const RowOpening& opening)
@@ -437,24 +455,19 @@ void PianoRollPanel::paint(juce::Graphics& g)
         return;
     }
 
-    const auto* owner = track();
     const auto* shown = pattern();
     g.setColour(tokens_.colour("color.text.secondary"));
     g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
 
-    // The button lives on the right of the header; the name stops before it
-    // rather than being drawn underneath.
-    header.removeFromRight(tokens_.integer("metric.pianoRoll.keyboardWidth") + tokens_.integer("space.md"));
-
-    // The pattern is named and not chosen here: the rack chooses, this panel
-    // follows. Saying which one is on screen is what keeps the two readable
-    // as one thing.
+    // The channel is chosen in the header; the pattern is named and not
+    // chosen here: the transport chooses, this panel follows. Saying which
+    // one is on screen keeps the two readable as one thing.
+    header.setLeft(channelChooser_.getRight() + tokens_.integer("space.md"));
     const auto count = edited != nullptr ? static_cast<int>(edited->notes.size()) : 0;
     const auto patternName = shown != nullptr ? patternEditing::displayName(state_, *shown) : std::string{};
 
-    g.drawText(juce::String(patternName) + juce::String(u8"  ·  ") +
-                   juce::String(owner != nullptr ? owner->name : std::string{}) + juce::String(u8"  ·  ") +
-                   juce::String(count) + (count > 1 ? " notes" : " note"),
+    g.drawText(juce::String(patternName) + juce::String(u8"  ·  ") + juce::String(count) +
+                   (count > 1 ? " notes" : " note"),
                header,
                juce::Justification::centredLeft,
                false);
@@ -483,7 +496,7 @@ void PianoRollPanel::paintEmpty(juce::Graphics& g) const
     g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
 
     const auto message = track() == nullptr
-                             ? u8"sélectionnez une piste"
+                             ? u8"choisissez un canal, dans le menu ci-dessus ou dans le rack"
                              : u8"cliquez pour ouvrir la ligne de cette piste et poser une note";
 
     g.drawText(message, getLocalBounds(), juce::Justification::centred, false);

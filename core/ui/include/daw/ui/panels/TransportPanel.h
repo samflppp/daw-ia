@@ -29,6 +29,11 @@ namespace daw::ui
 // the project: it comes from the clock, sixty times a second, because that is
 // where it actually is.
 //
+// The pattern being edited is chosen here, next to PAT, the way FL keeps it
+// in its toolbar: the chooser and "+ Pattern". Since S13 the rack only brings
+// sounds in, and the piano roll writes in the pattern this chooser names.
+// Choosing is not an edit: it goes to the Selection, never to the bus.
+//
 // The tempo and the signature are FL's readouts:
 //   wheel over the tempo       the project's tempo, one BPM a notch
 //   click on the tempo         a menu: type it, or automate it
@@ -37,7 +42,10 @@ namespace daw::ui
 // A turn of the wheel is one history entry, however many notches it counted.
 // The tempo shown is the project's — the point at the origin — even where the
 // tempo is automated further on; the caption says when it is.
-class TransportPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
+class TransportPanel final : public juce::Component,
+                             private juce::ChangeListener,
+                             private juce::Timer,
+                             private juce::AsyncUpdater
 {
 public:
     // What a transport button draws. Glyphs would have been cheaper and wrong:
@@ -75,6 +83,12 @@ public:
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void timerCallback() override;
+    void handleAsyncUpdate() override;
+
+    // Pattern mode plays the pattern the chooser shows, and nothing else.
+    void followCurrentPattern();
+    void rebuildPatternChooser();
+    void createPattern();
 
     void refresh();
     void paintReadout(juce::Graphics& g,
@@ -118,6 +132,9 @@ private:
 
     juce::TextButton patternMode_{"PAT"};
     juce::TextButton songMode_{"SONG"};
+
+    juce::ComboBox patternChooser_;
+    juce::TextButton addPattern_{"+ Pattern"};
 
     // What the last refresh drew, so a tick that changes nothing repaints
     // nothing. The readout is redrawn thirty times a second and the rest of the

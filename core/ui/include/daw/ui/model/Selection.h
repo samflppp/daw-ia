@@ -19,10 +19,10 @@ public:
     [[nodiscard]] domain::TrackId track() const noexcept { return track_; }
     [[nodiscard]] domain::ClipId clip() const noexcept { return clip_; }
 
-    // Which pattern is being worked on. The channel rack chooses it, the
-    // piano roll shows one of its rows, and the beatmaker loop follows it:
-    // three screens, one choice, so that switching pattern in the rack moves
-    // the piano roll and the loop with it.
+    // Which pattern is being worked on. The transport chooses it, the piano
+    // roll shows one of its rows, and the beatmaker loop follows it: three
+    // screens, one choice, so that switching pattern moves the piano roll and
+    // the loop with it.
     //
     // It sits here for the same reason the selected track does: it is not a
     // property of the project. Two windows on the same project would each be
