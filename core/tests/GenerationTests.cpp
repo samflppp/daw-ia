@@ -433,3 +433,34 @@ TEST_CASE("the style model the corpus pipeline writes is the one the generator r
             CHECK(inScale(ghost.pitch, Key{6, Mode::minor}));
     }
 }
+
+TEST_CASE("a row that plays one pitch says nothing about the key")
+{
+    // Kicks drawn in the rack on 4OSC: a C every beat. Without the rule, the
+    // key of any melody over them would be read as C.
+    ProjectState state;
+    Track kick{};
+    kick.id = TrackId::generate();
+    kick.name = "Kick";
+    REQUIRE(state.addTrack(kick).ok());
+    Track lead{};
+    lead.id = TrackId::generate();
+    lead.name = "Lead";
+    REQUIRE(state.addTrack(lead).ok());
+
+    Pattern pattern{};
+    pattern.id = PatternId::generate();
+    Clip kicks{};
+    kicks.id = ClipId::generate();
+    kicks.trackId = kick.id;
+    for (int beat = 0; beat < 4; ++beat)
+        kicks.notes.push_back(note(60, beat, 0.25));
+    pattern.clips.push_back(kicks);
+    REQUIRE(state.addPattern(pattern).ok());
+
+    auto context = Context::of(state, pattern.id, lead.id, 0.0, 4.0);
+    REQUIRE(context.ok());
+    CHECK(context.value().harmony.empty());
+    CHECK(context.value().project.empty());
+    CHECK(resolve({}, context.value()).key.source == Source::defaulted);
+}

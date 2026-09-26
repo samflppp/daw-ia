@@ -427,13 +427,13 @@ void Verification::click(juce::Component& target, juce::Point<int> at, bool righ
 }
 
 void Verification::drag(
-    juce::Component& target, juce::Point<int> from, juce::Point<int> to, bool ctrl, bool middle)
+    juce::Component& target, juce::Point<int> from, juce::Point<int> to, bool ctrl, bool middle, bool shift)
 {
     auto source = juce::Desktop::getInstance().getMainMouseSource();
     const auto now = juce::Time::getCurrentTime();
     const auto held = juce::ModifierKeys{
         (middle ? juce::ModifierKeys::middleButtonModifier : juce::ModifierKeys::leftButtonModifier) |
-        (ctrl ? juce::ModifierKeys::ctrlModifier : 0)};
+        (ctrl ? juce::ModifierKeys::ctrlModifier : 0) | (shift ? juce::ModifierKeys::shiftModifier : 0)};
     const auto start = from.toFloat();
 
     const juce::MouseEvent down{source,
@@ -588,7 +588,8 @@ void Verification::writeNotes(int row, const std::vector<double>& beats)
         key(juce::KeyPress{juce::KeyPress::F7Key});
 }
 
-void Verification::wheel(juce::Component& target, juce::Point<int> at, float deltaY, bool shift, bool ctrl)
+void Verification::wheel(
+    juce::Component& target, juce::Point<int> at, float deltaY, bool shift, bool ctrl, bool alt)
 {
     auto source = juce::Desktop::getInstance().getMainMouseSource();
     const auto now = juce::Time::getCurrentTime();
@@ -598,6 +599,8 @@ void Verification::wheel(juce::Component& target, juce::Point<int> at, float del
         held = held.withFlags(juce::ModifierKeys::shiftModifier);
     if (ctrl)
         held = held.withFlags(juce::ModifierKeys::ctrlModifier);
+    if (alt)
+        held = held.withFlags(juce::ModifierKeys::altModifier);
 
     const auto position = at.toFloat();
     const juce::MouseEvent event{source,
@@ -1261,6 +1264,7 @@ void Verification::buildList()
     addNavigationSteps();
     addExportSteps();
     addAutomationSteps();
+    addGenerationSteps();
 
     // --- the title bar -----------------------------------------------------------
 

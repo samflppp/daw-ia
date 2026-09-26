@@ -548,17 +548,24 @@ Context::of(const ProjectState& state, PatternId patternId, TrackId trackId, dou
     context.sampleChannel = owner->sample.has_value();
     context.channelPitch = owner->channelPitch;
 
-    const auto pitched = [&state](TrackId id)
+    // What says something about the harmony: not a sample channel, and not a
+    // row that plays one pitch only -- a kick drawn in the rack on 4OSC is a
+    // drum, whatever its instrument, and its C would make the key C.
+    const auto pitched = [&state](const Clip& clip)
     {
-        const auto* track = state.findTrack(id);
-        return track != nullptr && !track->sample.has_value();
+        const auto* track = state.findTrack(clip.trackId);
+        if (track == nullptr || track->sample.has_value() || clip.notes.empty())
+            return false;
+        return std::any_of(clip.notes.begin(),
+                           clip.notes.end(),
+                           [&clip](const Note& note) { return note.pitch != clip.notes.front().pitch; });
     };
 
     for (const auto& clip : pattern->clips)
     {
         if (clip.trackId == trackId)
             context.row = clip.notes;
-        else if (pitched(clip.trackId))
+        else if (pitched(clip))
             context.harmony.insert(context.harmony.end(), clip.notes.begin(), clip.notes.end());
     }
 
@@ -566,7 +573,7 @@ Context::of(const ProjectState& state, PatternId patternId, TrackId trackId, dou
     {
         for (const auto& clip : other.clips)
         {
-            if (pitched(clip.trackId))
+            if (pitched(clip))
                 context.project.insert(context.project.end(), clip.notes.begin(), clip.notes.end());
         }
     }

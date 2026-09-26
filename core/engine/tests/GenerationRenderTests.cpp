@@ -1,5 +1,6 @@
 #include "EngineTestSupport.h"
 #include "daw/domain/generation/Harmony.h"
+#include "daw/engine/PitchDetection.h"
 #include "daw/ui/model/GhostProposal.h"
 
 #include <tracktion_engine/utilities/tracktion_TestUtilities.h>
@@ -29,67 +30,6 @@ namespace
 constexpr double beatsPerMinute = 120.0;
 constexpr double secondsPerStep = 60.0 / beatsPerMinute * stepBeats;
 
-// YIN (de Cheveigné and Kawahara, 2002), the plain version: the fundamental
-// of a monophonic window, in Hz, or 0 when nothing periodic is there.
-double yin(const float* samples, int count, double sampleRate, double lowest, double highest)
-{
-    const auto tauMin = std::max(2, static_cast<int>(sampleRate / highest));
-    const auto tauMax = std::min(count / 2, static_cast<int>(sampleRate / lowest));
-    const auto width = count - tauMax;
-    if (tauMax <= tauMin + 2 || width <= 0)
-        return 0.0;
-
-    std::vector<double> difference(static_cast<std::size_t>(tauMax + 1), 0.0);
-    for (int tau = 1; tau <= tauMax; ++tau)
-    {
-        double sum = 0.0;
-        for (int j = 0; j < width; ++j)
-        {
-            const auto delta = static_cast<double>(samples[j]) - static_cast<double>(samples[j + tau]);
-            sum += delta * delta;
-        }
-        difference[static_cast<std::size_t>(tau)] = sum;
-    }
-
-    std::vector<double> normalised(difference.size(), 1.0);
-    double running = 0.0;
-    for (int tau = 1; tau <= tauMax; ++tau)
-    {
-        running += difference[static_cast<std::size_t>(tau)];
-        normalised[static_cast<std::size_t>(tau)] =
-            running > 0.0 ? difference[static_cast<std::size_t>(tau)] * tau / running : 1.0;
-    }
-
-    auto best = -1;
-    for (int tau = tauMin; tau < tauMax; ++tau)
-    {
-        if (normalised[static_cast<std::size_t>(tau)] < 0.15)
-        {
-            while (tau + 1 < tauMax &&
-                   normalised[static_cast<std::size_t>(tau + 1)] < normalised[static_cast<std::size_t>(tau)])
-                ++tau;
-            best = tau;
-            break;
-        }
-    }
-    if (best < 0)
-        return 0.0;
-
-    // A parabola through the minimum and its neighbours, for a period finer
-    // than a sample.
-    const auto a = normalised[static_cast<std::size_t>(best - 1)];
-    const auto b = normalised[static_cast<std::size_t>(best)];
-    const auto c = normalised[static_cast<std::size_t>(best + 1)];
-    const auto shift = (a - c) / (2.0 * (a - 2.0 * b + c));
-    const auto period = static_cast<double>(best) + (std::isfinite(shift) ? shift : 0.0);
-    return sampleRate / period;
-}
-
-int midiOf(double hertz)
-{
-    return static_cast<int>(std::lround(69.0 + 12.0 * std::log2(hertz / 440.0)));
-}
-
 struct Heard
 {
     std::vector<int> onsets;  // in sixteenths
@@ -118,12 +58,12 @@ Heard listen(tracktion::Edit& edit, const std::vector<Note>& written)
     for (int step = 0; step < steps; ++step)
     {
         levels.push_back(audio.getRMSLevel(0, step * samplesPerStep, samplesPerStep));
-        const auto hertz = yin(audio.getReadPointer(0, step * samplesPerStep + skip),
-                               samplesPerStep - skip,
-                               rendered.sampleRate,
-                               30.0,
-                               1500.0);
-        stepPitches.push_back(hertz > 0.0 ? midiOf(hertz) : -1);
+        const auto hertz = daw::engine::fundamentalOf(audio.getReadPointer(0, step * samplesPerStep + skip),
+                                                      samplesPerStep - skip,
+                                                      rendered.sampleRate,
+                                                      30.0,
+                                                      1500.0);
+        stepPitches.push_back(hertz > 0.0 ? daw::engine::midiPitchOf(hertz) : -1);
     }
 
     // An attack is a sixteenth much louder than the one before it, or a
@@ -156,9 +96,9 @@ Heard listen(tracktion::Edit& edit, const std::vector<Note>& written)
             continue;
         }
 
-        const auto hertz =
-            yin(audio.getReadPointer(0, start + skip), length, rendered.sampleRate, 30.0, 1500.0);
-        heard.pitches.push_back(hertz > 0.0 ? midiOf(hertz) : -1);
+        const auto hertz = daw::engine::fundamentalOf(
+            audio.getReadPointer(0, start + skip), length, rendered.sampleRate, 30.0, 1500.0);
+        heard.pitches.push_back(hertz > 0.0 ? daw::engine::midiPitchOf(hertz) : -1);
     }
     return heard;
 }

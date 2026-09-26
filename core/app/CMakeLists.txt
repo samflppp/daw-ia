@@ -20,6 +20,7 @@ target_sources(daw_app PRIVATE
     src/PlaybackProbe.cpp
     src/Verification.cpp
     src/VerificationAutomation.cpp
+    src/VerificationGeneration.cpp
     src/SampleLibrary.cpp
     src/SamplePreview.cpp
     src/SongExporter.cpp

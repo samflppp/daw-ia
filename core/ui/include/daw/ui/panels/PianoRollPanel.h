@@ -90,6 +90,10 @@ public:
 
     // --- generation. Read by the verification.
     [[nodiscard]] bool proposing() const noexcept { return proposal_.has_value(); }
+    [[nodiscard]] const GhostProposal* proposal() const noexcept
+    {
+        return proposal_.has_value() ? &*proposal_ : nullptr;
+    }
     [[nodiscard]] const std::vector<domain::generation::GhostNote>& ghostNotes() const noexcept
     {
         return ghosts_;

@@ -4,6 +4,7 @@
 #include "PlaybackProbe.h"
 #include "SongExporter.h"
 #include "daw/domain/command/CommandBus.h"
+#include "daw/domain/generation/Generator.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/ui/TitleBarView.h"
 #include "daw/ui/Tokens.h"
@@ -190,6 +191,13 @@ private:
     // changed under the points, undo and redo while the song plays.
     void addAutomationSteps();
 
+    // S14: generation in the piano roll (VerificationGeneration.cpp). A range
+    // on the ruler, Ctrl+G, constraints typed, variants, the disorder --
+    // reject, generate twice, change pattern, undo something else, generate
+    // while the song plays -- with the project unmoved throughout; then Tab,
+    // and the render: attacks and pitches.
+    void addGenerationSteps();
+
     // A render of the Edit as it plays, kept whole in memory, and its level
     // window by window between two beats of the song: the RMS of each
     // channel, in dB.
@@ -253,7 +261,8 @@ private:
               juce::Point<int> from,
               juce::Point<int> to,
               bool ctrl = false,
-              bool middle = false);
+              bool middle = false,
+              bool shift = false);
 
     // A short burst and silence, as a WAV file: a drum hit an onset detector
     // cannot miss.
@@ -268,8 +277,12 @@ private:
     // Where a beat of a lane is, brought into sight first with the wheel the
     // way a person scrolls, when the view does not show it.
     [[nodiscard]] juce::Point<int> playlistBeat(int lane, double beats);
-    void
-    wheel(juce::Component& target, juce::Point<int> at, float deltaY, bool shift = false, bool ctrl = false);
+    void wheel(juce::Component& target,
+               juce::Point<int> at,
+               float deltaY,
+               bool shift = false,
+               bool ctrl = false,
+               bool alt = false);
 
     [[nodiscard]] std::size_t depth() const { return bus_.undoDepth(); }
 
@@ -346,6 +359,13 @@ private:
     std::function<bool(const juce::File&)> saveAsTo_;
     std::function<juce::String()> lastRefusal_;
     const PlaybackProbe* probe_{nullptr};
+
+    // S14.
+    domain::TrackId leadTrack_{};
+    std::string generationBaseline_;
+    std::size_t generationDepth_{0};
+    std::vector<domain::generation::GhostNote> firstGhosts_;
+    std::vector<domain::generation::GhostNote> acceptedGhosts_;
 };
 
 } // namespace daw::app
