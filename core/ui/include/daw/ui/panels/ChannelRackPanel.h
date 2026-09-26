@@ -38,6 +38,11 @@ public:
     ~ChannelRackPanel() override;
 
     void paint(juce::Graphics& g) override;
+    bool keyPressed(const juce::KeyPress& key) override;
+
+    // The channels Ctrl + click gathered, for Ctrl+C and as the targets of
+    // Ctrl+V. Read by the verification.
+    [[nodiscard]] const std::vector<domain::TrackId>& picked() const noexcept { return picked_; }
     void resized() override;
 
     void mouseDown(const juce::MouseEvent& event) override;
@@ -135,6 +140,14 @@ private:
     };
 
     std::optional<Drag> drag_;
+
+    // The picked channels, in the order they were picked.
+    std::vector<domain::TrackId> picked_;
+    Clipboard& clipboard_;
+
+    // Ctrl+C, Ctrl+V, Ctrl+B on whole rows of the pattern on screen.
+    void copyChannels();
+    void pasteChannels(bool duplicate);
 
     std::optional<int> paintedPlayheadStep_;
 

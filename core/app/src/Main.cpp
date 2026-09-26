@@ -592,7 +592,9 @@ private:
                                          *rack_,
                                          *switch_,
                                          *copilot_,
-                                         *sampleLibrary_};
+                                         *sampleLibrary_,
+                                         *levels_,
+                                         clipboard_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();
@@ -880,6 +882,7 @@ private:
     ui::History history_;
     std::unique_ptr<EditClock> clock_;
     std::unique_ptr<LevelMonitor> levels_;
+    ui::Clipboard clipboard_;
     std::unique_ptr<WorkspaceSwitch> switch_;
     std::unique_ptr<CopilotBridge> copilot_;
     std::unique_ptr<PluginRack> rack_;

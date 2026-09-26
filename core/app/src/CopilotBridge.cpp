@@ -280,6 +280,16 @@ void CopilotBridge::handleMessage(const juce::String& line)
     handleAnswer(parsed.value());
 }
 
+std::vector<std::string> CopilotBridge::capabilities() const
+{
+    // The commands it may ask for, and the methods handleRequest answers.
+    auto offered = wiring_.registry.types();
+    for (const auto* method :
+         {"state.get", "tools.list", "clip.notes", "plugins.find", "mix.levels", "commands.execute"})
+        offered.emplace_back(method);
+    return offered;
+}
+
 void CopilotBridge::handleRequest(const Value& message)
 {
     const auto method = message.stringAt("method");

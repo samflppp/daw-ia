@@ -51,6 +51,23 @@ void LevelMonitor::timerCallback()
     sendChangeMessage();
 }
 
+std::vector<ui::StripMeter> LevelMonitor::meters() const
+{
+    std::vector<ui::StripMeter> shown;
+    for (const auto& level : meters_.levels())
+    {
+        ui::StripMeter meter{};
+        meter.strip = level.strip;
+        meter.peakLeftDb = level.peakLeftDb;
+        meter.peakRightDb = level.peakRightDb;
+        meter.rmsLeftDb = level.rmsLeftDb;
+        meter.rmsRightDb = level.rmsRightDb;
+        meter.over = level.over;
+        shown.push_back(std::move(meter));
+    }
+    return shown;
+}
+
 domain::Value LevelMonitor::toValue(const domain::ProjectState& state) const
 {
     const auto measured = meters_.levels();

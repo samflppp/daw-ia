@@ -67,6 +67,7 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
     , project_(context.project)
     , selection_(context.selection)
     , clock_(context.clock)
+    , clipboard_(context.clipboard)
 {
     titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
@@ -476,11 +477,115 @@ void PianoRollPanel::paintNotes(juce::Graphics& g, juce::Rectangle<int> area) co
         g.setColour(soft.interpolatedWith(full, amount));
         g.fillRoundedRectangle(bounds, radius);
 
-        if (note.id == selectedNote_)
+        if (note.id == selectedNote_ || isPicked(note.id))
         {
             g.setColour(tokens_.colour("color.note.selected"));
             g.drawRoundedRectangle(bounds, radius, tokens_.number("stroke.focus"));
         }
+    }
+
+    if (band_.has_value())
+    {
+        g.setColour(tokens_.colour("color.state.selected"));
+        g.fillRect(*band_);
+        g.setColour(tokens_.colour("color.accent.primary"));
+        g.drawRect(*band_, tokens_.integer("stroke.hairline"));
+    }
+}
+
+bool PianoRollPanel::isPicked(domain::NoteId id) const
+{
+    return std::find(picked_.begin(), picked_.end(), id) != picked_.end();
+}
+
+juce::Rectangle<int> PianoRollPanel::noteBounds(const domain::Note& note) const
+{
+    const auto x = xForBeat(note.startBeats);
+    return {x,
+            yForPitch(note.pitch),
+            std::max(1, xForBeat(note.startBeats + note.lengthBeats) - x),
+            tokens_.integer("metric.pianoRoll.keyHeight")};
+}
+
+void PianoRollPanel::copyPicked()
+{
+    const auto* shown = pattern();
+    const auto* owner = track();
+    if (shown == nullptr || owner == nullptr)
+        return;
+
+    auto notes = picked_;
+    if (notes.empty() && !selectedNote_.isNil())
+        notes.push_back(selectedNote_);
+    if (notes.empty())
+        return;
+
+    auto copied = copyNotes(*shown, owner->id, notes);
+    if (!copied.rows.empty())
+        clipboard_.notes = std::move(copied);
+}
+
+void PianoRollPanel::pasteNotes(bool duplicate)
+{
+    const auto* shown = pattern();
+    const auto* owner = track();
+    if (shown == nullptr || owner == nullptr)
+        return;
+
+    if (duplicate)
+        copyPicked();
+    if (!clipboard_.notes.has_value())
+        return;
+
+    // Ctrl+V at the playhead, on the grid, when the pattern on screen is the
+    // one sounding; where the copy came from otherwise. Ctrl+B right after
+    // the copy, the pattern lengthened when it has to be.
+    const auto& copied = *clipboard_.notes;
+    auto at = copied.originBeats;
+    if (duplicate)
+        at = duplicateAt(copied, copied.originBeats);
+    else if (const auto local = patternEditing::localBeats(state_, shown->id, clock_.positionBeats());
+             local.has_value())
+        at = quantise(*local);
+
+    auto plan = planPaste(state_, shown->id, copied, {owner->id}, at, duplicate);
+    if (plan.commands.empty())
+        return;
+
+    domain::GroupOptions group{};
+    group.label = (duplicate ? "dupliquer " : "coller ") + std::to_string(plan.pasted.size()) + " notes";
+    const auto pasted = plan.pasted;
+    if (bus_.executeGroup(std::move(plan.commands), group).ok())
+    {
+        // The copies become the picked notes: a second Ctrl+B goes on.
+        picked_ = pasted;
+        selectedNote_ = {};
+        repaint();
+    }
+}
+
+void PianoRollPanel::removePicked()
+{
+    const auto* edited = clip();
+    if (edited == nullptr)
+        return;
+
+    std::vector<std::unique_ptr<domain::Command>> commands;
+    for (const auto& note : edited->notes)
+    {
+        if (isPicked(note.id) || note.id == selectedNote_)
+            commands.push_back(std::make_unique<domain::RemoveNote>(edited->id, note.id));
+    }
+    if (commands.empty())
+        return;
+
+    domain::GroupOptions group{};
+    group.label = "retirer " + std::to_string(commands.size()) + " notes";
+    if (bus_.executeGroup(std::move(commands), group).ok())
+    {
+        picked_.clear();
+        selectedNote_ = {};
+        repaint();
     }
 }
 
@@ -638,6 +743,7 @@ void PianoRollPanel::addNoteAt(juce::Point<int> point)
     if (bus_.execute(std::make_unique<domain::AddNote>(clip()->id, note)).ok())
     {
         selectedNote_ = note.id;
+        picked_ = {note.id};
         repaint();
     }
 }
@@ -685,13 +791,37 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
         return;
     }
 
+    // Ctrl + click adds a note to the picked ones or takes it out; Ctrl +
+    // drag on empty space picks what the band touches. Neither writes.
+    if (event.mods.isCtrlDown())
+    {
+        if (hit != nullptr)
+        {
+            if (isPicked(hit->id))
+                picked_.erase(std::find(picked_.begin(), picked_.end(), hit->id));
+            else
+                picked_.push_back(hit->id);
+            selectedNote_ = {};
+        }
+        else
+        {
+            bandStart_ = event.getPosition();
+            band_ = juce::Rectangle<int>{bandStart_, bandStart_};
+        }
+        repaint();
+        return;
+    }
+
     if (hit == nullptr)
     {
+        picked_.clear();
         addNoteAt(event.getPosition());
         return;
     }
 
     selectedNote_ = hit->id;
+    if (!isPicked(hit->id))
+        picked_ = {hit->id};
 
     // The grab offset is what keeps a note from jumping under the cursor: the
     // user moves the note, not the point they clicked on.
@@ -727,6 +857,13 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
 
 void PianoRollPanel::mouseDrag(const juce::MouseEvent& event)
 {
+    if (band_.has_value())
+    {
+        band_ = juce::Rectangle<int>{bandStart_, event.getPosition()}.getIntersection(gridArea());
+        repaint();
+        return;
+    }
+
     if (draggingPlayhead_)
     {
         movePlayheadTo(event.getPosition().getX());
@@ -824,6 +961,22 @@ void PianoRollPanel::mouseUp(const juce::MouseEvent& event)
 
     draggingPlayhead_ = false;
 
+    if (band_.has_value())
+    {
+        const auto area = *band_;
+        band_.reset();
+        if (const auto* edited = clip(); edited != nullptr)
+        {
+            for (const auto& note : edited->notes)
+            {
+                if (noteBounds(note).intersects(area) && !isPicked(note.id))
+                    picked_.push_back(note.id);
+            }
+        }
+        repaint();
+        return;
+    }
+
     if (!drag_.has_value())
         return;
 
@@ -861,7 +1014,24 @@ bool PianoRollPanel::keyPressed(const juce::KeyPress& key)
 {
     if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
     {
-        removeNote(selectedNote_);
+        removePicked();
+        return true;
+    }
+
+    const auto ctrl = juce::ModifierKeys::ctrlModifier;
+    if (key == juce::KeyPress{'c', ctrl, 0})
+    {
+        copyPicked();
+        return true;
+    }
+    if (key == juce::KeyPress{'v', ctrl, 0})
+    {
+        pasteNotes(false);
+        return true;
+    }
+    if (key == juce::KeyPress{'b', ctrl, 0})
+    {
+        pasteNotes(true);
         return true;
     }
 

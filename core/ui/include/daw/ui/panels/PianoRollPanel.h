@@ -40,6 +40,13 @@ public:
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
     bool keyPressed(const juce::KeyPress& key) override;
 
+    // The notes picked by clicks, Ctrl + click and Ctrl + drag: what Ctrl+C,
+    // Ctrl+B and Delete act on. Read by the verification.
+    [[nodiscard]] const std::vector<domain::NoteId>& picked() const noexcept { return picked_; }
+
+    // Where a note is drawn: the verification aims its clicks with it.
+    [[nodiscard]] juce::Rectangle<int> noteBounds(const domain::Note& note) const;
+
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void timerCallback() override;
@@ -118,6 +125,18 @@ private:
     int topPitch_{84};
 
     domain::NoteId selectedNote_{};
+
+    // Every picked note, the one being dragged among them; a band drawn with
+    // Ctrl, in panel coordinates.
+    std::vector<domain::NoteId> picked_;
+    std::optional<juce::Rectangle<int>> band_;
+    juce::Point<int> bandStart_;
+    Clipboard& clipboard_;
+
+    [[nodiscard]] bool isPicked(domain::NoteId id) const;
+    void copyPicked();
+    void pasteNotes(bool duplicate);
+    void removePicked();
 
     // Where the playhead was last painted. Without it the timer invalidated
     // the column the playhead is moving to and never the one it is leaving, so

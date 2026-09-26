@@ -3,6 +3,7 @@
 #include "daw/domain/Value.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/engine/LevelMeters.h"
+#include "daw/ui/model/LevelSource.h"
 
 #include <juce_events/juce_events.h>
 #include <tracktion_engine/tracktion_engine.h>
@@ -19,7 +20,7 @@ namespace daw::app
 // screen and for the copilot alike: a meter the copilot cannot read is a mixer
 // it cannot judge, and a meter only the copilot can read is a number nobody
 // checks.
-class LevelMonitor final : public juce::ChangeBroadcaster, private juce::Timer
+class LevelMonitor final : public ui::LevelSource, private juce::Timer
 {
 public:
     static constexpr int pollHz = 30;
@@ -33,6 +34,10 @@ public:
     LevelMonitor& operator=(LevelMonitor&&) = delete;
 
     [[nodiscard]] std::vector<engine::StripLevel> levels() const { return meters_.levels(); }
+
+    // --- ui::LevelSource
+    [[nodiscard]] std::vector<ui::StripMeter> meters() const override;
+    void clearOvers() override { meters_.clearOvers(); }
     [[nodiscard]] engine::LevelMeters& meters() noexcept { return meters_; }
 
     // What mix.levels answers: every strip of the project, named the way the

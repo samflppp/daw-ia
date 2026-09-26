@@ -1,5 +1,6 @@
 #include "Verification.h"
 
+#include "daw/domain/commands/MixCommands.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TempoCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
@@ -8,6 +9,9 @@
 #include "daw/engine/MeterTap.h"
 #include "daw/engine/Rendering.h"
 #include "daw/ui/panels/BrowserPanel.h"
+#include "daw/ui/panels/ChannelRackPanel.h"
+#include "daw/ui/panels/MixerPanel.h"
+#include "daw/ui/panels/PianoRollPanel.h"
 #include "daw/ui/panels/PlaylistPanel.h"
 
 #include <algorithm>
@@ -1171,7 +1175,9 @@ void Verification::buildList()
 
     addPlaylistViewSteps();
     addPreviewSteps();
+    addClipboardSteps();
     addMeterSteps();
+    addMixerSteps();
 
     // --- the title bar -----------------------------------------------------------
 
@@ -2098,6 +2104,426 @@ void Verification::addPreviewSteps()
                 key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(depth() == savedDepth_, "les dix dépôts défaits");
             check(state_.audioClips().size() == 1, "il reste le clap");
+        });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+namespace
+{
+
+template <typename Type>
+Type* childOfType(juce::Component& root, int rank = 0)
+{
+    for (auto* child : root.getChildren())
+    {
+        if (auto* found = dynamic_cast<Type*>(child); found != nullptr)
+        {
+            if (rank == 0)
+                return found;
+            --rank;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+juce::Component* Verification::mixerStrip(const domain::TrackId& id) const
+{
+    auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer"));
+    if (mixer == nullptr)
+        return nullptr;
+
+    // Channels, then buses, in the project's order; the master last.
+    std::vector<domain::TrackId> ids;
+    for (const auto& track : state_.tracks())
+        ids.push_back(track.id);
+    for (const auto& bus : state_.buses())
+        ids.push_back(bus.id);
+    ids.push_back(domain::ProjectState::masterTrackId());
+
+    const auto strips = mixer->strips();
+    const auto found = std::find(ids.begin(), ids.end(), id);
+    const auto rank = static_cast<std::size_t>(std::distance(ids.begin(), found));
+    return found != ids.end() && rank < strips.size() ? strips[rank] : nullptr;
+}
+
+double Verification::renderedMasterPeakDb(const std::string& name)
+{
+    const auto file = folder_.getChildFile(name + ".wav");
+    if (!engine::renderAsPlayed(edit_, file))
+        return engine::StripLevel::floorDb;
+
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader{formats.createReaderFor(file)};
+    if (reader == nullptr || reader->lengthInSamples <= 0)
+        return engine::StripLevel::floorDb;
+
+    juce::AudioBuffer<float> buffer{static_cast<int>(reader->numChannels),
+                                    static_cast<int>(reader->lengthInSamples)};
+    reader->read(&buffer, 0, buffer.getNumSamples(), 0, true, true);
+    const auto peak = buffer.getMagnitude(0, buffer.getNumSamples());
+    return peak > 0.0f ? 20.0 * std::log10(static_cast<double>(peak)) : engine::StripLevel::floorDb;
+}
+
+void Verification::addMixerSteps()
+{
+    // --- the mixer ------------------------------------------------------------------
+    //
+    // A person opens it with F10, makes a bus, sends the kick into it, pulls
+    // the bus down, solos the hat while the song plays, asks the AI to mix,
+    // then takes everything back with Ctrl+Z. Every sound claim is measured on
+    // a render or on the meters.
+
+    add("F10 ouvre le mixer : une tranche par piste, puis le master",
+        [this]
+        {
+            savedState_ = domain::json::write(state_.toValue());
+            savedDepth_ = depth();
+            key(juce::KeyPress{juce::KeyPress::F10Key});
+        });
+
+    add("la page Mixer est ouverte",
+        [this]
+        {
+            auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer"));
+            check(mixer != nullptr && mixer->isShowing(), "la page Mixer est à l'écran");
+            if (mixer == nullptr)
+                return;
+            check(mixer->strips().size() == state_.tracks().size() + state_.buses().size() + 1,
+                  std::to_string(mixer->strips().size()) +
+                      " tranches : " + std::to_string(state_.tracks().size()) + " pistes, " +
+                      std::to_string(state_.buses().size()) + " bus, le master");
+        });
+
+    add("« + Bus » crée un bus, une entrée d'historique",
+        [this]
+        {
+            auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer"));
+            auto* add = mixer != nullptr ? button(*mixer, "+ Bus") : nullptr;
+            if (add == nullptr)
+            {
+                check(false, "le bouton « + Bus »");
+                return;
+            }
+            click(*add, add->getLocalBounds().getCentre());
+            check(state_.buses().size() == 1, "un bus");
+            check(depth() == savedDepth_ + 1, "une entrée d'historique");
+        });
+
+    add("envoyer le Kick dans le bus, baisser le bus : le rendu baisse de ce qu'il faut",
+        [this]
+        {
+            if (state_.buses().empty())
+                return;
+            const auto busId = state_.buses().front().id;
+            const auto kickId = state_.tracks().front().id;
+
+            // Everything else muted, so that the file holds the kick alone.
+            std::vector<std::unique_ptr<domain::Command>> silence;
+            for (const auto& track : state_.tracks())
+            {
+                if (track.id != kickId)
+                    silence.push_back(std::make_unique<domain::SetTrackMuted>(track.id, true));
+            }
+            static_cast<void>(
+                bus_.executeGroup(std::move(silence), domain::GroupOptions{"verif : kick seul", {}}));
+            press("PAT");
+            const auto direct = renderedMasterPeakDb("50-kick-direct");
+
+            auto* kickStrip = mixerStrip(kickId);
+            auto* output = kickStrip != nullptr ? childOfType<juce::ComboBox>(*kickStrip, 0) : nullptr;
+            check(output != nullptr, "la tranche du Kick a une sortie");
+            if (output == nullptr)
+                return;
+            output->setSelectedItemIndex(1, juce::sendNotificationSync);
+            check(state_.findTrack(kickId)->output == busId, "le Kick sort dans le bus");
+
+            // The bus's fader, dragged down by the hand.
+            auto* busStrip = mixerStrip(busId);
+            auto* fader = busStrip != nullptr ? childOfType<juce::Slider>(*busStrip, 0) : nullptr;
+            if (fader == nullptr)
+            {
+                check(false, "la tranche du bus a un fader");
+                return;
+            }
+            const auto before = depth();
+            const auto top = fader->getLocalBounds().getCentre();
+            drag(*fader, top, top.translated(0, fader->getHeight() / 5));
+            const auto busDb = state_.findStrip(busId)->volumeDb;
+            check(depth() == before + 1, "un glissé du fader, une entrée d'historique");
+
+            const auto routed = renderedMasterPeakDb("51-kick-par-le-bus");
+            note("Kick direct : " + juce::String(direct, 2).toStdString() + " dBFS ; par le bus à " +
+                 juce::String(busDb, 2).toStdString() + " dB : " + juce::String(routed, 2).toStdString() +
+                 " dBFS");
+            check(busDb < -0.5, "le fader du bus est descendu");
+            check(std::abs((routed - direct) - busDb) < 0.1,
+                  "le rendu baisse du niveau du fader du bus, à 0,1 dB près");
+        });
+
+    add(
+        "en lecture, S sur le Hat : seul le Hat s'entend",
+        [this]
+        {
+            // Everything back, then the song plays, then the solo.
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0}); // fader
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0}); // output
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0}); // the kick alone
+
+            press("SONG");
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(true, 0.0, 4.0)));
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.0)));
+            key(juce::KeyPress{juce::KeyPress::spaceKey});
+
+            const auto hatId = state_.tracks()[1].id;
+            auto* hatStrip = mixerStrip(hatId);
+            auto* solo = hatStrip != nullptr ? button(*hatStrip, "S") : nullptr;
+            if (solo == nullptr)
+            {
+                check(false, "la tranche du Hat a un bouton S");
+                return;
+            }
+            click(*solo, solo->getLocalBounds().getCentre());
+            check(state_.findTrack(hatId)->soloed, "le Hat est en solo, dans le projet");
+            check(!state_.isAudible(state_.tracks().front().id), "le Kick n'est plus entendu");
+        },
+        [this] {
+            return levelOf(state_.tracks().front().id.toString()).peakDb <=
+                   engine::StripLevel::floorDb + 1.0f;
+        },
+        3000.0);
+
+    add(
+        "le vu-mètre du Kick est tombé ; S de nouveau, il repart",
+        [this]
+        {
+            check(levelOf(state_.tracks().front().id.toString()).peakDb <= engine::StripLevel::floorDb + 1.0f,
+                  "le Kick mesure -100 dBFS pendant le solo du Hat");
+            auto* hatStrip = mixerStrip(state_.tracks()[1].id);
+            if (auto* solo = hatStrip != nullptr ? button(*hatStrip, "S") : nullptr; solo != nullptr)
+                click(*solo, solo->getLocalBounds().getCentre());
+        },
+        [this] { return levelOf(state_.tracks().front().id.toString()).peakDb > -60.0f; },
+        3000.0);
+
+    add("« Mixer par l'IA » : aucun modèle appelé, la liste de ce qui manque",
+        [this]
+        {
+            key(juce::KeyPress{juce::KeyPress::spaceKey});
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(false, 0.0, 0.0)));
+
+            auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer"));
+            auto* ask = mixer != nullptr ? button(*mixer, juce::String::fromUTF8("Mixer par l'IA")) : nullptr;
+            if (ask == nullptr)
+            {
+                check(false, "le bouton « Mixer par l'IA »");
+                return;
+            }
+
+            transcriptBefore_ = copilot_.transcript().size();
+            click(*ask, ask->getLocalBounds().getCentre());
+            const auto report = mixer->readinessReport();
+            note("rapport :\n\n```\n" + report.toStdString() + "```");
+            check(copilot_.transcript().size() == transcriptBefore_, "le copilote n'a rien reçu");
+            check(!mixer->strips().empty() && !mixer->strips().back()->isVisible(),
+                  "le rapport prend la place des tranches");
+            check(report.contains("besoins sur"), "un compte des besoins couverts");
+            check(report.contains("mix.measure") && report.contains("plugin.parameters"),
+                  "les manques y sont, nommés : mesure sur un passage, paramètres des effets");
+        });
+
+    add("tout défaire au Ctrl+Z, dans l'ordre inverse",
+        [this]
+        {
+            // The same button puts the strips back.
+            if (auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer")); mixer != nullptr)
+            {
+                if (auto* ask = button(*mixer, juce::String::fromUTF8("Mixer par l'IA")); ask != nullptr)
+                    click(*ask, ask->getLocalBounds().getCentre());
+                check(!mixer->strips().empty() && mixer->strips().back()->isVisible(),
+                      "le même bouton rend les tranches");
+            }
+
+            // The solo toggled twice, then the bus: three entries.
+            for (int undo = 0; undo < 3; ++undo)
+                key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(depth() == savedDepth_, "l'historique est revenu à son point de départ");
+            check(domain::json::write(state_.toValue()) == savedState_,
+                  "le projet d'avant le mixer, à l'octet près");
+            key(juce::KeyPress{juce::KeyPress::F10Key});
+        });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+juce::Point<int> Verification::rackChannel(int row) const
+{
+    // The channel column of the rack, on the row: where its name is clicked.
+    const auto cell = rackCell(row, 0);
+    return {tokens_.integer("space.md"), cell.getY()};
+}
+
+void Verification::addClipboardSteps()
+{
+    // --- the clipboard, in the piano roll and in the rack ---------------------------
+    //
+    // Ctrl + click to pick, Ctrl+C, change of pattern, Ctrl+V; what was copied
+    // in the piano roll pasted in the rack; Ctrl+B again and again until the
+    // pattern has to grow; and all of it undone. A paste of N notes is one
+    // entry and one Ctrl+Z.
+
+    add("dans le piano-roll, Ctrl + clic prend deux kicks, puis en rend un, puis le reprend",
+        [this]
+        {
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportStop>()));
+            press("PAT");
+            savedState_ = domain::json::write(state_.toValue());
+            savedDepth_ = depth();
+
+            selection_.selectPattern(state_.patterns().front().id);
+            auto* rack = panel("channel_rack");
+            if (rack != nullptr)
+                click(*rack, rackChannel(0));
+
+            key(juce::KeyPress{juce::KeyPress::F7Key});
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            const auto* row = state_.patterns().front().findClipForTrack(state_.tracks().front().id);
+            check(roll != nullptr && row != nullptr && row->notes.size() >= 3,
+                  "le piano-roll montre les kicks");
+            if (roll == nullptr || row == nullptr || row->notes.size() < 3)
+                return;
+
+            const auto first = roll->noteBounds(row->notes[0]).getCentre();
+            const auto third = roll->noteBounds(row->notes[2]).getCentre();
+            click(*roll, first, false, false, true);
+            click(*roll, third, false, false, true);
+            check(roll->picked().size() == 2, "deux notes prises");
+            click(*roll, first, false, false, true);
+            check(roll->picked().size() == 1, "un second Ctrl + clic en rend une");
+            click(*roll, first, false, false, true);
+            check(roll->picked().size() == 2, "et un troisième la reprend");
+
+            static_cast<void>(roll->keyPressed(juce::KeyPress{'c', juce::ModifierKeys::ctrlModifier, 0}));
+            check(depth() == savedDepth_, "copier n'écrit rien");
+        });
+
+    add("autre pattern, Ctrl+V : les deux kicks à la tête de lecture, une entrée",
+        [this]
+        {
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            if (roll == nullptr || state_.patterns().size() < 2)
+                return;
+
+            const auto second = state_.patterns()[1].id;
+            selection_.selectPattern(second);
+            const auto kickId = state_.tracks().front().id;
+            const auto before = state_.findPattern(second)->findClipForTrack(kickId);
+            const auto had = before != nullptr ? before->notes.size() : 0;
+
+            static_cast<void>(roll->keyPressed(juce::KeyPress{'v', juce::ModifierKeys::ctrlModifier, 0}));
+            const auto* after = state_.findPattern(second)->findClipForTrack(kickId);
+            check(after != nullptr && after->notes.size() == had + 2,
+                  "deux notes dans le pattern 2, sur la ligne du Kick ouverte au besoin");
+            check(depth() == savedDepth_ + 1, "un seul Ctrl+V, une seule entrée d'historique");
+            if (after != nullptr && after->notes.size() >= 2)
+                note("collées aux temps " +
+                     juce::String(after->notes[after->notes.size() - 2].startBeats, 2).toStdString() +
+                     " et " + juce::String(after->notes.back().startBeats, 2).toStdString() +
+                     " : la tête est au temps 0, l'écart d'origine est gardé");
+        });
+
+    add("Ctrl+B quatre fois : les copies s'enchaînent, le pattern s'allonge à la cinquième mesure",
+        [this]
+        {
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            if (roll == nullptr)
+                return;
+
+            const auto second = state_.patterns()[1].id;
+            const auto length = state_.findPattern(second)->lengthBeats;
+            for (int press = 0; press < 4; ++press)
+                static_cast<void>(roll->keyPressed(juce::KeyPress{'b', juce::ModifierKeys::ctrlModifier, 0}));
+
+            const auto* pattern = state_.findPattern(second);
+            note("longueur du pattern 2 : " + juce::String(length, 0).toStdString() + " -> " +
+                 juce::String(pattern->lengthBeats, 0).toStdString() + " temps");
+            check(depth() == savedDepth_ + 5, "quatre Ctrl+B, quatre entrées");
+            check(pattern->lengthBeats > length,
+                  "le dernier Ctrl+B a allongé le pattern pour tenir sa copie");
+            check(std::fmod(pattern->lengthBeats, 4.0) == 0.0, "à la mesure");
+            check(roll->picked().size() == 2, "la sélection suit les copies");
+
+            for (int undo = 0; undo < 4; ++undo)
+                key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(state_.findPattern(second)->lengthBeats == length, "quatre Ctrl+Z : la longueur revient");
+        });
+
+    add("ce que le piano-roll a copié, collé dans le rack sur le Hat",
+        [this]
+        {
+            auto* rack = dynamic_cast<ui::ChannelRackPanel*>(panel("channel_rack"));
+            if (rack == nullptr)
+                return;
+
+            click(*rack, rackChannel(1));
+            check(rack->picked().size() == 1, "le Hat est pris");
+
+            // The playhead on the second sixteenth, where the Hat has nothing:
+            // the paste lands there, at the head, not on the hats already in.
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.25)));
+            const auto hatId = state_.tracks()[1].id;
+            const auto second = state_.patterns()[1].id;
+            const auto* before = state_.findPattern(second)->findClipForTrack(hatId);
+            const auto had = before != nullptr ? before->notes.size() : 0;
+
+            static_cast<void>(rack->keyPressed(juce::KeyPress{'v', juce::ModifierKeys::ctrlModifier, 0}));
+            const auto* after = state_.findPattern(second)->findClipForTrack(hatId);
+            note("notes du Hat dans le pattern 2 : " + std::to_string(had) + " -> " +
+                 std::to_string(after != nullptr ? after->notes.size() : 0) +
+                 " (une note déjà là à la même place et à la même hauteur n'est pas doublée)");
+            check(after != nullptr && after->notes.size() > had, "des notes arrivent sur le Hat");
+            check(depth() == savedDepth_ + 2, "une entrée");
+        });
+
+    add("dans le rack, Kick et Hat pris au Ctrl + clic, copiés, collés dans le pattern 1",
+        [this]
+        {
+            auto* rack = dynamic_cast<ui::ChannelRackPanel*>(panel("channel_rack"));
+            if (rack == nullptr)
+                return;
+
+            click(*rack, rackChannel(0));
+            click(*rack, rackChannel(1), false, false, true);
+            check(rack->picked().size() == 2, "deux canaux pris");
+            static_cast<void>(rack->keyPressed(juce::KeyPress{'c', juce::ModifierKeys::ctrlModifier, 0}));
+
+            selection_.selectPattern(state_.patterns().front().id);
+            const auto before = depth();
+            static_cast<void>(rack->keyPressed(juce::KeyPress{'v', juce::ModifierKeys::ctrlModifier, 0}));
+            check(depth() == before + 1, "le collage de deux lignes est une entrée");
+
+            const auto& lines = history_.entries();
+            if (history_.cursor() > 0 && lines[history_.cursor() - 1].group.has_value())
+                note("historique : « " + lines[history_.cursor() - 1].group->label + " », " +
+                     std::to_string(lines[history_.cursor() - 1].merged) + " commandes");
+        });
+
+    add("tout défaire : le projet d'avant le presse-papiers, à l'octet près",
+        [this]
+        {
+            for (int undo = 0; undo < 20 && depth() > savedDepth_; ++undo)
+                key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == savedState_, "à l'octet près");
+            key(juce::KeyPress{juce::KeyPress::F7Key});
         });
 }
 

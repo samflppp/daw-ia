@@ -54,6 +54,7 @@ ChannelRackPanel::ChannelRackPanel(const PanelContext& context)
     , project_(context.project)
     , selection_(context.selection)
     , clock_(context.clock)
+    , clipboard_(context.clipboard)
     , samples_(context.samples)
 {
     titled_ = context.titled;
@@ -63,6 +64,9 @@ ChannelRackPanel::ChannelRackPanel(const PanelContext& context)
 
     // A chooser that kept the focus after a click would open its list on the
     // next press of Space instead of letting the transport have it.
+    // The rack takes Ctrl+C, Ctrl+V and Ctrl+B; Space and Ctrl+Z go on up to
+    // the view as before.
+    setWantsKeyboardFocus(true);
     patternChooser_.setWantsKeyboardFocus(false);
     resolutionChooser_.setWantsKeyboardFocus(false);
     patternChooser_.setTextWhenNothingSelected("aucun pattern");
@@ -360,7 +364,8 @@ void ChannelRackPanel::paintChannels(juce::Graphics& g, juce::Rectangle<int> are
         if (row.getY() >= area.getBottom())
             break;
 
-        if (track.id == selection_.track())
+        if (track.id == selection_.track() ||
+            std::find(picked_.begin(), picked_.end(), track.id) != picked_.end())
         {
             g.setColour(tokens_.colour("color.state.selected"));
             g.fillRect(row);
@@ -635,7 +640,24 @@ void ChannelRackPanel::mouseDown(const juce::MouseEvent& event)
             return;
         }
 
+        grabKeyboardFocus();
+
+        // Ctrl + click adds the channel to the picked ones or takes it out,
+        // the grammar of the playlist and the piano roll.
+        if (event.mods.isCtrlDown())
+        {
+            const auto found = std::find(picked_.begin(), picked_.end(), track.id);
+            if (found != picked_.end())
+                picked_.erase(found);
+            else
+                picked_.push_back(track.id);
+            repaint();
+            return;
+        }
+
+        picked_ = {track.id};
         selection_.selectTrack(track.id);
+        repaint();
         return;
     }
 
@@ -676,6 +698,79 @@ void ChannelRackPanel::mouseUp(const juce::MouseEvent& event)
 
     static_cast<void>(bus_.endGesture(drag_->gesture));
     drag_.reset();
+}
+
+// --- the clipboard ------------------------------------------------------------
+
+bool ChannelRackPanel::keyPressed(const juce::KeyPress& key)
+{
+    const auto ctrl = juce::ModifierKeys::ctrlModifier;
+    if (key == juce::KeyPress{'c', ctrl, 0})
+    {
+        copyChannels();
+        return true;
+    }
+    if (key == juce::KeyPress{'v', ctrl, 0})
+    {
+        pasteChannels(false);
+        return true;
+    }
+    if (key == juce::KeyPress{'b', ctrl, 0})
+    {
+        pasteChannels(true);
+        return true;
+    }
+    return false;
+}
+
+void ChannelRackPanel::copyChannels()
+{
+    const auto* shown = patternEditing::current(state_, selection_);
+    if (shown == nullptr)
+        return;
+
+    auto tracks = picked_;
+    if (tracks.empty() && !selection_.track().isNil())
+        tracks.push_back(selection_.track());
+    if (!tracks.empty())
+        clipboard_.notes = copyRows(*shown, tracks);
+}
+
+void ChannelRackPanel::pasteChannels(bool duplicate)
+{
+    const auto* shown = patternEditing::current(state_, selection_);
+    if (shown == nullptr)
+        return;
+
+    // Ctrl+B copies what is picked and lays it right after itself; Ctrl+V
+    // lays what was copied at the playhead, on the step under it, or at the
+    // pattern's start when the playhead is elsewhere.
+    if (duplicate)
+        copyChannels();
+    if (!clipboard_.notes.has_value())
+        return;
+
+    const auto& copied = *clipboard_.notes;
+    double at = 0.0;
+    if (duplicate)
+    {
+        at = duplicateAt(copied, copied.originBeats);
+    }
+    else if (const auto local = patternEditing::localBeats(state_, shown->id, clock_.positionBeats());
+             local.has_value())
+    {
+        at = std::floor(*local / stepBeats()) * stepBeats();
+    }
+
+    auto plan = planPaste(
+        state_, shown->id, copied, duplicate ? std::vector<domain::TrackId>{} : picked_, at, duplicate);
+    if (plan.commands.empty())
+        return;
+
+    domain::GroupOptions group{};
+    group.label =
+        duplicate ? "dupliquer les canaux" : "coller " + std::to_string(plan.pasted.size()) + " notes";
+    static_cast<void>(bus_.executeGroup(std::move(plan.commands), group));
 }
 
 // --- dropping samples ---------------------------------------------------------

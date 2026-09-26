@@ -1,4 +1,4 @@
-# Vérification S11 — 26 Sep 2026 1:41:54am
+# Vérification S11 — 26 Sep 2026 7:57:22am
 
 
 ## 1. disposition
@@ -82,7 +82,7 @@
 - capture : `14-«-répète-le-pattern-1-huit-fois-puis-ajoute-le-pattern-2-».png`
 
 ## 15. ce que le copilote a fait
-- réponse : « Le pattern 1 était déjà posé huit fois de suite (temps 0 à 128). J'ai ajouté le pattern 2 à la suite, à partir de la mesure 33. »
+- réponse : « Le pattern 1 était déjà posé huit fois (temps 0 à 128). J'ai ajouté le pattern 2 à la suite, à partir de la mesure 33. »
 - OK : une seule entrée d'historique
 - OK : marquée copilote
 - poses du pattern 1 : 8, du pattern 2 : 1
@@ -220,7 +220,7 @@
 - capture : `35-zoomé-au-début-Espace-en-SONG--la-vue-suit-la-tête-de-lecture.png`
 
 ## 36. la tête de lecture reste dans la vue
-- tête au temps 11.52, vue de 8.0 à 17.8
+- tête au temps 11.07, vue de 8.0 à 17.8
 - OK : la page a tourné, la tête est à l'écran
 - OK : la page commence sur une mesure
 - capture : `36-la-tête-de-lecture-reste-dans-la-vue.png`
@@ -256,22 +256,22 @@
 - capture : `42-le-Ctrl+Z-reconstruit-l'aperçu-une-fois.png`
 
 ## 43. mesurer un sample de deux minutes : le thread message continue
-- copie de 21 Mo dans le projet : 239.88 ms
+- copie de 21 Mo dans le projet : 142.786 ms
 - OK : la première demande rend la main tout de suite, sans forme d'onde
 - durée de la demande : 0.1 ms
 - capture : `43-mesurer-un-sample-de-deux-minutes--le-thread-message-continue.png`
 
 ## 44. aucun gel pendant la mesure ; déposer un autre long sample sur la playlist
-- mesure faite en 2042.06 ms ; plus long écart entre deux tics : 183.597 ms (un tic toutes les 120 ms)
+- mesure faite en 1210.84 ms ; plus long écart entre deux tics : 145.574 ms (un tic toutes les 120 ms)
 - OK : aucun gel : jamais plus de 400 ms sans tic
 - OK : une mesure
-- dépôt, copie et pose du clip par le moteur comprises : 675.17 ms
+- dépôt, copie et pose du clip par le moteur comprises : 329.66 ms
 - OK : un dépôt, une entrée d'historique
 - OK : juste après le dépôt, la forme d'onde est en cours de mesure : le bloc est vide
 - capture : `44-aucun-gel-pendant-la-mesure--déposer-un-autre-long-sample-sur-la-playlist.png`
 
 ## 45. le bloc s'est rempli
-- après le dépôt, plus long écart entre deux tics : 363.77 ms — le moteur reconstruit son graphe pour le nouveau clip sur le thread message, comme à chaque dépôt depuis la S10 ; la mesure seule est à l'étape d'avant
+- après le dépôt, plus long écart entre deux tics : 211.332 ms — le moteur reconstruit son graphe pour le nouveau clip sur le thread message, comme à chaque dépôt depuis la S10 ; la mesure seule est à l'étape d'avant
 - OK : une mesure pour ce sample
 - OK : la forme d'onde couvre 121 s
 - capture : `45-le-bloc-s'est-rempli.png`
@@ -285,10 +285,50 @@
 - OK : il reste le clap
 - capture : `47-dix-clips-une-seule-mesure--dix-Ctrl+Z.png`
 
-## 48. boucler la première mesure, Espace : les vu-mètres bougent
-- capture : `48-boucler-la-première-mesure-Espace--les-vu-mètres-bougent.png`
+## 48. dans le piano-roll, Ctrl + clic prend deux kicks, puis en rend un, puis le reprend
+- OK : le piano-roll montre les kicks
+- OK : deux notes prises
+- OK : un second Ctrl + clic en rend une
+- OK : et un troisième la reprend
+- OK : copier n'écrit rien
+- capture : `48-dans-le-piano-roll-Ctrl-+-clic-prend-deux-kicks-puis-en-rend-un-puis-le-reprend.png`
 
-## 49. chaque piste mesure ce qu'elle joue, et seulement ça
+## 49. autre pattern, Ctrl+V : les deux kicks à la tête de lecture, une entrée
+- OK : deux notes dans le pattern 2, sur la ligne du Kick ouverte au besoin
+- OK : un seul Ctrl+V, une seule entrée d'historique
+- collées aux temps 0.00 et 2.00 : la tête est au temps 0, l'écart d'origine est gardé
+- capture : `49-autre-pattern-Ctrl+V--les-deux-kicks-à-la-tête-de-lecture-une-entrée.png`
+
+## 50. Ctrl+B quatre fois : les copies s'enchaînent, le pattern s'allonge à la cinquième mesure
+- longueur du pattern 2 : 16 -> 20 temps
+- OK : quatre Ctrl+B, quatre entrées
+- OK : le dernier Ctrl+B a allongé le pattern pour tenir sa copie
+- OK : à la mesure
+- OK : la sélection suit les copies
+- OK : quatre Ctrl+Z : la longueur revient
+- capture : `50-Ctrl+B-quatre-fois--les-copies-s'enchaînent-le-pattern-s'allonge-à-la-cinquième-mesure.png`
+
+## 51. ce que le piano-roll a copié, collé dans le rack sur le Hat
+- OK : le Hat est pris
+- notes du Hat dans le pattern 2 : 8 -> 10 (une note déjà là à la même place et à la même hauteur n'est pas doublée)
+- OK : des notes arrivent sur le Hat
+- OK : une entrée
+- capture : `51-ce-que-le-piano-roll-a-copié-collé-dans-le-rack-sur-le-Hat.png`
+
+## 52. dans le rack, Kick et Hat pris au Ctrl + clic, copiés, collés dans le pattern 1
+- OK : deux canaux pris
+- OK : le collage de deux lignes est une entrée
+- historique : « coller 10 notes », 11 commandes
+- capture : `52-dans-le-rack-Kick-et-Hat-pris-au-Ctrl-+-clic-copiés-collés-dans-le-pattern-1.png`
+
+## 53. tout défaire : le projet d'avant le presse-papiers, à l'octet près
+- OK : à l'octet près
+- capture : `53-tout-défaire--le-projet-d'avant-le-presse-papiers-à-l'octet-près.png`
+
+## 54. boucler la première mesure, Espace : les vu-mètres bougent
+- capture : `54-boucler-la-première-mesure-Espace--les-vu-mètres-bougent.png`
+
+## 55. chaque piste mesure ce qu'elle joue, et seulement ça
 - master : crête -11.2 dBFS, RMS -19.0 dBFS
 - OK : le master mesure la lecture
 - Kick : crête -11.2 dBFS
@@ -298,38 +338,99 @@
 - OK : au moins une piste de la mesure bouclée mesure un signal
 - OK : la piste du clap, hors de la boucle, reste à -100 dBFS
 - OK : le master n'est jamais sous sa piste la plus forte
-- capture : `49-chaque-piste-mesure-ce-qu'elle-joue-et-seulement-ça.png`
+- capture : `55-chaque-piste-mesure-ce-qu'elle-joue-et-seulement-ça.png`
 
-## 50. couper la piste la plus forte pendant la lecture
-- capture : `50-couper-la-piste-la-plus-forte-pendant-la-lecture.png`
+## 56. couper la piste la plus forte pendant la lecture
+- capture : `56-couper-la-piste-la-plus-forte-pendant-la-lecture.png`
 
-## 51. la rendre : son vu-mètre repart au coup suivant
+## 57. la rendre : son vu-mètre repart au coup suivant
 - OK : coupée, elle mesure -100 dBFS en moins de 2 s
-- capture : `51-la-rendre--son-vu-mètre-repart-au-coup-suivant.png`
+- capture : `57-la-rendre--son-vu-mètre-repart-au-coup-suivant.png`
 
-## 52. le copilote lit les vu-mètres
-- capture : `52-le-copilote-lit-les-vu-mètres.png`
+## 58. le copilote lit les vu-mètres
+- capture : `58-le-copilote-lit-les-vu-mètres.png`
 
-## 53. ce qu'il a lu est ce que le vu-mètre mesure
-- réponse : « Le niveau crête du master est actuellement de **-28,2 dBFS**. »
-- 14 lectures du vu-mètre du master pendant la demande
+## 59. ce qu'il a lu est ce que le vu-mètre mesure
+- réponse : « Le master affiche actuellement une crête de **-12,4 dBFS** (pas de dépassement). »
+- 34 lectures du vu-mètre du master pendant la demande
 - OK : aucune entrée d'historique : une lecture ne modifie rien
 - OK : le master sonnait pendant la demande
 - OK : la réponse donne, au dixième de dB, une crête que le vu-mètre du master a lue pendant la demande (entre -100.0 et -11.1 dBFS)
-- capture : `53-ce-qu'il-a-lu-est-ce-que-le-vu-mètre-mesure.png`
+- capture : `59-ce-qu'il-a-lu-est-ce-que-le-vu-mètre-mesure.png`
 
-## 54. Espace arrête : tout retombe à -100
+## 60. Espace arrête : tout retombe à -100
 - OK : aucun bloc perdu pendant la lecture en direct
-- capture : `54-Espace-arrête--tout-retombe-à--100.png`
+- capture : `60-Espace-arrête--tout-retombe-à--100.png`
 
-## 55. au rendu, le master mesure ce que le fichier contient
-- fichier : 100.17 s, crête -4.95 dBFS ; vu-mètre du master : 101.35 s, crête -4.95 dBFS
+## 61. au rendu, le master mesure ce que le fichier contient
+- fichier : 100.17 s, crête -4.95 dBFS ; vu-mètre du master : 101.08 s, crête -4.95 dBFS
 - OK : même crête, à 0,1 dB près
 - OK : même énergie, à 0,1 dB près
 - OK : en SONG, la piste du clap mesure son clip : sa piste compagnon a sa prise
-- capture : `55-au-rendu-le-master-mesure-ce-que-le-fichier-contient.png`
+- capture : `61-au-rendu-le-master-mesure-ce-que-le-fichier-contient.png`
 
-## 56. la barre de titre remplace celle du système
+## 62. F10 ouvre le mixer : une tranche par piste, puis le master
+- capture : `62-F10-ouvre-le-mixer--une-tranche-par-piste-puis-le-master.png`
+
+## 63. la page Mixer est ouverte
+- OK : la page Mixer est à l'écran
+- OK : 5 tranches : 4 pistes, 0 bus, le master
+- capture : `63-la-page-Mixer-est-ouverte.png`
+
+## 64. « + Bus » crée un bus, une entrée d'historique
+- OK : un bus
+- OK : une entrée d'historique
+- capture : `64-«-+-Bus-»-crée-un-bus-une-entrée-d'historique.png`
+
+## 65. envoyer le Kick dans le bus, baisser le bus : le rendu baisse de ce qu'il faut
+- OK : la tranche du Kick a une sortie
+- OK : le Kick sort dans le bus
+- OK : un glissé du fader, une entrée d'historique
+- Kick direct : -11.10 dBFS ; par le bus à -25.27 dB : -36.39 dBFS
+- OK : le fader du bus est descendu
+- OK : le rendu baisse du niveau du fader du bus, à 0,1 dB près
+- capture : `65-envoyer-le-Kick-dans-le-bus-baisser-le-bus--le-rendu-baisse-de-ce-qu'il-faut.png`
+
+## 66. en lecture, S sur le Hat : seul le Hat s'entend
+- OK : le Hat est en solo, dans le projet
+- OK : le Kick n'est plus entendu
+- capture : `66-en-lecture-S-sur-le-Hat--seul-le-Hat-s'entend.png`
+
+## 67. le vu-mètre du Kick est tombé ; S de nouveau, il repart
+- OK : le Kick mesure -100 dBFS pendant le solo du Hat
+- capture : `67-le-vu-mètre-du-Kick-est-tombé--S-de-nouveau-il-repart.png`
+
+## 68. « Mixer par l'IA » : aucun modèle appelé, la liste de ce qui manque
+- rapport :
+
+```
+Aucun modèle appelé : ceci vérifie ce que le copilote peut atteindre pour mixer.
+14 besoins sur 25 sont couverts. Ce qui manque encore :
+• connaître les paramètres d'un effet : noms, unités, plages, valeurs actuelles (plugin.parameters) — l'état ne liste que les paramètres déjà touchés, par identifiant et en valeur normalisée : une IA ne sait pas que « 0,42 » est une fréquence de coupure à 800 Hz
+• disposer d'effets de base connus quelle que soit la machine : EQ, compresseur, limiteur (mix.stock_effects) — les plugins installés varient d'une machine à l'autre et leurs paramètres n'ont pas de sens commun
+• mesurer crête et RMS sur un passage choisi, par un rendu (mix.measure) — 300 ms en direct ne disent rien d'un refrain ; les totaux d'un rendu existent dans le moteur mais ne sont pas exposés au copilote
+• mesurer la sonie intégrée (LUFS) et la crête vraie (mix.loudness) — la cible d'un master se donne en LUFS, pas en RMS
+• mesurer le spectre de chaque piste et du master (mix.spectrum) — équilibrer les graves et les aigus, choisir où égaliser
+• repérer les pistes qui se masquent (mix.masking) — deux pistes dans la même bande de fréquences
+• mesurer la corrélation et la largeur stéréo (mix.stereo) — la compatibilité mono, la largeur
+• mesurer la dynamique : facteur de crête, réduction de gain d'un compresseur (mix.dynamics) — savoir si une piste est trop compressée ou pas assez
+• automatiser un réglage dans le temps (automation.write) — hors périmètre de la S11
+• déclencher un compresseur par une autre piste (sidechain) (track.set_sidechain) — le kick qui fait respirer la basse
+• comparer à un morceau de référence (mix.reference) — juger un mix contre un autre
+```
+- OK : le copilote n'a rien reçu
+- OK : le rapport prend la place des tranches
+- OK : un compte des besoins couverts
+- OK : les manques y sont, nommés : mesure sur un passage, paramètres des effets
+- capture : `68-«-Mixer-par-l'IA-»--aucun-modèle-appelé-la-liste-de-ce-qui-manque.png`
+
+## 69. tout défaire au Ctrl+Z, dans l'ordre inverse
+- OK : le même bouton rend les tranches
+- OK : l'historique est revenu à son point de départ
+- OK : le projet d'avant le mixer, à l'octet près
+- capture : `69-tout-défaire-au-Ctrl+Z-dans-l'ordre-inverse.png`
+
+## 70. la barre de titre remplace celle du système
 - OK : plus de barre de titre Windows
 - OK : la barre de DAW IA est affichée
 - OK : elle porte le nom du projet : « verif »
@@ -337,28 +438,28 @@
 - OK : le bouton Beatmaker, allumé
 - OK : Fichier, quatre workspaces, réduire, agrandir, fermer
 - OK : le transport ne porte plus les workspaces
-- capture : `56-la-barre-de-titre-remplace-celle-du-système.png`
+- capture : `70-la-barre-de-titre-remplace-celle-du-système.png`
 
-## 57. Ctrl+S enregistre
+## 71. Ctrl+S enregistre
 - OK : la barre dit « enregistré »
-- capture : `57-Ctrl+S-enregistre.png`
+- capture : `71-Ctrl+S-enregistre.png`
 
-## 58. double-clic sur la barre : agrandir, puis rendre sa taille
+## 72. double-clic sur la barre : agrandir, puis rendre sa taille
 - OK : la fenêtre est agrandie
-- capture : `58-double-clic-sur-la-barre--agrandir-puis-rendre-sa-taille.png`
+- capture : `72-double-clic-sur-la-barre--agrandir-puis-rendre-sa-taille.png`
 
-## 59. le second double-clic rend la taille d'avant
+## 73. le second double-clic rend la taille d'avant
 - OK : elle ne l'est plus
 - OK : et elle a repris sa place
-- capture : `59-le-second-double-clic-rend-la-taille-d'avant.png`
+- capture : `73-le-second-double-clic-rend-la-taille-d'avant.png`
 
-## 60. les workspaces se changent depuis la barre
+## 74. les workspaces se changent depuis la barre
 - OK : les deux boutons existent
-- capture : `60-les-workspaces-se-changent-depuis-la-barre.png`
+- capture : `74-les-workspaces-se-changent-depuis-la-barre.png`
 
-## 61. Découverte est affiché, puis retour au beatmaker
+## 75. Découverte est affiché, puis retour au beatmaker
 - OK : Découverte est allumé
-- capture : `61-Découverte-est-affiché-puis-retour-au-beatmaker.png`
+- capture : `75-Découverte-est-affiché-puis-retour-au-beatmaker.png`
 
 ## Résultat
-- 142 vérifications passées, 0 en échec
+- 179 vérifications passées, 0 en échec

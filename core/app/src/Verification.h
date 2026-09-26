@@ -132,6 +132,16 @@ private:
     // clip on a companion track is the one that has something to measure.
     void addMeterSteps();
 
+    // The mixer: F10, a bus, a route, a fader, a solo while playing, the
+    // readiness check, and all of it undone.
+    void addMixerSteps();
+
+    // Ctrl + click, Ctrl+C, Ctrl+V, Ctrl+B in the piano roll and the rack.
+    void addClipboardSteps();
+    [[nodiscard]] juce::Point<int> rackChannel(int row) const;
+    [[nodiscard]] juce::Component* mixerStrip(const domain::TrackId& id) const;
+    [[nodiscard]] double renderedMasterPeakDb(const std::string& name);
+
     // The playlist on a song longer than the screen: scroll, zoom, follow.
     void addPlaylistViewSteps();
 

@@ -87,6 +87,7 @@ public:
     [[nodiscard]] const std::vector<Line>& transcript() const override;
     void ask(std::string_view request) override;
     void restart() override;
+    [[nodiscard]] std::vector<std::string> capabilities() const override;
 
 private:
     // --- the socket thread

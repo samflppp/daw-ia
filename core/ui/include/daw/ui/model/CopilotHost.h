@@ -83,6 +83,11 @@ public:
     // Starts the process again after it died. The panel offers it; it never
     // does it on its own behind a click the user did not make.
     virtual void restart() = 0;
+
+    // Everything the copilot can reach: the command types it may ask for and
+    // the methods the application answers it. What the "Mixer par l'IA" check
+    // is run against.
+    [[nodiscard]] virtual std::vector<std::string> capabilities() const = 0;
 };
 
 } // namespace daw::ui

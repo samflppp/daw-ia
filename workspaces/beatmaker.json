@@ -12,6 +12,7 @@
     "channel_rack",
     "piano_roll",
     "plugin_chain",
+    "mixer",
     "history",
     "copilot"
   ],
@@ -68,6 +69,16 @@
         "y": 0.1,
         "width": 0.3,
         "height": 0.6
+      },
+      {
+        "panel": "mixer",
+        "title": "Mixer",
+        "shortcut": "F10",
+        "open": false,
+        "x": 0.05,
+        "y": 0.3,
+        "width": 0.9,
+        "height": 0.7
       },
       {
         "panel": "tracks",
