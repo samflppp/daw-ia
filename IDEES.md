@@ -59,3 +59,35 @@ message. Un appel au modèle distant par frappe de clavier serait trop lent et t
 
 Chiffres issus d'un blog commercial (vendeur de NAS) reprenant la documentation du projet Laya. À
 revérifier sur le dépôt Hugging Face avant tout engagement.
+
+## À trancher fin S14 — la stratégie du moteur génératif
+
+Décision reportée volontairement jusqu'à ce que la S14 dise jusqu'où vont des règles et un Markov
+sur le corpus personnel.
+
+Écarté d'emblée : la génération audio (Suno, Udio, Stability). Elle produit du fini, pas de la
+matière éditable — ni BPM exact, ni grille, ni stems, ni notes déplaçables. Incompatible avec la
+promesse de contrôle chirurgical.
+
+Symbolique open-source : peu de choses utilisables en produit. Magenta à l'abandon ; les
+transformers symboliques (Music Transformer, anticipatory, MMM) sont des travaux de recherche —
+poids disponibles, qualité inégale, licences à vérifier une par une. Point de départ pour un
+fine-tune, pas un produit.
+
+Les quatre voies :
+
+| Voie | Coût | Valeur devant un comité |
+|---|---|---|
+| Règles + Markov (S14) | déjà payé | faible seul, mais c'est la base de justesse |
+| LLM distant qui écrit du MIDI sous contraintes | quasi nul | marche demain, mais c'est l'API d'un autre |
+| Transformer open-source fine-tuné sur le corpus perso | quelques centaines d'euros de GPU, 3-4 semaines | le plus fort : modèle spécialisé, corpus propriétaire |
+| Modèle from scratch | des mois | aucun intérêt à cette échelle |
+
+Lecture retenue : l'avantage n'est ni le modèle ni l'algorithme, c'est huit ans de production dans
+un genre précis avec des placements pour preuve. La vraie architecture n'est pas de choisir une
+voie mais de les empiler — règles pour la justesse, modèle pour le style, LLM distant pour
+comprendre l'intention en français. La couche de contrainte, qui est notre code, garantit le
+résultat.
+
+PRÉALABLE JURIDIQUE, hors du dépôt : vérifier ce que le contrat d'édition dit de l'exploitation
+dérivée des compositions. Entraîner un modèle commercial sur des œuvres éditées n'est pas neutre.
