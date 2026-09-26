@@ -1,0 +1,271 @@
+#include "EngineTestSupport.h"
+#include "daw/domain/generation/Harmony.h"
+#include "daw/ui/model/GhostProposal.h"
+
+#include <tracktion_engine/utilities/tracktion_TestUtilities.h>
+
+#include <algorithm>
+#include <cmath>
+#include <memory>
+#include <set>
+#include <string>
+#include <vector>
+
+#include <doctest/doctest.h>
+
+using namespace daw::domain;
+using namespace daw::domain::generation;
+using daw::testing::EngineHarness;
+using daw::ui::GhostProposal;
+
+// The proof of S14 is a render, not a state. The notes a proposal writes are
+// played by the 4OSC fallback, rendered offline, and listened to: where each
+// attack starts, and which pitch each note sounds at, measured on the audio.
+// A pitch outside the key fails the test; it is not a warning.
+
+namespace
+{
+
+constexpr double beatsPerMinute = 120.0;
+constexpr double secondsPerStep = 60.0 / beatsPerMinute * stepBeats;
+
+// YIN (de Cheveigné and Kawahara, 2002), the plain version: the fundamental
+// of a monophonic window, in Hz, or 0 when nothing periodic is there.
+double yin(const float* samples, int count, double sampleRate, double lowest, double highest)
+{
+    const auto tauMin = std::max(2, static_cast<int>(sampleRate / highest));
+    const auto tauMax = std::min(count / 2, static_cast<int>(sampleRate / lowest));
+    const auto width = count - tauMax;
+    if (tauMax <= tauMin + 2 || width <= 0)
+        return 0.0;
+
+    std::vector<double> difference(static_cast<std::size_t>(tauMax + 1), 0.0);
+    for (int tau = 1; tau <= tauMax; ++tau)
+    {
+        double sum = 0.0;
+        for (int j = 0; j < width; ++j)
+        {
+            const auto delta = static_cast<double>(samples[j]) - static_cast<double>(samples[j + tau]);
+            sum += delta * delta;
+        }
+        difference[static_cast<std::size_t>(tau)] = sum;
+    }
+
+    std::vector<double> normalised(difference.size(), 1.0);
+    double running = 0.0;
+    for (int tau = 1; tau <= tauMax; ++tau)
+    {
+        running += difference[static_cast<std::size_t>(tau)];
+        normalised[static_cast<std::size_t>(tau)] =
+            running > 0.0 ? difference[static_cast<std::size_t>(tau)] * tau / running : 1.0;
+    }
+
+    auto best = -1;
+    for (int tau = tauMin; tau < tauMax; ++tau)
+    {
+        if (normalised[static_cast<std::size_t>(tau)] < 0.15)
+        {
+            while (tau + 1 < tauMax &&
+                   normalised[static_cast<std::size_t>(tau + 1)] < normalised[static_cast<std::size_t>(tau)])
+                ++tau;
+            best = tau;
+            break;
+        }
+    }
+    if (best < 0)
+        return 0.0;
+
+    // A parabola through the minimum and its neighbours, for a period finer
+    // than a sample.
+    const auto a = normalised[static_cast<std::size_t>(best - 1)];
+    const auto b = normalised[static_cast<std::size_t>(best)];
+    const auto c = normalised[static_cast<std::size_t>(best + 1)];
+    const auto shift = (a - c) / (2.0 * (a - 2.0 * b + c));
+    const auto period = static_cast<double>(best) + (std::isfinite(shift) ? shift : 0.0);
+    return sampleRate / period;
+}
+
+int midiOf(double hertz)
+{
+    return static_cast<int>(std::lround(69.0 + 12.0 * std::log2(hertz / 440.0)));
+}
+
+struct Heard
+{
+    std::vector<int> onsets;  // in sixteenths
+    std::vector<int> pitches; // one per written note, measured; -1 when none
+};
+
+// Onsets on the sixteenth grid, the way the verification listens since S5: a
+// window much louder than the one before it. Then, for each written note, the
+// pitch of the audio in its first sixteenth, skipping the attack.
+Heard listen(tracktion::Edit& edit, const std::vector<Note>& written)
+{
+    const auto rendered = tracktion::test_utilities::renderToAudioBuffer(edit);
+    Heard heard{};
+    REQUIRE(rendered.sampleRate > 0.0);
+
+    const auto& audio = rendered.buffer;
+    const auto samplesPerStep = static_cast<int>(std::lround(secondsPerStep * rendered.sampleRate));
+    const auto steps = audio.getNumSamples() / samplesPerStep;
+
+    // Per sixteenth: its level, and the pitch it sounds at past its first
+    // few milliseconds. A change of pitch class counts, an octave jump does
+    // not (see below).
+    const auto skip = static_cast<int>(0.012 * rendered.sampleRate);
+    std::vector<float> levels;
+    std::vector<int> stepPitches;
+    for (int step = 0; step < steps; ++step)
+    {
+        levels.push_back(audio.getRMSLevel(0, step * samplesPerStep, samplesPerStep));
+        const auto hertz = yin(audio.getReadPointer(0, step * samplesPerStep + skip),
+                               samplesPerStep - skip,
+                               rendered.sampleRate,
+                               30.0,
+                               1500.0);
+        stepPitches.push_back(hertz > 0.0 ? midiOf(hertz) : -1);
+    }
+
+    // An attack is a sixteenth much louder than the one before it, or a
+    // sounding sixteenth at another pitch than the one before it: 4OSC holds
+    // its level from one legato note to the next, and only the pitch says a
+    // new one began.
+    const auto loudest = levels.empty() ? 0.0f : *std::max_element(levels.begin(), levels.end());
+    for (std::size_t step = 0; step < levels.size(); ++step)
+    {
+        const auto before = step == 0 ? 0.0f : levels[step - 1];
+        const auto sounding = levels[step] > loudest * 0.05f;
+        const auto louder = levels[step] > before * 1.25f;
+        const auto moved = step > 0 && stepPitches[step] >= 0 && stepPitches[step - 1] >= 0 &&
+                           stepPitches[step] % 12 != stepPitches[step - 1] % 12;
+        if (sounding && (louder || moved))
+            heard.onsets.push_back(static_cast<int>(step));
+    }
+
+    for (const auto& note : written)
+    {
+        const auto start =
+            static_cast<int>(std::lround(note.startBeats * 60.0 / beatsPerMinute * rendered.sampleRate));
+        const auto length =
+            std::min(static_cast<int>(note.lengthBeats * 60.0 / beatsPerMinute * rendered.sampleRate),
+                     static_cast<int>(0.12 * rendered.sampleRate)) -
+            skip;
+        if (length <= 0 || start + skip + length > audio.getNumSamples())
+        {
+            heard.pitches.push_back(-1);
+            continue;
+        }
+
+        const auto hertz =
+            yin(audio.getReadPointer(0, start + skip), length, rendered.sampleRate, 30.0, 1500.0);
+        heard.pitches.push_back(hertz > 0.0 ? midiOf(hertz) : -1);
+    }
+    return heard;
+}
+
+// A proposal accepted the way Tab accepts it, and what it wrote, in time order.
+std::vector<Note> acceptInto(EngineHarness& harness, ClipId row, const char* text, int variant)
+{
+    // The proposal keeps a reference to its model: it has to outlive it.
+    static const auto model = StyleModel::fallback();
+    auto opened = GhostProposal::open(harness.state,
+                                      ProjectState::patternIdForClip(row),
+                                      harness.trackId,
+                                      0.0,
+                                      16.0,
+                                      LocalInterpreter::parse(text),
+                                      model);
+    REQUIRE(opened.ok());
+    auto proposal = std::move(opened).value();
+    static_cast<void>(proposal.shift(variant));
+
+    auto acceptance = proposal.accept(harness.state, row);
+    REQUIRE(harness.bus.executeGroup(std::move(acceptance.commands), acceptance.group).ok());
+
+    auto notes = harness.state.findClip(row)->notes;
+    std::sort(
+        notes.begin(), notes.end(), [](const Note& a, const Note& b) { return a.startBeats < b.startBeats; });
+    return notes;
+}
+
+void provePlayed(const char* text, Key key, int variant)
+{
+    EngineHarness harness;
+    const auto row = ClipId::generate();
+    REQUIRE(harness.bus.execute(harness.createClip(row, 0.0, 16.0)).ok());
+
+    const auto written = acceptInto(harness, row, text, variant);
+    REQUIRE_FALSE(written.empty());
+    const auto heard = listen(harness.host.edit(), written);
+
+    // Where the attacks are.
+    std::set<int> starts;
+    for (const auto& note : written)
+        starts.insert(static_cast<int>(std::lround(note.startBeats / stepBeats)));
+
+    std::string onsetText;
+    int offNote = 0;
+    for (const auto onset : heard.onsets)
+    {
+        onsetText += std::to_string(onset) + " ";
+        if (starts.count(onset) == 0)
+            ++offNote;
+    }
+    MESSAGE(std::string{text} << ", variant " << variant << ": " << written.size()
+                              << " notes, onsets heard at " << onsetText);
+
+    CHECK(offNote == 0); // no attack where no note starts
+
+    // Every start that can be heard is heard. The one that cannot: a note
+    // tied to the one before it, at the same pitch class, since 4OSC then
+    // neither rises nor changes pitch.
+    std::set<int> audible;
+    for (std::size_t i = 0; i < written.size(); ++i)
+    {
+        const auto tied =
+            i > 0 && written[i - 1].pitch % 12 == written[i].pitch % 12 &&
+            written[i - 1].startBeats + written[i - 1].lengthBeats >= written[i].startBeats - 1e-6;
+        if (!tied)
+            audible.insert(static_cast<int>(std::lround(written[i].startBeats / stepBeats)));
+    }
+    int missed = 0;
+    for (const auto start : audible)
+    {
+        if (std::find(heard.onsets.begin(), heard.onsets.end(), start) == heard.onsets.end())
+            ++missed;
+    }
+    MESSAGE(audible.size() << " audible starts, " << missed << " missed");
+    CHECK(missed == 0);
+
+    // What each note sounds at.
+    std::size_t measured = 0;
+    for (std::size_t i = 0; i < written.size(); ++i)
+    {
+        CHECK(inScale(written[i].pitch, key));
+        if (heard.pitches[i] < 0)
+            continue;
+        ++measured;
+        CHECK(inScale(heard.pitches[i], key)); // out of the key is a failure, not a warning
+        // The class exactly; the octave within one. Under 100 Hz YIN can lock
+        // on twice the period of 4OSC's wave, which is a fact about the
+        // detector, not about the note: the class is what the key judges.
+        CHECK(heard.pitches[i] % 12 == written[i].pitch % 12);
+        CHECK(std::abs(heard.pitches[i] - written[i].pitch) <= 12);
+    }
+    MESSAGE(measured << " of " << written.size() << " pitches measured");
+    CHECK(measured * 10 >= written.size() * 9);
+}
+
+} // namespace
+
+TEST_CASE("A generated melody sounds at its attacks and at its pitches, all in the key")
+{
+    for (int variant = 0; variant < 3; ++variant)
+        provePlayed("Am mélodie", Key{9, Mode::minor}, variant);
+}
+
+TEST_CASE("A generated bass sounds at its attacks and at its pitches, all in the key")
+{
+    for (int variant = 0; variant < 2; ++variant)
+        provePlayed("F#m basse croches", Key{6, Mode::minor}, variant);
+}

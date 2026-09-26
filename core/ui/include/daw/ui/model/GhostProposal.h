@@ -38,6 +38,16 @@ public:
                                                             domain::generation::Interpretation interpretation,
                                                             const domain::generation::StyleModel& model);
 
+    // The proposal keeps the model by reference: a temporary would be gone
+    // before the first variant is drawn.
+    static domain::Result<GhostProposal> open(const domain::ProjectState&,
+                                              domain::PatternId,
+                                              domain::TrackId,
+                                              double,
+                                              double,
+                                              domain::generation::Interpretation,
+                                              const domain::generation::StyleModel&&) = delete;
+
     // The variant on screen. Drawn on first use.
     [[nodiscard]] const std::vector<domain::generation::GhostNote>& notes();
 

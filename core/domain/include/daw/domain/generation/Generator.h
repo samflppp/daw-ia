@@ -80,6 +80,7 @@ public:
     static constexpr int maxVariants = 16;
 
     Variants(Context context, ResolvedConstraints constraints, const StyleModel& model);
+    Variants(Context, ResolvedConstraints, const StyleModel&&) = delete; // kept by reference
 
     // The variant at that rank, 0 first. Clamped to what could be drawn.
     [[nodiscard]] const std::vector<GhostNote>& at(int rank);
