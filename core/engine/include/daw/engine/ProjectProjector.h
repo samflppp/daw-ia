@@ -57,6 +57,12 @@ public:
     //     the way across.
     static constexpr tracktion::PanLaw panLaw = tracktion::PanLaw3dBCenter;
 
+    // The law of a bus and of the master: a balance, unity at the centre.
+    // Tracktion has no true balance law; the linear one is unity at the centre
+    // and doubles one side at either extreme (+6 dB). A bus is rarely panned
+    // hard, and the limit is written down in the S11 review.
+    static constexpr tracktion::PanLaw busPanLaw = tracktion::PanLawLinear;
+
     // The catalogue resolves a PluginRef into an installed plugin, and the store
     // holds the opaque states. Both are optional: a projection without them
     // still does tracks, clips, notes and volume, which is all a test that
@@ -123,9 +129,29 @@ private:
     [[nodiscard]] tracktion::AudioTrack* findTrack(const domain::TrackId& id, bool companion) const;
     [[nodiscard]] tracktion::AudioTrack* createTrackFor(const domain::TrackId& id, bool companion);
 
-    // Name, volume, pan law, pan and mute: written the same on a track and on
-    // its companion, so a recording and a pattern of one track mix as one.
+    // Name, volume, pan law and pan: written the same on a track and on its
+    // companion, so a recording and a pattern of one track mix as one.
     void applyMix(tracktion::AudioTrack& target, const domain::Track& source);
+
+    // Where the strip goes and what it is heard as: its mute, which is the
+    // domain's isAudible and not its own muted flag — a solo elsewhere can
+    // silence it —, its output, bus or master, and its sends, one AuxSend per
+    // bus, after the fader. Written on a track and on its companion alike.
+    void applyRoute(tracktion::AudioTrack& target, const domain::Track& source);
+
+    // What applyRoute depends on, beyond the strip itself: whether it is
+    // heard, and the aux number of every bus it reaches. A solo on another
+    // track, or a bus removed before this one, changes it.
+    [[nodiscard]] domain::Value routeValue(const domain::Track& source) const;
+
+    // The aux number of a bus: its rank among the buses, 0 to 31.
+    [[nodiscard]] int busNumber(const domain::TrackId& bus) const;
+
+    // A bus: a Tracktion track with no clip, an AuxReturn in front of its
+    // chain, then its inserts, its fader and its tap.
+    void reconcileBus(const domain::Track& bus,
+                      std::vector<std::pair<domain::TrackId, domain::Value>>& projected);
+    void ensureAuxReturn(tracktion::AudioTrack& track, int number);
 
     // The audio clips of a track, on its companion.
     void reconcileAudioTrack(tracktion::AudioTrack& companion, domain::TrackId trackId, bool retimed);
@@ -189,11 +215,15 @@ private:
     [[nodiscard]] domain::Value playedValue(domain::TrackId trackId) const;
 
     // --- plugins
-    void reconcilePlugins(tracktion::AudioTrack& target, const domain::Track& source);
-    [[nodiscard]] static tracktion::Plugin* findPlugin(tracktion::AudioTrack& track,
+    //
+    // A chain is a PluginList, on a track or on the master. The domain's
+    // inserts go after `offset` plugins of the projection's own that lead the
+    // chain: the fallback synth, a sampler, an AuxReturn.
+    void reconcilePlugins(tracktion::PluginList& list, const domain::Track& source, int offset);
+    [[nodiscard]] static tracktion::Plugin* findPlugin(tracktion::PluginList& list,
                                                        const domain::PluginId& id);
     [[nodiscard]] tracktion::Plugin::Ptr createPluginFor(const domain::PluginInstance& source);
-    static void removeUnknownPlugins(tracktion::AudioTrack& track, const domain::Track& source);
+    static void removeUnknownPlugins(tracktion::PluginList& list, const domain::Track& source);
     void applyPluginState(tracktion::Plugin& target, const domain::PluginInstance& source);
     static void applyPluginParameters(tracktion::Plugin& target, const domain::PluginInstance& source);
     [[nodiscard]] bool isInstrument(const domain::PluginRef& ref) const;
@@ -229,6 +259,9 @@ private:
 
     domain::Value projectedLoop_;
     Stats stats_;
+
+    // The master's last projected form, like a track's.
+    domain::Value projectedMaster_;
 
     // Last projected tempo sequence. Rebuilding it costs little, but rebuilding
     // it for nothing would drag every clip of the Edit with it.

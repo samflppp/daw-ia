@@ -43,6 +43,15 @@ const juce::Identifier domainSampleProperty{"dawDomainSample"};
 const juce::Identifier domainRoleProperty{"dawDomainRole"};
 const juce::String audioRole{"audio"};
 
+// A send is bound by the bus it goes to, the way the domain keys it: an
+// AuxSend carries that bus's identifier.
+const juce::Identifier domainSendBusProperty{"dawDomainSendBus"};
+
+// The master's fader: our own VolumeAndPan in the master chain, in front of
+// the master's tap, so that the master meter reads what leaves the Edit.
+// Tracktion's master volume stays at unity behind it.
+const juce::Identifier masterFaderProperty{"dawMasterFader"};
+
 // The note that plays a sample at its own pitch. A lit cell plays the channel
 // pitch, which is middle C unless the user changed it — so a drum sample
 // dropped on the rack sounds as it was recorded.
@@ -194,31 +203,184 @@ void ProjectProjector::applyMix(tracktion::AudioTrack& target, const domain::Tra
         // The law is written before the position, and on every projection: an
         // Edit built elsewhere, or a Tracktion default moved by another part of
         // the process, would otherwise decide the stereo image of this project.
-        volume->setPanLaw(panLaw);
+        //
+        // A channel places a source: constant power, -3 dB at the centre. A bus
+        // carries a stereo mix already placed: its pan is a balance, unity at
+        // the centre — the constant-power law there would take 3 dB off every
+        // signal going through, once per bus, which the S11 render measured.
+        volume->setPanLaw(state_.isBus(source.id) ? busPanLaw : panLaw);
         volume->setPan(static_cast<float>(source.pan));
     }
+}
 
+int ProjectProjector::busNumber(const domain::TrackId& bus) const
+{
+    const auto index = state_.busIndex(bus);
+    return index ? static_cast<int>(index.value()) : -1;
+}
+
+domain::Value ProjectProjector::routeValue(const domain::Track& source) const
+{
+    domain::Value::Array sends;
+    for (const auto& send : source.sends)
+    {
+        sends.push_back(domain::Value::object(
+            {{"bus", domain::Value{send.bus.toString()}},
+             {"levelDb", domain::Value{send.levelDb}},
+             {"number", domain::Value{static_cast<std::int64_t>(busNumber(send.bus))}}}));
+    }
+
+    return domain::Value::object(
+        {{"audible", domain::Value{state_.isAudible(source.id)}},
+         {"output", domain::Value{source.output.toString()}},
+         {"sends", domain::Value::array(std::move(sends))},
+         {"number",
+          domain::Value{static_cast<std::int64_t>(state_.isBus(source.id) ? busNumber(source.id) : -1)}}});
+}
+
+void ProjectProjector::applyRoute(tracktion::AudioTrack& target, const domain::Track& source)
+{
     // Tracktion's own mute, not a volume of -100 dB: it silences the clips and
     // the instrument that plays them, and it leaves the fader alone, so
-    // unmuting gives the track back exactly where the user left it.
-    target.setMute(source.muted);
+    // unmuting gives the track back exactly where the user left it. What it
+    // is given is whether the strip is heard, mute and solo together.
+    target.setMute(!state_.isAudible(source.id));
+
+    // The output: a bus, or the default device, which is the master.
+    auto* destination = source.output.isNil() ? nullptr : findTrack(source.output, false);
+    if (destination != nullptr)
+    {
+        if (!target.getOutput().outputsToDestTrack(*destination))
+            target.getOutput().setOutputToTrack(destination);
+    }
+    else if (!target.getOutput().usesDefaultAudioOut())
+    {
+        target.getOutput().setOutputToDefaultDevice(false);
+    }
+
+    // The sends: one AuxSend per bus, bound by the bus's identifier, placed
+    // right after the fader so that they are post-fader.
+    for (auto* aux : target.pluginList.getPluginsOfType<tracktion::AuxSendPlugin>())
+    {
+        if (aux == nullptr)
+            continue;
+        const auto bus = aux->state.getProperty(domainSendBusProperty).toString();
+        const bool kept =
+            std::any_of(source.sends.begin(),
+                        source.sends.end(),
+                        [&bus](const domain::Send& send) { return toJuce(send.bus.toString()) == bus; });
+        if (!kept)
+            aux->deleteFromParent();
+    }
+
+    for (const auto& send : source.sends)
+    {
+        const auto number = busNumber(send.bus);
+        if (number < 0)
+            continue;
+
+        tracktion::AuxSendPlugin* aux = nullptr;
+        for (auto* candidate : target.pluginList.getPluginsOfType<tracktion::AuxSendPlugin>())
+        {
+            if (candidate != nullptr &&
+                candidate->state.getProperty(domainSendBusProperty).toString() == toJuce(send.bus.toString()))
+                aux = candidate;
+        }
+
+        if (aux == nullptr)
+        {
+            auto created = edit_.getPluginCache().createNewPlugin(tracktion::AuxSendPlugin::create());
+            aux = dynamic_cast<tracktion::AuxSendPlugin*>(created.get());
+            if (aux == nullptr)
+                continue;
+
+            aux->state.setProperty(domainSendBusProperty, toJuce(send.bus.toString()), nullptr);
+            const auto plugins = target.pluginList.getPlugins();
+            auto* fader = target.getVolumePlugin();
+            const auto after = fader != nullptr ? plugins.indexOf(fader) + 1 : plugins.size();
+            target.pluginList.insertPlugin(created, after, nullptr);
+        }
+
+        if (aux->busNumber.get() != number)
+            aux->busNumber = number;
+        if (!juce::approximatelyEqual(aux->getGainDb(), static_cast<float>(send.levelDb)))
+            aux->setGainDb(static_cast<float>(send.levelDb));
+    }
+}
+
+void ProjectProjector::ensureAuxReturn(tracktion::AudioTrack& track, int number)
+{
+    const auto returns = track.pluginList.getPluginsOfType<tracktion::AuxReturnPlugin>();
+    if (returns.size() == 1 && returns.getFirst() != nullptr &&
+        track.pluginList.getPlugins().getFirst() == returns.getFirst())
+    {
+        if (returns.getFirst()->busNumber.get() != number)
+            returns.getFirst()->busNumber = number;
+        return;
+    }
+
+    for (auto* existing : returns)
+    {
+        if (existing != nullptr)
+            existing->deleteFromParent();
+    }
+
+    auto created = edit_.getPluginCache().createNewPlugin(tracktion::AuxReturnPlugin::xmlTypeName, {});
+    if (auto* aux = dynamic_cast<tracktion::AuxReturnPlugin*>(created.get()); aux != nullptr)
+    {
+        aux->busNumber = number;
+        track.pluginList.insertPlugin(created, 0, nullptr);
+    }
+}
+
+void ProjectProjector::reconcileBus(const domain::Track& bus,
+                                    std::vector<std::pair<domain::TrackId, domain::Value>>& projected)
+{
+    auto* target = findTrack(bus.id, false);
+    if (target == nullptr)
+        target = createTrackFor(bus.id, false);
+    if (target == nullptr)
+        return;
+
+    const auto snapshot = domain::Value::object({{"track", bus.toValue()}, {"route", routeValue(bus)}});
+    const auto previous = std::find_if(
+        projected_.begin(), projected_.end(), [&bus](const auto& entry) { return entry.first == bus.id; });
+    const bool isNew = previous == projected_.end();
+    const auto partChanged = [&](std::string_view part)
+    {
+        const auto* before = isNew ? nullptr : previous->second.find(part);
+        const auto* now = snapshot.find(part);
+        return before == nullptr || now == nullptr || !(*before == *now);
+    };
+
+    const bool routeChanged = partChanged("route");
+    if (partChanged("track") || routeChanged)
+    {
+        applyMix(*target, bus);
+        ensureAuxReturn(*target, busNumber(bus.id));
+        reconcilePlugins(target->pluginList, bus, 1);
+        applyRoute(*target, bus);
+    }
+
+    ensureMeterTap(target->pluginList, toJuce(bus.id.toString()), state_.isAudible(bus.id));
+    projected.emplace_back(bus.id, snapshot);
 }
 
 void ProjectProjector::removeUnknownTracks()
 {
     // Any audio track without a known domain identifier is removed, including
     // the one Tracktion creates with a new Edit. The domain decides what
-    // exists; the Edit never keeps a track of its own.
+    // exists; the Edit never keeps a track of its own. A bus is known too.
     for (auto* track : tracktion::getAudioTracks(edit_))
     {
         if (track == nullptr)
             continue;
 
         const auto marker = track->state.getProperty(domainTrackIdProperty).toString();
-        const bool known = std::any_of(state_.tracks().begin(),
-                                       state_.tracks().end(),
-                                       [&marker](const domain::Track& source)
-                                       { return toJuce(source.id.toString()) == marker; });
+        const auto matches = [&marker](const domain::Track& source)
+        { return toJuce(source.id.toString()) == marker; };
+        const bool known = std::any_of(state_.tracks().begin(), state_.tracks().end(), matches) ||
+                           std::any_of(state_.buses().begin(), state_.buses().end(), matches);
         if (!known)
             edit_.deleteTrack(track);
     }
@@ -226,6 +388,53 @@ void ProjectProjector::removeUnknownTracks()
 
 void ProjectProjector::reconcileMaster()
 {
+    const auto& master = state_.master();
+    auto& list = edit_.getMasterPluginList();
+
+    // Our fader, created once, kept in front of the tap.
+    tracktion::VolumeAndPanPlugin* fader = nullptr;
+    for (auto* candidate : list.getPluginsOfType<tracktion::VolumeAndPanPlugin>())
+    {
+        if (candidate != nullptr && candidate->state.hasProperty(masterFaderProperty))
+            fader = candidate;
+    }
+    if (fader == nullptr)
+    {
+        auto created = edit_.getPluginCache().createNewPlugin(tracktion::VolumeAndPanPlugin::create());
+        fader = dynamic_cast<tracktion::VolumeAndPanPlugin*>(created.get());
+        if (fader != nullptr)
+        {
+            fader->state.setProperty(masterFaderProperty, true, nullptr);
+            list.insertPlugin(created, -1, nullptr);
+        }
+    }
+
+    const auto snapshot = master.toValue();
+    if (!(snapshot == projectedMaster_))
+    {
+        reconcilePlugins(list, master, 0);
+
+        if (fader != nullptr)
+        {
+            // The fader after the inserts: a limiter on the master sees the
+            // mix, and the fader sets what leaves it.
+            const auto plugins = list.getPlugins();
+            if (plugins.indexOf(fader) != static_cast<int>(master.plugins.size()))
+            {
+                const tracktion::Plugin::Ptr keep{fader};
+                fader->removeFromParent();
+                list.insertPlugin(keep, static_cast<int>(master.plugins.size()), nullptr);
+            }
+
+            // A master pan is a balance: unity at the centre, the linear law.
+            fader->setPanLaw(busPanLaw);
+            fader->setPan(static_cast<float>(master.pan));
+            fader->setVolumeDb(master.muted ? static_cast<float>(domain::ProjectState::minVolumeDb)
+                                            : static_cast<float>(master.volumeDb));
+        }
+        projectedMaster_ = snapshot;
+    }
+
     if (auto volume = edit_.getMasterVolumePlugin(); volume != nullptr)
     {
         if (volume->getVolumeDb() != 0.0f)
@@ -239,10 +448,9 @@ void ProjectProjector::reconcileMaster()
             volume->setPan(0.0f);
     }
 
-    // The master measures what leaves the Edit. Its list is before Tracktion's
-    // master volume, which stays at unity: the day the domain has a master
-    // fader, it goes in front of this tap, not behind it.
-    ensureMeterTap(edit_.getMasterPluginList(), MeterTapPlugin::masterStrip, true);
+    // The master measures what leaves the Edit: after its inserts and its
+    // fader, before Tracktion's master volume, which stays at unity.
+    ensureMeterTap(list, MeterTapPlugin::masterStrip, !master.muted);
 }
 
 void ProjectProjector::ensureMeterTap(tracktion::PluginList& list, const juce::String& strip, bool audible)
@@ -398,11 +606,11 @@ bool ProjectProjector::hasDomainInstrument(const domain::Track& source) const
                        [this](const domain::PluginInstance& plugin) { return isInstrument(plugin.ref); });
 }
 
-tracktion::Plugin* ProjectProjector::findPlugin(tracktion::AudioTrack& track, const domain::PluginId& id)
+tracktion::Plugin* ProjectProjector::findPlugin(tracktion::PluginList& list, const domain::PluginId& id)
 {
     const auto wanted = toJuce(id.toString());
 
-    for (auto plugin : track.pluginList.getPlugins())
+    for (auto plugin : list.getPlugins())
     {
         if (plugin != nullptr && plugin->state.getProperty(domainPluginIdProperty).toString() == wanted)
             return plugin;
@@ -436,9 +644,9 @@ tracktion::Plugin::Ptr ProjectProjector::createPluginFor(const domain::PluginIns
     return plugin;
 }
 
-void ProjectProjector::removeUnknownPlugins(tracktion::AudioTrack& track, const domain::Track& source)
+void ProjectProjector::removeUnknownPlugins(tracktion::PluginList& list, const domain::Track& source)
 {
-    for (auto plugin : track.pluginList.getPlugins())
+    for (auto plugin : list.getPlugins())
     {
         if (plugin == nullptr)
             continue;
@@ -517,26 +725,22 @@ void ProjectProjector::applyPluginParameters(tracktion::Plugin& target, const do
     }
 }
 
-void ProjectProjector::reconcilePlugins(tracktion::AudioTrack& target, const domain::Track& source)
+void ProjectProjector::reconcilePlugins(tracktion::PluginList& list, const domain::Track& source, int offset)
 {
-    removeUnknownPlugins(target, source);
-
-    // The fallback synth, when there is one, stays in front of the chain: the
-    // user's own plugins are placed after it, in the order the domain gives.
-    const auto offset = target.pluginList.getPluginsOfType<tracktion::FourOscPlugin>().size();
+    removeUnknownPlugins(list, source);
 
     for (std::size_t index = 0; index < source.plugins.size(); ++index)
     {
         const auto& instance = source.plugins[index];
 
-        auto* plugin = findPlugin(target, instance.id);
+        auto* plugin = findPlugin(list, instance.id);
         if (plugin == nullptr)
         {
             auto created = createPluginFor(instance);
             if (created == nullptr)
                 continue;
 
-            target.pluginList.insertPlugin(created, offset + static_cast<int>(index), nullptr);
+            list.insertPlugin(created, offset + static_cast<int>(index), nullptr);
             plugin = created.get();
         }
 
@@ -971,7 +1175,11 @@ void ProjectProjector::reconcile()
     removeUnknownTracks();
 
     std::vector<std::pair<domain::TrackId, domain::Value>> stillProjected;
-    stillProjected.reserve(state_.tracks().size());
+    stillProjected.reserve(state_.tracks().size() + state_.buses().size());
+
+    // The buses first: a channel routed into a bus needs the bus to be there.
+    for (const auto& bus : state_.buses())
+        reconcileBus(bus, stillProjected);
 
     for (const auto& source : state_.tracks())
     {
@@ -985,8 +1193,8 @@ void ProjectProjector::reconcile()
         // property of the track any more — the notes live in the patterns —
         // so a snapshot made of the track alone would miss every edit made to
         // a pattern and leave the Edit silent.
-        const auto snapshot =
-            domain::Value::object({{"track", source.toValue()}, {"played", playedValue(source.id)}});
+        const auto snapshot = domain::Value::object(
+            {{"track", source.toValue()}, {"played", playedValue(source.id)}, {"route", routeValue(source)}});
 
         const auto previous = std::find_if(projected_.begin(),
                                            projected_.end(),
@@ -1002,15 +1210,23 @@ void ProjectProjector::reconcile()
 
         const bool trackChanged = partChanged("track");
         const bool playedChanged = partChanged("played");
+        const bool routeChanged = partChanged("route");
 
         if (trackChanged)
         {
             applyMix(*target, source);
             ensureInstrument(*target, source);
-            reconcilePlugins(*target, source);
-        }
 
-        ensureMeterTap(target->pluginList, toJuce(source.id.toString()), !source.muted);
+            // The fallback synth, when there is one, stays in front of the
+            // chain: the user's own plugins are placed after it.
+            reconcilePlugins(target->pluginList,
+                             source,
+                             target->pluginList.getPluginsOfType<tracktion::FourOscPlugin>().size());
+        }
+        if (trackChanged || routeChanged)
+            applyRoute(*target, source);
+
+        ensureMeterTap(target->pluginList, toJuce(source.id.toString()), state_.isAudible(source.id));
 
         // Clips are the expensive part, so they are looked at only when what
         // the track plays changed, or when the tempo moved the seconds under
@@ -1032,9 +1248,11 @@ void ProjectProjector::reconcile()
         {
             if (trackChanged || needsCompanion)
                 applyMix(*companion, source);
+            if (trackChanged || routeChanged || needsCompanion)
+                applyRoute(*companion, source);
             if (playedChanged || retimed || needsCompanion)
                 reconcileAudioTrack(*companion, source.id, retimed);
-            ensureMeterTap(companion->pluginList, toJuce(source.id.toString()), !source.muted);
+            ensureMeterTap(companion->pluginList, toJuce(source.id.toString()), state_.isAudible(source.id));
         }
 
         stillProjected.emplace_back(source.id, snapshot);

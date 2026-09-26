@@ -19,6 +19,7 @@ target_sources(daw_engine_tests PRIVATE
     TempoProjectionTests.cpp
     PanProjectionTests.cpp
     MeterTests.cpp
+    MixProjectionTests.cpp
     SampleProjectionTests.cpp
     PluginHostingTests.cpp
     PluginPersistenceTests.cpp)
@@ -57,7 +58,7 @@ doctest_discover_tests(daw_engine_tests
 # library, loaded through the real CLAP entry point, produces sound in this
 # project. A commercial plugin proves that too, but it cannot be committed, it
 # is not installed on every machine, and many are silent until their own content
-# is loaded — which would make a failing test say nothing at all.
+# is loaded ??? which would make a failing test say nothing at all.
 # ---------------------------------------------------------------------------
 add_library(daw_test_clap MODULE clap_fixture/DawTestClapPlugin.cpp)
 set_target_properties(daw_test_clap PROPERTIES
