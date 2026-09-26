@@ -57,6 +57,13 @@ constexpr double pixelsPerVelocityStep = 1.5;
     }
 }
 
+// The range snaps to the nearest line, not the one before: a drag that stops
+// just short of bar three means bar three.
+[[nodiscard]] double snapped(double beats)
+{
+    return std::max(0.0, std::round(beats / gridStepBeats) * gridStepBeats);
+}
+
 [[nodiscard]] juce::String pitchName(int pitch)
 {
     return juce::String("C") + juce::String(pitch / semitonesPerOctave - 1);
@@ -96,6 +103,15 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
     };
     addAndMakeVisible(channelChooser_);
     rebuildChannelChooser();
+
+    // The generation field, hidden until Ctrl+G.
+    prompt_.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
+    prompt_.setTextToShowWhenEmpty(
+        juce::String::fromUTF8(u8"Am doubles dense grave basse — Entrée génère, Tab garde, Échap rejette"),
+        tokens_.colour("color.text.disabled"));
+    prompt_.setTabKeyUsedAsCharacter(false);
+    prompt_.onKey = [this](const juce::KeyPress& key) { return generationKey(key); };
+    addChildComponent(prompt_);
 
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
@@ -141,6 +157,8 @@ void PianoRollPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     // A note an undo took away is no longer picked: a pick left pointing at
     // nothing would still count, and the velocity lane would think two notes
     // are picked when none of those on screen is.
+    refreshProposal();
+
     picked_.erase(std::remove_if(picked_.begin(),
                                  picked_.end(),
                                  [edited](domain::NoteId id)
@@ -198,6 +216,25 @@ void PianoRollPanel::resized()
 
     // Smaller, the window may have lost the notes it showed.
     revealNotes();
+    placePrompt();
+}
+
+// Here and not with the rest of generation: placing a child is for the panel
+// file itself, as the hygiene rule 2 has it.
+void PianoRollPanel::placePrompt()
+{
+    if (!prompt_.isVisible())
+        return;
+
+    const auto grid = gridArea();
+    const auto width = std::min(tokens_.integer("metric.pianoRoll.promptWidth"), grid.getWidth());
+    const auto shown = shownRange();
+    const auto left = shown.has_value() ? xForBeat(shown->first) : grid.getX();
+
+    prompt_.setBounds(std::clamp(left, grid.getX(), std::max(grid.getX(), grid.getRight() - width)),
+                      grid.getY() + tokens_.integer("space.xs"),
+                      width,
+                      tokens_.integer("metric.pianoRoll.promptHeight"));
 }
 
 void PianoRollPanel::rebuildChannelChooser()
@@ -519,10 +556,13 @@ void PianoRollPanel::paint(juce::Graphics& g)
 
     paintGrid(g, area);
     paintNotes(g, area);
+    paintGhosts(g, area);
     paintKeyboard(g, keyboard);
     paintRuler(g, ruler);
+    paintRange(g, area);
     paintVelocityLane(g);
     paintPlayhead(g, area);
+    paintProposalLine(g);
 }
 
 void PianoRollPanel::paintEmpty(juce::Graphics& g) const
@@ -613,7 +653,11 @@ void PianoRollPanel::paintNotes(juce::Graphics& g, juce::Rectangle<int> area) co
         const auto amount = static_cast<float>(note.velocity - domain::Note::lowestVelocity) /
                             static_cast<float>(domain::Note::highestVelocity - domain::Note::lowestVelocity);
 
-        g.setColour(soft.interpolatedWith(full, amount));
+        // A note Tab would replace is drawn faded under the grey ones.
+        if (proposal_.has_value() && proposal_->replaces(note))
+            g.setColour(tokens_.colour("color.note.replaced"));
+        else
+            g.setColour(soft.interpolatedWith(full, amount));
         g.fillRoundedRectangle(bounds, radius);
 
         if (note.id == selectedNote_ || isPicked(note.id))
@@ -947,6 +991,19 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
     // anything else watching the bus.
     if (rulerArea().contains(event.getPosition()))
     {
+        // Shift picks the range generation writes into; a plain click moves
+        // the playhead, as it always has.
+        if (event.mods.isShiftDown() && patternLength() > 0.0)
+        {
+            const auto anchor =
+                std::min(snapped(beatAtX(event.getPosition().getX())), patternLength() - gridStepBeats);
+            rangeAnchor_ = anchor;
+            range_ = std::make_pair(anchor, anchor + gridStepBeats);
+            placePrompt();
+            repaint();
+            return;
+        }
+
         draggingPlayhead_ = true;
         movePlayheadTo(event.getPosition().getX());
         return;
@@ -1050,6 +1107,17 @@ void PianoRollPanel::mouseDrag(const juce::MouseEvent& event)
         const auto keyHeight = std::max(1, tokens_.integer("metric.pianoRoll.keyHeight"));
         topPitch_ = std::clamp(pan_->topPitch + delta.getY() / keyHeight, rowsVisible(), highestVisiblePitch);
         setView(pan_->firstBeat - static_cast<double>(delta.getX()) / beatWidth(), zoom_);
+        return;
+    }
+
+    if (rangeAnchor_.has_value())
+    {
+        const auto at = snapped(beatAtX(event.getPosition().getX()));
+        const auto from = std::min(*rangeAnchor_, at);
+        const auto to = std::max(*rangeAnchor_ + gridStepBeats, at);
+        range_ = std::make_pair(from, std::min(to, patternLength()));
+        placePrompt();
+        repaint();
         return;
     }
 
@@ -1163,6 +1231,7 @@ void PianoRollPanel::mouseUp(const juce::MouseEvent& event)
     juce::ignoreUnused(event);
 
     draggingPlayhead_ = false;
+    rangeAnchor_.reset();
 
     if (pan_.has_value())
     {
@@ -1214,6 +1283,15 @@ void PianoRollPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::M
 {
     const auto grid = gridArea();
 
+    // Alt + wheel walks through the variants of a proposal, wherever the
+    // pointer is: the eye is on the grey notes, not on a control.
+    if (event.mods.isAltDown() && proposal_.has_value())
+    {
+        if (wheel.deltaY != 0.0f)
+            showVariant(wheel.deltaY < 0.0f ? +1 : -1);
+        return;
+    }
+
     if (rulerArea().contains(event.getPosition()))
     {
         // Around the pointer: the beat under it stays under it.
@@ -1254,6 +1332,9 @@ void PianoRollPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::M
 
 bool PianoRollPanel::keyPressed(const juce::KeyPress& key)
 {
+    if (generationKey(key))
+        return true;
+
     if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey)
     {
         removePicked();

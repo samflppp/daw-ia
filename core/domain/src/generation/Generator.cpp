@@ -583,7 +583,11 @@ std::uint64_t Context::hash() const
     hasher.add(toBeats);
     hasher.add(row);
     hasher.add(harmony);
-    hasher.add(project);
+    // The rest of the project only matters when nothing near the range says
+    // the key: a note written in another pattern must not regenerate a
+    // proposal that never read it.
+    if (row.empty() && harmony.empty())
+        hasher.add(project);
     hasher.add(static_cast<std::int64_t>(sampleChannel ? 1 : 0));
     hasher.add(static_cast<std::int64_t>(channelPitch));
     for (const auto c : trackName)

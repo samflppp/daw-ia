@@ -1,9 +1,12 @@
 #pragma once
 
+#include "daw/domain/generation/Constraints.h"
 #include "daw/ui/PanelRegistry.h"
+#include "daw/ui/model/GhostProposal.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -39,6 +42,12 @@ namespace daw::ui
 // Under the notes, the velocity lane: one stem per note, drawn over by hand,
 // as in FL's event editor. Its gestures are described in
 // PianoRollVelocityLane.cpp.
+//
+// Generation (S14, PianoRollGeneration.cpp): Shift + drag on the ruler picks a
+// range, Ctrl+G opens a small field above it, and the proposed notes are drawn
+// in grey. Enter generates again, Alt + wheel walks through the variants, Tab
+// writes them as one group from the generator, Escape drops them. Until Tab
+// nothing is written: the proposal is a GhostProposal held by this panel.
 class PianoRollPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
 {
 public:
@@ -78,6 +87,18 @@ public:
     // The velocity lane, and where a note's stem would reach at a velocity.
     [[nodiscard]] juce::Rectangle<int> velocityLane() const { return velocityArea(); }
     [[nodiscard]] juce::Point<int> velocityPointFor(const domain::Note& note, int velocity) const;
+
+    // --- generation. Read by the verification.
+    [[nodiscard]] bool proposing() const noexcept { return proposal_.has_value(); }
+    [[nodiscard]] const std::vector<domain::generation::GhostNote>& ghostNotes() const noexcept
+    {
+        return ghosts_;
+    }
+    [[nodiscard]] juce::TextEditor& promptField() noexcept { return prompt_; }
+    [[nodiscard]] std::optional<std::pair<double, double>> range() const { return range_; }
+    [[nodiscard]] juce::String proposalLine() const;
+    [[nodiscard]] double lastGenerationMs() const noexcept;
+    [[nodiscard]] int variantRank() const noexcept { return proposal_.has_value() ? proposal_->rank() : -1; }
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -145,6 +166,47 @@ private:
     // will get, shown now and sent on release.
     std::optional<std::vector<std::pair<domain::NoteId, int>>> velocityStroke_;
     juce::Point<int> strokeLast_;
+
+    // --- generation (PianoRollGeneration.cpp)
+
+    // A text field that hands Enter, Tab and Escape to the panel before it
+    // would use them itself: Tab would otherwise move the focus, and Escape
+    // would do nothing at all.
+    class PromptField final : public juce::TextEditor
+    {
+    public:
+        std::function<bool(const juce::KeyPress&)> onKey;
+        bool keyPressed(const juce::KeyPress& key) override
+        {
+            if (onKey && onKey(key))
+                return true;
+            return juce::TextEditor::keyPressed(key);
+        }
+    };
+
+    [[nodiscard]] bool generationKey(const juce::KeyPress& key);
+    void openPrompt();
+    void generateFromPrompt();
+    void showVariant(int delta);
+    void acceptProposal();
+    void closeProposal();
+    void refreshProposal();
+    void placePrompt();
+    [[nodiscard]] std::optional<std::pair<double, double>> shownRange() const;
+    void paintRange(juce::Graphics& g, juce::Rectangle<int> area) const;
+    void paintGhosts(juce::Graphics& g, juce::Rectangle<int> area) const;
+    void paintProposalLine(juce::Graphics& g) const;
+
+    PromptField prompt_;
+    std::optional<GhostProposal> proposal_;
+    std::vector<domain::generation::GhostNote> ghosts_;
+    juce::String promptedText_;
+    domain::generation::LocalInterpreter interpreter_;
+
+    // The range picked on the ruler, in pattern beats, and where the drag
+    // that picks it started.
+    std::optional<std::pair<double, double>> range_;
+    std::optional<double> rangeAnchor_;
 
     void addNoteAt(juce::Point<int> point);
     void removeNote(domain::NoteId noteId);
