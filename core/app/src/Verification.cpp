@@ -6,6 +6,7 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/serialization/Json.h"
+#include "daw/engine/Export.h"
 #include "daw/engine/MeterTap.h"
 #include "daw/engine/Rendering.h"
 #include "daw/ui/panels/BrowserPanel.h"
@@ -64,6 +65,7 @@ Verification::Verification(Wiring wiring)
     , saveAsTo_(std::move(wiring.saveAsTo))
     , lastRefusal_(std::move(wiring.lastRefusal))
 {
+    exporter_ = wiring.exporter;
 }
 
 Verification::~Verification()
@@ -1213,6 +1215,7 @@ void Verification::buildList()
     addRackSteps();
     addWorkflowSteps();
     addNavigationSteps();
+    addExportSteps();
 
     // --- the title bar -----------------------------------------------------------
 
@@ -3564,6 +3567,140 @@ void Verification::addNavigationSteps()
                 wheel(*playlist, ruler.getCentre(), -1.0f);
             check(std::abs(playlist->beatWidth() - fit) < 0.01, "dézoomer revient à la vue entière");
         });
+}
+
+} // namespace daw::app
+
+namespace daw::app
+{
+
+void Verification::openExportDialog()
+{
+    titleBar_.runMenuItem(ui::TitleBarView::exportItem);
+}
+
+void Verification::addExportSteps()
+{
+    // --- S13: Fichier > Exporter... -------------------------------------------------
+    //
+    // The four formats through the same dialog a person answers: the format,
+    // the quality it offers, "Exporter". Each file is read back and measured
+    // against the first, a WAV: same length (a lossy codec pads a few
+    // milliseconds), same level (within half a decibel for MP3 and AAC).
+
+    if (exporter_ == nullptr)
+        return;
+
+    struct Case
+    {
+        int formatId;
+        const char* name;
+        const char* extension;
+        double levelTolerance;
+    };
+    static constexpr Case cases[] = {
+        {1, "WAV", ".wav", 0.0},
+        {2, "FLAC", ".flac", 0.01},
+        {3, "MP3", ".mp3", 0.5},
+        {4, "AAC", ".m4a", 0.5},
+    };
+
+    for (const auto& format : cases)
+    {
+        add(
+            std::string{"Fichier > Exporter... : "} + format.name,
+            [this] { openExportDialog(); },
+            [] {
+                return dynamic_cast<juce::AlertWindow*>(juce::Component::getCurrentlyModalComponent()) !=
+                       nullptr;
+            },
+            3000.0);
+
+        add(
+            std::string{"format "} + format.name + ", qualité proposée, « Exporter »",
+            [this, format]
+            {
+                auto* dialog =
+                    dynamic_cast<juce::AlertWindow*>(juce::Component::getCurrentlyModalComponent());
+                auto* formats =
+                    dialog != nullptr ? dialog->getComboBoxComponent(SongExporter::formatField) : nullptr;
+                auto* quality =
+                    dialog != nullptr ? dialog->getComboBoxComponent(SongExporter::qualityField) : nullptr;
+                if (formats == nullptr || quality == nullptr)
+                {
+                    check(false, "la boîte d'export a un format et une qualité");
+                    return;
+                }
+
+                formats->setSelectedId(format.formatId, juce::sendNotificationSync);
+                note("qualités proposées : " +
+                     [quality]
+                     {
+                         juce::StringArray items;
+                         for (int index = 0; index < quality->getNumItems(); ++index)
+                             items.add(quality->getItemText(index));
+                         return items.joinIntoString(", ").toStdString();
+                     }() +
+                     " ; choisie : " + quality->getText().toStdString());
+
+                exportsBefore_ = exporter_->lastExport();
+                dialog->exitModalState(SongExporter::exportButton);
+            },
+            [this, format] {
+                return exporter_->lastExport().hasFileExtension(format.extension) ||
+                       exporter_->lastError().isNotEmpty();
+            },
+            120000.0);
+
+        add(std::string{"le fichier "} + format.name + " relu et mesuré",
+            [this, format]
+            {
+                check(exporter_->lastError().isEmpty(),
+                      "aucune erreur" + (exporter_->lastError().isEmpty()
+                                             ? std::string{}
+                                             : " (" + exporter_->lastError().toStdString() + ")"));
+                const auto file = exporter_->lastExport();
+                check(file.existsAsFile(), file.getFileName().toStdString() + " écrit");
+                check(titleBar_.status() == juce::String(u8"exporté : ") + file.getFileName(),
+                      "la barre dit « exporté : " + file.getFileName().toStdString() + " »");
+
+                juce::AudioBuffer<float> audio;
+                double rate = 0.0;
+                if (!engine::readExport(file, audio, rate) || audio.getNumSamples() == 0)
+                {
+                    check(false, "le fichier se relit");
+                    return;
+                }
+
+                const auto seconds = audio.getNumSamples() / rate;
+                auto sum = 0.0;
+                for (int channel = 0; channel < audio.getNumChannels(); ++channel)
+                {
+                    const auto level = audio.getRMSLevel(channel, 0, audio.getNumSamples());
+                    sum += static_cast<double>(level) * level;
+                }
+                const auto rmsDb = 10.0 * std::log10(sum / audio.getNumChannels());
+
+                note(file.getFileName().toStdString() + " : " + std::to_string(file.getSize() / 1024) +
+                     " Kio, " + juce::String(seconds, 2).toStdString() + " s, " +
+                     juce::String(rate, 0).toStdString() + " Hz, " + juce::String(rmsDb, 2).toStdString() +
+                     " dBFS RMS");
+
+                if (format.formatId == 1)
+                {
+                    exportSeconds_ = seconds;
+                    exportRmsDb_ = rmsDb;
+                    check(seconds > 1.0, "le morceau entier, pas un fragment");
+                    return;
+                }
+
+                check(seconds >= exportSeconds_ - 0.01 && seconds <= exportSeconds_ + 0.15,
+                      "même durée que le WAV, à quelques millisecondes de rembourrage près");
+                check(std::abs(rmsDb - exportRmsDb_) <= std::max(format.levelTolerance, 0.01),
+                      "même niveau que le WAV (écart " + juce::String(rmsDb - exportRmsDb_, 3).toStdString() +
+                          " dB)");
+            });
+    }
 }
 
 } // namespace daw::app

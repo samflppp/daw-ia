@@ -12,6 +12,7 @@ juce_add_console_app(daw_engine_tests
 target_sources(daw_engine_tests PRIVATE
     EngineTestMain.cpp
     EngineHostTests.cpp
+    ExportTests.cpp
     ProjectionTests.cpp
     PatternProjectionTests.cpp
     ArrangementTests.cpp

@@ -20,6 +20,7 @@ target_sources(daw_app PRIVATE
     src/Verification.cpp
     src/SampleLibrary.cpp
     src/SamplePreview.cpp
+    src/SongExporter.cpp
     src/WorkspaceSwitch.cpp)
 
 target_include_directories(daw_app PRIVATE src)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LevelMonitor.h"
+#include "SongExporter.h"
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/ui/TitleBarView.h"
@@ -85,6 +86,10 @@ public:
         std::function<bool(const juce::File&)> openProjectAt;
         std::function<bool(const juce::File&)> saveAsTo;
         std::function<juce::String()> lastRefusal;
+
+        // Fichier > Exporter...: its dialog is answered like any other; the
+        // files it writes land in the run's folder, not behind a save dialog.
+        SongExporter* exporter{nullptr};
     };
 
     explicit Verification(Wiring wiring);
@@ -168,6 +173,10 @@ private:
 
     // S13: the wheel over the ruler zooms, the middle button drags the view.
     void addNavigationSteps();
+
+    // S13: Fichier > Exporter..., in the four formats, read back and measured.
+    void addExportSteps();
+    void openExportDialog();
     [[nodiscard]] std::vector<int> kickVelocities() const;
     [[nodiscard]] juce::TreeViewItem* browserItem(const juce::File& file) const;
     void clickBrowserItem(juce::TreeViewItem& item);
@@ -275,6 +284,10 @@ private:
     double wheelAt_{0.0};
     Heard heardBefore_{};
     std::size_t tracksBefore_{0};
+    SongExporter* exporter_{nullptr};
+    juce::File exportsBefore_;
+    double exportSeconds_{0.0};
+    double exportRmsDb_{0.0};
     std::size_t previewBuilds_{0};
     std::size_t measuredBefore_{0};
     bool watchTicks_{false};

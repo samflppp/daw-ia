@@ -124,6 +124,8 @@ void TitleBarView::showFileMenu()
     menu.addSeparator();
     menu.addItem(saveItem, "Enregistrer");
     menu.addItem(saveAsItem, "Enregistrer sous...");
+    menu.addSeparator();
+    menu.addItem(exportItem, "Exporter...");
 
     juce::Component::SafePointer<TitleBarView> self{this};
     menu.showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(&file_),
@@ -149,6 +151,9 @@ void TitleBarView::runMenuItem(int item)
         break;
     case saveAsItem:
         call(actions_.saveAs);
+        break;
+    case exportItem:
+        call(actions_.exportSong);
         break;
     default:
         break;

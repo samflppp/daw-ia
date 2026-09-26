@@ -30,6 +30,7 @@ public:
         std::function<void()> openProject;
         std::function<void()> save;
         std::function<void()> saveAs;
+        std::function<void()> exportSong;
 
         std::function<void()> minimise;
         std::function<void()> toggleMaximise;
@@ -67,6 +68,7 @@ public:
         openItem,
         saveItem,
         saveAsItem,
+        exportItem,
     };
 
     void paint(juce::Graphics& g) override;

@@ -13,8 +13,10 @@ add_library(daw::engine ALIAS daw_engine)
 target_sources(daw_engine INTERFACE
     src/ClapPluginFormat.cpp
     src/EngineHost.cpp
+    src/Export.cpp
     src/HostedParameters.cpp
     src/LevelMeters.cpp
+    src/MediaFoundation.cpp
     src/MeterTap.cpp
     src/ParameterBridge.cpp
     src/PluginCatalogue.cpp
@@ -37,6 +39,11 @@ target_link_libraries(daw_engine INTERFACE
     juce::juce_audio_devices
     juce::juce_audio_processors
     juce::juce_audio_utils)
+
+# MP3 and AAC go through Windows's own Media Foundation encoders.
+if(WIN32)
+    target_link_libraries(daw_engine INTERFACE mf mfplat mfreadwrite mfuuid)
+endif()
 
 if(DAW_BUILD_TESTS)
     add_subdirectory(tests)

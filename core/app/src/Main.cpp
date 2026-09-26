@@ -6,6 +6,7 @@
 #include "PluginRack.h"
 #include "PluginWindow.h"
 #include "SampleLibrary.h"
+#include "SongExporter.h"
 #include "TransportSync.h"
 #include "Verification.h"
 #include "WorkspaceSwitch.h"
@@ -235,8 +236,11 @@ public:
                 [this](const juce::File& target) { return newProjectAt(target); },
                 [this](const juce::File& target) { return openProjectAt(target); },
                 [this](const juce::File& target) { return saveAs(target); },
-                [this] { return lastRefusal_; }});
+                [this] { return lastRefusal_; },
+                exporter_.get()});
 
+            if (exporter_ != nullptr)
+                exporter_->writeInto(juce::File{tokens[index + 1].unquoted()}.getChildFile("export"));
             verification_->start();
             return;
         }
@@ -246,6 +250,7 @@ public:
     {
         stopTimer();
         verification_.reset();
+        exporter_.reset();
 
         // The copilot goes first: it holds a thread that answers through the
         // bus, and the bus is about to be taken apart.
@@ -311,11 +316,23 @@ private:
         if (switch_ == nullptr)
             return content;
 
+        exporter_ = std::make_unique<SongExporter>(SongExporter::Wiring{
+            engineHost_->edit(),
+            [this] { return projectName(); },
+            [] { return projectsFolder(); },
+            [this](const juce::String& status, bool lasting)
+            {
+                if (titleBar_ != nullptr)
+                    titleBar_->setStatus(status, lasting);
+            },
+            [this](const juce::String& title, const juce::String& message) { tell(title, message); }});
+
         ui::TitleBarView::Actions actions;
         actions.newProject = [this] { chooseNewProject(); };
         actions.openProject = [this] { chooseProjectToOpen(); };
         actions.save = [this] { saveNow(); };
         actions.saveAs = [this] { chooseSaveAs(); };
+        actions.exportSong = [this] { exporter_->start(); };
         actions.minimise = [this]
         {
             if (window_ != nullptr)
@@ -892,6 +909,7 @@ private:
     std::unique_ptr<SampleLibrary> sampleLibrary_;
     ui::WorkspaceView* view_{nullptr};
     std::unique_ptr<Verification> verification_;
+    std::unique_ptr<SongExporter> exporter_;
     ui::TitleBarView* titleBar_{nullptr};
     std::unique_ptr<juce::FileChooser> chooser_;
     std::optional<juce::File> relaunchProject_;
