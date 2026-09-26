@@ -3,6 +3,8 @@
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
+#include "daw/ui/AutomatableSlider.h"
+#include "daw/ui/model/AutomationEditing.h"
 
 #include <algorithm>
 #include <cmath>
@@ -57,6 +59,10 @@ public:
                 static_cast<void>(bus_.endGesture(*gesture_));
             gesture_.reset();
         };
+
+        // The right-click opens the line, as it does on the mixer.
+        volume_.onAutomate = [this] { automate(domain::AutomationTarget::volumeOf(trackId_)); };
+        pan_.onAutomate = [this] { automate(domain::AutomationTarget::panOf(trackId_)); };
 
         // The name is a label and no longer a painted string: double-clicking it
         // renames the track, which is the gesture every list in every DAW uses.
@@ -350,6 +356,14 @@ public:
     }
 
 private:
+    // The right-click on a slider: its line, shown in the playlist.
+    void automate(const domain::AutomationTarget& target)
+    {
+        const auto line = automationEditing::open(bus_, state_, target);
+        if (!line.isNil())
+            selection_.showAutomation(line);
+    }
+
     // G for gauche, D for droite, C for centre: the panel is in French, and a
     // mixing desk says which side, not which sign.
     [[nodiscard]] static juce::String panText(double pan)
@@ -410,8 +424,8 @@ private:
     juce::Label name_;
     bool selected_{false};
 
-    juce::Slider volume_;
-    juce::Slider pan_;
+    AutomatableSlider volume_;
+    AutomatableSlider pan_;
     juce::ToggleButton mute_;
     juce::ToggleButton bypass_;
     juce::TextButton remove_;

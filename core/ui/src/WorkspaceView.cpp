@@ -59,10 +59,14 @@ WorkspaceView::WorkspaceView(const PanelServices& services, const PanelRegistry&
     // Without this, a click on a panel that wants no focus leaves the key
     // press with nobody to hand it to.
     setWantsKeyboardFocus(true);
+
+    automationRequests_ = services_.selection.automationRequests();
+    services_.selection.addChangeListener(this);
 }
 
 WorkspaceView::~WorkspaceView()
 {
+    services_.selection.removeChangeListener(this);
     pages_.clear();
     panels_.clear();
     setLookAndFeel(nullptr);
@@ -295,6 +299,25 @@ void WorkspaceView::markActive(const PageSlot* front)
 {
     for (auto& slot : pages_)
         slot.window->setActive(&slot == front);
+}
+
+void WorkspaceView::changeListenerCallback(juce::ChangeBroadcaster* source)
+{
+    if (source != &services_.selection)
+        return;
+    const auto requests = services_.selection.automationRequests();
+    if (requests == automationRequests_)
+        return;
+    automationRequests_ = requests;
+
+    // Closed or behind another page, the playlist comes to the front.
+    if (auto* slot = slotFor("playlist"); slot != nullptr)
+    {
+        if (slot->open)
+            bringToFront(*slot);
+        else
+            setOpen(*slot, true);
+    }
 }
 
 bool WorkspaceView::showPage(std::string_view panel, bool visible)

@@ -4,6 +4,8 @@
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/copilot/MixingReadiness.h"
+#include "daw/ui/AutomatableSlider.h"
+#include "daw/ui/model/AutomationEditing.h"
 
 #include <algorithm>
 #include <cmath>
@@ -140,6 +142,7 @@ public:
         fader_.onValueChange = [this]
         { execute(std::make_unique<domain::SetTrackVolume>(id_, fader_.getValue())); };
         fader_.onDragEnd = [this] { endGesture(); };
+        fader_.onAutomate = [this] { automate(domain::AutomationTarget::volumeOf(id_)); };
 
         addAndMakeVisible(pan_);
         pan_.setSliderStyle(juce::Slider::LinearHorizontal);
@@ -149,6 +152,7 @@ public:
         pan_.onDragStart = [this] { gesture_ = bus_.beginGesture("panoramique"); };
         pan_.onValueChange = [this] { execute(std::make_unique<domain::SetTrackPan>(id_, pan_.getValue())); };
         pan_.onDragEnd = [this] { endGesture(); };
+        pan_.onAutomate = [this] { automate(domain::AutomationTarget::panOf(id_)); };
 
         addAndMakeVisible(mute_);
         mute_.setButtonText("M");
@@ -410,6 +414,15 @@ private:
         gesture_.reset();
     }
 
+    // The right-click on the fader or the pan: its line, created when it has
+    // none, shown in the playlist.
+    void automate(const domain::AutomationTarget& target)
+    {
+        const auto line = automationEditing::open(bus_, state_, target);
+        if (!line.isNil())
+            owner_.selection_.showAutomation(line);
+    }
+
     MixerPanel& owner_;
     const Tokens& tokens_;
     domain::CommandBus& bus_;
@@ -418,8 +431,8 @@ private:
     Kind kind_;
 
     juce::Label name_;
-    juce::Slider fader_;
-    juce::Slider pan_;
+    AutomatableSlider fader_;
+    AutomatableSlider pan_;
     juce::TextButton mute_;
     juce::TextButton solo_;
     juce::ComboBox output_;

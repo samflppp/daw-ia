@@ -51,6 +51,10 @@ namespace daw::ui
 // Under the ruler, as soon as the tempo changes past the origin, the tempo
 // lane: FL's tempo automation, drawn as the step line it is. Its gestures are
 // described in PlaylistTempoLane.cpp.
+//
+// Then one lane per automation line, under the audio lane of its track when
+// it has one: the same grammar as the tempo lane, described in
+// PlaylistAutomationLane.cpp.
 class PlaylistPanel final : public juce::Component,
                             public juce::DragAndDropTarget,
                             public juce::FileDragAndDropTarget,
@@ -119,12 +123,41 @@ public:
     [[nodiscard]] juce::Rectangle<int> tempoLane() const { return tempoLaneArea(); }
     [[nodiscard]] juce::Point<int> tempoPointFor(double beats, double bpm) const;
 
+    // The lane of an automation line, and where a value at a beat is drawn
+    // in it. Nothing for a line the playlist does not show. The verification
+    // aims with them.
+    [[nodiscard]] std::optional<int> laneOfAutomation(domain::AutomationLineId line) const;
+    [[nodiscard]] std::optional<juce::Point<int>>
+    automationPointFor(domain::AutomationLineId line, double beats, double value) const;
+
+    // The line the last request to see one named: its lane is lit.
+    [[nodiscard]] domain::AutomationLineId shownAutomation() const noexcept { return shownAutomation_; }
+
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
     void timerCallback() override;
 
     // --- lanes
+    //
+    // The pattern lanes first, then, strip by strip, the audio lane of a
+    // track that holds audio and the automation lanes of that strip. Pattern
+    // lanes being first, a lane below patternLaneCount() is a pattern.
+    struct Lane
+    {
+        enum class Kind
+        {
+            pattern,
+            audio,
+            automation
+        };
+
+        Kind kind{Kind::pattern};
+        std::size_t pattern{0};
+        domain::TrackId track{};
+        domain::AutomationLineId line{};
+    };
+    [[nodiscard]] std::vector<Lane> lanes() const;
     [[nodiscard]] int patternLaneCount() const;
     [[nodiscard]] std::vector<domain::TrackId> audioTracks() const;
     [[nodiscard]] int laneCount() const;
@@ -182,6 +215,26 @@ private:
     bool tempoDoubleClick(juce::Point<int> point);
     bool tempoWheel(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel);
     void closeTempoWheel(bool onlyWhenRested = false);
+
+    // --- the automation lanes (PlaylistAutomationLane.cpp)
+    [[nodiscard]] juce::Rectangle<int> laneArea(int lane) const;
+    [[nodiscard]] const domain::AutomationLine* automationLineIn(int lane) const;
+    [[nodiscard]] int
+    yForValue(juce::Rectangle<int> area, const domain::AutomationTarget& target, double value) const;
+    [[nodiscard]] double
+    valueAtY(juce::Rectangle<int> area, const domain::AutomationTarget& target, int y) const;
+    [[nodiscard]] std::optional<domain::AutomationPointId> automationPointAt(int lane,
+                                                                             juce::Point<int> point) const;
+    void paintAutomation(juce::Graphics& g, juce::Rectangle<int> grid) const;
+    void showAutomationMenu(domain::AutomationLineId line);
+    void revealAutomation(domain::AutomationLineId line);
+
+    bool automationMouseDown(const juce::MouseEvent& event);
+    bool automationMouseDrag(const juce::MouseEvent& event);
+    bool automationMouseUp();
+    bool automationDoubleClick(juce::Point<int> point);
+    bool automationWheel(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel);
+    void closeAutomationWheel(bool onlyWhenRested = false);
 
     // --- items
     [[nodiscard]] std::vector<Item> items() const;
@@ -259,6 +312,19 @@ private:
     std::optional<domain::GestureId> tempoWheelGesture_;
     juce::uint32 lastTempoWheelMs_{0};
     bool tempoLaneShown_{false};
+
+    // A point being dragged, on both axes at once, in one gesture.
+    struct AutomationDrag
+    {
+        domain::AutomationLineId line{};
+        domain::AutomationPointId point{};
+        domain::GestureId gesture{};
+    };
+    std::optional<AutomationDrag> automationDrag_;
+    std::optional<domain::GestureId> automationWheelGesture_;
+    juce::uint32 lastAutomationWheelMs_{0};
+    domain::AutomationLineId shownAutomation_{};
+    std::size_t automationRequests_{0};
 
     // A move in progress: the selection is drawn shifted, and one group of
     // moves leaves when the mouse is released — one history entry however

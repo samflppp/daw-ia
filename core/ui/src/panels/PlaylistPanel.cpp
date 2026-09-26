@@ -4,6 +4,7 @@
 #include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
+#include "daw/ui/model/AutomationEditing.h"
 #include "daw/ui/model/PatternEditing.h"
 
 #include <algorithm>
@@ -135,6 +136,13 @@ void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     if (source == &project_)
         static_cast<void>(previews_.refresh(state_));
 
+    // A slider asked to see its automation line: its lane comes into view.
+    if (source == &selection_ && selection_.automationRequests() != automationRequests_)
+    {
+        automationRequests_ = selection_.automationRequests();
+        revealAutomation(selection_.automationLine());
+    }
+
     // A block an undo took away is no longer selectable.
     const auto all = items();
     selected_.erase(std::remove_if(selected_.begin(),
@@ -181,18 +189,51 @@ std::vector<domain::TrackId> PlaylistPanel::audioTracks() const
     return tracks;
 }
 
+std::vector<PlaylistPanel::Lane> PlaylistPanel::lanes() const
+{
+    std::vector<Lane> all;
+    for (std::size_t index = 0; index < state_.patterns().size(); ++index)
+        all.push_back(Lane{Lane::Kind::pattern, index, {}, {}});
+
+    // Strip by strip: a track's audio, then the lines of that strip, in the
+    // order automationEditing::ordered gives them.
+    const auto audio = audioTracks();
+    const auto lines = automationEditing::ordered(state_);
+    const auto addLinesOf = [&](domain::TrackId strip)
+    {
+        for (const auto* line : lines)
+        {
+            if (automationEditing::stripOf(state_, *line) == strip)
+                all.push_back(Lane{Lane::Kind::automation, 0, strip, line->id});
+        }
+    };
+
+    for (const auto& track : state_.tracks())
+    {
+        if (std::find(audio.begin(), audio.end(), track.id) != audio.end())
+            all.push_back(Lane{Lane::Kind::audio, 0, track.id, {}});
+        addLinesOf(track.id);
+    }
+    for (const auto& bus : state_.buses())
+        addLinesOf(bus.id);
+    addLinesOf(domain::ProjectState::masterTrackId());
+    return all;
+}
+
 int PlaylistPanel::laneCount() const
 {
-    return patternLaneCount() + static_cast<int>(audioTracks().size());
+    return static_cast<int>(lanes().size());
 }
 
 int PlaylistPanel::laneOfTrack(domain::TrackId trackId) const
 {
-    const auto tracks = audioTracks();
-    const auto found = std::find(tracks.begin(), tracks.end(), trackId);
-    return found == tracks.end()
-               ? -1
-               : patternLaneCount() + static_cast<int>(std::distance(tracks.begin(), found));
+    const auto all = lanes();
+    for (std::size_t index = 0; index < all.size(); ++index)
+    {
+        if (all[index].kind == Lane::Kind::audio && all[index].track == trackId)
+            return static_cast<int>(index);
+    }
+    return -1;
 }
 
 // --- geometry ---------------------------------------------------------------
@@ -358,7 +399,7 @@ void PlaylistPanel::scrollBarMoved(juce::ScrollBar* bar, double newRangeStart)
 
 void PlaylistPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
 {
-    if (tempoWheel(event, wheel))
+    if (tempoWheel(event, wheel) || automationWheel(event, wheel))
         return;
 
     const auto grid = gridArea();
@@ -544,6 +585,7 @@ void PlaylistPanel::paint(juce::Graphics& g)
     paintTempoLane(g);
     paintLanes(g, gridArea(), headerArea());
     paintBlocks(g, gridArea());
+    paintAutomation(g, gridArea());
     paintPlayhead(g);
 
     if (band_.has_value())
@@ -629,8 +671,8 @@ void PlaylistPanel::paintLanes(juce::Graphics& g,
     g.setColour(tokens_.colour("color.surface.panel"));
     g.fillRect(headers);
 
-    const auto tracks = audioTracks();
-    for (int lane = 0; lane < laneCount(); ++lane)
+    const auto all = lanes();
+    for (int lane = 0; lane < static_cast<int>(all.size()); ++lane)
     {
         const auto y = grid.getY() + lane * laneHeight - firstLanePixel();
         if (y + laneHeight <= grid.getY())
@@ -654,11 +696,21 @@ void PlaylistPanel::paintLanes(juce::Graphics& g,
                 g.fillRect(name);
             }
         }
-        else if (const auto* track =
-                     state_.findTrack(tracks[static_cast<std::size_t>(lane - patternLaneCount())]);
-                 track != nullptr)
+        else if (const auto& entry = all[static_cast<std::size_t>(lane)]; entry.kind == Lane::Kind::audio)
         {
-            label = juce::String::fromUTF8(track->name.c_str());
+            if (const auto* track = state_.findTrack(entry.track); track != nullptr)
+                label = juce::String::fromUTF8(track->name.c_str());
+        }
+        else if (const auto* line = state_.findAutomationLine(entry.line); line != nullptr)
+        {
+            label = juce::String::fromUTF8(automationEditing::label(state_, *line).c_str());
+
+            // The line a slider's right-click asked for is the lit one.
+            if (line->id == shownAutomation_)
+            {
+                g.setColour(tokens_.colour("color.state.selected"));
+                g.fillRect(name);
+            }
         }
 
         g.setColour(tokens_.colour("color.border.hairline"));
@@ -850,6 +902,7 @@ void PlaylistPanel::paintPlayhead(juce::Graphics& g) const
 void PlaylistPanel::timerCallback()
 {
     closeTempoWheel(true);
+    closeAutomationWheel(true);
     followPlayhead();
 
     // Only the two columns the playhead leaves and reaches are repainted.
@@ -1169,7 +1222,7 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
         return;
     }
 
-    if (tempoMouseDown(event))
+    if (tempoMouseDown(event) || automationMouseDown(event))
         return;
 
     const auto lane = laneAtY(point.getY());
@@ -1263,7 +1316,7 @@ void PlaylistPanel::mouseDrag(const juce::MouseEvent& event)
         return;
     }
 
-    if (tempoMouseDrag(event))
+    if (tempoMouseDrag(event) || automationMouseDrag(event))
         return;
 
     if (band_.has_value())
@@ -1300,7 +1353,7 @@ void PlaylistPanel::mouseUp(const juce::MouseEvent& event)
         return;
     }
 
-    if (tempoMouseUp())
+    if (tempoMouseUp() || automationMouseUp())
         return;
 
     if (band_.has_value())
@@ -1328,7 +1381,7 @@ void PlaylistPanel::mouseUp(const juce::MouseEvent& event)
 
 void PlaylistPanel::mouseDoubleClick(const juce::MouseEvent& event)
 {
-    if (tempoDoubleClick(event.getPosition()))
+    if (tempoDoubleClick(event.getPosition()) || automationDoubleClick(event.getPosition()))
         return;
 
     if (!headerArea().contains(event.getPosition()))

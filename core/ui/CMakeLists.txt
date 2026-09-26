@@ -16,6 +16,7 @@ add_library(daw_ui_workspace STATIC
     src/workspace/WorkspaceManifest.cpp
     src/workspace/LayoutTree.cpp
     src/history/HistoryLog.cpp
+    src/model/AutomationEditing.cpp
     src/model/NoteClipboard.cpp
     src/model/PatternPreviews.cpp
     src/model/SampleSearch.cpp
@@ -86,6 +87,7 @@ target_sources(daw_ui INTERFACE
     src/panels/ChannelRackPanel.cpp
     src/panels/PlaylistPanel.cpp
     src/panels/PlaylistTempoLane.cpp
+    src/panels/PlaylistAutomationLane.cpp
     src/panels/PianoRollVelocityLane.cpp
     src/panels/MixerPanel.cpp
     src/panels/BrowserPanel.cpp

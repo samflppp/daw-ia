@@ -35,7 +35,9 @@ namespace daw::ui
 //
 // It is also the drag-and-drop container: a sample dragged out of the browser
 // page travels over the view to the rack or the playlist page it is dropped on.
-class WorkspaceView final : public juce::Component, public juce::DragAndDropContainer
+class WorkspaceView final : public juce::Component,
+                            public juce::DragAndDropContainer,
+                            private juce::ChangeListener
 {
 public:
     WorkspaceView(const PanelServices& services, const PanelRegistry& registry);
@@ -77,6 +79,10 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
 
 private:
+    // A request to see an automation line opens the playlist, where lines are.
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+    std::size_t automationRequests_{0};
+
     struct Placed
     {
         juce::String id;

@@ -36,6 +36,13 @@ void Selection::selectPattern(domain::PatternId pattern)
     sendChangeMessage();
 }
 
+void Selection::showAutomation(domain::AutomationLineId line)
+{
+    automationLine_ = line;
+    ++automationRequests_;
+    sendChangeMessage();
+}
+
 void Selection::clear()
 {
     if (track_.isNil() && clip_.isNil() && pattern_.isNil())
