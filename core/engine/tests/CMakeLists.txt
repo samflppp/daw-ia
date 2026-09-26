@@ -19,6 +19,7 @@ target_sources(daw_engine_tests PRIVATE
     TransportProjectionTests.cpp
     TempoProjectionTests.cpp
     PanProjectionTests.cpp
+    AutomationProjectionTests.cpp
     MeterTests.cpp
     MixProjectionTests.cpp
     SampleProjectionTests.cpp

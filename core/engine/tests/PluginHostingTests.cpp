@@ -1,5 +1,6 @@
 #include "EngineTestSupport.h"
 #include "HostedParameters.h"
+#include "daw/domain/commands/AutomationCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/engine/ClapPluginFormat.h"
 #include "daw/engine/ContentStore.h"
@@ -8,7 +9,9 @@
 
 #include <tracktion_engine/utilities/tracktion_TestUtilities.h>
 
+#include <cmath>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "clap/ClapPluginInstance.h"
@@ -537,6 +540,91 @@ TEST_CASE("A parameter command reaches the CLAP plugin, and is heard")
 
     REQUIRE(harness.bus.execute(std::make_unique<SetPluginParameter>(instance.id, paramId, 1.0)).ok());
     CHECK(renderedRms(harness.host.edit()) > atDefaultGain * 1.5);
+}
+
+namespace
+{
+
+// The first and the second half of a render, each as one RMS.
+std::pair<double, double> renderedHalves(tracktion::Edit& edit)
+{
+    auto rendered = tracktion::test_utilities::renderToAudioBuffer(edit);
+    const auto half = rendered.buffer.getNumSamples() / 2;
+    if (half == 0)
+        return {0.0, 0.0};
+
+    const auto rms = [&rendered](int start, int length)
+    {
+        double sum = 0.0;
+        for (int channel = 0; channel < rendered.buffer.getNumChannels(); ++channel)
+        {
+            const auto* samples = rendered.buffer.getReadPointer(channel, start);
+            for (int index = 0; index < length; ++index)
+                sum += static_cast<double>(samples[index]) * samples[index];
+        }
+        return std::sqrt(sum / (static_cast<double>(length) * rendered.buffer.getNumChannels()));
+    };
+    return {rms(0, half), rms(half, half)};
+}
+
+} // namespace
+
+TEST_CASE("An automated plugin parameter is heard moving, and survives its plugin going and coming back")
+{
+    PluginHarness harness;
+
+    const auto description = harness.registerPlugin(clapFixture(), daw::engine::ClapPluginFormat::formatName);
+    REQUIRE(description.has_value());
+
+    PluginInstance instance{};
+    instance.id = PluginId::generate();
+    instance.ref = PluginCatalogue::refFor(*description);
+    REQUIRE(harness.bus.execute(harness.insert(instance)).ok());
+    harness.playThreeNotes();
+
+    // Each half against itself without automation: the three notes do not
+    // fill the two halves alike, the gain is what has to differ.
+    const auto [steadyFirst, steadySecond] = renderedHalves(harness.host.edit());
+    REQUIRE(steadyFirst > 0.01);
+    REQUIRE(steadySecond > 0.01);
+
+    // The gain of the fixture, named by its CLAP id, rising from nothing.
+    std::vector<AutomationPoint> points(2);
+    points[0].id = AutomationPointId::generate();
+    points[0].beats = 0.0;
+    points[0].value = 0.0;
+    points[1].id = AutomationPointId::generate();
+    points[1].beats = 2.0;
+    points[1].value = 1.0;
+    const auto target = AutomationTarget::parameterOf(instance.id, "0");
+    REQUIRE(harness.bus
+                .execute(
+                    std::make_unique<WriteAutomation>(AutomationLineId::generate(), target, 0.0, 2.0, points))
+                .ok());
+    const auto depth = harness.bus.undoDepth();
+
+    const auto [quiet, loud] = renderedHalves(harness.host.edit());
+    MESSAGE("gain automated 0 -> 1: first half " << quiet / steadyFirst << " of itself, second half "
+                                                 << loud / steadySecond);
+    CHECK(loud / steadySecond > 2.0 * quiet / steadyFirst);
+
+    // The parameter moved during the render and nobody touched it: the
+    // bridge must not have turned the automation into commands.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(200);
+    CHECK(harness.bus.undoDepth() == depth);
+
+    // The plugin goes, and its line with it; the Edit still renders.
+    REQUIRE(harness.bus.execute(std::make_unique<RemovePlugin>(instance.id)).ok());
+    CHECK(harness.state.findAutomationLineFor(target) == nullptr);
+    static_cast<void>(renderedHalves(harness.host.edit()));
+
+    // And comes back with it, heard rising again.
+    REQUIRE(harness.bus.undo().ok());
+    REQUIRE(harness.state.findAutomationLineFor(target) != nullptr);
+    const auto [quietAgain, loudAgain] = renderedHalves(harness.host.edit());
+    MESSAGE("after the undo: first half " << quietAgain / steadyFirst << " of itself, second half "
+                                          << loudAgain / steadySecond);
+    CHECK(loudAgain / steadySecond > 2.0 * quietAgain / steadyFirst);
 }
 
 TEST_CASE("A captured CLAP state, put on a new instance, brings its sound back")

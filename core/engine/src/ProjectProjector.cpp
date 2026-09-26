@@ -1266,6 +1266,7 @@ void ProjectProjector::reconcile()
     }
 
     reconcileMaster();
+    reconcileAutomation();
 
     projected_ = std::move(stillProjected);
     forgetClipsNotLaidOut();
@@ -1274,6 +1275,192 @@ void ProjectProjector::reconcile()
     projecting_ = false;
     if (onProjected)
         onProjected();
+}
+
+// --- automation --------------------------------------------------------------
+
+tracktion::VolumeAndPanPlugin* ProjectProjector::masterFader() const
+{
+    for (auto* candidate : edit_.getMasterPluginList().getPluginsOfType<tracktion::VolumeAndPanPlugin>())
+    {
+        if (candidate != nullptr && candidate->state.hasProperty(masterFaderProperty))
+            return candidate;
+    }
+    return nullptr;
+}
+
+std::vector<tracktion::AutomatableParameter*>
+ProjectProjector::parametersOf(const domain::AutomationTarget& target)
+{
+    using Kind = domain::AutomationTarget::Kind;
+    std::vector<tracktion::AutomatableParameter*> parameters;
+
+    const auto fromFader = [&target, &parameters](tracktion::VolumeAndPanPlugin* fader)
+    {
+        if (fader == nullptr)
+            return;
+        auto& parameter = target.kind == Kind::volume ? fader->volParam : fader->panParam;
+        if (parameter != nullptr)
+            parameters.push_back(parameter.get());
+    };
+
+    if (target.kind != Kind::pluginParameter)
+    {
+        if (target.strip == domain::ProjectState::masterTrackId())
+        {
+            fromFader(masterFader());
+            return parameters;
+        }
+
+        // A channel is two Tracktion tracks, the patterns and the recordings,
+        // mixed as one: both follow the line.
+        for (const auto companion : {false, true})
+        {
+            if (auto* track = findTrack(target.strip, companion); track != nullptr)
+                fromFader(track->getVolumePlugin());
+        }
+        return parameters;
+    }
+
+    const auto location = state_.pluginLocation(target.plugin);
+    if (!location)
+        return parameters;
+
+    tracktion::PluginList* list = nullptr;
+    if (location.value().trackId == domain::ProjectState::masterTrackId())
+        list = &edit_.getMasterPluginList();
+    else if (auto* track = findTrack(location.value().trackId, false); track != nullptr)
+        list = &track->pluginList;
+
+    if (list == nullptr)
+        return parameters;
+    if (auto* plugin = findPlugin(*list, target.plugin); plugin != nullptr)
+    {
+        if (auto* parameter = hostedParameter(*plugin, target.paramId); parameter != nullptr)
+            parameters.push_back(parameter);
+    }
+    return parameters;
+}
+
+void ProjectProjector::reconcileAutomation()
+{
+    struct Point
+    {
+        double seconds;
+        float value;
+        float curve;
+    };
+
+    const auto& tempo = edit_.tempoSequence;
+    const auto secondsAt = [&tempo](double beats)
+    { return tempo.toTime(tracktion::BeatPosition::fromBeats(beats)).inSeconds(); };
+
+    const auto engineValue = [](const domain::AutomationLine& line, double value)
+    {
+        return line.target.kind == domain::AutomationTarget::Kind::volume
+                   ? tracktion::decibelsToVolumeFaderPosition(static_cast<float>(value))
+                   : static_cast<float>(value);
+    };
+
+    // The curve a line asks for, in seconds and in the engine's values.
+    const auto curveOf = [&](const domain::AutomationLine& line)
+    {
+        std::vector<Point> points;
+        const auto& source = line.points;
+        for (std::size_t index = 0; index < source.size(); ++index)
+        {
+            const auto& from = source[index];
+            points.push_back(
+                Point{secondsAt(from.beats), engineValue(line, from.value), static_cast<float>(from.curve)});
+            if (index + 1 == source.size())
+                break;
+
+            // The tempo changes strictly inside the segment. None: the
+            // segment is one piece in seconds as it is in beats.
+            const auto& to = source[index + 1];
+            std::vector<double> cuts;
+            for (const auto& change : state_.tempoPoints())
+            {
+                if (change.startBeats > from.beats && change.startBeats < to.beats)
+                    cuts.push_back(change.startBeats);
+            }
+            if (cuts.empty())
+                continue;
+
+            // A straight segment stays straight inside each tempo, so a point
+            // at each change is exact. A bent one is followed every eighth of
+            // a beat instead, straight pieces between.
+            if (from.curve != 0.0)
+            {
+                for (auto beat = from.beats + 0.125; beat < to.beats; beat += 0.125)
+                    cuts.push_back(beat);
+                std::sort(cuts.begin(), cuts.end());
+                cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+                points.back().curve = 0.0f;
+            }
+            for (const auto beat : cuts)
+                points.push_back(Point{secondsAt(beat), engineValue(line, line.valueAt(beat)), 0.0f});
+        }
+        return points;
+    };
+
+    const auto holds = [](const tracktion::AutomationCurve& curve, const std::vector<Point>& wanted)
+    {
+        if (curve.getNumPoints() != static_cast<int>(wanted.size()))
+            return false;
+        for (int index = 0; index < curve.getNumPoints(); ++index)
+        {
+            const auto& point = wanted[static_cast<std::size_t>(index)];
+            if (std::abs(curve.getPointTime(index).inSeconds() - point.seconds) > 1.0e-9 ||
+                !juce::exactlyEqual(curve.getPointValue(index), point.value) ||
+                !juce::exactlyEqual(curve.getPointCurve(index), point.curve))
+                return false;
+        }
+        return true;
+    };
+
+    const auto write = [](tracktion::AutomationCurve& curve, const std::vector<Point>& wanted)
+    {
+        curve.clear(nullptr);
+        for (const auto& point : wanted)
+            static_cast<void>(curve.addPoint(
+                tracktion::TimePosition::fromSeconds(point.seconds), point.value, point.curve, nullptr));
+    };
+
+    const auto patternMode = state_.transport().mode == domain::PlayMode::pattern;
+    std::vector<tracktion::AutomatableParameter::Ptr> driven;
+
+    for (const auto& line : state_.automation())
+    {
+        // Pattern mode: the arrangement is silent, its automation too. An
+        // empty line drives nothing. A muted master stays at the floor.
+        if (patternMode || line.points.empty())
+            continue;
+        if (line.target.kind == domain::AutomationTarget::Kind::volume &&
+            line.target.strip == domain::ProjectState::masterTrackId() && state_.master().muted)
+            continue;
+
+        const auto wanted = curveOf(line);
+        for (auto* parameter : parametersOf(line.target))
+        {
+            auto& curve = parameter->getCurve();
+            if (!holds(curve, wanted))
+                write(curve, wanted);
+            driven.emplace_back(parameter);
+        }
+    }
+
+    // What no line drives any more goes back to its static value.
+    for (auto& parameter : automated_)
+    {
+        if (parameter == nullptr)
+            continue;
+        const auto stillDriven = std::any_of(
+            driven.begin(), driven.end(), [&parameter](const auto& other) { return other == parameter; });
+        if (!stillDriven && parameter->getCurve().getNumPoints() > 0)
+            parameter->getCurve().clear(nullptr);
+    }
+    automated_ = std::move(driven);
 }
 
 } // namespace daw::engine

@@ -214,6 +214,28 @@ private:
     // must not touch them, and a note added to a pattern must.
     [[nodiscard]] domain::Value playedValue(domain::TrackId trackId) const;
 
+    // --- automation
+    //
+    // Each line of the domain becomes the AutomationCurve of the Tracktion
+    // parameters it drives: a channel's volume or pan on its track and on its
+    // companion, a bus's, the master fader's, or one parameter of a plugin.
+    //
+    // Tracktion's curve is in seconds and the domain's line in beats, so the
+    // curve is computed again whenever the tempo moves; a segment that crosses
+    // a tempo change is cut there, so it keeps its shape in beats. The volume
+    // goes to Tracktion as a fader position, the space the curve bends in.
+    //
+    // Pattern mode plays no automation: a line is in the arrangement, and the
+    // arrangement is silent in pattern mode. A muted master keeps its fader at
+    // the floor, whatever its line says.
+    //
+    // Compared against what the curve already holds, so a projection that
+    // changes nothing about automation writes nothing.
+    void reconcileAutomation();
+    [[nodiscard]] std::vector<tracktion::AutomatableParameter*>
+    parametersOf(const domain::AutomationTarget& target);
+    [[nodiscard]] tracktion::VolumeAndPanPlugin* masterFader() const;
+
     // --- plugins
     //
     // A chain is a PluginList, on a track or on the master. The domain's
@@ -262,6 +284,10 @@ private:
 
     // The master's last projected form, like a track's.
     domain::Value projectedMaster_;
+
+    // The parameters a curve was written on, so a line that goes away leaves
+    // its parameter at its static value instead of on a curve nothing owns.
+    std::vector<tracktion::AutomatableParameter::Ptr> automated_;
 
     // Last projected tempo sequence. Rebuilding it costs little, but rebuilding
     // it for nothing would drag every clip of the Edit with it.

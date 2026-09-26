@@ -170,6 +170,12 @@ void ParameterBridge::handleAsyncUpdate()
             if (plugin == nullptr)
                 break;
 
+            // An automated parameter moves because its line says so. That is
+            // playback, not a hand on a knob: turned into commands, it would
+            // fill the history with the automation being read.
+            if (subscription->parameter->hasAutomationPoints())
+                break;
+
             // Third echo guard, and the one that actually closes the loop: a
             // value the project already holds produces no command, so a
             // projection can never come back as history.
