@@ -363,5 +363,18 @@ qui produit les notes.
   C'est le chantier qui demande le plus de soin, parce qu'il touche au moteur audio et au thread audio.
 - **Choisir en voyant :** les variantes côte à côte ou nommées, pas derrière une molette.
 
-**Ce que j'attends de toi avant d'écrire le modèle :** ce qui te gêne le plus dans l'usage réel. Est-ce le
-geste, le texte, l'impossibilité d'écouter, ou le travail ligne par ligne ? L'ordre de la refonte en dépend.
+**Ta réponse, le 27 septembre :** le problème, c'est la fenêtre qui s'ouvre. Tu envisages plutôt une génération
+ciblée : on désigne une zone, puis un prompt génère dedans.
+
+La refonte part donc de là :
+- **plus de zone de saisie posée sur la grille ;**
+- **la zone d'abord :** une sélection sur la grille, qui dit où générer ;
+- **le prompt ensuite,** dans la langue du copilote, pour dire quoi générer.
+
+Le modèle S16 tranchera trois points :
+- **Où s'écrit le prompt :** le panneau Copilote existant, qui sait déjà quelle zone est sélectionnée, ou un
+  champ fixe, hors de la grille.
+- **Ce qu'est une zone :** une plage de temps sur une piste au piano-roll, ou aussi un rectangle dans la
+  playlist qui couvre plusieurs pistes (accords, basse et mélodie d'un coup).
+- **Ce qu'on voit avant d'accepter :** les notes grises, comme aujourd'hui, ou le résultat écrit tout de suite,
+  qu'un Ctrl+Z retire.
