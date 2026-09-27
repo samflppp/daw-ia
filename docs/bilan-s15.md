@@ -391,8 +391,8 @@ retient :
 - **la ligne technique disparaît de l'écran par défaut ;**
 - **ce que le moteur a choisi reste disponible,** mais à la demande, pour qui veut comprendre ou corriger (un
   détail qu'on déplie), et non imposé à chaque proposition ;
-- **s'il faut dire quelque chose, c'est une phrase courte en mots de musicien,** par exemple « quatre mesures en
-  la mineur, dans ton style ». Ou rien du tout : les notes grises parlent d'elles-mêmes.
+- **les notes grises s'accompagnent d'une phrase courte en mots de musicien** (tranché avec toi), par exemple
+  « quatre mesures en la mineur, dans ton style » ou « même rythme, notes plus sombres ».
 
 **Ce que le modèle S16 devra définir :**
 - **La fenêtre du prompt :** hors de la grille, sans ligne technique, et qui ne propose rien avant que le prompt
