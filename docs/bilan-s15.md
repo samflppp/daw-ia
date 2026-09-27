@@ -1,7 +1,7 @@
 # Bilan de fin de S15 — DAW IA
 
 **Période :** semaine 15 sur 26. Rédigé le 27 septembre 2026.
-**Dépôt :** `samflppp/daw-ia`, branche `main`, 12 commits de `eb80d37` à `6021252`, plus ce bilan (réécrit après le chantier copilote, §10).
+**Dépôt :** `samflppp/daw-ia`, branche `main`, 11 commits de `eb80d37` à `6021252`, plus ce bilan (réécrit après le chantier copilote, §10).
 **Volume depuis le bilan S14 :** 40 fichiers, +4 540 lignes, −27 (hors ce bilan).
 **Tests :** 327 cas ctest (domaine, persistance, interface ; +17), 85 cas d'engine (+1, rendu), 33 cas Python
 (+3).
