@@ -156,6 +156,56 @@ Value toValue(const std::vector<Tool>& tools)
     return Value::array(std::move(items));
 }
 
+Tool generationTool()
+{
+    const auto oneOf = [](std::string description, std::vector<std::string> values)
+    {
+        Value::Array items;
+        for (auto& value : values)
+            items.push_back(Value{std::move(value)});
+        return Value::object({{"type", Value{std::string{"string"}}},
+                              {"description", Value{std::move(description)}},
+                              {"enum", Value::array(std::move(items))}});
+    };
+
+    auto clipId = Value::object(
+        {{"type", Value{std::string{"string"}}},
+         {"description",
+          Value{std::string{"La ligne où écrire : son clipId dans l'état, ou le $new: d'une ligne créée plus "
+                            "haut dans la même requête (clip.create_midi ou pattern.add_track)."}}},
+         {"pattern", Value{std::string{"^\\$new:[a-z0-9_-]{1,32}$|^[0-9A-HJKMNP-TV-Z]{26}$"}}}});
+
+    auto key = Value::object(
+        {{"type", Value{std::string{"object"}}},
+         {"description", Value{std::string{"Tonalité. Absente : lue dans les autres lignes du pattern."}}},
+         {"properties",
+          Value::object({{"tonic", field("string", "Tonique en notation anglaise : A, F#, Bb, C...")},
+                         {"mode", oneOf("Majeur ou mineur naturel.", {"major", "minor"})}})},
+         {"required", Value::array({Value{std::string{"tonic"}}, Value{std::string{"mode"}}})},
+         {"additionalProperties", Value{false}}});
+
+    return make(
+        std::string{generationToolName},
+        "Écrit une ligne musicale avec le générateur du DAW : accords, mélodie, basse ou rythme, "
+        "juste par construction, répétée selon une forme, dans le style appris de l'utilisateur. "
+        "Remplace les notes de la ligne dans la plage. À préférer à note.add dès qu'il s'agit "
+        "d'écrire de la musique plutôt que des notes dictées une à une. Chaque champ omis est "
+        "déduit du contexte.",
+        schema({{"clipId", std::move(clipId)},
+                {"fromBeats", field("number", "Début de la plage dans le pattern, en temps. Défaut : 0.")},
+                {"toBeats", field("number", "Fin de la plage, en temps. Défaut : la fin du pattern.")},
+                {"key", std::move(key)},
+                {"role", oneOf("Ce que joue la ligne.", {"melody", "bass", "chords", "rhythm"})},
+                {"resolution", oneOf("Grille des attaques.", {"1/4", "1/8", "1/16"})},
+                {"density", oneOf("Nombre d'attaques.", {"sparse", "medium", "dense"})},
+                {"register", oneOf("Registre.", {"low", "mid", "high"})},
+                {"form",
+                 oneOf("Répétition : boucle stricte, AABA, etc. Omis : choisie selon le rôle.",
+                       {"free", "loop", "varied", "aa'", "aab", "aaba", "aaab"})},
+                {"variant", integer("Variante, 1 par défaut ; une autre donne d'autres notes.", 1, 16)}},
+               {"clipId"}));
+}
+
 std::vector<Tool> builtinTools()
 {
     const auto trackId = identifier("Identifiant de la piste.");

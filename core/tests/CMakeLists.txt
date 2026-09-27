@@ -34,6 +34,7 @@ add_executable(daw_domain_tests
     AutomationTests.cpp
     AutomationEditingTests.cpp
     SampleSearchTests.cpp
+    CopilotRequestTests.cpp
     FormTests.cpp
     GenerationTests.cpp
     GhostProposalTests.cpp

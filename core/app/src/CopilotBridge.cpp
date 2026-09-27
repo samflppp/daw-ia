@@ -2,6 +2,9 @@
 
 #include "daw/domain/copilot/Tools.h"
 #include "daw/domain/serialization/Json.h"
+#include "daw/ui/model/CopilotRequest.h"
+#include "daw/ui/model/StyleLearning.h"
+#include "daw/ui/model/StyleSource.h"
 
 #include <juce_core/juce_core.h>
 
@@ -284,8 +287,13 @@ std::vector<std::string> CopilotBridge::capabilities() const
 {
     // The commands it may ask for, and the methods handleRequest answers.
     auto offered = wiring_.registry.types();
-    for (const auto* method :
-         {"state.get", "tools.list", "clip.notes", "plugins.find", "mix.levels", "commands.execute"})
+    for (const auto* method : {"state.get",
+                               "tools.list",
+                               "clip.notes",
+                               "plugins.find",
+                               "mix.levels",
+                               "commands.check",
+                               "commands.execute"})
         offered.emplace_back(method);
     return offered;
 }
@@ -316,7 +324,10 @@ void CopilotBridge::handleRequest(const Value& message)
     {
         auto tools = domain::copilot::toolsFor(wiring_.registry);
         if (tools)
+        {
+            tools.value().push_back(domain::copilot::generationTool());
             result = domain::copilot::toValue(tools.value());
+        }
         else
             failure = errorValue("tools", tools.error().message);
     }
@@ -364,14 +375,9 @@ void CopilotBridge::handleRequest(const Value& message)
         const auto query = arguments.stringAt("query");
         result = domain::copilot::findPlugins(machinePlugins(), query ? query.value() : std::string{});
     }
-    else if (method.value() == "commands.execute")
+    else if (method.value() == "commands.check" || method.value() == "commands.execute")
     {
-        domain::CommandQueue::Request request{};
-        request.origin.actor = domain::Actor::copilot;
-
-        if (const auto label = arguments.stringAt("label"); label)
-            request.label = label.value();
-
+        std::vector<domain::CommandQueue::Step> steps;
         const auto* commands = arguments.find("commands");
         if (commands == nullptr || commands->asArray() == nullptr || commands->asArray()->empty())
         {
@@ -389,14 +395,72 @@ void CopilotBridge::handleRequest(const Value& message)
                     break;
                 }
 
-                request.steps.push_back(domain::CommandQueue::Step{type.value(), *payload});
+                steps.push_back(domain::CommandQueue::Step{type.value(), *payload});
             }
         }
 
+        // Tried on a copy first, on the message thread where the project
+        // lives: the steps the model sent, and pattern.generate turned into
+        // the notes the generator writes, with the style learned from the
+        // person. Nothing is applied here.
+        auto expansion = std::make_shared<ui::copilot::Expansion>();
         if (failure.isNull())
+        {
+            auto tried = onMessageThread(
+                [this, expansion, steps]() -> domain::Result<Value>
+                {
+                    const auto& base = ui::styleModel();
+                    auto* learning = ui::styleLearning();
+                    const auto model =
+                        learning != nullptr
+                            ? learning->model(wiring_.state, base)
+                            : std::shared_ptr<const domain::generation::StyleModel>{
+                                  std::shared_ptr<const domain::generation::StyleModel>{}, &base};
+                    *expansion = ui::copilot::expand(wiring_.state, wiring_.registry, steps, *model);
+                    return Value{};
+                });
+            if (!tried)
+                failure = errorValue("state", tried.error().message);
+        }
+
+        const auto refusedText = [&expansion, &steps]
+        {
+            const auto& refusal = *expansion->refusal;
+            return describe(refusal.code,
+                            "appel " + std::to_string(refusal.index + 1) + " (" + steps[refusal.index].type +
+                                ") : " + refusal.message);
+        };
+
+        if (!failure.isNull())
+        {
+            // said below
+        }
+        else if (method.value() == "commands.check")
+        {
+            if (expansion->ok())
+                result =
+                    Value::object({{"ok", Value{true}},
+                                   {"steps", Value{static_cast<std::int64_t>(expansion->steps.size())}}});
+            else
+                result =
+                    Value::object({{"ok", Value{false}},
+                                   {"index", Value{static_cast<std::int64_t>(expansion->refusal->index)}},
+                                   {"message", Value{refusedText()}}});
+        }
+        else if (!expansion->ok())
+        {
+            failure = errorValue("refused", refusedText());
+        }
+        else
         {
             if (queue_ == nullptr)
                 return;
+
+            domain::CommandQueue::Request request{};
+            request.origin.actor = domain::Actor::copilot;
+            if (const auto label = arguments.stringAt("label"); label)
+                request.label = label.value();
+            request.steps = std::move(expansion->steps);
 
             auto answer = queue_->submit(std::move(request));
 

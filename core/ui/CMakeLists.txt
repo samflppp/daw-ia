@@ -17,6 +17,7 @@ add_library(daw_ui_workspace STATIC
     src/workspace/LayoutTree.cpp
     src/history/HistoryLog.cpp
     src/model/AutomationEditing.cpp
+    src/model/CopilotRequest.cpp
     src/model/GhostProposal.cpp
     src/model/NoteClipboard.cpp
     src/model/PatternPreviews.cpp

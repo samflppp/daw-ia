@@ -51,6 +51,16 @@ struct Tool
 // the ones the model may call.
 [[nodiscard]] Value toValue(const std::vector<Tool>& tools);
 
+// The one tool that is not a command: pattern.generate asks the DAW's own
+// generator (rules, form, the style learned from the person) to write a line,
+// and is turned into note.remove and note.add before anything reaches the bus.
+// Its payload is the constraints of the S14 contract (Constraints.h), plus
+// where to write. A model that writes forty chords note by note runs out of
+// room; one that says "chords, minor, sparse" does not, and cannot write a
+// note out of the key.
+inline constexpr std::string_view generationToolName = "pattern.generate";
+[[nodiscard]] Tool generationTool();
+
 // The tools the registry actually holds, or the mismatch, named.
 [[nodiscard]] Result<std::vector<Tool>> toolsFor(const CommandRegistry& registry);
 
