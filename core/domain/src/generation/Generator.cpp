@@ -1,5 +1,7 @@
 #include "daw/domain/generation/Generator.h"
 
+#include "daw/domain/generation/Form.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -245,15 +247,39 @@ struct Grid
     int bar{16};
 };
 
-[[nodiscard]] Grid gridOf(const Context& context, const ResolvedConstraints& constraints)
+[[nodiscard]] Grid gridOf(const Context& context, Resolution resolution)
 {
     Grid grid{};
-    grid.resolution = stepsOf(constraints.resolution.value);
+    grid.resolution = stepsOf(resolution);
     grid.bar = std::max(1, static_cast<int>(std::lround(context.beatsPerBar * stepsPerBeat)));
     grid.start = static_cast<int>(std::ceil(context.fromBeats / stepBeats - epsilon));
     grid.start = (grid.start + grid.resolution - 1) / grid.resolution * grid.resolution;
     grid.end = toStep(context.toBeats);
     return grid;
+}
+
+[[nodiscard]] Grid gridOf(const Context& context, const ResolvedConstraints& constraints)
+{
+    return gridOf(context, constraints.resolution.value);
+}
+
+// How the range is cut into units: their length, and how many there are. A
+// range that does not fall on a unit counts its last piece as a unit, which
+// gets the beginning of the one it repeats.
+struct Layout
+{
+    int unitSteps{16};
+    int units{1};
+};
+
+[[nodiscard]] Layout layoutOf(const Grid& grid, Role role)
+{
+    Layout out{};
+    const auto range = std::max(0, grid.end - grid.start);
+    const auto bars = (range + grid.bar - 1) / grid.bar;
+    out.unitSteps = unitBars(role, bars) * grid.bar;
+    out.units = std::max(1, (range + out.unitSteps - 1) / out.unitSteps);
+    return out;
 }
 
 // The next inter-onset interval: legal ones are on the resolution, inside
@@ -406,6 +432,340 @@ struct Grid
     return out;
 }
 
+// --- form ------------------------------------------------------------------------
+
+// Lays one unit out over the range, letter by letter (Form.h). Every change it
+// makes stays inside what the rules allow: pitches come from the legal list,
+// onsets stay on the resolution and inside the range.
+class Shaper
+{
+public:
+    Shaper(const Context& context,
+           const ResolvedConstraints& constraints,
+           const RoleStyle& style,
+           Random& random,
+           const Layout& layout)
+        : context_{context}
+        , constraints_{constraints}
+        , style_{style}
+        , random_{random}
+        , grid_{gridOf(context, constraints)}
+        , unitSteps_{layout.unitSteps}
+        , letters_{schema(constraints.form.value, layout.units)}
+        , firstBar_{static_cast<int>(std::floor(context.fromBeats / context.beatsPerBar + epsilon))}
+        , chords_{chordsOf(context, constraints.key.value)}
+    {
+        const auto [low, high] = registerRange(constraints.role.value, constraints.reg.value);
+        pitches_ = legalPitches(constraints.key.value, low, high);
+        for (const auto& note : context.row)
+        {
+            if (note.startBeats < context.fromBeats - epsilon)
+                before_.push_back(note);
+        }
+    }
+
+    [[nodiscard]] std::vector<GhostNote> run()
+    {
+        if (letters_.empty())
+            return generateLine(context_, constraints_, style_, random_);
+
+        auto unitContext = context_;
+        unitContext.toBeats = std::min(context_.toBeats, (grid_.start + unitSteps_) * stepBeats);
+        const auto unit = generateLine(unitContext, constraints_, style_, random_);
+        if (unit.empty())
+            return unit;
+
+        std::vector<GhostNote> out;
+        for (std::size_t i = 0; i < letters_.size(); ++i)
+        {
+            const auto index = static_cast<int>(i);
+            const auto unitStart = grid_.start + index * unitSteps_;
+            if (unitStart >= grid_.end)
+                break;
+            const auto unitEnd = std::min(grid_.end, unitStart + unitSteps_);
+
+            auto piece = within(shifted(unit, index * unitSteps_), unitStart, unitEnd);
+            switch (letters_[i])
+            {
+            case Letter::a:
+                adapt(piece, index);
+                break;
+            case Letter::aReturn:
+                adapt(piece, index);
+                static_cast<void>(end(piece, true));
+                break;
+            case Letter::aVaried:
+                adapt(piece, index);
+                vary(piece);
+                break;
+            case Letter::b:
+                piece = contrast(piece, index, unitStart, unitEnd, out);
+                break;
+            }
+            out.insert(out.end(), piece.begin(), piece.end());
+        }
+        return out;
+    }
+
+private:
+    [[nodiscard]] static std::vector<GhostNote> shifted(std::vector<GhostNote> notes, int steps)
+    {
+        for (auto& note : notes)
+            note.startBeats += steps * stepBeats;
+        return notes;
+    }
+
+    // The notes that start between two steps, cut at the second.
+    [[nodiscard]] static std::vector<GhostNote> within(const std::vector<GhostNote>& notes, int from, int to)
+    {
+        std::vector<GhostNote> out;
+        for (auto note : notes)
+        {
+            if (note.startBeats < from * stepBeats - epsilon || note.startBeats > to * stepBeats - epsilon)
+                continue;
+            note.lengthBeats = std::min(note.lengthBeats, to * stepBeats - note.startBeats);
+            out.push_back(note);
+        }
+        return out;
+    }
+
+    [[nodiscard]] static std::vector<int> onsets(const std::vector<GhostNote>& notes, int from)
+    {
+        std::vector<int> out;
+        for (const auto& note : notes)
+            out.push_back(toStep(note.startBeats) - from);
+        return out;
+    }
+
+    [[nodiscard]] std::optional<Chord> chordAt(int step) const
+    {
+        const auto bar =
+            static_cast<int>(std::floor(step * stepBeats / context_.beatsPerBar + epsilon)) - firstBar_;
+        if (bar < 0 || bar >= static_cast<int>(chords_.size()))
+            return std::nullopt;
+        return chords_[static_cast<std::size_t>(bar)];
+    }
+
+    [[nodiscard]] int degreeOf(int pitch) const
+    {
+        const auto index = diatonicIndex(pitch, constraints_.key.value).value_or(0);
+        return ((index % 7) + 7) % 7;
+    }
+
+    // The legal pitch nearest a target that passes a test; the lower on a tie.
+    template <typename Test>
+    [[nodiscard]] std::optional<int> nearest(int target, Test test) const
+    {
+        std::optional<int> best;
+        for (const auto pitch : pitches_)
+        {
+            if (test(pitch) && (!best.has_value() || std::abs(pitch - target) < std::abs(*best - target)))
+                best = pitch;
+        }
+        return best;
+    }
+
+    // A repeated unit over another chord than the one under the first unit.
+    void adapt(std::vector<GhostNote>& piece, int unit) const
+    {
+        const auto role = constraints_.role.value;
+        if (unit == 0 || role == Role::rhythm || role == Role::chords)
+            return;
+
+        const auto key = constraints_.key.value;
+        const auto [low, high] = registerRange(role, constraints_.reg.value);
+        for (auto& note : piece)
+        {
+            const auto step = toStep(note.startBeats);
+            const auto now = chordAt(step);
+            const auto then = chordAt(step - unit * unitSteps_);
+            if (!now.has_value() || !then.has_value() || *now == *then)
+                continue;
+
+            if (role == Role::bass)
+            {
+                // Follow the root: the same contour, moved by the step between
+                // the two roots, the short way round.
+                auto delta = (((now->root - then->root) % 7) + 7) % 7;
+                if (delta > 3)
+                    delta -= 7;
+                const auto index = diatonicIndex(note.pitch, key);
+                if (!index.has_value())
+                    continue;
+                for (const auto octave : {0, -7, 7})
+                {
+                    const auto pitch = pitchOfIndex(*index + delta + octave, key);
+                    if (pitch >= low && pitch <= high)
+                    {
+                        note.pitch = pitch;
+                        break;
+                    }
+                }
+            }
+            else if (step % grid_.bar % stepsPerBeat == 0 && !isChordTone(note.pitch, *now, key))
+            {
+                const auto pitch =
+                    nearest(note.pitch, [&](int candidate) { return isChordTone(candidate, *now, key); });
+                if (pitch.has_value())
+                    note.pitch = *pitch;
+            }
+        }
+    }
+
+    // The last note closed on the tonic, or opened: on the fifth for a bass,
+    // whose second rubs against the root it leaves, on the second or the fifth
+    // for a melody. Says whether it changed.
+    bool end(std::vector<GhostNote>& piece, bool closed) const
+    {
+        if (piece.empty() || constraints_.role.value == Role::rhythm)
+            return false;
+
+        const auto bass = constraints_.role.value == Role::bass;
+        auto& last = piece.back();
+        const auto pitch = nearest(last.pitch,
+                                   [&](int candidate)
+                                   {
+                                       const auto degree = degreeOf(candidate);
+                                       if (closed)
+                                           return degree == 0;
+                                       return degree == 4 || (!bass && degree == 1);
+                                   });
+        if (!pitch.has_value() || *pitch == last.pitch)
+            return false;
+        last.pitch = *pitch;
+        return true;
+    }
+
+    // One note moved by one step of the resolution, the downbeat kept when
+    // another note can move. Says whether one could.
+    bool displace(std::vector<GhostNote>& piece) const
+    {
+        const auto step = grid_.resolution * stepBeats;
+        struct Move
+        {
+            std::size_t index;
+            bool later;
+        };
+        std::vector<Move> moves;
+        for (std::size_t i = 1; i < piece.size(); ++i)
+        {
+            if (piece[i].lengthBeats > step + epsilon)
+                moves.push_back({i, true});
+            if (piece[i].startBeats - step > piece[i - 1].startBeats + epsilon)
+                moves.push_back({i, false});
+        }
+        if (moves.empty() && !piece.empty() && piece.front().lengthBeats > step + epsilon)
+            moves.push_back({0, true});
+        if (moves.empty())
+            return false;
+
+        const auto move = moves[random_.next() % moves.size()];
+        auto& note = piece[move.index];
+        if (move.later)
+        {
+            note.startBeats += step;
+            note.lengthBeats -= step;
+        }
+        else
+        {
+            note.startBeats -= step;
+            note.lengthBeats += step;
+            auto& previous = piece[move.index - 1];
+            previous.lengthBeats = std::min(previous.lengthBeats, note.startBeats - previous.startBeats);
+        }
+        return true;
+    }
+
+    void accent(std::vector<GhostNote>& piece) const
+    {
+        if (piece.empty())
+            return;
+        auto& note = piece[random_.next() % piece.size()];
+        const auto delta = random_.next() % 2 == 0 ? 15 : -15;
+        auto velocity = std::clamp(note.velocity + delta, Note::lowestVelocity, Note::highestVelocity);
+        if (velocity == note.velocity)
+            velocity = std::clamp(note.velocity - delta, Note::lowestVelocity, Note::highestVelocity);
+        note.velocity = velocity;
+    }
+
+    // A light change, never a redraw.
+    void vary(std::vector<GhostNote>& piece) const
+    {
+        const auto pitched = constraints_.role.value != Role::rhythm;
+        const auto choice = random_.next() % (pitched ? 3 : 2);
+        if (choice == 0 && displace(piece))
+            return;
+        if (choice == 2 && end(piece, random_.next() % 2 == 0))
+            return;
+        accent(piece);
+    }
+
+    // The first half kept, the second drawn again after it with another rhythm
+    // than the unit had there, and an open end.
+    [[nodiscard]] std::vector<GhostNote> contrast(std::vector<GhostNote> piece,
+                                                  int unit,
+                                                  int unitStart,
+                                                  int unitEnd,
+                                                  const std::vector<GhostNote>& written)
+    {
+        const auto half = unitStart + unitSteps_ / 2;
+        adapt(piece, unit);
+        if (half >= unitEnd)
+            return piece;
+
+        auto first = within(piece, unitStart, half);
+        const auto reference = onsets(within(piece, half, unitEnd), half);
+
+        // What the second half follows: the row before the range, then what
+        // the form has written so far.
+        auto sub = context_;
+        sub.row = before_;
+        const std::vector<GhostNote>& kept = first;
+        for (const auto* part : {&written, &kept})
+        {
+            for (const auto& ghost : *part)
+            {
+                Note note{};
+                note.pitch = ghost.pitch;
+                note.velocity = ghost.velocity;
+                note.startBeats = ghost.startBeats;
+                note.lengthBeats = ghost.lengthBeats;
+                sub.row.push_back(note);
+            }
+        }
+        sub.fromBeats = half * stepBeats;
+        sub.toBeats = unitEnd * stepBeats;
+
+        // Four draws: a rhythm table that knows one answer gives the same
+        // rhythm every time, and a moved note then makes the difference.
+        std::vector<GhostNote> second;
+        auto differs = false;
+        for (int draw = 0; draw < 4 && !differs; ++draw)
+        {
+            second = generateLine(sub, constraints_, style_, random_);
+            differs = onsets(second, half) != reference;
+        }
+        if (!differs)
+            static_cast<void>(displace(second));
+
+        first.insert(first.end(), second.begin(), second.end());
+        static_cast<void>(end(first, false));
+        return first;
+    }
+
+    const Context& context_;
+    const ResolvedConstraints& constraints_;
+    const RoleStyle& style_;
+    Random& random_;
+    Grid grid_;
+    int unitSteps_;
+    std::vector<Letter> letters_;
+    int firstBar_;
+    std::vector<std::optional<Chord>> chords_;
+    std::vector<int> pitches_;
+    std::vector<Note> before_;
+};
+
 // --- chords ----------------------------------------------------------------------
 
 // Close voicings of a triad inside the window: root position and both
@@ -433,13 +793,28 @@ struct Grid
     return out;
 }
 
+// With a form, the comping rhythm of the first bar is the unit: every A bar
+// plays it again, a varied one changes one velocity, a B bar draws its own.
+// The progression stays drawn bar by bar, and past four bars it comes back.
 [[nodiscard]] std::vector<GhostNote> generateChords(const Context& context,
                                                     const ResolvedConstraints& constraints,
                                                     const RoleStyle& style,
-                                                    Random& random)
+                                                    Random& random,
+                                                    const Layout& layout)
 {
     const auto key = constraints.key.value;
     const auto grid = gridOf(context, constraints);
+    const auto letters = schema(constraints.form.value, layout.units);
+    const auto startBar = grid.start / grid.bar;
+
+    struct Hit
+    {
+        int offset;
+        int length;
+        int velocity;
+    };
+    std::vector<Hit> comping;
+    std::vector<Chord> cycle;
     const auto [low, high] = registerRange(Role::chords, constraints.reg.value);
     const auto heard = chordsOf(context, key);
     const auto firstBar = static_cast<int>(std::floor(context.fromBeats / context.beatsPerBar + epsilon));
@@ -461,9 +836,14 @@ struct Grid
             const auto given = rank >= 0 && rank < static_cast<int>(heard.size())
                                    ? heard[static_cast<std::size_t>(rank)]
                                    : std::optional<Chord>{};
+            const auto unit = bar - startBar;
             if (given.has_value())
             {
                 chord = *given;
+            }
+            else if (!letters.empty() && unit >= 4 && !cycle.empty())
+            {
+                chord = cycle[static_cast<std::size_t>(unit % 4) % cycle.size()];
             }
             else
             {
@@ -477,6 +857,8 @@ struct Grid
                 chord = Chord{candidates[random.pick(weights)]};
             }
             keepLast(roots, chord.root);
+            if (unit < 4)
+                cycle.push_back(chord);
 
             // The voicing nearest the last one: voices move as little as they can.
             const auto options = voicings(chord, key, low, high);
@@ -501,6 +883,33 @@ struct Grid
         }
 
         const auto nextBar = (bar + 1) * grid.bar;
+        const auto unit = bar - startBar;
+        const auto letter = !letters.empty() && unit < static_cast<int>(letters.size())
+                                ? letters[static_cast<std::size_t>(unit)]
+                                : Letter::b;
+        if (unit > 0 && letter != Letter::b && !comping.empty())
+        {
+            auto hits = comping;
+            if (letter == Letter::aVaried)
+            {
+                auto& hit = hits[random.next() % hits.size()];
+                hit.velocity = std::clamp(hit.velocity + (hit.velocity > 100 ? -15 : 15),
+                                          Note::lowestVelocity,
+                                          Note::highestVelocity);
+            }
+            for (const auto& hit : hits)
+            {
+                const auto at = bar * grid.bar + hit.offset;
+                if (at < grid.start || at >= std::min(grid.end, nextBar))
+                    continue;
+                const auto length = std::min(hit.length, std::min(grid.end, nextBar) - at);
+                for (const auto pitch : *voiced)
+                    out.push_back(GhostNote{pitch, hit.velocity, at * stepBeats, length * stepBeats});
+            }
+            position = nextBar;
+            continue;
+        }
+
         const auto interval =
             nextInterval(style, constraints, grid, position, std::min(grid.end, nextBar), onsets, random);
         if (!interval.has_value())
@@ -513,6 +922,8 @@ struct Grid
         const auto velocity = velocityAt(style, position % grid.bar, random);
         for (const auto pitch : *voiced)
             out.push_back(GhostNote{pitch, velocity, position * stepBeats, length * stepBeats});
+        if (!letters.empty() && unit == 0)
+            comping.push_back(Hit{position - bar * grid.bar, length, velocity});
 
         keepLast(onsets, *interval);
         position += *interval;
@@ -661,6 +1072,16 @@ ResolvedConstraints resolve(const Constraints& constraints, const Context& conte
         out.resolution = {Resolution::sixteenth, Source::defaulted};
     }
 
+    if (constraints.form.has_value())
+    {
+        out.form = {*constraints.form, Source::imposed};
+    }
+    else
+    {
+        const auto layout = layoutOf(gridOf(context, out.resolution.value), out.role.value);
+        out.form = {defaultForm(out.role.value, layout.units), Source::deduced};
+    }
+
     out.density = constraints.density.has_value() ? Resolved<Density>{*constraints.density, Source::imposed}
                                                   : Resolved<Density>{Density::medium, Source::defaulted};
 
@@ -725,14 +1146,16 @@ generate(const Context& context, const ResolvedConstraints& constraints, const S
     seed.add(static_cast<std::int64_t>(constraints.density.value));
     seed.add(static_cast<std::int64_t>(constraints.reg.value));
     seed.add(static_cast<std::int64_t>(constraints.role.value));
+    seed.add(static_cast<std::int64_t>(constraints.form.value));
     seed.add(static_cast<std::int64_t>(variant));
 
     Random random{seed.value()};
     const auto& style = model.role(constraints.role.value);
+    const auto layout = layoutOf(gridOf(context, constraints), constraints.role.value);
 
     if (constraints.role.value == Role::chords)
-        return generateChords(context, constraints, style, random);
-    return generateLine(context, constraints, style, random);
+        return generateChords(context, constraints, style, random, layout);
+    return Shaper{context, constraints, style, random, layout}.run();
 }
 
 // --- variants ------------------------------------------------------------------------

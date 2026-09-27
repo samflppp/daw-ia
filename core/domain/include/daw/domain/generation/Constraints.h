@@ -61,6 +61,21 @@ enum class Role : std::uint8_t
     rhythm // a sample channel: positions and velocities, the pitch is the channel's
 };
 
+// The shape of a proposal over time: one unit (a bar, two for a long melody)
+// generated, then repeated and varied. A loop lives on repetition; a Markov
+// chain of order 3 does not remember what it played four beats ago, so the
+// repetition is decided here, above it.
+enum class Form : std::uint8_t
+{
+    free,    // libre: no unit, the whole range drawn at once (S14)
+    loop,    // boucle: the unit, strictly repeated
+    varied,  // varié: every return is a different light variation
+    aaPrime, // AA': the unit, then a light variation of it
+    aab,     // AAB
+    aaba,    // AABA
+    aaab     // AAAB
+};
+
 struct Key
 {
     int tonic{9}; // pitch class, 0 = C
@@ -76,6 +91,7 @@ struct Constraints
     std::optional<Density> density;
     std::optional<Register> reg;
     std::optional<Role> role;
+    std::optional<Form> form; // added in S15; a JSON without it still reads
 
     [[nodiscard]] Value toValue() const;
     [[nodiscard]] static Result<Constraints> fromValue(const Value& value);
@@ -115,6 +131,7 @@ public:
 //   densité     clair, moyen, dense
 //   registre    grave, medium, aigu
 //   rôle        mélodie, basse, accords, rythme
+//   forme       AABA, AAAB, AAB, AA', boucle, varié, libre
 //
 // Anything else is ignored and reported. Two words for one field: the last
 // one wins, and the conflict is reported.
@@ -153,6 +170,7 @@ struct ResolvedConstraints
     Resolved<Density> density;
     Resolved<Register> reg;
     Resolved<Role> role;
+    Resolved<Form> form;
 
     friend bool operator==(const ResolvedConstraints& lhs, const ResolvedConstraints& rhs) = default;
 };
@@ -163,6 +181,7 @@ struct ResolvedConstraints
 [[nodiscard]] std::string_view describe(Density density) noexcept;
 [[nodiscard]] std::string_view describe(Register reg) noexcept;
 [[nodiscard]] std::string_view describe(Role role) noexcept;
+[[nodiscard]] std::string_view describe(Form form) noexcept;
 [[nodiscard]] std::string_view describe(Source source) noexcept;
 
 // "La mineur (déduit) · doubles (imposé) · basse (déduit)"

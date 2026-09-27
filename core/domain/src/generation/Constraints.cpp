@@ -132,6 +132,24 @@ constexpr std::array<Word<Role>, 14> roleWords{{
     {"batterie", Role::rhythm},
 }};
 
+// Lower case already: "AABA" arrives as "aaba". The prime is typed three ways.
+constexpr std::array<Word<Form>, 14> formWords{{
+    {"aaba", Form::aaba},
+    {"aaab", Form::aaab},
+    {"aab", Form::aab},
+    {"aa'", Form::aaPrime},
+    {"aa\xE2\x80\xB2", Form::aaPrime}, // AA′
+    {"aa\xE2\x80\x99", Form::aaPrime}, // AA’
+    {"boucle", Form::loop},
+    {"loop", Form::loop},
+    {"répété", Form::loop},
+    {"varié", Form::varied},
+    {"varie", Form::varied},
+    {"variée", Form::varied},
+    {"libre", Form::free},
+    {"free", Form::free},
+}};
+
 template <typename T, std::size_t N>
 [[nodiscard]] std::optional<T> lookup(const std::array<Word<T>, N>& words, std::string_view word)
 {
@@ -218,6 +236,28 @@ void assign(std::optional<T>& field,
     return "melody";
 }
 
+[[nodiscard]] std::string_view formText(Form value) noexcept
+{
+    switch (value)
+    {
+    case Form::free:
+        return "free";
+    case Form::loop:
+        return "loop";
+    case Form::varied:
+        return "varied";
+    case Form::aaPrime:
+        return "aa'";
+    case Form::aab:
+        return "aab";
+    case Form::aaba:
+        return "aaba";
+    case Form::aaab:
+        return "aaab";
+    }
+    return "free";
+}
+
 template <typename T, std::size_t N>
 [[nodiscard]] Result<std::optional<T>> optionalEnum(const Value& value,
                                                     std::string_view key,
@@ -295,6 +335,8 @@ Value Constraints::toValue() const
         members.emplace_back("register", Value{registerText(*reg)});
     if (role.has_value())
         members.emplace_back("role", Value{roleText(*role)});
+    if (form.has_value())
+        members.emplace_back("form", Value{formText(*form)});
     return Value::object(std::move(members));
 }
 
@@ -349,6 +391,15 @@ Result<Constraints> Constraints::fromValue(const Value& value)
         return role.error();
     out.role = role.value();
 
+    auto form = optionalEnum<Form, 7>(
+        value,
+        "form",
+        {Form::free, Form::loop, Form::varied, Form::aaPrime, Form::aab, Form::aaba, Form::aaab},
+        formText);
+    if (!form)
+        return form.error();
+    out.form = form.value();
+
     return out;
 }
 
@@ -393,6 +444,7 @@ Interpretation LocalInterpreter::parse(std::string_view text)
     std::optional<std::string> densityWord;
     std::optional<std::string> registerWord;
     std::optional<std::string> roleWord;
+    std::optional<std::string> formWord;
 
     std::size_t at = 0;
     while (at < text.size())
@@ -417,6 +469,8 @@ Interpretation LocalInterpreter::parse(std::string_view text)
             assign(out.constraints.density, *density, original, densityWord, out);
         else if (auto reg = lookup(registerWords, word); reg.has_value())
             assign(out.constraints.reg, *reg, original, registerWord, out);
+        else if (auto form = lookup(formWords, word); form.has_value())
+            assign(out.constraints.form, *form, original, formWord, out);
         else if (auto key = parseKey(word); key.has_value())
             assign(out.constraints.key, *key, original, keyWord, out);
         else
@@ -498,6 +552,28 @@ std::string_view describe(Role role) noexcept
     return "mélodie";
 }
 
+std::string_view describe(Form form) noexcept
+{
+    switch (form)
+    {
+    case Form::free:
+        return "libre";
+    case Form::loop:
+        return "boucle";
+    case Form::varied:
+        return "varié";
+    case Form::aaPrime:
+        return "AA\xE2\x80\xB2";
+    case Form::aab:
+        return "AAB";
+    case Form::aaba:
+        return "AABA";
+    case Form::aaab:
+        return "AAAB";
+    }
+    return "libre";
+}
+
 std::string_view describe(Source source) noexcept
 {
     switch (source)
@@ -529,6 +605,7 @@ std::string describe(const ResolvedConstraints& constraints)
     if (constraints.role.value != Role::rhythm)
         out += " · " + part(std::string{describe(constraints.reg.value)}, constraints.reg.source);
     out += " · " + part(std::string{describe(constraints.role.value)}, constraints.role.source);
+    out += " · " + part(std::string{describe(constraints.form.value)}, constraints.form.source);
     return out;
 }
 
@@ -552,6 +629,8 @@ std::string shortLabel(const ResolvedConstraints& constraints)
     if (constraints.reg.source == Source::imposed)
         add(describe(constraints.reg.value));
     add(describe(constraints.role.value));
+    if (constraints.form.source == Source::imposed)
+        add(describe(constraints.form.value));
     return out;
 }
 
