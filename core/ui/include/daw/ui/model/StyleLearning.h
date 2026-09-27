@@ -88,8 +88,8 @@ public:
 
     void onExecuted(const domain::Receipt& receipt) override;
     void onCoalesced(const domain::Receipt& receipt) override;
-    void onUndone(const domain::Receipt&) override { dirty_ = true; }
-    void onRedone(const domain::Receipt&) override { dirty_ = true; }
+    void onUndone(const domain::Receipt&) override { dirty_ = stale_ = true; }
+    void onRedone(const domain::Receipt&) override { dirty_ = stale_ = true; }
 
 private:
     [[nodiscard]] juce::File fileFor(const std::string& projectId) const;
@@ -102,7 +102,8 @@ private:
     std::string projectName_;
     bool enabled_{true};
     bool excluded_{false};
-    bool dirty_{true};
+    bool dirty_{true}; // changed since the last save wrote the counts
+    bool stale_{true}; // changed since the last Ctrl+G counted the project
 
     domain::generation::MachineNotes machine_;
 

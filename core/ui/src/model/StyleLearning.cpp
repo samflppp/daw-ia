@@ -94,7 +94,7 @@ void StyleLearning::attach(const std::string& projectId,
     projectName_ = projectName;
     machine_ = {};
     machine_.read(journal);
-    dirty_ = true;
+    dirty_ = stale_ = true;
 
     excluded_ = false;
     if (const auto mine = readJson(fileFor(projectId_)); mine.has_value())
@@ -199,7 +199,14 @@ StyleLearning::model(const domain::ProjectState& state, const domain::generation
         return borrowed(base);
     }
 
-    current_ = excluded_ ? domain::generation::Learned{} : domain::generation::learn(state, machine_.notes());
+    // Counted again only when the project changed since the last Ctrl+G: a
+    // second proposal on the same notes costs nothing.
+    if (stale_)
+    {
+        current_ =
+            excluded_ ? domain::generation::Learned{} : domain::generation::learn(state, machine_.notes());
+        stale_ = false;
+    }
     domain::generation::Learned total{};
     {
         const std::lock_guard lock{mutex_};
@@ -248,7 +255,7 @@ std::string StyleLearning::describe(domain::generation::Role role) const
 void StyleLearning::setEnabled(bool enabled)
 {
     enabled_ = enabled;
-    dirty_ = true;
+    dirty_ = stale_ = true;
     model_.reset();
     writeSettings();
 }
@@ -256,7 +263,7 @@ void StyleLearning::setEnabled(bool enabled)
 void StyleLearning::setProjectExcluded(bool excluded)
 {
     excluded_ = excluded;
-    dirty_ = true;
+    dirty_ = stale_ = true;
     model_.reset();
     // Said on disk at once: the counts of a project left out go now, not at
     // the next save.
@@ -280,7 +287,7 @@ void StyleLearning::forget()
         otherCount_ = 0;
     }
     excluded_ = false;
-    dirty_ = true;
+    dirty_ = stale_ = true;
     model_.reset();
 }
 
@@ -293,13 +300,13 @@ int StyleLearning::otherProjects() const
 void StyleLearning::onExecuted(const domain::Receipt& receipt)
 {
     machine_.observe(receipt);
-    dirty_ = true;
+    dirty_ = stale_ = true;
 }
 
 void StyleLearning::onCoalesced(const domain::Receipt& receipt)
 {
     static_cast<void>(receipt);
-    dirty_ = true;
+    dirty_ = stale_ = true;
 }
 
 void setStyleLearning(StyleLearning* learning) noexcept
