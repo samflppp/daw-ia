@@ -6,6 +6,7 @@
 #include "daw/domain/serialization/Json.h"
 #include "daw/ui/model/CopilotRequest.h"
 
+#include <cmath>
 #include <map>
 #include <ostream>
 #include <string>
