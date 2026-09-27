@@ -397,10 +397,15 @@ retient :
 **Ce que le modèle S16 devra définir :**
 - **La fenêtre du prompt :** hors de la grille, sans ligne technique, et qui ne propose rien avant que le prompt
   soit écrit.
-- **Ce qu'« améliorer » veut dire pour le moteur.** Le générateur sait créer ; il ne sait pas encore reprendre des
-  notes existantes. Pistes : garder le rythme et changer les hauteurs, garder les hauteurs et changer le rythme,
-  varier comme la forme varie un A′, ou suivre une consigne (« plus sombre », « plus rythmé », « humanise »). Les
-  notes sélectionnées deviennent le contexte, le prompt dit la transformation, et les règles de justesse restent
-  les mêmes.
+- **« Améliorer » : les quatre transformations, toutes demandées.** Le moteur sait créer ; il devra aussi
+  reprendre des notes sélectionnées, de quatre façons, choisies par le prompt :
+  - **garder le rythme, changer les hauteurs** : mêmes attaques, mêmes durées, d'autres notes ;
+  - **garder les hauteurs, changer le rythme** : même suite de notes, d'autres placements ;
+  - **une variante légère,** comme la forme en fait pour un A′ : une note déplacée, une fin ouverte ou fermée ;
+  - **suivre une consigne** du prompt : « plus sombre », « plus rythmé », « humanise »…
+
+  Les notes sélectionnées deviennent le contexte, et les règles de justesse restent les mêmes. Le modèle S16 dira,
+  pour chaque consigne comprise, ce qu'elle change dans les notes. La preuve se mesurera sur les notes avant et
+  après : le rythme conservé quand il doit l'être, les hauteurs conservées quand elles doivent l'être.
 - **Une zone sur plusieurs pistes :** une ligne par piste, dans le rôle que son nom ou son contenu indique, et une
   seule proposition à valider pour toutes.
