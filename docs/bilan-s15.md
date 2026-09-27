@@ -20,6 +20,8 @@
 - **Le copilote écrit de la musique** (demandé en cours de semaine) : « ouvre un omnisphere et cree des accords
   triste dans un pattern en 140 bpm » passe, avec le vrai modèle (§10).
 - **Rien n'est tombé** de ce qui était demandé. Ce qui reste en deçà est au §7.
+- **Ctrl+G sera refait.** Tu ne l'aimes pas, et je pense que tu as raison : le geste, pas le moteur. La refonte
+  est annoncée au §11. Elle ouvre la S16, avec un modèle à valider avant d'écrire une ligne.
 
 ## 1. Le modèle de structure, tel que validé
 
@@ -236,6 +238,10 @@ Rien de ce qui était demandé n'est tombé. En deçà :
 
 ## 8. À écouter, dans l'ordre
 
+Ces écoutes passent encore par Ctrl+G, qui va changer (§11). Ce qu'elles jugent, la forme, l'apprentissage et
+les accords, ne change pas avec lui. Pour éviter le geste, le panneau Copilote fait la même chose avec
+pattern.generate : « quatre mesures de mélodie en la mineur sur le Lead, en AABA ».
+
 1. **La forme, sur un canal Lead vide : Maj + glisser sur quatre mesures, Ctrl+G, Tab, lecture.** Tu dois
    entendre une mesure, la même, une autre, la première. Puis la même plage avec « libre » : c'est la S14. La
    différence entre les deux est ce que la semaine a apporté.
@@ -253,6 +259,7 @@ Rien de ce qui était demandé n'est tombé. En deçà :
 
 ## 9. Reste à faire
 
+- **La refonte de Ctrl+G (§11),** premier chantier de la S16, sur un modèle validé avant d'être codé.
 - Ton écoute (§8), en commençant par la forme.
 - L'interprète distant des contraintes (S16) : en partie avancé par le §10. Le copilote écrit déjà le JSON du
   contrat S14 §2 pour pattern.generate ; reste la zone de saisie, qui ne passe toujours que par LocalInterpreter.
@@ -315,3 +322,46 @@ par un include transitif. La CI l'a vu, `6021252` le corrige. C'est contraire à
 
 **À essayer :** la même phrase dans le panneau Copilote, puis écouter les quatre accords sur Omnisphere. Puis
 une variante qui combine : « ajoute une basse 808 qui suit ces accords, en croches ».
+
+## 11. Annonce : la refonte de Ctrl+G
+
+**Ta décision, le 27 septembre :** Ctrl+G ne te plaît pas, et on peut faire beaucoup mieux. Ce qui suit est
+une annonce, pas un modèle. Rien n'est codé. Le modèle viendra en ouverture de la S16, à valider avant la
+première ligne, comme la forme et l'apprentissage cette semaine.
+
+**Ce que je reproche moi-même au geste actuel,** maintenant que le moteur derrière est solide :
+
+- **Il se cache.** Rien à l'écran ne dit qu'il existe. Il faut connaître Ctrl+G, et savoir que Maj + glisser sur
+  la règle prend une plage. Un geste qu'on ne découvre pas n'existe pas pour quelqu'un de neuf, et
+  l'utilisateur neuf est le cas le plus fréquent (§3).
+- **Il parle une langue à lui.** La zone ne comprend qu'une quarantaine de mots courts (« Am doubles dense ») et
+  ignore le reste. Le copilote, lui, comprend maintenant « des accords tristes » et en fait des contraintes
+  (§10). Deux façons de demander la même chose, dont la moins bonne est dans le piano-roll.
+- **Il travaille une ligne à la fois.** Une boucle, c'est des accords, une basse qui les suit et une mélodie
+  au-dessus. Il faut aujourd'hui trois Ctrl+G, trois plages, trois Tab.
+- **Il se voit mais ne s'entend pas.** Les notes grises sont à l'écran ; pour les entendre, il faut les écrire
+  avec Tab. On juge une proposition à l'oreille, pas à l'œil. C'était hors périmètre S15, et c'est ce qui manque
+  le plus au geste.
+- **Ses variantes se parcourent à l'aveugle.** Alt + molette, sans rien qui dise combien il y en a ni en quoi
+  elles diffèrent.
+- **Il pose sa zone de texte sur la grille,** là où sont les notes qu'on veut voir.
+
+**Ce qui ne change pas.** Le moteur reste tel quel : `Harmony`, la forme, l'apprentissage, le contrat des
+contraintes (S14 §2 et `form`), `GhostProposal`, un groupe marqué `generator` par acceptation, et rien d'écrit
+avant l'acceptation. La refonte porte sur la façon de demander, d'écouter et de choisir. Elle ne touche pas à ce
+qui produit les notes.
+
+**Les pistes que j'apporterai au modèle S16,** pour qu'on tranche ensemble :
+
+- **Une seule langue.** La demande passe par le même interprète que le copilote, ce qui achève l'interprète
+  distant prévu en S16. Le LocalInterpreter devient le repli hors ligne, pas l'interface.
+- **Un point d'entrée visible,** là où l'on travaille : dans le pattern ou dans le channel rack plutôt qu'au
+  clavier seulement. La plage par défaut est le pattern entier, pour ne plus avoir à la choisir.
+- **Plusieurs lignes d'un coup :** « une boucle trap en fa# mineur » propose accords, basse et mélodie ensemble,
+  chacune sur sa piste.
+- **Écouter avant d'écrire :** la proposition joue en boucle sans entrer dans le projet ni dans l'historique.
+  C'est le chantier qui demande le plus de soin, parce qu'il touche au moteur audio et au thread audio.
+- **Choisir en voyant :** les variantes côte à côte ou nommées, pas derrière une molette.
+
+**Ce que j'attends de toi avant d'écrire le modèle :** ce qui te gêne le plus dans l'usage réel. Est-ce le
+geste, le texte, l'impossibilité d'écouter, ou le travail ligne par ligne ? L'ordre de la refonte en dépend.
