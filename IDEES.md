@@ -65,6 +65,13 @@ revérifier sur le dépôt Hugging Face avant tout engagement.
 Décision reportée volontairement jusqu'à ce que la S14 dise jusqu'où vont des règles et un Markov
 sur le corpus personnel.
 
+**Tranché en S15 sur un point (27 septembre 2026) : pas de fine-tune sur un corpus personnel du
+fondateur.** Un DAW s'adresse à tout le monde ; un générateur enfermé dans le style d'un seul
+producteur ne sert que lui. Le générateur apprend à la place de la personne qui l'utilise, à partir
+de ce qu'elle produit dans le DAW, et tout reste sur sa machine (bilan S15). La voie « transformer
+fine-tuné sur le corpus perso » du tableau ci-dessous et la « lecture retenue » qui la suit sont
+donc écartées ; le reste de la section (audio écarté, empiler les couches) tient toujours.
+
 Écarté d'emblée : la génération audio (Suno, Udio, Stability). Elle produit du fini, pas de la
 matière éditable — ni BPM exact, ni grille, ni stems, ni notes déplaçables. Incompatible avec la
 promesse de contrôle chirurgical.
