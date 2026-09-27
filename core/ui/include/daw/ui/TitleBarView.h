@@ -32,6 +32,13 @@ public:
         std::function<void()> saveAs;
         std::function<void()> exportSong;
 
+        // Fichier > Génération: the generator learning from the person.
+        std::function<bool()> learning;
+        std::function<void()> toggleLearning;
+        std::function<bool()> projectLearning;
+        std::function<void()> toggleProjectLearning;
+        std::function<void()> forgetLearning;
+
         std::function<void()> minimise;
         std::function<void()> toggleMaximise;
         std::function<void()> close;
@@ -69,6 +76,9 @@ public:
         saveItem,
         saveAsItem,
         exportItem,
+        learnItem,
+        projectLearnItem,
+        forgetItem,
     };
 
     void paint(juce::Graphics& g) override;

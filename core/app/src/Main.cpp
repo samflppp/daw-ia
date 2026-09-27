@@ -35,6 +35,7 @@
 #include "daw/ui/model/History.h"
 #include "daw/ui/model/ProjectObserver.h"
 #include "daw/ui/model/Selection.h"
+#include "daw/ui/model/StyleLearning.h"
 
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
@@ -95,6 +96,13 @@ public:
         // is rebuilt from.
         if (!openProject(projectFolderFromCommandLine(commandLine)))
             return;
+
+        // What the generator learns from this person, from the project just
+        // rebuilt and the ones saved before it. It stays on this machine.
+        learning_ = std::make_unique<ui::StyleLearning>(learningFolderFromCommandLine(commandLine));
+        learning_->attach(store_->projectId(), projectName().toStdString(), bus_.journal());
+        learningToken_ = bus_.addObserver(*learning_);
+        ui::setStyleLearning(learning_.get());
 
         projector_ = std::make_unique<engine::ProjectProjector>(
             engineHost_->edit(), state_, &engineHost_->catalogue(), contentStore_.get());
@@ -266,6 +274,16 @@ public:
 
         closeProject();
 
+        // A count still running after the last save is waited for: it is the
+        // one the next launch reads.
+        if (learning_ != nullptr)
+        {
+            bus_.removeObserver(learningToken_);
+            learning_->settle();
+            ui::setStyleLearning(nullptr);
+            learning_.reset();
+        }
+
         juce::Logger::setCurrentLogger(nullptr);
 
         // The plugin windows go before the Edit that owns the plugins they
@@ -305,6 +323,8 @@ public:
         {
             if (const auto saved = store_->save(); !saved)
                 juce::Logger::writeToLog("project not saved: " + juce::String(saved.error().message));
+            else
+                learnFromSave();
         }
 
         quit();
@@ -341,6 +361,19 @@ private:
         actions.save = [this] { saveNow(); };
         actions.saveAs = [this] { chooseSaveAs(); };
         actions.exportSong = [this] { exporter_->start(); };
+        actions.learning = [this] { return learning_ != nullptr && learning_->enabled(); };
+        actions.toggleLearning = [this]
+        {
+            if (learning_ != nullptr)
+                learning_->setEnabled(!learning_->enabled());
+        };
+        actions.projectLearning = [this] { return learning_ != nullptr && !learning_->projectExcluded(); };
+        actions.toggleProjectLearning = [this]
+        {
+            if (learning_ != nullptr)
+                learning_->setProjectExcluded(!learning_->projectExcluded());
+        };
+        actions.forgetLearning = [this] { confirmForgetLearning(); };
         actions.minimise = [this]
         {
             if (window_ != nullptr)
@@ -420,8 +453,54 @@ private:
         }
 
         reportProjectHealthy();
+        learnFromSave();
         if (titleBar_ != nullptr)
             titleBar_->setStatus(juce::String(u8"enregistré"), false);
+    }
+
+    // Every save, the autosave included, teaches the generator what the
+    // project holds now. The count runs off the message thread.
+    void learnFromSave()
+    {
+        if (learning_ != nullptr)
+            learning_->saved(state_);
+    }
+
+    // "Oublier ce qui a été appris...": asked first, since it cannot be undone.
+    void confirmForgetLearning()
+    {
+        if (learning_ == nullptr)
+            return;
+
+        const auto forget = [this]
+        {
+            learning_->forget();
+            if (titleBar_ != nullptr)
+                titleBar_->setStatus(juce::String::fromUTF8("appris : oublié"), false);
+        };
+
+        if (verification_ != nullptr)
+        {
+            forget();
+            return;
+        }
+
+        juce::AlertWindow::showOkCancelBox(
+            juce::MessageBoxIconType::QuestionIcon,
+            juce::String::fromUTF8("Oublier ce qui a été appris"),
+            juce::String::fromUTF8(
+                "Le générateur oubliera le style appris de tous tes projets. Tes projets ne "
+                "changent pas. Le projet ouvert continuera de lui apprendre tant que "
+                "« Apprendre de ce projet » est coché."),
+            juce::String::fromUTF8("Oublier"),
+            juce::String::fromUTF8("Annuler"),
+            nullptr,
+            juce::ModalCallbackFunction::create(
+                [forget](int chosen)
+                {
+                    if (chosen != 0)
+                        forget();
+                }));
     }
 
     void chooseNewProject()
@@ -519,6 +598,7 @@ private:
             tell("Enregistrer sous", juce::String(saved.error().message));
             return false;
         }
+        learnFromSave();
 
         const juce::File source{juce::String{store_->folder().root().string()}};
         if (!source.copyDirectoryTo(target))
@@ -665,6 +745,7 @@ private:
         if (saved)
         {
             reportProjectHealthy();
+            learnFromSave();
             return;
         }
 
@@ -703,6 +784,20 @@ private:
     // --project "<path to a .dawproj folder>". Without it, the application
     // opens the same default project every time, which is what a first launch
     // needs and what --demo relies on.
+    // Where what was learned is kept: beside the settings, and inside the
+    // verification's own folder when one runs, so a scripted run never
+    // teaches the person's generator nor reads what it learned.
+    [[nodiscard]] static juce::File learningFolderFromCommandLine(const juce::String& commandLine)
+    {
+        const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+        for (int index = 0; index < tokens.size() - 1; ++index)
+        {
+            if (tokens[index].startsWith("--verify"))
+                return juce::File{tokens[index + 1].unquoted()}.getChildFile("appris");
+        }
+        return ui::StyleLearning::defaultFolder();
+    }
+
     [[nodiscard]] juce::File projectFolderFromCommandLine(const juce::String& commandLine)
     {
         const auto tokens = juce::StringArray::fromTokens(commandLine, true);
@@ -895,6 +990,8 @@ private:
     domain::CommandRegistry registry_{domain::CommandRegistry::withBuiltinCommands()};
     domain::CommandBus bus_{state_, registry_};
     std::unique_ptr<persistence::ProjectStore> store_;
+    std::unique_ptr<ui::StyleLearning> learning_;
+    domain::ObserverToken learningToken_{};
     bool unsavedReported_{false};
     std::unique_ptr<engine::ContentStore> contentStore_;
     std::unique_ptr<engine::EngineHost> engineHost_;

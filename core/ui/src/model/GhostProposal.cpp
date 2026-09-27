@@ -30,6 +30,23 @@ domain::Result<GhostProposal> GhostProposal::open(const domain::ProjectState& st
     return proposal;
 }
 
+domain::Result<GhostProposal> GhostProposal::open(const domain::ProjectState& state,
+                                                  domain::PatternId pattern,
+                                                  domain::TrackId track,
+                                                  double fromBeats,
+                                                  double toBeats,
+                                                  Interpretation interpretation,
+                                                  std::shared_ptr<const StyleModel> model)
+{
+    if (model == nullptr)
+        return domain::fail(domain::ErrorCode::invalidArgument, "no style model");
+
+    auto opened = open(state, pattern, track, fromBeats, toBeats, std::move(interpretation), *model);
+    if (opened)
+        opened.value().kept_ = std::move(model);
+    return opened;
+}
+
 GhostProposal::GhostProposal(domain::PatternId pattern,
                              domain::TrackId track,
                              Interpretation interpretation,

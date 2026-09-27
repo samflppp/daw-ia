@@ -127,6 +127,21 @@ void TitleBarView::showFileMenu()
     menu.addSeparator();
     menu.addItem(exportItem, "Exporter...");
 
+    // What the generator learns from, said and undone here, and nowhere else
+    // than on this machine.
+    const auto ask = [](const std::function<bool()>& question) { return question ? question() : false; };
+    juce::PopupMenu generation;
+    generation.addItem(
+        learnItem, juce::String::fromUTF8("Apprendre de mes projets"), true, ask(actions_.learning));
+    generation.addItem(projectLearnItem,
+                       juce::String::fromUTF8("Apprendre de ce projet"),
+                       ask(actions_.learning),
+                       ask(actions_.projectLearning));
+    generation.addSeparator();
+    generation.addItem(forgetItem, juce::String::fromUTF8("Oublier ce qui a été appris..."));
+    menu.addSeparator();
+    menu.addSubMenu(juce::String::fromUTF8("Génération"), generation);
+
     juce::Component::SafePointer<TitleBarView> self{this};
     menu.showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(&file_),
                        [self](int chosen)
@@ -154,6 +169,15 @@ void TitleBarView::runMenuItem(int item)
         break;
     case exportItem:
         call(actions_.exportSong);
+        break;
+    case learnItem:
+        call(actions_.toggleLearning);
+        break;
+    case projectLearnItem:
+        call(actions_.toggleProjectLearning);
+        break;
+    case forgetItem:
+        call(actions_.forgetLearning);
         break;
     default:
         break;

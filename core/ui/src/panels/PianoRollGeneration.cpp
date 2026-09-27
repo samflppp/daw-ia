@@ -1,3 +1,4 @@
+#include "daw/ui/model/StyleLearning.h"
 #include "daw/ui/model/StyleSource.h"
 #include "daw/ui/panels/PianoRollPanel.h"
 
@@ -98,8 +99,19 @@ void PianoRollPanel::generateFromPrompt()
         text.toStdString(),
         [this, text, from, to, patternId, trackId](domain::generation::Interpretation read)
         {
+            // The base, and what the person taught it: the projects saved, and
+            // this one as it is now.
+            const auto& base = styleModel();
+            auto* learning = styleLearning();
+            const auto started = juce::Time::getMillisecondCounterHiRes();
+            auto model = learning != nullptr
+                             ? learning->model(state_, base)
+                             : std::shared_ptr<const domain::generation::StyleModel>{
+                                   std::shared_ptr<const domain::generation::StyleModel>{}, &base};
+            lastStyleMs_ = juce::Time::getMillisecondCounterHiRes() - started;
+
             auto opened =
-                GhostProposal::open(state_, patternId, trackId, from, to, std::move(read), styleModel());
+                GhostProposal::open(state_, patternId, trackId, from, to, std::move(read), std::move(model));
             if (!opened)
             {
                 juce::Logger::writeToLog("generation: refused: " + juce::String{opened.error().message});
@@ -108,9 +120,13 @@ void PianoRollPanel::generateFromPrompt()
 
             proposal_ = std::move(opened).value();
             promptedText_ = text;
+            const auto role = proposal_->constraints().role.value;
+            styleLine_ = juce::String::fromUTF8(
+                (learning != nullptr ? learning->describe(role) : base.origin()).c_str());
             ghosts_ = proposal_->notes();
             juce::Logger::writeToLog("generation: " + proposalLine() + " · " + juce::String(ghosts_.size()) +
-                                     " notes · " + juce::String(proposal_->lastDrawMs(), 2) + " ms");
+                                     " notes · " + juce::String(proposal_->lastDrawMs(), 2) +
+                                     " ms · style en " + juce::String(lastStyleMs_, 2) + " ms");
             placePrompt();
             repaint();
         });
@@ -231,7 +247,7 @@ juce::String PianoRollPanel::proposalLine() const
 
     auto line = juce::String::fromUTF8(domain::generation::describe(proposal_->constraints()).c_str());
     line << juce::String::fromUTF8(" · variante ") << (proposal_->rank() + 1) << "/" << proposal_->drawn();
-    line << juce::String::fromUTF8(" · style : ") << juce::String{styleModel().origin()};
+    line << juce::String::fromUTF8(" · style : ") << styleLine_;
 
     const auto& read = proposal_->interpretation();
     if (!read.ignored.empty())

@@ -102,6 +102,10 @@ public:
     [[nodiscard]] std::optional<std::pair<double, double>> range() const { return range_; }
     [[nodiscard]] juce::String proposalLine() const;
     [[nodiscard]] double lastGenerationMs() const noexcept;
+
+    // How long building the style took at the last Ctrl+G: the project
+    // counted, mixed with the others and the base. Logged and verified.
+    [[nodiscard]] double lastStyleMs() const noexcept { return lastStyleMs_; }
     [[nodiscard]] int variantRank() const noexcept { return proposal_.has_value() ? proposal_->rank() : -1; }
 
 private:
@@ -205,6 +209,8 @@ private:
     std::optional<GhostProposal> proposal_;
     std::vector<domain::generation::GhostNote> ghosts_;
     juce::String promptedText_;
+    juce::String styleLine_;
+    double lastStyleMs_{0.0};
     domain::generation::LocalInterpreter interpreter_;
 
     // The range picked on the ruler, in pattern beats, and where the drag

@@ -48,6 +48,18 @@ public:
                                               domain::generation::Interpretation,
                                               const domain::generation::StyleModel&&) = delete;
 
+    // The same, keeping the model alive: a style learned from the projects is
+    // built again at each Ctrl+G, and the one a proposal was drawn with must
+    // outlive the next one.
+    [[nodiscard]] static domain::Result<GhostProposal>
+    open(const domain::ProjectState& state,
+         domain::PatternId pattern,
+         domain::TrackId track,
+         double fromBeats,
+         double toBeats,
+         domain::generation::Interpretation interpretation,
+         std::shared_ptr<const domain::generation::StyleModel> model);
+
     // The variant on screen. Drawn on first use.
     [[nodiscard]] const std::vector<domain::generation::GhostNote>& notes();
 
@@ -113,6 +125,7 @@ private:
     double requestedTo_{0.0};
     domain::generation::Interpretation interpretation_;
     const domain::generation::StyleModel* model_;
+    std::shared_ptr<const domain::generation::StyleModel> kept_;
     std::unique_ptr<domain::generation::Variants> variants_;
     std::uint64_t contextHash_{0};
     int rank_{0};

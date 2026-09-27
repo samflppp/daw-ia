@@ -81,6 +81,7 @@ target_sources(daw_ui INTERFACE
     src/model/ProjectObserver.cpp
     src/model/Selection.cpp
     src/model/PatternEditing.cpp
+    src/model/StyleLearning.cpp
     src/model/StyleSource.cpp
     src/panels/PlaceholderPanel.cpp
     src/panels/TransportPanel.cpp
