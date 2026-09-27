@@ -67,9 +67,12 @@ LEVELS: dict[str, Any] = {
 class FakeDaw:
     """A DAW that answers the four methods the copilot uses, and remembers."""
 
-    def __init__(self, refuse: str | None = None) -> None:
+    def __init__(self, refuse: str | None = None, check: Any = None) -> None:
         self.executed: list[dict[str, Any]] = []
+        self.checked: list[list[dict[str, Any]]] = []
         self.refuse = refuse
+        # What commands.check answers; None plays a DAW from before it existed.
+        self.check = check
         self._listener = socket.socket()
         self._listener.bind(("127.0.0.1", 0))
         self._listener.listen(1)
@@ -94,6 +97,7 @@ class FakeDaw:
                     "plugins.find": lambda params: {"query": params.get("query", ""), "found": []},
                     "mix.levels": lambda _params: LEVELS,
                     "commands.execute": self._execute,
+                    **({"commands.check": self._check} if self.check is not None else {}),
                 },
             )
             self._peer.serve_forever()
@@ -107,6 +111,10 @@ class FakeDaw:
 
         self.executed.append(params)
         return {"groupId": "01JBWQ7Z00000000000GR0UP0", "commandIds": ["01JBWQ7Z0000000000000CMD01"]}
+
+    def _check(self, params: dict[str, Any]) -> dict[str, Any]:
+        self.checked.append(list(params["commands"]))
+        return self.check(params["commands"])
 
     def stop(self) -> None:
         if self._peer is not None:
@@ -325,3 +333,131 @@ def test_a_command_name_survives_the_vendor_rule() -> None:
     # And the map wins over the guess, so a name that already held two
     # underscores comes back as it left.
     assert _original_tool_name("odd__name", {"odd__name": "odd__name"}) == "odd__name"
+
+
+# --- a request that writes music -------------------------------------------------
+
+
+def checked_daw(check: Any) -> FakeDaw:
+    fake = FakeDaw(check=check)
+    fake.start()
+    return fake
+
+
+def test_a_call_cut_by_the_length_limit_is_not_staged_and_is_asked_again() -> None:
+    daw = checked_daw(lambda _commands: {"ok": True})
+    try:
+        cut = tool_turn(
+            ToolCall("a", "track.add", {"trackId": "$new:keys", "name": "Keys", "volumeDb": 0.0}),
+            ToolCall("b", "note.add", {}),
+        )
+        cut.stop_reason = "max_tokens"
+        provider = ScriptedProvider([cut, Turn(text="Piste ajoutée.")])
+
+        answer = Agent(connected(daw), provider).answer("ajoute une piste Keys")
+
+        assert not answer.failed
+        assert [command["type"] for command in daw.executed[0]["commands"]] == ["track.add"]
+        told = provider.messages[-1][-1]["content"]
+        assert told[1]["is_error"] is True
+        assert "coupé" in told[1]["content"]
+    finally:
+        daw.stop()
+
+
+def test_a_call_the_copy_refuses_is_taken_back_and_corrected_in_the_same_request() -> None:
+    def check(commands: list[dict[str, Any]]) -> dict[str, Any]:
+        for index, command in enumerate(commands):
+            if command["payload"].get("volumeDb", 0.0) > 6.0:
+                return {
+                    "ok": False,
+                    "index": index,
+                    "message": "appel 1 (track.set_volume) : volume trop haut",
+                }
+        return {"ok": True}
+
+    daw = checked_daw(check)
+    try:
+        provider = ScriptedProvider(
+            [
+                tool_turn(ToolCall("a", "track.set_volume", {"trackId": "T", "volumeDb": 40.0})),
+                tool_turn(ToolCall("b", "track.set_volume", {"trackId": "T", "volumeDb": 6.0})),
+                Turn(text="Volume à 6 dB."),
+            ]
+        )
+
+        answer = Agent(connected(daw), provider).answer("monte la basse à fond")
+
+        assert not answer.failed
+        # The refused call went back to the model as its own result...
+        first_results = provider.messages[1][-1]["content"]
+        assert first_results[0]["is_error"] is True
+        assert "volume trop haut" in first_results[0]["content"]
+        # ...and only the corrected one was applied.
+        assert [command["payload"]["volumeDb"] for command in daw.executed[0]["commands"]] == [6.0]
+    finally:
+        daw.stop()
+
+
+def test_the_omnisphere_request_is_one_group_ending_in_one_generation() -> None:
+    daw = checked_daw(lambda _commands: {"ok": True})
+    try:
+        omnisphere = {"format": "VST3", "identifier": "spectrasonics-omnisphere", "name": "Omnisphere"}
+        provider = ScriptedProvider(
+            [
+                tool_turn(ToolCall("a", "plugins.search", {"query": "omnisphere"})),
+                tool_turn(
+                    ToolCall(
+                        "b", "tempo.set_bpm", {"pointId": "01JBWQ7Z0000000000000TEMP0", "beatsPerMinute": 140}
+                    ),
+                    ToolCall(
+                        "c", "track.add", {"trackId": "$new:omni", "name": "Omnisphere", "volumeDb": 0.0}
+                    ),
+                    ToolCall(
+                        "d",
+                        "plugin.insert",
+                        {
+                            "trackId": "$new:omni",
+                            "plugin": {"id": "$new:synth", "ref": omnisphere, "bypassed": False},
+                        },
+                    ),
+                    ToolCall(
+                        "e",
+                        "clip.create_midi",
+                        {
+                            "trackId": "$new:omni",
+                            "clipId": "$new:accords",
+                            "startBeats": 0.0,
+                            "lengthBeats": 16.0,
+                        },
+                    ),
+                    ToolCall(
+                        "f",
+                        "pattern.generate",
+                        {"clipId": "$new:accords", "role": "chords", "key": {"tonic": "A", "mode": "minor"}},
+                    ),
+                ),
+                Turn(text="Omnisphere chargé, tempo à 140, quatre mesures d'accords en la mineur."),
+            ]
+        )
+
+        answer = Agent(connected(daw), provider).answer(
+            "ouvre un omnisphere et cree des accords triste dans un pattern en 140 bpm"
+        )
+
+        assert not answer.failed
+        sent = daw.executed[0]["commands"]
+        assert [command["type"] for command in sent] == [
+            "tempo.set_bpm",
+            "track.add",
+            "plugin.insert",
+            "clip.create_midi",
+            "pattern.generate",
+        ]
+        # The generation writes into the row created two calls before.
+        assert sent[4]["payload"]["clipId"] == sent[3]["payload"]["clipId"]
+        assert len(sent[4]["payload"]["clipId"]) == 26
+        # Every turn with commands was tried on the copy first.
+        assert daw.checked
+    finally:
+        daw.stop()

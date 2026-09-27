@@ -9,7 +9,10 @@ The turn, in order:
   1. the model is given the project summary, the tools, and the request
   2. its read calls are answered at once, because reading changes nothing
   3. its command calls are staged, never applied one by one
-  4. when it stops talking, the staged commands go to the DAW as one group
+  4. after each turn, the DAW tries what is staged on a copy of the project
+     (commands.check); a call it refuses is taken back out and the model is
+     told why, so it can correct it in the same request
+  5. when it stops talking, the staged commands go to the DAW as one group
 
 Step 3 is the whole point. A command applied the moment the model asked for it
 would leave a project half changed the day the second command is refused, and
@@ -37,7 +40,7 @@ from daw_services.ia_provider import (
 )
 from daw_services.rpc import Peer, RpcError
 
-MAX_TURNS = 6
+MAX_TURNS = 8
 NEW_ID_PATTERN = re.compile(r"^\$new:[a-z0-9_-]{1,32}$")
 CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
@@ -78,6 +81,20 @@ Règles :
   est la mesure t / 4 + 1. Le temps 128 est la mesure 33, jamais « la mesure
   128 ». Utilise « temps » seulement pour une position qui tombe dans une
   mesure.
+- Pour écrire de la musique (des accords, une mélodie, une basse, un rythme),
+  appelle pattern.generate sur la ligne où elle doit aller, une fois par ligne.
+  Le générateur du DAW écrit des notes justes, répétées selon une forme, dans
+  le style appris de l'utilisateur. Traduis l'intention en contraintes :
+  « triste », « sombre », « mélancolique » donnent une tonalité mineure ;
+  « calme » une densité sparse ; « énergique » dense ; « grave » le registre
+  low. Dis dans ta phrase finale ce que tu as choisi. N'utilise note.add que
+  pour des notes que l'utilisateur dicte une à une.
+- La ligne doit exister avant pattern.generate : crée-la dans la même requête
+  (clip.create_midi, ou pattern.add_track) et donne son $new: comme clipId.
+- Un instrument se charge avec track.add puis plugin.insert sur cette piste ;
+  cherche d'abord le plugin (plugins.search) pour son identifiant exact.
+- Si un appel est refusé par le DAW, le résultat de l'outil le dit : corrige
+  cet appel et renvoie-le. Les autres restent en attente.
 - track.set_channel_pitch règle la hauteur d'un canal dans le channel rack. Il
   ne change aucune note déjà écrite.
 - Pour quantifier ou transposer, lis d'abord les notes du clip : il faut leurs
@@ -221,6 +238,7 @@ class Agent:
         ]
 
         staged: list[dict[str, Any]] = []
+        origins: list[str] = []  # the call each staged command came from
         minted: dict[str, str] = {}
         total = Usage()
         said = ""
@@ -238,7 +256,18 @@ class Agent:
                 break
 
             messages.append({"role": "assistant", "content": turn.raw_content})
-            results = [self._run(call, staged, minted) for call in turn.tool_calls]
+
+            # A turn stopped by the length limit ends in a call whose arguments
+            # were cut: it is not staged, and the model is told to send it again.
+            cut = turn.stop_reason == "max_tokens"
+            results = []
+            for rank, call in enumerate(turn.tool_calls):
+                if cut and rank == len(turn.tool_calls) - 1:
+                    results.append(_error(call, CUT_CALL))
+                    continue
+                results.append(self._run(call, staged, minted, origins))
+
+            self._check(staged, origins, results)
             messages.append({"role": "user", "content": results})
 
         if not staged:
@@ -262,14 +291,54 @@ class Agent:
             command_ids=list((outcome or {}).get("commandIds", [])),
         )
 
-    def _run(self, call: ToolCall, staged: list[dict[str, Any]], minted: dict[str, str]) -> dict[str, Any]:
+    def _run(
+        self,
+        call: ToolCall,
+        staged: list[dict[str, Any]],
+        minted: dict[str, str],
+        origins: list[str],
+    ) -> dict[str, Any]:
         if call.name in READ_TOOL_NAMES:
             return _result(call, self._read(call))
 
         # A command: staged, not applied. The DAW applies the lot at the end,
         # in one group, or applies none of it.
         staged.append({"type": call.name, "payload": resolve_new_ids(call.arguments, minted)})
+        origins.append(call.call_id)
         return _result(call, {"staged": True})
+
+    def _check(self, staged: list[dict[str, Any]], origins: list[str], results: list[dict[str, Any]]) -> None:
+        """Tries what is staged on a copy of the project, and takes back what it refuses.
+
+        Each refusal removes one command and tells the model which call it was
+        and why, in that call's own result when it is from this turn. A DAW
+        that does not know commands.check is not asked again: the group is
+        then judged when it is applied, as before.
+        """
+        while staged:
+            try:
+                verdict = self._daw.request("commands.check", {"commands": staged}, timeout=30.0)
+            except RpcError:
+                return
+            if not isinstance(verdict, dict) or verdict.get("ok", True):
+                return
+
+            index = int(verdict.get("index", -1))
+            if not 0 <= index < len(staged):
+                return
+
+            call_id = origins.pop(index)
+            staged.pop(index)
+            said = (
+                f"Refusé par le DAW, rien n'est appliqué : {verdict.get('message', '')}. "
+                "Corrige cet appel et renvoie-le."
+            )
+            for rank, result in enumerate(results):
+                if result.get("tool_use_id") == call_id:
+                    results[rank] = {**result, "content": said, "is_error": True}
+                    break
+            else:
+                results.append({"type": "text", "text": said})
 
     def _read(self, call: ToolCall) -> dict[str, Any]:
         try:
@@ -285,6 +354,16 @@ class Agent:
             return self._daw.request("plugins.find", {"query": call.arguments.get("query", "")})
         except RpcError as failure:
             return {"error": str(failure)}
+
+
+CUT_CALL = (
+    "Cet appel a été coupé par la limite de longueur de la réponse et n'a pas été pris. "
+    "Renvoie-le entier, et écris moins d'appels : pattern.generate écrit une ligne entière en un seul."
+)
+
+
+def _error(call: ToolCall, message: str) -> dict[str, Any]:
+    return {"type": "tool_result", "tool_use_id": call.call_id, "content": message, "is_error": True}
 
 
 def _result(call: ToolCall, content: Any) -> dict[str, Any]:

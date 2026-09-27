@@ -22,6 +22,10 @@ from typing import Any, Protocol
 
 API_KEY_VARIABLE = "DAW_IA_ANTHROPIC_API_KEY"
 DEFAULT_MODEL = "claude-sonnet-5"
+
+# Room for one answer. A request that writes music used to run out of it at
+# 2048: forty note.add calls, the last one cut in the middle of its arguments.
+MAX_TOKENS = 8192
 DEFAULT_ENDPOINT = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 
@@ -168,7 +172,7 @@ class AnthropicProvider:
         body = json.dumps(
             {
                 "model": self._model,
-                "max_tokens": 2048,
+                "max_tokens": MAX_TOKENS,
                 "system": [{"type": "text", "text": system}],
                 "messages": list(messages),
                 "tools": sent_tools,
