@@ -371,10 +371,23 @@ La refonte part donc de là :
 - **la zone d'abord :** une sélection sur la grille, qui dit où générer ;
 - **le prompt ensuite,** dans la langue du copilote, pour dire quoi générer.
 
-Le modèle S16 tranchera trois points :
-- **Où s'écrit le prompt :** le panneau Copilote existant, qui sait déjà quelle zone est sélectionnée, ou un
-  champ fixe, hors de la grille.
-- **Ce qu'est une zone :** une plage de temps sur une piste au piano-roll, ou aussi un rectangle dans la
-  playlist qui couvre plusieurs pistes (accords, basse et mélodie d'un coup).
-- **Ce qu'on voit avant d'accepter :** les notes grises, comme aujourd'hui, ou le résultat écrit tout de suite,
-  qu'un Ctrl+Z retire.
+**Tranché avec toi le même jour :**
+- **Une zone, c'est les deux :** une plage de temps sur une piste au piano-roll, et un rectangle dans la playlist
+  qui couvre plusieurs pistes.
+- **Ctrl+G reste le geste.** Il ouvre une fenêtre où s'écrit le prompt, dans la langue du copilote.
+- **Rien n'est écrit sans validation :** la proposition s'affiche en notes grises, qu'on accepte ou non.
+- **Deux usages selon ce qui est sélectionné :**
+  - **des notes sélectionnées :** Ctrl+G les améliore, selon le prompt ;
+  - **une zone vide :** Ctrl+G crée à partir de rien, comme aujourd'hui.
+
+**Ce que le modèle S16 devra définir :**
+- **Ce que la fenêtre fait de mieux que la zone actuelle.** Le reproche portait sur la fenêtre qui s'ouvre ; elle
+  reste. Il faudra dire précisément ce qui change : sa place (hors de la grille), le moment où elle propose (après
+  le prompt, et non dès l'ouverture), et ce qu'elle montre.
+- **Ce qu'« améliorer » veut dire pour le moteur.** Le générateur sait créer ; il ne sait pas encore reprendre des
+  notes existantes. Pistes : garder le rythme et changer les hauteurs, garder les hauteurs et changer le rythme,
+  varier comme la forme varie un A′, ou suivre une consigne (« plus sombre », « plus rythmé », « humanise »). Les
+  notes sélectionnées deviennent le contexte, le prompt dit la transformation, et les règles de justesse restent
+  les mêmes.
+- **Une zone sur plusieurs pistes :** une ligne par piste, dans le rôle que son nom ou son contenu indique, et une
+  seule proposition à valider pour toutes.
