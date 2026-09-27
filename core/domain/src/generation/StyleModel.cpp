@@ -246,6 +246,14 @@ StyleModel StyleModel::fallback()
     return model;
 }
 
+StyleModel StyleModel::of(std::array<RoleStyle, 4> roles, std::string origin)
+{
+    StyleModel model;
+    model.roles_ = std::move(roles);
+    model.origin_ = std::move(origin);
+    return model;
+}
+
 const RoleStyle& StyleModel::role(Role role) const noexcept
 {
     return roles_[indexOf(role)];

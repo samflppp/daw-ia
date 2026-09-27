@@ -52,6 +52,8 @@ struct RoleStyle
 
     // Mean and deviation of the velocity at each sixteenth of the bar.
     std::map<int, std::pair<double, double>> velocity;
+
+    friend bool operator==(const RoleStyle& lhs, const RoleStyle& rhs) = default;
 };
 
 class StyleModel
@@ -65,12 +67,16 @@ public:
     // plays when there is no corpus, and what the CI tests against.
     [[nodiscard]] static StyleModel fallback();
 
+    // A model built from tables counted elsewhere: what the generator learned
+    // from the person (Learning.h) mixed with one of the two above.
+    [[nodiscard]] static StyleModel of(std::array<RoleStyle, 4> roles, std::string origin);
+
     [[nodiscard]] static Result<StyleModel> fromValue(const Value& value);
     [[nodiscard]] Value toValue() const;
 
     [[nodiscard]] const RoleStyle& role(Role role) const noexcept;
 
-    // "corpus" or "repli".
+    // "corpus", "repli" or "appris".
     [[nodiscard]] const std::string& origin() const noexcept { return origin_; }
 
 private:

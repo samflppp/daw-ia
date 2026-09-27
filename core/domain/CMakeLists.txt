@@ -18,6 +18,7 @@ add_library(daw_domain STATIC
     src/generation/Form.cpp
     src/generation/Generator.cpp
     src/generation/Harmony.cpp
+    src/generation/Learning.cpp
     src/generation/StyleModel.cpp
     src/commands/AddNote.cpp
     src/commands/AutomationCommands.cpp
