@@ -1,11 +1,11 @@
 # Bilan de fin de S15 — DAW IA
 
 **Période :** semaine 15 sur 26. Rédigé le 27 septembre 2026.
-**Dépôt :** `samflppp/daw-ia`, branche `main`, 6 commits de `eb80d37` à `b54738a`, plus ce bilan.
-**Volume depuis le bilan S14 :** 30 fichiers, +3 451 lignes, −11 (hors ce bilan).
-**Tests :** 324 cas ctest (domaine, persistance, interface ; +14), 85 cas d'engine (+1, rendu), 30 cas Python
-(inchangé).
-**Vérifications par l'application :** 474 dans la liste, aucune en échec (§6).
+**Dépôt :** `samflppp/daw-ia`, branche `main`, 11 commits de `eb80d37` à `b5b1177`, plus ce bilan (réécrit après le chantier copilote, §10).
+**Volume depuis le bilan S14 :** 40 fichiers, +4 540 lignes, −27 (hors ce bilan).
+**Tests :** 327 cas ctest (domaine, persistance, interface ; +17), 85 cas d'engine (+1, rendu), 33 cas Python
+(+3).
+**Vérifications par l'application :** 484 dans la liste, aucune en échec (§6 et §10).
 **Registry :** 55 types, inchangé. Ni la forme ni l'apprentissage n'ajoutent de commande.
 
 ## En bref
@@ -17,6 +17,8 @@
   machine seulement. Deux projets de styles opposés donnent deux générateurs mesurablement différents (§4).
 - **Le corpus personnel est retiré du périmètre.** Plus aucune demande de corpus ; `IDEES.md` est tranché sur
   ce point.
+- **Le copilote écrit de la musique** (demandé en cours de semaine) : « ouvre un omnisphere et cree des accords
+  triste dans un pattern en 140 bpm » passe, avec le vrai modèle (§10).
 - **Rien n'est tombé** de ce qui était demandé. Ce qui reste en deçà est au §7.
 
 ## 1. Le modèle de structure, tel que validé
@@ -210,9 +212,11 @@ mélodie »), et la ligne le montrait. La mesure elle-même était juste, mais l
 était vérifié. Il dit maintenant « proposé ». C'est le même piège qu'aux §6 de la S13 et de la S14, en plus
 petit : une vérification verte doit dire ce qu'elle regarde vraiment.
 
-**Chiffre à retenir :** le style est rebâti en 7,7 ms à chaque Ctrl+G sur le projet de vérification (Debug).
-Avec le tirage (~1 ms), on reste sous les 16 ms. Sur un gros projet, le comptage du projet ouvert grandira avec
-lui : il sera à mettre en cache si le chiffre monte.
+**Un chiffre que j'avais mal lu.** La première version de ce bilan disait « style rebâti en 7,7 ms ». Le log
+du même passage montrait quatre reconstructions entre 14,3 et 17,4 ms, dont deux au-dessus des 16 ms, quand un
+Ctrl+G en suivait un autre sans que rien ait changé. Le comptage du projet ouvert est maintenant gardé tant que
+le bus ne dit pas qu'il a changé (`f125d15`). Dernier passage : 0,56 ms à l'étape mesurée. Tout est en Debug.
+Sur un gros projet, le premier Ctrl+G après une modification reste le cas coûteux, et il n'est pas mesuré.
 
 ## 7. Ce qui est tombé, et ce qui reste en deçà
 
@@ -250,6 +254,61 @@ Rien de ce qui était demandé n'est tombé. En deçà :
 ## 9. Reste à faire
 
 - Ton écoute (§8), en commençant par la forme.
-- L'interprète distant des contraintes (S16), qui devra connaître le champ `form`.
+- L'interprète distant des contraintes (S16) : en partie avancé par le §10. Le copilote écrit déjà le JSON du
+  contrat S14 §2 pour pattern.generate ; reste la zone de saisie, qui ne passe toujours que par LocalInterpreter.
 - Le bug intermittent : il ne s'est pas présenté pendant les passages de la semaine.
 - Le fader d'une tranche automatisée (dette de la S13, au moment du polish).
+
+## 10. Le copilote écrit de la musique (demandé le 27 septembre)
+
+**Le problème.** « ouvre un omnisphere et cree des accords triste dans un pattern en 140 bpm » échouait sur
+« note.add: missing key clipId ». Le copilote écrivait chaque note des accords par un note.add. La réponse du
+modèle, plafonnée à 2048 jetons, se coupait au milieu du dernier appel, et l'agent ne regardait pas pourquoi elle
+s'était arrêtée : l'appel vide partait avec le groupe, qui était refusé en entier.
+
+**Ce qui a changé.**
+- **`pattern.generate`, un outil musical pour le copilote.** Une ligne, une plage, et les contraintes du contrat
+  S14 §2 plus `form`. Le DAW le déroule avec son propre générateur (règles, forme, style appris de la personne)
+  en note.remove et note.add, exactement comme Tab. Le registry reste à 55 types. Le modèle ne peut pas écrire
+  une fausse note, puisque ce ne sont plus ses notes.
+- **L'essai à blanc.** Avant d'appliquer, et après chaque tour du modèle, le DAW rejoue ce qui attend sur une
+  copie de l'état. Chaque étape y voit ce que les précédentes ont créé : la ligne ouverte deux appels plus tôt
+  existe quand pattern.generate écrit dedans. Un appel refusé est retiré, et le modèle apprend pourquoi dans le
+  résultat de cet appel, pour le corriger dans la même requête.
+- **La limite.** 8192 jetons, et un appel coupé n'est plus jamais mis en attente : le modèle est invité à le
+  renvoyer.
+- **Le prompt** dit quand préférer pattern.generate à note.add, et comment traduire une intention :
+  « triste » donne du mineur, « calme » une densité sparse. « triste » n'est pas un axe du générateur ; la
+  réponse dit ce que le modèle a choisi.
+
+**Les preuves.**
+- `CopilotRequestTests` (CI, sans API) : la demande mise en commandes donne Omnisphere sur une piste neuve,
+  140 BPM, quatre triades de la mineur, une seule entrée copilote, et un Ctrl+Z qui rend le projet à l'octet
+  près. Un appel refusé est nommé par son rang, et le projet ne bouge pas.
+- `test_copilot.py` (CI, faux modèle) : un appel coupé n'est pas pris, un appel refusé revient au modèle et
+  seule sa correction est appliquée, et la demande Omnisphere part en un groupe qui finit par pattern.generate.
+- **La vérification, avec le vrai modèle et la phrase mot pour mot** (deux passages) :
+
+| Mesure | Résultat |
+|---|---|
+| Réponse | « J'ai créé une piste Omnisphere avec le plugin chargé, un nouveau pattern de 4 mesures placé à la suite (mesure 37, temps 144), avec un changement de tempo à 140 BPM à cet endroit. J'y ai généré des accords tristes en la mineur, densité clairsemée, en boucle. » |
+| Historique | une entrée, marquée copilote |
+| Omnisphere | chargé sur une piste neuve |
+| Accords | 12 notes, 4 attaques, chacune une triade de la mineur, toutes les notes dans la tonalité annoncée |
+| Ctrl+Z | le projet d'avant, à l'octet près |
+
+**Ce que le premier passage a trouvé.** Il échouait sur « une tonalité mineure : Do majeur ». Le produit avait
+bien écrit la mineur, et le disait. Mon contrôle déduisait la tonalité des notes, et des triades de la mineur
+sont les notes de do majeur : seule la tonique les distingue. Le contrôle lit maintenant la tonalité annoncée
+par la réponse, puis vérifie que chaque note et chaque triade y appartiennent. Le troisième vert qui ne regardait
+pas ce qu'il croyait regarder, cette fois dans l'autre sens : un rouge qui ne regardait pas le bon objet.
+
+**Deux choses à savoir.**
+- **Le modèle interprète.** Au premier passage il a réglé le tempo du projet à 140. Au second, il a posé un
+  changement de tempo à 140 au début du nouveau pattern, laissant le reste du morceau à son tempo. Les deux
+  lisent « un pattern en 140 bpm ». Si tu veux l'un plutôt que l'autre, c'est une règle de prompt.
+- **Chaque essai à blanc copie l'état,** une fois par tour du modèle (huit au plus). C'est négligeable devant
+  les secondes d'un appel au modèle, et ce n'est pas mesuré sur un gros projet.
+
+**À essayer :** la même phrase dans le panneau Copilote, puis écouter les quatre accords sur Omnisphere. Puis
+une variante qui combine : « ajoute une basse 808 qui suit ces accords, en croches ».
