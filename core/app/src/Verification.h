@@ -203,6 +203,11 @@ private:
     // written; "boucle" and "libre" understood.
     void addFormSteps();
 
+    // S15: the generator learns from the person, in the verification's own
+    // folder: the base first, the generator's notes teaching nothing, the
+    // person's eighths learned and measured, the save, the menu, forgetting.
+    void addLearningSteps();
+
     // A render of the Edit as it plays, kept whole in memory, and its level
     // window by window between two beats of the song: the RMS of each
     // channel, in dB.
