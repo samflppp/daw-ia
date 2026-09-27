@@ -6,13 +6,16 @@
 #include "daw/domain/generation/Learning.h"
 #include "daw/domain/serialization/Json.h"
 #include "daw/ui/TitleBarView.h"
+#include "daw/ui/model/CopilotHost.h"
 #include "daw/ui/model/PatternEditing.h"
 #include "daw/ui/model/StyleLearning.h"
 #include "daw/ui/model/StyleSource.h"
 #include "daw/ui/panels/PianoRollPanel.h"
 
 #include <cmath>
+#include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -307,6 +310,114 @@ void Verification::addLearningSteps()
             check(domain::json::write(state_.toValue()) == savedState_, "tout défait : le projet d'avant");
             key(juce::KeyPress{juce::KeyPress::F7Key});
             press("SONG");
+        });
+
+    // --- the copilot writing music, with the real model ---------------------------
+    //
+    // The request that failed on 27 September, word for word: the model used
+    // to write every chord note by note and ran out of room. It now loads the
+    // plugin, sets the tempo, opens a row and calls pattern.generate once.
+
+    add(
+        "S15 copilote : « ouvre un omnisphere et cree des accords triste dans un pattern en 140 bpm »",
+        [this]
+        {
+            savedState_ = domain::json::write(state_.toValue());
+            savedDepth_ = depth();
+            transcriptBefore_ = copilot_.transcript().size();
+            copilot_.ask("ouvre un omnisphere et cree des accords triste dans un pattern en 140 bpm");
+        },
+        [this]
+        {
+            return copilot_.transcript().size() > transcriptBefore_ + 1 &&
+                   copilot_.status() != ui::CopilotHost::Status::working;
+        },
+        180000.0);
+
+    add("ce qu'il a fait : Omnisphere, 140 BPM, des triades mineures, une seule entrée ; Ctrl+Z défait tout",
+        [this]
+        {
+            const auto& lines = copilot_.transcript();
+            const auto* last = lines.empty() ? nullptr : &lines.back();
+            note("réponse : « " + (last != nullptr ? last->text : std::string{}) + " »");
+            check(last != nullptr && last->from == ui::CopilotHost::Line::From::copilot,
+                  "le copilote répond, sans refus");
+            check(depth() == savedDepth_ + 1, "une seule entrée d'historique");
+            const auto& entries = history_.entries();
+            const auto* entry = history_.cursor() > 0 ? &entries[history_.cursor() - 1] : nullptr;
+            check(entry != nullptr && entry->actor == domain::Actor::copilot, "marquée copilote");
+
+            auto at140 = false;
+            for (const auto& point : state_.tempoPoints())
+                at140 = at140 || std::abs(point.beatsPerMinute - 140.0) < 1e-6;
+            check(at140, "le tempo est à 140");
+
+            const domain::Track* omnisphere = nullptr;
+            for (const auto& track : state_.tracks())
+            {
+                for (const auto& plugin : track.plugins)
+                {
+                    if (juce::String{plugin.ref.name}.containsIgnoreCase("omnisphere"))
+                        omnisphere = &track;
+                }
+            }
+            check(omnisphere != nullptr, "une piste porte Omnisphere");
+
+            std::vector<domain::Note> notes;
+            if (omnisphere != nullptr)
+            {
+                for (const auto& pattern : state_.patterns())
+                {
+                    if (const auto* row = pattern.findClipForTrack(omnisphere->id); row != nullptr)
+                        notes.insert(notes.end(), row->notes.begin(), row->notes.end());
+                }
+            }
+            check(!notes.empty(), std::to_string(notes.size()) + " notes sur la piste Omnisphere");
+
+            // The key is the one the answer names. Read from the notes it could
+            // not be: the triads of A minor are the notes of C major, and only
+            // the tonic tells them apart. What is checked is that what the
+            // copilot says it did is what it did.
+            const auto said = juce::String::fromUTF8(last != nullptr ? last->text.c_str() : "").toLowerCase();
+            std::optional<domain::generation::Key> tonality;
+            for (int tonic = 0; tonic < 12 && !tonality.has_value(); ++tonic)
+            {
+                const domain::generation::Key minor{tonic, domain::generation::Mode::minor};
+                if (said.contains(
+                        juce::String::fromUTF8(domain::generation::describe(minor).c_str()).toLowerCase()))
+                    tonality = minor;
+            }
+            check(
+                tonality.has_value(),
+                "la réponse annonce une tonalité mineure : " +
+                    (tonality.has_value() ? domain::generation::describe(*tonality) : std::string{"aucune"}));
+            auto inKey = tonality.has_value();
+            for (const auto& written : notes)
+                inKey = inKey && domain::generation::inScale(written.pitch, *tonality);
+            check(inKey, "toutes les notes sont dans cette tonalité");
+
+            std::map<long long, std::vector<int>> onsets;
+            for (const auto& written : notes)
+                onsets[std::llround(written.startBeats * 960.0)].push_back(written.pitch);
+            auto triads = tonality.has_value() && !onsets.empty();
+            for (const auto& [at, pitches] : onsets)
+            {
+                std::vector<domain::generation::WeightedPitch> chord;
+                for (const auto pitch : pitches)
+                    chord.push_back({pitch, 1.0});
+                const auto found =
+                    tonality.has_value() ? domain::generation::detectChord(chord, *tonality) : std::nullopt;
+                auto inside = found.has_value() && pitches.size() == 3;
+                for (const auto pitch : pitches)
+                    inside = inside && found.has_value() &&
+                             domain::generation::isChordTone(pitch, *found, *tonality);
+                triads = triads && inside;
+            }
+            check(triads, std::to_string(onsets.size()) + " attaques, chacune une triade de la tonalité");
+
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == savedState_,
+                  "un Ctrl+Z : le projet d'avant, à l'octet près");
         });
 }
 
