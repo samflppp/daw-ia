@@ -128,7 +128,8 @@ std::vector<Note> acceptInto(EngineHarness& harness, ClipId row, const char* tex
     return notes;
 }
 
-void provePlayed(const char* text, Key key, int variant)
+// The attacks heard, by sixteenth of the whole range.
+std::vector<int> provePlayed(const char* text, Key key, int variant)
 {
     EngineHarness harness;
     const auto row = ClipId::generate();
@@ -194,6 +195,21 @@ void provePlayed(const char* text, Key key, int variant)
     }
     MESSAGE(measured << " of " << written.size() << " pitches measured");
     CHECK(measured * 10 >= written.size() * 9);
+    return heard.onsets;
+}
+
+// The attacks heard in one bar, inside it. The downbeat is left out: a bar
+// that starts on the pitch class the bar before ended on, tied to it, gives
+// no attack there, and that says nothing about the rhythm of the bar.
+std::set<int> heardInBar(const std::vector<int>& onsets, int bar)
+{
+    std::set<int> out;
+    for (const auto onset : onsets)
+    {
+        if (onset > bar * 16 && onset < (bar + 1) * 16)
+            out.insert(onset - bar * 16);
+    }
+    return out;
 }
 
 } // namespace
@@ -208,4 +224,16 @@ TEST_CASE("A generated bass sounds at its attacks and at its pitches, all in the
 {
     for (int variant = 0; variant < 2; ++variant)
         provePlayed("F#m basse croches", Key{6, Mode::minor}, variant);
+}
+
+TEST_CASE("An AABA melody is heard as one bar three times and another bar in third place")
+{
+    for (int variant = 0; variant < 3; ++variant)
+    {
+        const auto onsets = provePlayed("Am mélodie AABA", Key{9, Mode::minor}, variant);
+        const auto first = heardInBar(onsets, 0);
+        CHECK(heardInBar(onsets, 1) == first);
+        CHECK(heardInBar(onsets, 3) == first);
+        CHECK(heardInBar(onsets, 2) != first);
+    }
 }

@@ -1265,6 +1265,7 @@ void Verification::buildList()
     addExportSteps();
     addAutomationSteps();
     addGenerationSteps();
+    addFormSteps();
 
     // --- the title bar -----------------------------------------------------------
 

@@ -198,6 +198,11 @@ private:
     // and the render: attacks and pitches.
     void addGenerationSteps();
 
+    // S15: the form. Four bars on a fresh channel: AABA deduced and shown,
+    // bars 1, 2 and 4 on one rhythm and bar 3 on another, on screen and once
+    // written; "boucle" and "libre" understood.
+    void addFormSteps();
+
     // A render of the Edit as it plays, kept whole in memory, and its level
     // window by window between two beats of the song: the RMS of each
     // channel, in dB.
