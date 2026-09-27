@@ -380,10 +380,23 @@ La refonte part donc de là :
   - **des notes sélectionnées :** Ctrl+G les améliore, selon le prompt ;
   - **une zone vide :** Ctrl+G crée à partir de rien, comme aujourd'hui.
 
+**Le vrai reproche, précisé ensuite :** c'est la ligne d'information sous la zone (« Do majeur (déduit) ·
+croches (déduit) · moyen (défaut) · grave (déduit) · mélodie (déduit) · AABA (déduit) · variante 1/1 · style :
+repli »). Elle ne représente rien pour la plupart des gens, n'aide pas, et rend la prise en main plus difficile.
+
+**Cela contredit une demande de la S15,** qu'il faut dire : le cahier de la semaine voulait que la forme
+s'expose dans cette ligne (« AABA · variante 2/16 ») pour qu'on voie pourquoi on entend ce qu'on entend. La
+ligne a été construite pour être exacte. Elle parle la langue du moteur, pas celle d'un musicien. Ce que la S16
+retient :
+- **la ligne technique disparaît de l'écran par défaut ;**
+- **ce que le moteur a choisi reste disponible,** mais à la demande, pour qui veut comprendre ou corriger (un
+  détail qu'on déplie), et non imposé à chaque proposition ;
+- **s'il faut dire quelque chose, c'est une phrase courte en mots de musicien,** par exemple « quatre mesures en
+  la mineur, dans ton style ». Ou rien du tout : les notes grises parlent d'elles-mêmes.
+
 **Ce que le modèle S16 devra définir :**
-- **Ce que la fenêtre fait de mieux que la zone actuelle.** Le reproche portait sur la fenêtre qui s'ouvre ; elle
-  reste. Il faudra dire précisément ce qui change : sa place (hors de la grille), le moment où elle propose (après
-  le prompt, et non dès l'ouverture), et ce qu'elle montre.
+- **La fenêtre du prompt :** hors de la grille, sans ligne technique, et qui ne propose rien avant que le prompt
+  soit écrit.
 - **Ce qu'« améliorer » veut dire pour le moteur.** Le générateur sait créer ; il ne sait pas encore reprendre des
   notes existantes. Pistes : garder le rythme et changer les hauteurs, garder les hauteurs et changer le rythme,
   varier comme la forme varie un A′, ou suivre une consigne (« plus sombre », « plus rythmé », « humanise »). Les
