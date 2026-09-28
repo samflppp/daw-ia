@@ -244,6 +244,59 @@ void Verification::addGenerationSteps()
             untouched("parcourir les variantes");
         });
 
+    // --- S16: listening before writing. The effect is measured on the Lead's
+    // own meter, the state and the history are compared to the byte.
+    add(
+        "S16 : ▶ Écouter : la basse proposée joue en boucle sur le Lead, sans rien écrire",
+        [roll]
+        {
+            if (auto* panel = roll(); panel != nullptr)
+                panel->generationBar().listenButton().triggerClick();
+        },
+        [this, roll]
+        {
+            auto* panel = roll();
+            return panel != nullptr && panel->listeningToProposal() && clock_.isPlaying() &&
+                   levelOf(leadTrack_.toString()).peakDb > -60.0f;
+        },
+        6000.0);
+
+    add("pendant l'écoute : le Lead sonne, le projet et l'historique n'ont pas bougé ; une autre variante "
+        "s'entend aussitôt",
+        [this, roll, untouched, enter]
+        {
+            auto* panel = roll();
+            if (panel == nullptr)
+                return;
+            const auto lead = levelOf(leadTrack_.toString());
+            note("Lead pendant l'écoute : crête " + juce::String(lead.peakDb, 1).toStdString() + " dBFS");
+            check(lead.peakDb > -60.0f, "le Lead sonne : ce sont les notes grises, il n'en a aucune écrite");
+            check(panel->generationBar().isListening(), "le bouton dit « Arrêter »");
+            untouched("écouter");
+
+            const auto before = panel->ghostNotes();
+            enter(panel->promptField().getText());
+            check(panel->ghostNotes() != before, "une autre variante");
+            check(panel->listeningToProposal() && clock_.isPlaying(),
+                  "l'écoute continue, sur la nouvelle variante");
+            untouched("changer de variante en écoutant");
+        });
+
+    add("Ctrl+Espace arrête l'écoute : le transport revient où le domaine le dit",
+        [this, roll, untouched]
+        {
+            auto* panel = roll();
+            if (panel == nullptr)
+                return;
+            static_cast<void>(panel->keyPressed(
+                juce::KeyPress{juce::KeyPress::spaceKey, juce::ModifierKeys::ctrlModifier, 0}));
+            check(!panel->listeningToProposal() && !panel->generationBar().isListening(),
+                  "l'écoute est arrêtée");
+            check(!clock_.isPlaying(), "à l'arrêt, comme le domaine");
+            check(panel->proposing(), "la proposition est toujours là");
+            untouched("arrêter l'écoute");
+        });
+
     add("désordre : Échap rejette, puis Ctrl+G deux fois de suite sans accepter",
         [this, roll, untouched, enter]
         {

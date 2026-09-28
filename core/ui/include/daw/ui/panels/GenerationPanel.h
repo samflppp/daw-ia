@@ -17,7 +17,7 @@ namespace daw::ui
 // It holds no proposal and reads no project. The panel owns the proposal,
 // and tells this bar what to show; the bar tells the panel what was asked.
 //
-//   first row    the prompt, then Valider and Fermer
+//   first row    the prompt, then Écouter, Valider and Fermer
 //   second row   what is going on, in a musician's words: nothing before a
 //                prompt is written, "Je lis ta demande…" while it is read, the
 //                short sentence once the grey notes are there. The variants
@@ -39,6 +39,7 @@ public:
     std::function<bool(const juce::KeyPress&)> onKey;
     std::function<void(int delta)> onVariant;
     std::function<void()> onAccept;
+    std::function<void()> onListen; // ▶ Écouter, or ■ Arrêter while listening
     std::function<void()> onClose;
 
     // Called when the bar needs another height: the details opened or closed.
@@ -78,6 +79,11 @@ public:
     [[nodiscard]] bool detailsOpen() const noexcept { return detailsOpen_; }
     void setDetailsOpen(bool open);
 
+    // The listen button says what it will do: listen, or stop.
+    void setListening(bool listening);
+    [[nodiscard]] bool isListening() const noexcept { return listening_; }
+    [[nodiscard]] juce::TextButton& listenButton() noexcept { return listen_; }
+
 private:
     void timerCallback() override;
     void refreshButtons();
@@ -112,6 +118,7 @@ private:
     juce::TextButton previous_;
     juce::TextButton next_;
     juce::TextButton details_;
+    juce::TextButton listen_;
     juce::TextButton accept_;
     juce::TextButton close_;
 
@@ -119,6 +126,7 @@ private:
     Shown shown_;
     juce::String message_;
     bool detailsOpen_{false};
+    bool listening_{false};
     int tick_{0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GenerationPanel)

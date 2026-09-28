@@ -53,8 +53,9 @@ namespace daw::ui
 // until a prompt is written; Enter reads it, the proposal is drawn in grey
 // with a short sentence under it, Alt + wheel or the arrows walk through the
 // variants, Tab or Valider writes them as one group from the generator, Escape
-// drops them. Until then nothing is written: the proposal is a GhostProposal
-// held by this panel.
+// drops them. Écouter (Ctrl+Space) loops the grey notes through the track's
+// instrument, written nowhere (ListeningHost). Until Tab nothing is written:
+// the proposal is a GhostProposal held by this panel.
 class PianoRollPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
 {
 public:
@@ -114,6 +115,7 @@ public:
     [[nodiscard]] GenerationPanel& generationBar() noexcept { return bar_; }
     [[nodiscard]] bool generationOpen() const noexcept { return bar_.isVisible(); }
     [[nodiscard]] juce::TextButton& generateButton() noexcept { return generate_; }
+    [[nodiscard]] bool listeningToProposal() const noexcept { return listeningHere_; }
 
     // The sentence under the grey notes, in a musician's words.
     [[nodiscard]] juce::String proposalSentence() const;
@@ -204,6 +206,11 @@ private:
     void closeProposal();
     void refreshProposal();
     void placeBar();
+
+    // ▶ Écouter: the proposal on screen, looped, written nowhere.
+    void toggleListening();
+    void listenAgain(); // another variant, or regenerated: heard at once
+    void stopListening();
     void showProposal(const PromptReader::Reading& reading);
     [[nodiscard]] std::optional<std::pair<double, double>> shownRange() const;
 
@@ -223,6 +230,8 @@ private:
     GenerationPanel bar_;
     juce::TextButton generate_;
     PromptReader& reader_;
+    ListeningHost& listening_;
+    bool listeningHere_{false}; // this panel started what is heard
     std::optional<GhostProposal> proposal_;
     std::vector<domain::generation::GhostNote> ghosts_;
     juce::String promptedText_;

@@ -48,6 +48,15 @@ GenerationPanel::GenerationPanel(const Tokens& tokens, DawLookAndFeel& lookAndFe
     details_.onClick = [this] { setDetailsOpen(!detailsOpen_); };
     addChildComponent(details_);
 
+    listen_.setTooltip(juce::String::fromUTF8(
+        u8"Joue la proposition en boucle, sans rien écrire dans le projet (Ctrl+Espace)"));
+    listen_.onClick = [this]
+    {
+        if (onListen)
+            onListen();
+    };
+    addAndMakeVisible(listen_);
+
     accept_.setButtonText(juce::String::fromUTF8(u8"Valider (Tab)"));
     accept_.setTooltip(
         juce::String::fromUTF8(u8"Écrit les notes grises dans le pattern. Ctrl+Z les retire."));
@@ -116,6 +125,12 @@ void GenerationPanel::showMessage(const juce::String& message)
     repaint();
 }
 
+void GenerationPanel::setListening(bool listening)
+{
+    listening_ = listening;
+    refreshButtons();
+}
+
 void GenerationPanel::setDetailsOpen(bool open)
 {
     if (open == detailsOpen_)
@@ -144,6 +159,8 @@ void GenerationPanel::refreshButtons()
 {
     const auto proposed = state_ == State::proposed;
     accept_.setEnabled(proposed);
+    listen_.setEnabled(proposed);
+    listen_.setButtonText(juce::String::fromUTF8(listening_ ? u8"■ Arrêter" : u8"▶ Écouter"));
     previous_.setVisible(proposed);
     next_.setVisible(proposed);
     previous_.setEnabled(proposed && shown_.rank > 0);
@@ -182,6 +199,8 @@ void GenerationPanel::resized()
     close_.setBounds(first.removeFromRight(buttonWidth));
     first.removeFromRight(gap);
     accept_.setBounds(first.removeFromRight(buttonWidth));
+    first.removeFromRight(gap);
+    listen_.setBounds(first.removeFromRight(buttonWidth));
     first.removeFromRight(gap);
     field_.setBounds(first);
 

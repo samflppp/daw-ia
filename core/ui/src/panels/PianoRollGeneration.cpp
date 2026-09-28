@@ -48,6 +48,12 @@ bool PianoRollPanel::generationKey(const juce::KeyPress& key)
         return true;
     }
 
+    if (key == juce::KeyPress{juce::KeyPress::spaceKey, juce::ModifierKeys::ctrlModifier, 0})
+    {
+        toggleListening();
+        return true;
+    }
+
     if (key == juce::KeyPress::returnKey)
     {
         generateFromPrompt();
@@ -203,6 +209,7 @@ void PianoRollPanel::generateFromPrompt()
             styleShare_ = learning != nullptr ? learning->share(role) : 0.0;
             ghosts_ = proposal_->notes();
             showProposal(reading);
+            listenAgain();
             juce::Logger::writeToLog("generation: " + proposalLine() + " · " + juce::String(ghosts_.size()) +
                                      " notes · " + juce::String(proposal_->lastDrawMs(), 2) +
                                      " ms · style en " + juce::String(lastStyleMs_, 2) + " ms" +
@@ -244,11 +251,66 @@ void PianoRollPanel::showVariant(int delta)
 
     ghosts_ = proposal_->notes();
     showProposal(lastReading_);
+    listenAgain();
     repaint();
+}
+
+// --- listening ------------------------------------------------------------------------
+
+void PianoRollPanel::toggleListening()
+{
+    if (listeningHere_)
+    {
+        stopListening();
+        return;
+    }
+    if (!proposal_.has_value())
+        return;
+
+    ListeningHost::Line line{
+        proposal_->track(), proposal_->pattern(), proposal_->fromBeats(), proposal_->toBeats(), ghosts_};
+    const auto refused = listening_.listen({line});
+    if (!refused.empty())
+    {
+        bar_.showMessage(juce::String::fromUTF8(refused.c_str()));
+        return;
+    }
+
+    listeningHere_ = true;
+    listening_.onEnded = [this]
+    {
+        listeningHere_ = false;
+        listening_.onEnded = nullptr;
+        bar_.setListening(false);
+    };
+    bar_.setListening(true);
+    juce::Logger::writeToLog("generation: listening to " + juce::String(ghosts_.size()) + " notes");
+}
+
+void PianoRollPanel::listenAgain()
+{
+    if (!listeningHere_ || !proposal_.has_value())
+        return;
+
+    ListeningHost::Line line{
+        proposal_->track(), proposal_->pattern(), proposal_->fromBeats(), proposal_->toBeats(), ghosts_};
+    if (!listening_.listen({line}).empty())
+        stopListening();
+}
+
+void PianoRollPanel::stopListening()
+{
+    if (!listeningHere_)
+        return;
+    listeningHere_ = false;
+    listening_.onEnded = nullptr;
+    listening_.stop();
+    bar_.setListening(false);
 }
 
 void PianoRollPanel::closeProposal()
 {
+    stopListening();
     reader_.cancel();
     proposal_.reset();
     ghosts_.clear();
@@ -333,6 +395,7 @@ void PianoRollPanel::refreshProposal()
     case GhostProposal::Refresh::regenerated:
         ghosts_ = proposal_->notes();
         showProposal(lastReading_);
+        listenAgain();
         juce::Logger::writeToLog("generation: context changed, regenerated");
         break;
     case GhostProposal::Refresh::unchanged:

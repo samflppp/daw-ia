@@ -71,6 +71,7 @@ constexpr double pixelsPerVelocityStep = 1.5;
 PianoRollPanel::PianoRollPanel(const PanelContext& context)
     : bar_(context.tokens, context.lookAndFeel)
     , reader_(context.prompts)
+    , listening_(context.listening)
     , tokens_(context.tokens)
     , lookAndFeel_(context.lookAndFeel)
     , bus_(context.bus)
@@ -117,6 +118,7 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
     bar_.onKey = [this](const juce::KeyPress& key) { return generationKey(key); };
     bar_.onVariant = [this](int delta) { showVariant(delta); };
     bar_.onAccept = [this] { acceptProposal(); };
+    bar_.onListen = [this] { toggleListening(); };
     bar_.onClose = [this]
     {
         closeProposal();
@@ -140,6 +142,7 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
 
 PianoRollPanel::~PianoRollPanel()
 {
+    stopListening();
     reader_.cancel();
     stopTimer();
     selection_.removeChangeListener(this);
