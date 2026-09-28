@@ -377,6 +377,47 @@ bool operator==(const Pattern& lhs, const Pattern& rhs)
 }
 
 // ---------------------------------------------------------------------------
+// Lane
+// ---------------------------------------------------------------------------
+
+Result<void> Lane::validate() const
+{
+    if (id.isNil())
+        return fail(ErrorCode::invalidArgument, "lane identifier is nil");
+    return {};
+}
+
+Value Lane::toValue() const
+{
+    return Value::object({{"id", Value{id.toString()}}, {"name", Value{name}}});
+}
+
+Result<Lane> Lane::fromValue(const Value& value)
+{
+    auto id = idAt<LaneId>(value, "id");
+    if (!id)
+        return id.error();
+
+    auto name = value.stringAt("name");
+    if (!name)
+        return name.error();
+
+    Lane lane{};
+    lane.id = id.value();
+    lane.name = std::move(name).value();
+
+    if (auto valid = lane.validate(); !valid)
+        return valid.error();
+
+    return lane;
+}
+
+bool operator==(const Lane& lhs, const Lane& rhs)
+{
+    return lhs.id == rhs.id && lhs.name == rhs.name;
+}
+
+// ---------------------------------------------------------------------------
 // Placement
 // ---------------------------------------------------------------------------
 
@@ -386,6 +427,8 @@ Result<void> Placement::validate() const
         return fail(ErrorCode::invalidArgument, "placement identifier is nil");
     if (patternId.isNil())
         return fail(ErrorCode::invalidArgument, "the placement names no pattern");
+    if (laneId.isNil())
+        return fail(ErrorCode::invalidArgument, "the placement is on no line");
     if (startBeats < 0.0)
         return fail(ErrorCode::invalidArgument, "the placement starts before the timeline origin");
     if (!std::isfinite(startBeats))
@@ -395,9 +438,15 @@ Result<void> Placement::validate() const
 
 Value Placement::toValue() const
 {
-    return Value::object({{"id", Value{id.toString()}},
+    Value::Object members{{"id", Value{id.toString()}},
                           {"patternId", Value{patternId.toString()}},
-                          {"startBeats", Value{startBeats}}});
+                          {"startBeats", Value{startBeats}}};
+
+    // Only when it is not the line of its pattern: a placement that never left
+    // it serialises the way it did before S17, byte for byte.
+    if (laneId != ProjectState::laneOfPattern(patternId))
+        members.emplace_back("laneId", Value{laneId.toString()});
+    return Value::object(std::move(members));
 }
 
 Result<Placement> Placement::fromValue(const Value& value)
@@ -418,6 +467,15 @@ Result<Placement> Placement::fromValue(const Value& value)
     placement.id = id.value();
     placement.patternId = patternId.value();
     placement.startBeats = startBeats.value();
+    placement.laneId = ProjectState::laneOfPattern(patternId.value());
+
+    if (value.find("laneId") != nullptr)
+    {
+        auto laneId = idAt<LaneId>(value, "laneId");
+        if (!laneId)
+            return laneId.error();
+        placement.laneId = laneId.value();
+    }
 
     auto valid = placement.validate();
     if (!valid)
@@ -428,7 +486,8 @@ Result<Placement> Placement::fromValue(const Value& value)
 
 bool operator==(const Placement& lhs, const Placement& rhs)
 {
-    return lhs.id == rhs.id && lhs.patternId == rhs.patternId && lhs.startBeats == rhs.startBeats;
+    return lhs.id == rhs.id && lhs.patternId == rhs.patternId && lhs.startBeats == rhs.startBeats &&
+           lhs.laneId == rhs.laneId;
 }
 
 // ---------------------------------------------------------------------------
@@ -727,15 +786,22 @@ Result<void> AudioClip::validate() const
         return fail(ErrorCode::invalidArgument, "an audio clip sounds on a track");
     if (startBeats < 0.0 || !std::isfinite(startBeats))
         return fail(ErrorCode::invalidArgument, "the audio clip starts before the timeline origin");
+    if (laneId.isNil())
+        return fail(ErrorCode::invalidArgument, "the audio clip is on no line");
     return sample.validate();
 }
 
 Value AudioClip::toValue() const
 {
-    return Value::object({{"id", Value{id.toString()}},
+    Value::Object members{{"id", Value{id.toString()}},
                           {"trackId", Value{trackId.toString()}},
                           {"sample", sample.toValue()},
-                          {"startBeats", Value{startBeats}}});
+                          {"startBeats", Value{startBeats}}};
+
+    // Only when it is not the line of its track, as for a placement.
+    if (laneId != ProjectState::laneOfTrack(trackId))
+        members.emplace_back("laneId", Value{laneId.toString()});
+    return Value::object(std::move(members));
 }
 
 Result<AudioClip> AudioClip::fromValue(const Value& value)
@@ -765,6 +831,15 @@ Result<AudioClip> AudioClip::fromValue(const Value& value)
     clip.trackId = trackId.value();
     clip.sample = std::move(sample).value();
     clip.startBeats = startBeats.value();
+    clip.laneId = ProjectState::laneOfTrack(trackId.value());
+
+    if (value.find("laneId") != nullptr)
+    {
+        auto laneId = idAt<LaneId>(value, "laneId");
+        if (!laneId)
+            return laneId.error();
+        clip.laneId = laneId.value();
+    }
 
     if (auto valid = clip.validate(); !valid)
         return valid.error();
@@ -775,7 +850,7 @@ Result<AudioClip> AudioClip::fromValue(const Value& value)
 bool operator==(const AudioClip& lhs, const AudioClip& rhs)
 {
     return lhs.id == rhs.id && lhs.trackId == rhs.trackId && lhs.sample == rhs.sample &&
-           lhs.startBeats == rhs.startBeats;
+           lhs.startBeats == rhs.startBeats && lhs.laneId == rhs.laneId;
 }
 
 Result<void> Send::validate() const
@@ -1652,6 +1727,178 @@ Result<std::size_t> ProjectState::patternIndex(PatternId id) const
     return static_cast<std::size_t>(std::distance(patterns_.begin(), position));
 }
 
+// --- lanes ------------------------------------------------------------------
+
+const Lane* ProjectState::findLane(LaneId id) const noexcept
+{
+    for (const auto& lane : lanes_)
+    {
+        if (lane.id == id)
+            return &lane;
+    }
+    return nullptr;
+}
+
+Result<std::size_t> ProjectState::laneIndex(LaneId id) const
+{
+    const auto position =
+        std::find_if(lanes_.begin(), lanes_.end(), [id](const Lane& lane) { return lane.id == id; });
+    if (position == lanes_.end())
+        return fail(ErrorCode::notFound, "no such lane: " + id.toString());
+
+    return static_cast<std::size_t>(std::distance(lanes_.begin(), position));
+}
+
+Result<void> ProjectState::insertLane(Lane lane, std::size_t index)
+{
+    if (auto valid = lane.validate(); !valid)
+        return valid;
+
+    if (findLane(lane.id) != nullptr)
+        return fail(ErrorCode::conflict, "lane already exists: " + lane.id.toString());
+
+    const auto at = std::min(index, lanes_.size());
+    lanes_.insert(lanes_.begin() + static_cast<std::ptrdiff_t>(at), std::move(lane));
+    return {};
+}
+
+Result<void> ProjectState::removeLane(LaneId id)
+{
+    auto index = laneIndex(id);
+    if (!index)
+        return index.error();
+
+    lanes_.erase(lanes_.begin() + static_cast<std::ptrdiff_t>(index.value()));
+
+    arrangement_.erase(std::remove_if(arrangement_.begin(),
+                                      arrangement_.end(),
+                                      [id](const Placement& placement) { return placement.laneId == id; }),
+                       arrangement_.end());
+    audio_.erase(std::remove_if(
+                     audio_.begin(), audio_.end(), [id](const AudioClip& clip) { return clip.laneId == id; }),
+                 audio_.end());
+    return {};
+}
+
+Result<void> ProjectState::setLaneName(LaneId id, std::string name)
+{
+    auto index = laneIndex(id);
+    if (!index)
+        return index.error();
+
+    lanes_[index.value()].name = std::move(name);
+    return {};
+}
+
+Result<void> ProjectState::moveLane(LaneId id, std::size_t index)
+{
+    auto from = laneIndex(id);
+    if (!from)
+        return from.error();
+
+    auto lane = std::move(lanes_[from.value()]);
+    lanes_.erase(lanes_.begin() + static_cast<std::ptrdiff_t>(from.value()));
+
+    const auto at = std::min(index, lanes_.size());
+    lanes_.insert(lanes_.begin() + static_cast<std::ptrdiff_t>(at), std::move(lane));
+    return {};
+}
+
+bool ProjectState::laneIsEmpty(LaneId id) const noexcept
+{
+    return std::none_of(arrangement_.begin(),
+                        arrangement_.end(),
+                        [id](const Placement& placement) { return placement.laneId == id; }) &&
+           std::none_of(
+               audio_.begin(), audio_.end(), [id](const AudioClip& clip) { return clip.laneId == id; });
+}
+
+LaneId ProjectState::laneOfPattern(PatternId id) noexcept
+{
+    return LaneId{id.value()};
+}
+
+LaneId ProjectState::laneOfTrack(TrackId id) noexcept
+{
+    return LaneId{id.value()};
+}
+
+bool ProjectState::isLaneOfSomeTrack(LaneId id) const noexcept
+{
+    return std::any_of(
+        tracks_.begin(), tracks_.end(), [id](const Track& track) { return laneOfTrack(track.id) == id; });
+}
+
+Result<bool> ProjectState::ensureLaneOfPattern(PatternId id)
+{
+    const auto laneId = laneOfPattern(id);
+    if (findLane(laneId) != nullptr)
+        return false;
+
+    // Above the audio lines, as the S16 playlist drew them.
+    const auto firstAudio = std::find_if(
+        lanes_.begin(), lanes_.end(), [this](const Lane& lane) { return isLaneOfSomeTrack(lane.id); });
+
+    Lane lane{};
+    lane.id = laneId;
+    if (auto inserted = insertLane(lane, static_cast<std::size_t>(std::distance(lanes_.begin(), firstAudio)));
+        !inserted)
+        return inserted.error();
+    return true;
+}
+
+Result<bool> ProjectState::ensureLaneOfTrack(TrackId id)
+{
+    const auto laneId = laneOfTrack(id);
+    if (findLane(laneId) != nullptr)
+        return false;
+
+    auto rank = trackIndex(id);
+    if (!rank)
+        return rank.error();
+
+    // Among the audio lines, in track order: before the line of the first
+    // track that comes after this one.
+    std::size_t at = lanes_.size();
+    for (std::size_t index = 0; index < lanes_.size(); ++index)
+    {
+        const auto later =
+            std::find_if(tracks_.begin() + static_cast<std::ptrdiff_t>(rank.value()) + 1,
+                         tracks_.end(),
+                         [&](const Track& track) { return laneOfTrack(track.id) == lanes_[index].id; });
+        if (later != tracks_.end())
+        {
+            at = index;
+            break;
+        }
+    }
+
+    Lane lane{};
+    lane.id = laneId;
+    if (auto inserted = insertLane(lane, at); !inserted)
+        return inserted.error();
+    return true;
+}
+
+std::vector<Lane> ProjectState::legacyLanes() const
+{
+    std::vector<Lane> lanes;
+    for (const auto& pattern : patterns_)
+        lanes.push_back(Lane{laneOfPattern(pattern.id), {}});
+
+    for (const auto& track : tracks_)
+    {
+        const auto holds = std::any_of(audio_.begin(),
+                                       audio_.end(),
+                                       [&track](const AudioClip& clip) { return clip.trackId == track.id; });
+        if (holds)
+            lanes.push_back(Lane{laneOfTrack(track.id), {}});
+    }
+    return lanes;
+}
+
+// --- patterns ---------------------------------------------------------------
+
 Result<void> ProjectState::addPattern(Pattern pattern)
 {
     return insertPattern(std::move(pattern), patterns_.size());
@@ -1754,6 +2001,16 @@ std::vector<const Placement*> ProjectState::placementsOf(PatternId id) const
 
 Result<void> ProjectState::addPlacement(Placement placement)
 {
+    // A placement given without a line goes on the line of its pattern, the
+    // one it would have been drawn on before lines were free.
+    if (placement.laneId.isNil())
+    {
+        if (findPattern(placement.patternId) == nullptr)
+            return fail(ErrorCode::notFound, "no such pattern: " + placement.patternId.toString());
+        if (auto ensured = ensureLaneOfPattern(placement.patternId); !ensured)
+            return ensured.error();
+        placement.laneId = laneOfPattern(placement.patternId);
+    }
     return insertPlacement(placement, arrangement_.size());
 }
 
@@ -1780,6 +2037,9 @@ Result<void> ProjectState::insertPlacement(Placement placement, std::size_t inde
     if (findPattern(placement.patternId) == nullptr)
         return fail(ErrorCode::notFound, "no such pattern: " + placement.patternId.toString());
 
+    if (findLane(placement.laneId) == nullptr)
+        return fail(ErrorCode::notFound, "no such lane: " + placement.laneId.toString());
+
     const auto at = std::min(index, arrangement_.size());
     arrangement_.insert(arrangement_.begin() + static_cast<std::ptrdiff_t>(at), placement);
     return {};
@@ -1797,7 +2057,7 @@ Result<void> ProjectState::removePlacement(PlacementId id)
     return {};
 }
 
-Result<void> ProjectState::movePlacement(PlacementId id, double startBeats)
+Result<void> ProjectState::movePlacement(PlacementId id, double startBeats, LaneId laneId)
 {
     const auto position = std::find_if(arrangement_.begin(),
                                        arrangement_.end(),
@@ -1809,6 +2069,12 @@ Result<void> ProjectState::movePlacement(PlacementId id, double startBeats)
     // move leaves the placement where it was.
     Placement moved = *position;
     moved.startBeats = startBeats;
+    if (!laneId.isNil())
+    {
+        if (findLane(laneId) == nullptr)
+            return fail(ErrorCode::notFound, "no such lane: " + laneId.toString());
+        moved.laneId = laneId;
+    }
 
     auto valid = moved.validate();
     if (!valid)
@@ -1845,6 +2111,7 @@ Result<void> ProjectState::addSingleTrackPattern(
     placement.id = placementIdForClip(clipId);
     placement.patternId = pattern.id;
     placement.startBeats = startBeats;
+    placement.laneId = laneOfPattern(pattern.id);
 
     // Both validated before either is written: without this a bad start would
     // leave a pattern behind, and the bus would have recorded no history entry
@@ -1862,8 +2129,13 @@ Result<void> ProjectState::addSingleTrackPattern(
     if (findClip(clipId) != nullptr)
         return fail(ErrorCode::conflict, "clip already exists: " + clipId.toString());
 
+    const auto patternId = pattern.id;
     if (auto added = addPattern(std::move(pattern)); !added)
         return added;
+
+    // One pattern, one line: what clip.create_midi has always drawn.
+    if (auto ensured = ensureLaneOfPattern(patternId); !ensured)
+        return ensured.error();
 
     return addPlacement(placement);
 }
@@ -2077,6 +2349,15 @@ Result<std::size_t> ProjectState::audioClipIndex(AudioClipId id) const
 
 Result<void> ProjectState::addAudioClip(AudioClip clip)
 {
+    // Without a line, on the line of its track, as for a placement.
+    if (clip.laneId.isNil())
+    {
+        if (findTrack(clip.trackId) == nullptr)
+            return fail(ErrorCode::notFound, "no such track: " + clip.trackId.toString());
+        if (auto ensured = ensureLaneOfTrack(clip.trackId); !ensured)
+            return ensured.error();
+        clip.laneId = laneOfTrack(clip.trackId);
+    }
     return insertAudioClip(std::move(clip), audio_.size());
 }
 
@@ -2090,6 +2371,9 @@ Result<void> ProjectState::insertAudioClip(AudioClip clip, std::size_t index)
 
     if (findTrack(clip.trackId) == nullptr)
         return fail(ErrorCode::notFound, "no such track: " + clip.trackId.toString());
+
+    if (findLane(clip.laneId) == nullptr)
+        return fail(ErrorCode::notFound, "no such lane: " + clip.laneId.toString());
 
     const auto at = std::min(index, audio_.size());
     audio_.insert(audio_.begin() + static_cast<std::ptrdiff_t>(at), std::move(clip));
@@ -2107,7 +2391,7 @@ Result<void> ProjectState::removeAudioClip(AudioClipId id)
     return {};
 }
 
-Result<void> ProjectState::moveAudioClip(AudioClipId id, double startBeats)
+Result<void> ProjectState::moveAudioClip(AudioClipId id, double startBeats, LaneId laneId)
 {
     const auto position =
         std::find_if(audio_.begin(), audio_.end(), [id](const AudioClip& clip) { return clip.id == id; });
@@ -2116,6 +2400,12 @@ Result<void> ProjectState::moveAudioClip(AudioClipId id, double startBeats)
 
     AudioClip moved = *position;
     moved.startBeats = startBeats;
+    if (!laneId.isNil())
+    {
+        if (findLane(laneId) == nullptr)
+            return fail(ErrorCode::notFound, "no such lane: " + laneId.toString());
+        moved.laneId = laneId;
+    }
     if (auto valid = moved.validate(); !valid)
         return valid;
 
@@ -2552,6 +2842,18 @@ Value ProjectState::toValue() const
         members.emplace_back("audio", Value::array(std::move(serialisedAudio)));
     }
 
+    // Only when they are not the lines an S16 project showed — one per
+    // pattern, then one per track holding audio: an old project serialises
+    // the way it did before S17, byte for byte, and fromValue rebuilds them.
+    if (lanes_ != legacyLanes())
+    {
+        Value::Array serialisedLanes;
+        serialisedLanes.reserve(lanes_.size());
+        for (const auto& lane : lanes_)
+            serialisedLanes.push_back(lane.toValue());
+        members.emplace_back("lanes", Value::array(std::move(serialisedLanes)));
+    }
+
     // The mixer, only where there is one: no bus and an untouched master
     // serialise the way a project did before S11, byte for byte.
     if (!buses_.empty())
@@ -2656,6 +2958,33 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
         }
     }
 
+    // Before the patterns: a pattern read below must not create its line
+    // when the lines were written.
+    const auto* lanesValue = value.find("lanes");
+    if (lanesValue != nullptr)
+    {
+        const auto* items = lanesValue->asArray();
+        if (items == nullptr)
+            return fail(ErrorCode::invalidPayload, "lanes must be an array");
+
+        for (const auto& item : *items)
+        {
+            auto lane = Lane::fromValue(item);
+            if (!lane)
+                return lane.error();
+
+            // A state written before patterns existed has already been given
+            // the lines of its clips above; it never carries lanes, but a
+            // damaged one must not fail on a duplicate it did not write.
+            if (state.findLane(lane.value().id) != nullptr)
+                continue;
+
+            auto added = state.insertLane(std::move(lane).value(), state.lanes_.size());
+            if (!added)
+                return added.error();
+        }
+    }
+
     if (const auto* patternsValue = value.find("patterns"); patternsValue != nullptr)
     {
         const auto* items = patternsValue->asArray();
@@ -2668,9 +2997,16 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
             if (!pattern)
                 return pattern.error();
 
+            const auto patternId = pattern.value().id;
             auto added = state.addPattern(std::move(pattern).value());
             if (!added)
                 return added.error();
+
+            if (lanesValue == nullptr)
+            {
+                if (auto ensured = state.ensureLaneOfPattern(patternId); !ensured)
+                    return ensured.error();
+            }
         }
     }
 
@@ -2686,7 +3022,7 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
             if (!placement)
                 return placement.error();
 
-            auto added = state.addPlacement(placement.value());
+            auto added = state.insertPlacement(placement.value(), state.arrangement_.size());
             if (!added)
                 return added.error();
         }
@@ -2704,7 +3040,13 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
             if (!clip)
                 return clip.error();
 
-            auto added = state.addAudioClip(std::move(clip).value());
+            if (lanesValue == nullptr)
+            {
+                if (auto ensured = state.ensureLaneOfTrack(clip.value().trackId); !ensured)
+                    return ensured.error();
+            }
+
+            auto added = state.insertAudioClip(std::move(clip).value(), state.audio_.size());
             if (!added)
                 return added.error();
         }
@@ -2763,7 +3105,7 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
 bool operator==(const ProjectState& lhs, const ProjectState& rhs)
 {
     return lhs.tempo_ == rhs.tempo_ && lhs.timeSignature_ == rhs.timeSignature_ &&
-           lhs.tracks_ == rhs.tracks_ && lhs.patterns_ == rhs.patterns_ &&
+           lhs.tracks_ == rhs.tracks_ && lhs.patterns_ == rhs.patterns_ && lhs.lanes_ == rhs.lanes_ &&
            lhs.arrangement_ == rhs.arrangement_ && lhs.audio_ == rhs.audio_ && lhs.buses_ == rhs.buses_ &&
            lhs.master_ == rhs.master_ && lhs.automation_ == rhs.automation_;
 }

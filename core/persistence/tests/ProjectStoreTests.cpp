@@ -2,7 +2,9 @@
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/command/CommandRegistry.h"
 #include "daw/domain/commands/CreateMidiClip.h"
+#include "daw/domain/commands/LaneCommands.h"
 #include "daw/domain/commands/PatternCommands.h"
+#include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/domain/serialization/Json.h"
@@ -360,12 +362,12 @@ TEST_CASE("a project written before patterns existed reopens as patterns, and is
     const auto elapsed =
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startedAt);
 
-    MESSAGE("réouverture et migration 3 -> 4 : " << elapsed.count() << " ms pour " << report.value().rows
+    MESSAGE("réouverture et migration 3 -> 5 : " << elapsed.count() << " ms pour " << report.value().rows
                                                  << " lignes");
 
     // The file really was one version behind, and really was migrated.
     CHECK(session.store->versionOnDisk() == ProjectStore::schemaVersion);
-    CHECK(ProjectStore::schemaVersion == 4);
+    CHECK(ProjectStore::schemaVersion == 5);
 
     const auto clipId = ClipId::parse("01JBWQ7Z0000000000000CL1P0").value();
     const auto trackId = TrackId::parse("01JBWQ7Z0000000000000TRACK").value();
@@ -682,7 +684,7 @@ TEST_CASE("a project of the first nine weeks reopens under the playlist, takes i
         MESSAGE("réouverture sous S10 d'un projet S8 + S9 : " << elapsed.count() << " ms pour "
                                                               << report.value().rows << " lignes");
 
-        CHECK(session.store->versionOnDisk() == 4);
+        CHECK(session.store->versionOnDisk() == ProjectStore::schemaVersion);
         REQUIRE(session.state.patterns().size() == 2);
         REQUIRE(session.state.arrangement().size() == 2);
         CHECK(session.state.findPlacement(legacyPlacement)->startBeats == doctest::Approx(8.0));
@@ -747,4 +749,91 @@ TEST_CASE("a project of the first nine weeks reopens under the playlist, takes i
     for (int index = 0; index < 4; ++index)
         REQUIRE(session.bus.undo().ok());
     CHECK(session.stateJson() == beforePlaylist);
+}
+
+TEST_CASE("an S16 project reopens under free lines with the same state, takes lines, and keeps them across "
+          "processes")
+{
+    namespace s16 = daw::testing::s16;
+    TemporaryFolder temporary{"lanes"};
+    const auto project = temporary.child("Beat S16.dawproj");
+    const auto written = temporary.child("s16.json");
+    const auto dumped = temporary.child("dumped.json");
+
+    // An S16 process writes, closes and dies; another opens what it left.
+    REQUIRE(runChildProcess({"--child", "write-s16", project.string(), written.string()}) == 0);
+    const auto s16State = readTextFile(written);
+    REQUIRE_FALSE(s16State.empty());
+
+    REQUIRE(runChildProcess({"--child", "dump", project.string(), dumped.string()}) == 0);
+    auto seen = json::read(readTextFile(dumped));
+    REQUIRE(seen.ok());
+
+    // Same state, to the byte, as the S16 build serialised it: the lines are
+    // those S16 drew, so nothing in the text says "line".
+    CHECK(json::write(*seen.value().find("state")) == s16State);
+    CHECK(s16State.find("lane") == std::string::npos);
+
+    const auto drums = PatternId::parse(s16::drumPattern).value();
+    const auto line = PatternId::parse(s16::bassPattern).value();
+    const auto kick = TrackId::parse(s16::kickTrack).value();
+    const auto bassAt0 = PlacementId::parse(s16::bassAt0).value();
+    const auto sampleClip = AudioClipId::parse(s16::sampleClip).value();
+    const auto fx = LaneId::parse("01JBWQ7Z00000000S17FXLANE0").value();
+
+    std::string lined;
+    {
+        const auto startedAt = std::chrono::steady_clock::now();
+        Reopened session;
+        auto report = reopen(session, project);
+        REQUIRE(report.ok());
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startedAt);
+        MESSAGE("réouverture et migration 4 -> 5 d'un projet S16 : " << elapsed.count() << " ms pour "
+                                                                     << report.value().rows << " lignes");
+
+        CHECK(session.store->versionOnDisk() == 5);
+        CHECK(session.stateJson() == s16State);
+
+        // One line per pattern, in pattern order, then the drum track's audio.
+        REQUIRE(session.state.lanes().size() == 3);
+        CHECK(session.state.lanes()[0].id == ProjectState::laneOfPattern(drums));
+        CHECK(session.state.lanes()[1].id == ProjectState::laneOfPattern(line));
+        CHECK(session.state.lanes()[2].id == ProjectState::laneOfTrack(kick));
+
+        // What the playlist of S17 writes: the bass block dragged onto the
+        // drum line, the drum line named, a new line for effects and the
+        // sample moved onto it.
+        session.store->startRecording(session.bus);
+        REQUIRE(
+            session.bus
+                .execute(std::make_unique<MovePlacement>(bassAt0, 8.0, ProjectState::laneOfPattern(drums)))
+                .ok());
+        REQUIRE(
+            session.bus.execute(std::make_unique<RenameLane>(ProjectState::laneOfPattern(drums), "Groove"))
+                .ok());
+        REQUIRE(session.bus.execute(std::make_unique<CreateLane>(fx, "FX", 0)).ok());
+        REQUIRE(session.bus.execute(std::make_unique<MoveAudio>(sampleClip, 8.0, fx)).ok());
+        lined = session.stateJson();
+        session.store->stopRecording();
+        REQUIRE(session.store->close().ok());
+    }
+
+    // A third process sees the lines.
+    REQUIRE(runChildProcess({"--child", "dump", project.string(), dumped.string()}) == 0);
+    auto again = json::read(readTextFile(dumped));
+    REQUIRE(again.ok());
+    CHECK(json::write(*again.value().find("state")) == lined);
+
+    Reopened session;
+    REQUIRE(reopen(session, project).ok());
+    CHECK(session.stateJson() == lined);
+    CHECK(session.state.findPlacement(bassAt0)->laneId == ProjectState::laneOfPattern(drums));
+    CHECK(session.state.findAudioClip(sampleClip)->laneId == fx);
+    CHECK(session.state.lanes().front().name == "FX");
+
+    // Four Ctrl+Z give back the S16 project, to the byte.
+    for (int index = 0; index < 4; ++index)
+        REQUIRE(session.bus.undo().ok());
+    CHECK(session.stateJson() == s16State);
 }

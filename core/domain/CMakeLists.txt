@@ -26,6 +26,7 @@ add_library(daw_domain STATIC
     src/commands/AutomationCommands.cpp
     src/commands/NoteCommands.cpp
     src/commands/NoteEditCommands.cpp
+    src/commands/LaneCommands.cpp
     src/commands/PatternCommands.cpp
     src/commands/SampleCommands.cpp
     src/commands/CreateMidiClip.cpp

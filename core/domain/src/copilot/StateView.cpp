@@ -76,8 +76,14 @@ Value patternValue(const Pattern& pattern, const ProjectState& state)
     Value::Array placements;
     for (const auto* placement : state.placementsOf(pattern.id))
     {
-        placements.push_back(Value::object({{"placementId", Value{placement->id.toString()}},
-                                            {"startBeats", Value{placement->startBeats}}}));
+        Value::Object members{{"placementId", Value{placement->id.toString()}},
+                              {"startBeats", Value{placement->startBeats}}};
+
+        // Its playlist line, only when it left the one of its pattern: a
+        // project that never filed a block reads as it did before S17.
+        if (placement->laneId != ProjectState::laneOfPattern(pattern.id))
+            members.emplace_back("laneId", Value{placement->laneId.toString()});
+        placements.push_back(Value::object(std::move(members)));
     }
 
     // The rank is what "le pattern 2" means: the screens show an unnamed
@@ -252,6 +258,27 @@ Value summarise(const ProjectState& state, const MachinePlugins& plugins)
                        {"machinePlugins",
                         Value::object({{"total", Value{static_cast<std::int64_t>(plugins.available.size())}},
                                        {"listed", Value::array(std::move(installed))}})}});
+
+    // The playlist lines, only once one is named: before that they are the
+    // lines of the patterns, which the model already reads, and a project
+    // that never named one reads as it did before S17. Tidying a project is
+    // naming lines and filing blocks on them, so a named line is worth its
+    // tokens.
+    const auto named = std::any_of(
+        state.lanes().begin(), state.lanes().end(), [](const Lane& lane) { return !lane.name.empty(); });
+    if (named)
+    {
+        Value::Array lanes;
+        lanes.reserve(state.lanes().size());
+        for (std::size_t index = 0; index < state.lanes().size(); ++index)
+        {
+            const auto& lane = state.lanes()[index];
+            lanes.push_back(Value::object({{"laneId", Value{lane.id.toString()}},
+                                           {"rank", Value{static_cast<std::int64_t>(index + 1)}},
+                                           {"name", Value{lane.name}}}));
+        }
+        static_cast<void>(summary.set("lanes", Value::array(std::move(lanes))));
+    }
 
     // The automation lines, whole: "fade the master out" has to know whether
     // the master already has a line, and a line is a handful of points. Only

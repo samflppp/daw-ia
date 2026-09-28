@@ -38,13 +38,15 @@ private:
     std::optional<SampleRef> sample_;
 };
 
-// audio.place — lays a sample on the timeline, on a track, at a beat.
+// audio.place — lays a sample on the timeline, on a track, at a beat, and on
+// a playlist line. A nil line — or a payload written before S17 — files it on
+// the line of its track, created if missing.
 class PlaceAudio final : public Command
 {
 public:
     static constexpr std::string_view commandType = "audio.place";
 
-    PlaceAudio(AudioClipId clipId, TrackId trackId, SampleRef sample, double startBeats);
+    PlaceAudio(AudioClipId clipId, TrackId trackId, SampleRef sample, double startBeats, LaneId laneId = {});
 
     [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
 
@@ -60,16 +62,18 @@ private:
     TrackId trackId_;
     SampleRef sample_;
     double startBeats_;
+    LaneId laneId_;
 };
 
-// audio.move — another beat for an audio clip. Coalesces per clip, so a drag is
-// one history entry.
+// audio.move — another beat for an audio clip, and since S17 another line; a
+// nil line keeps the one it had. Coalesces per clip, so a drag is one history
+// entry.
 class MoveAudio final : public Command
 {
 public:
     static constexpr std::string_view commandType = "audio.move";
 
-    MoveAudio(AudioClipId clipId, double startBeats);
+    MoveAudio(AudioClipId clipId, double startBeats, LaneId laneId = {});
 
     [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
 
@@ -83,6 +87,7 @@ public:
 private:
     AudioClipId clipId_;
     double startBeats_;
+    LaneId laneId_;
 };
 
 // audio.remove — takes an audio clip off the timeline. The sample's bytes stay

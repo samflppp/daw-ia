@@ -148,16 +148,47 @@ struct Pattern
     friend bool operator==(const Pattern& lhs, const Pattern& rhs);
 };
 
-// One laying of a pattern on the timeline: which pattern, and at which beat.
+// One line of the playlist, the way FL Studio has them: free, named by the
+// user, holding any block. A line has no sound of its own — no volume, no
+// mute, no instrument. Moving a block from one line to another changes where
+// it is filed and nothing it plays; what sounds is the tracks of its pattern.
+//
+// It lives in the project, not in the screen, because the user writes it: a
+// block filed on the "Basse" line is an arrangement the user made, and losing
+// it on reopening or on Ctrl+Z would be a bug. What the screen owns stays
+// there: height, colour, scroll.
+struct Lane
+{
+    LaneId id{};
+
+    // May be empty: an unnamed line is displayed by its rank, like a pattern.
+    std::string name;
+
+    [[nodiscard]] Result<void> validate() const;
+    [[nodiscard]] Value toValue() const;
+    [[nodiscard]] static Result<Lane> fromValue(const Value& value);
+
+    friend bool operator==(const Lane& lhs, const Lane& rhs);
+};
+
+// One laying of a pattern on the timeline: which pattern, at which beat, and
+// on which line of the playlist.
 //
 // It carries no track, because the pattern already says which tracks it sounds
 // on, and no length, because the pattern already says how long it is. A field
-// that repeated either would be a second truth waiting to disagree.
+// that repeated either would be a second truth waiting to disagree. The line
+// repeats nothing: it is where the block is filed, and it does not sound.
 struct Placement
 {
     PlacementId id{};
     PatternId patternId{};
     double startBeats{0.0};
+
+    // Written before S17, a placement named no line. It then sits on the line
+    // of its pattern, whose identifier is the pattern's own (see
+    // ProjectState::laneOfPattern): the playlist those projects showed, one
+    // line per pattern, comes back without a byte being rewritten.
+    LaneId laneId{};
 
     [[nodiscard]] Result<void> validate() const;
     [[nodiscard]] Value toValue() const;
@@ -366,6 +397,10 @@ struct AudioClip
     TrackId trackId{};
     SampleRef sample;
     double startBeats{0.0};
+
+    // The playlist line it is filed on. Written before S17, an audio clip named
+    // none: it sits on the line of its track (ProjectState::laneOfTrack).
+    LaneId laneId{};
 
     [[nodiscard]] Result<void> validate() const;
     [[nodiscard]] Value toValue() const;
@@ -594,7 +629,42 @@ public:
     Result<void> addAudioClip(AudioClip clip);
     Result<void> insertAudioClip(AudioClip clip, std::size_t index);
     Result<void> removeAudioClip(AudioClipId id);
-    Result<void> moveAudioClip(AudioClipId id, double startBeats);
+
+    // A nil line keeps the clip on its line.
+    Result<void> moveAudioClip(AudioClipId id, double startBeats, LaneId laneId = {});
+
+    // --- lanes
+    //
+    // The lines of the playlist, top to bottom. Every placement and every audio
+    // clip is filed on one of them; a line may be empty.
+    [[nodiscard]] const std::vector<Lane>& lanes() const noexcept { return lanes_; }
+    [[nodiscard]] const Lane* findLane(LaneId id) const noexcept;
+    [[nodiscard]] Result<std::size_t> laneIndex(LaneId id) const;
+
+    // Beyond the current count it appends, like insertTrack.
+    Result<void> insertLane(Lane lane, std::size_t index);
+
+    // Takes the blocks filed on it with it, like removePattern takes its
+    // placements: a block on no line would be a block nothing can draw.
+    Result<void> removeLane(LaneId id);
+    Result<void> setLaneName(LaneId id, std::string name);
+    Result<void> moveLane(LaneId id, std::size_t index);
+
+    [[nodiscard]] bool laneIsEmpty(LaneId id) const noexcept;
+
+    // The line a pattern or a track had before lines were free: the
+    // pattern's or the track's own identifier, retyped. Derived and not
+    // engendered, like patternIdForClip, so a journal written before S17
+    // replays into the same lines every time.
+    static LaneId laneOfPattern(PatternId id) noexcept;
+    static LaneId laneOfTrack(TrackId id) noexcept;
+
+    // Creates that line if it is missing, where the S16 playlist showed it:
+    // the lines of patterns first, in pattern order, then the audio lines, in
+    // track order. Returns whether it had to be created, so a command can
+    // take it away again on undo.
+    Result<bool> ensureLaneOfPattern(PatternId id);
+    Result<bool> ensureLaneOfTrack(TrackId id);
 
     // --- patterns and placements
     //
@@ -633,7 +703,9 @@ public:
     Result<void> insertPlacement(Placement placement, std::size_t index);
 
     Result<void> removePlacement(PlacementId id);
-    Result<void> movePlacement(PlacementId id, double startBeats);
+
+    // A nil line keeps the placement on its line.
+    Result<void> movePlacement(PlacementId id, double startBeats, LaneId laneId = {});
 
     // Adds an empty track row to a pattern. The clip identifier comes from the
     // caller, like every other identifier in this project.
@@ -776,6 +848,13 @@ private:
     [[nodiscard]] AutomationLine* findAutomationLineMutable(AutomationLineId id) noexcept;
     void dropAutomation(const std::vector<AutomationLineId>& lines);
 
+    // The lines a project written before S17 shows: one per pattern, in
+    // pattern order, then one per track holding audio, in track order.
+    // toValue leaves lanes out when they are exactly these, so an old project
+    // serialises byte for byte as it did; fromValue rebuilds them when absent.
+    [[nodiscard]] std::vector<Lane> legacyLanes() const;
+    [[nodiscard]] bool isLaneOfSomeTrack(LaneId id) const noexcept;
+
     [[nodiscard]] TempoPoint* findTempoPointMutable(TempoPointId id) noexcept;
     void sortTempoPoints();
     Result<void> readTempoSequence(const Value::Array& points);
@@ -784,6 +863,7 @@ private:
     TimeSignature timeSignature_;
     std::vector<Track> tracks_;
     std::vector<Pattern> patterns_;
+    std::vector<Lane> lanes_;
     std::vector<Placement> arrangement_;
     std::vector<AudioClip> audio_;
     std::vector<Track> buses_;

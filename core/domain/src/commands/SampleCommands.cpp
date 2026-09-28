@@ -23,6 +23,22 @@ Result<IdType> idAt(const Value& value, std::string_view key)
     return parsed.value();
 }
 
+Result<LaneId> optionalLaneAt(const Value& value)
+{
+    if (value.find("laneId") == nullptr)
+        return LaneId{};
+    return idAt<LaneId>(value, "laneId");
+}
+
+bool flagAt(const Value& record, std::string_view key)
+{
+    const auto* value = record.find(key);
+    if (value == nullptr)
+        return false;
+    auto flag = value->asBool();
+    return flag.ok() && flag.value();
+}
+
 // A sample, or null: the one payload of this file where "nothing" is a value.
 Result<std::optional<SampleRef>> optionalSampleAt(const Value& value, std::string_view key)
 {
@@ -106,11 +122,13 @@ Result<void> SetTrackSample::revert(ProjectState& state, const Value& undoRecord
 // audio.place
 // ---------------------------------------------------------------------------
 
-PlaceAudio::PlaceAudio(AudioClipId clipId, TrackId trackId, SampleRef sample, double startBeats)
+PlaceAudio::PlaceAudio(
+    AudioClipId clipId, TrackId trackId, SampleRef sample, double startBeats, LaneId laneId)
     : clipId_{clipId}
     , trackId_{trackId}
     , sample_{std::move(sample)}
     , startBeats_{startBeats}
+    , laneId_{laneId}
 {
 }
 
@@ -136,16 +154,23 @@ Result<std::unique_ptr<Command>> PlaceAudio::fromPayload(const Value& payload)
     if (!startBeats)
         return startBeats.error();
 
-    return std::unique_ptr<Command>{
-        new PlaceAudio{clipId.value(), trackId.value(), std::move(sample).value(), startBeats.value()}};
+    auto laneId = optionalLaneAt(payload);
+    if (!laneId)
+        return laneId.error();
+
+    return std::unique_ptr<Command>{new PlaceAudio{
+        clipId.value(), trackId.value(), std::move(sample).value(), startBeats.value(), laneId.value()}};
 }
 
 Value PlaceAudio::payload() const
 {
-    return Value::object({{"clipId", Value{clipId_.toString()}},
+    Value::Object members{{"clipId", Value{clipId_.toString()}},
                           {"trackId", Value{trackId_.toString()}},
                           {"sample", sample_.toValue()},
-                          {"startBeats", Value{startBeats_}}});
+                          {"startBeats", Value{startBeats_}}};
+    if (!laneId_.isNil())
+        members.emplace_back("laneId", Value{laneId_.toString()});
+    return Value::object(std::move(members));
 }
 
 Result<Value> PlaceAudio::apply(ProjectState& state) const
@@ -155,11 +180,31 @@ Result<Value> PlaceAudio::apply(ProjectState& state) const
     clip.trackId = trackId_;
     clip.sample = sample_;
     clip.startBeats = startBeats_;
+    clip.laneId = laneId_;
 
-    if (auto added = state.addAudioClip(std::move(clip)); !added)
+    auto laneCreated = false;
+    if (laneId_.isNil())
+    {
+        if (state.findTrack(trackId_) == nullptr)
+            return fail(ErrorCode::notFound, "no such track: " + trackId_.toString());
+        auto ensured = state.ensureLaneOfTrack(trackId_);
+        if (!ensured)
+            return ensured.error();
+        laneCreated = ensured.value();
+        clip.laneId = ProjectState::laneOfTrack(trackId_);
+    }
+
+    const auto laneId = clip.laneId;
+    if (auto added = state.insertAudioClip(std::move(clip), state.audioClips().size()); !added)
+    {
+        if (laneCreated)
+            static_cast<void>(state.removeLane(laneId));
         return added.error();
+    }
 
-    return Value::object({{"clipId", Value{clipId_.toString()}}});
+    return Value::object({{"clipId", Value{clipId_.toString()}},
+                          {"laneId", Value{laneId.toString()}},
+                          {"laneCreated", Value{laneCreated}}});
 }
 
 Result<void> PlaceAudio::revert(ProjectState& state, const Value& undoRecord) const
@@ -168,16 +213,27 @@ Result<void> PlaceAudio::revert(ProjectState& state, const Value& undoRecord) co
     if (!clipId)
         return clipId.error();
 
-    return state.removeAudioClip(clipId.value());
+    if (auto removed = state.removeAudioClip(clipId.value()); !removed)
+        return removed;
+
+    if (flagAt(undoRecord, "laneCreated"))
+    {
+        auto laneId = idAt<LaneId>(undoRecord, "laneId");
+        if (!laneId)
+            return laneId.error();
+        return state.removeLane(laneId.value());
+    }
+    return {};
 }
 
 // ---------------------------------------------------------------------------
 // audio.move
 // ---------------------------------------------------------------------------
 
-MoveAudio::MoveAudio(AudioClipId clipId, double startBeats)
+MoveAudio::MoveAudio(AudioClipId clipId, double startBeats, LaneId laneId)
     : clipId_{clipId}
     , startBeats_{startBeats}
+    , laneId_{laneId}
 {
 }
 
@@ -191,12 +247,19 @@ Result<std::unique_ptr<Command>> MoveAudio::fromPayload(const Value& payload)
     if (!startBeats)
         return startBeats.error();
 
-    return std::unique_ptr<Command>{new MoveAudio{clipId.value(), startBeats.value()}};
+    auto laneId = optionalLaneAt(payload);
+    if (!laneId)
+        return laneId.error();
+
+    return std::unique_ptr<Command>{new MoveAudio{clipId.value(), startBeats.value(), laneId.value()}};
 }
 
 Value MoveAudio::payload() const
 {
-    return Value::object({{"clipId", Value{clipId_.toString()}}, {"startBeats", Value{startBeats_}}});
+    Value::Object members{{"clipId", Value{clipId_.toString()}}, {"startBeats", Value{startBeats_}}};
+    if (!laneId_.isNil())
+        members.emplace_back("laneId", Value{laneId_.toString()});
+    return Value::object(std::move(members));
 }
 
 Result<Value> MoveAudio::apply(ProjectState& state) const
@@ -206,11 +269,14 @@ Result<Value> MoveAudio::apply(ProjectState& state) const
         return fail(ErrorCode::notFound, "no such audio clip: " + clipId_.toString());
 
     const auto previous = clip->startBeats;
+    const auto previousLane = clip->laneId;
 
-    if (auto moved = state.moveAudioClip(clipId_, startBeats_); !moved)
+    if (auto moved = state.moveAudioClip(clipId_, startBeats_, laneId_); !moved)
         return moved.error();
 
-    return Value::object({{"clipId", Value{clipId_.toString()}}, {"previousStartBeats", Value{previous}}});
+    return Value::object({{"clipId", Value{clipId_.toString()}},
+                          {"previousStartBeats", Value{previous}},
+                          {"previousLaneId", Value{previousLane.toString()}}});
 }
 
 Result<void> MoveAudio::revert(ProjectState& state, const Value& undoRecord) const
@@ -223,7 +289,16 @@ Result<void> MoveAudio::revert(ProjectState& state, const Value& undoRecord) con
     if (!previous)
         return previous.error();
 
-    return state.moveAudioClip(clipId.value(), previous.value());
+    LaneId previousLane{};
+    if (undoRecord.find("previousLaneId") != nullptr)
+    {
+        auto lane = idAt<LaneId>(undoRecord, "previousLaneId");
+        if (!lane)
+            return lane.error();
+        previousLane = lane.value();
+    }
+
+    return state.moveAudioClip(clipId.value(), previous.value(), previousLane);
 }
 
 bool MoveAudio::canCoalesceWith(const Command& newer) const noexcept

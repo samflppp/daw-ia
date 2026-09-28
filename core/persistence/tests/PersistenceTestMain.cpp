@@ -35,6 +35,9 @@ int runChildScenario(int argc, char** argv)
     if (scenario == "extend-as-rack" && argc >= 4)
         return daw::testing::scenarios::extendAsRackSession(argv[3]);
 
+    if (scenario == "write-s16" && argc >= 5)
+        return daw::testing::scenarios::writeS16Session(argv[3], argv[4]);
+
     if (scenario == "dump" && argc >= 5)
         return daw::testing::scenarios::dumpSession(argv[3], argv[4]);
 

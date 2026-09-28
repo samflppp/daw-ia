@@ -108,8 +108,12 @@ TEST_CASE("The transport commands survive the round-trip and are registered")
     // Nine track commands, one clip, seven note, six pattern, two
     // placement, three audio, five transport, five plugin, four tempo, and
     // since S11 five of the mixer, since S12 the time signature, since S13
-    // seven of automation.
-    CHECK(registry.types().size() == 55);
+    // seven of automation, and since S17 four of the playlist lines.
+    CHECK(registry.types().size() == 59);
+    CHECK(registry.contains("lane.create"));
+    CHECK(registry.contains("lane.remove"));
+    CHECK(registry.contains("lane.rename"));
+    CHECK(registry.contains("lane.move"));
     CHECK(registry.contains("transport.play"));
     CHECK(registry.contains("transport.stop"));
     CHECK(registry.contains("transport.set_position"));

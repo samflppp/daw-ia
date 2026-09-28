@@ -99,7 +99,25 @@ constexpr std::string_view schemaV4 = R"sql(
 SELECT 1;
 )sql";
 
-constexpr Migration migrations[] = {{1, schemaV1}, {2, schemaV2}, {3, schemaV3}, {4, schemaV4}};
+// Version 5. Nothing to change either, for the same reason as version 4.
+//
+// S17 made the playlist lines free: a placement and an audio clip name the
+// line they are filed on, and four lane.* commands edit the lines. A journal
+// written before keeps replaying untouched — a payload that names no line
+// files the block on the line of its pattern or of its track, which is the
+// playlist those projects showed.
+//
+// The other direction is the danger again. An S16 build would replay
+// placement.move and read only the beat, dropping the line without a word,
+// and a block the user filed on "Basse" would come back on its pattern's line.
+// It already refuses a lane.create it does not know, but a project where
+// blocks were only dragged between lines holds none. The number refuses it.
+constexpr std::string_view schemaV5 = R"sql(
+SELECT 1;
+)sql";
+
+constexpr Migration migrations[] = {
+    {1, schemaV1}, {2, schemaV2}, {3, schemaV3}, {4, schemaV4}, {5, schemaV5}};
 
 constexpr std::string_view insertSql =
     "INSERT INTO journal (kind, command_id, at_micros, actor, context_digest, context_bytes, "

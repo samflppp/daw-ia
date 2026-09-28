@@ -55,7 +55,11 @@ public:
     //      direction — a project where a pattern is laid twice would replay
     //      into an older build as two patterns it cannot tell apart, and this
     //      is what makes that build refuse instead of lie.
-    static constexpr std::int64_t schemaVersion = 4;
+    //   5  no column either: S17 files every block on a playlist line, and a
+    //      payload without one reads as the line the S16 playlist drew. The
+    //      number is, again, for the other direction — an S16 build would drop
+    //      the line of every dragged block without saying so.
+    static constexpr std::int64_t schemaVersion = 5;
 
     ~ProjectStore() override;
 

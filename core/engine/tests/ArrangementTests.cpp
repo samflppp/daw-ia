@@ -1,4 +1,5 @@
 #include "EngineTestSupport.h"
+#include "daw/domain/commands/LaneCommands.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TempoCommands.h"
 
@@ -295,4 +296,52 @@ TEST_CASE("A tempo change moves every clip in seconds and rewrites none")
     REQUIRE(starts.size() == 4);
     CHECK(starts[3] == doctest::Approx(12.0));
     CHECK(track->getClips().getFirst()->getPosition().getLength().inSeconds() == doctest::Approx(4.0));
+}
+
+TEST_CASE("Filing blocks on other lines touches no clip and sounds the same, beat by beat")
+{
+    // A line is where a block is filed, never what it plays: the S17 claim is
+    // about sound, so it is proved on renders and on the Edit, clip for clip.
+    //
+    // Not sample for sample: two renders of an untouched Edit already differ
+    // in their bits (4OSC runs free), so the proof is what the ear gets —
+    // where each beat starts sounding, and how loud each beat is.
+    EngineHarness harness;
+    const auto beat = layBeat(harness, 4);
+
+    const auto levels = [&harness]
+    {
+        const auto rendered = tracktion::test_utilities::renderToAudioBuffer(harness.host.edit());
+        const auto samplesPerBeat = static_cast<int>(std::lround(secondsPerBeatAt120 * rendered.sampleRate));
+        std::vector<double> perBeat;
+        for (int start = 0; start + samplesPerBeat <= rendered.buffer.getNumSamples();
+             start += samplesPerBeat)
+            perBeat.push_back(rendered.buffer.getRMSLevel(0, start, samplesPerBeat));
+        return perBeat;
+    };
+
+    const auto heardBefore = listen(harness.host.edit());
+    const auto before = levels();
+
+    const auto stats = harness.projector.stats();
+    const auto verse = LaneId::generate();
+    REQUIRE(harness.bus.execute(std::make_unique<CreateLane>(verse, "Couplet", 0)).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<MovePlacement>(beat.placements[1], 4.0, verse)).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<MovePlacement>(beat.placements[3], 12.0, verse)).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<MoveLane>(verse, 5)).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<RenameLane>(verse, "Refrain")).ok());
+
+    CHECK(harness.projector.stats().clipsInserted == stats.clipsInserted);
+    CHECK(harness.projector.stats().clipsRewritten == stats.clipsRewritten);
+    CHECK(harness.projector.stats().clipsMoved == stats.clipsMoved);
+
+    const auto heardAfter = listen(harness.host.edit());
+    CHECK(heardAfter.sounding == heardBefore.sounding);
+    CHECK(heardAfter.soundingCount() == 4);
+
+    const auto after = levels();
+    REQUIRE(after.size() == before.size());
+    const auto loudest = *std::max_element(before.begin(), before.end());
+    for (std::size_t index = 0; index < before.size(); ++index)
+        CHECK(std::abs(after[index] - before[index]) <= loudest * 0.02);
 }

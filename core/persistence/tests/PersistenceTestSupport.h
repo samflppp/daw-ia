@@ -81,12 +81,35 @@ namespace scenarios
 // clip migrated to a pattern, and an S9 pattern next to it.
 [[nodiscard]] int extendAsRackSession(const std::filesystem::path& projectFolder);
 
+// Writes a project the way the S16 build wrote one, and leaves it on schema
+// 4: two tracks, a drum pattern laid twice and a bass pattern laid once, and a
+// sample on the drum track. Every payload is one S16 wrote — no line anywhere,
+// because lines did not exist — and the state it drops next to the project is
+// the one S16 serialised. The identifiers are fixed (namespace s16 below), so
+// the parent can name what it checks.
+[[nodiscard]] int writeS16Session(const std::filesystem::path& projectFolder,
+                                  const std::filesystem::path& stateFile);
+
 // Opens a project, replays it, and writes its state and its undo depth as
 // JSON: what another process sees when it opens the same folder.
 [[nodiscard]] int dumpSession(const std::filesystem::path& projectFolder,
                               const std::filesystem::path& stateFile);
 
 } // namespace scenarios
+
+namespace s16
+{
+inline constexpr const char* kickTrack = "01JBWQ7Z00000000S16TRACK0K";
+inline constexpr const char* bassTrack = "01JBWQ7Z00000000S16TRACK0B";
+inline constexpr const char* drumPattern = "01JBWQ7Z0000000S16PATTERNA";
+inline constexpr const char* bassPattern = "01JBWQ7Z0000000S16PATTERNB";
+inline constexpr const char* drumAt0 = "01JBWQ7Z00000000S16P0SE0A0";
+inline constexpr const char* drumAt4 = "01JBWQ7Z00000000S16P0SE0A4";
+inline constexpr const char* bassAt0 = "01JBWQ7Z00000000S16P0SE0B0";
+inline constexpr const char* sampleClip = "01JBWQ7Z00000000S16A0D10K8";
+inline constexpr const char* drumRow = "01JBWQ7Z00000000S16C1P0A00";
+inline constexpr const char* bassRow = "01JBWQ7Z00000000S16C1P0B00";
+} // namespace s16
 
 [[nodiscard]] std::string readTextFile(const std::filesystem::path& file);
 [[nodiscard]] bool writeTextFile(const std::filesystem::path& file, const std::string& text);

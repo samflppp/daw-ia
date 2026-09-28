@@ -215,6 +215,10 @@ std::vector<Tool> builtinTools()
     const auto pointId = identifier("Identifiant du point de tempo.");
     const auto patternId = identifier("Identifiant du pattern.");
     const auto placementId = identifier("Identifiant d'un placement, tel que l'état le nomme.");
+    const auto laneId = identifier("Identifiant d'une ligne de la playlist, tel que l'état le nomme.");
+    const auto optionalLane = identifier("Ligne de la playlist où le bloc est rangé. Facultatif : "
+                                         "sans elle, le bloc reste sur sa ligne (ou va sur celle de son "
+                                         "pattern). Une ligne range, elle ne change aucun son.");
 
     std::vector<Tool> tools;
 
@@ -337,7 +341,11 @@ std::vector<Tool> builtinTools()
                          "il faut le poser avec pattern.place pour qu'il sonne.",
                          schema({{"patternId", newIdentifier("Identifiant du pattern à créer.")},
                                  {"name", field("string", "Nom du pattern. Peut être vide.")},
-                                 {"lengthBeats", field("number", "Longueur du pattern, en temps.")}},
+                                 {"lengthBeats", field("number", "Longueur du pattern, en temps.")},
+                                 {"ownLane",
+                                  field("boolean",
+                                        "Faux pour ne pas créer de ligne de playlist à ce pattern (il sera "
+                                        "posé sur une ligne existante). Vrai par défaut.")}},
                                 {"patternId", "name", "lengthBeats"})));
 
     tools.push_back(make("pattern.place",
@@ -345,7 +353,8 @@ std::vector<Tool> builtinTools()
                          "voulu : aucune note n'est copiée, et le modifier une fois le change partout.",
                          schema({{"placementId", newIdentifier("Identifiant de ce placement.")},
                                  {"patternId", patternId},
-                                 {"startBeats", field("number", "Position sur la timeline, en temps.")}},
+                                 {"startBeats", field("number", "Position sur la timeline, en temps.")},
+                                 {"laneId", optionalLane}},
                                 {"placementId", "patternId", "startBeats"})));
 
     tools.push_back(
@@ -382,13 +391,41 @@ std::vector<Tool> builtinTools()
         make("placement.move",
              "Déplace un placement sur la timeline. Le pattern et ses autres placements ne bougent pas.",
              schema({{"placementId", placementId},
-                     {"startBeats", field("number", "Nouvelle position sur la timeline, en temps.")}},
+                     {"startBeats", field("number", "Nouvelle position sur la timeline, en temps.")},
+                     {"laneId", optionalLane}},
                     {"placementId", "startBeats"})));
 
     tools.push_back(make("placement.remove",
                          "Retire un placement de la timeline. Le pattern reste, et ses autres placements "
                          "aussi.",
                          schema({{"placementId", placementId}}, {"placementId"})));
+
+    // --- playlist lines
+    //
+    // Des lignes libres, comme dans FL : on y range les blocs, elles ne sonnent
+    // pas. Ranger un projet, c'est nommer des lignes et y déplacer des blocs.
+    tools.push_back(
+        make("lane.create",
+             "Crée une ligne vide dans la playlist, au rang donné (au-delà de la dernière, "
+             "elle s'ajoute en bas).",
+             schema({{"laneId", newIdentifier("Identifiant de la ligne à créer.")},
+                     {"name", field("string", "Nom de la ligne, par exemple « Basse ». Peut être vide.")},
+                     {"index", field("integer", "Rang de la ligne, 0 en haut.")}},
+                    {"laneId", "name", "index"})));
+
+    tools.push_back(make("lane.remove",
+                         "Supprime une ligne de la playlist, et tous les blocs rangés dessus.",
+                         schema({{"laneId", laneId}}, {"laneId"})));
+
+    tools.push_back(
+        make("lane.rename",
+             "Renomme une ligne de la playlist. Un nom vide l'affiche par son rang.",
+             schema({{"laneId", laneId}, {"name", field("string", "Nouveau nom.")}}, {"laneId", "name"})));
+
+    tools.push_back(make("lane.move",
+                         "Change le rang d'une ligne de la playlist. Ses blocs la suivent.",
+                         schema({{"laneId", laneId}, {"index", field("integer", "Nouveau rang, 0 en haut.")}},
+                                {"laneId", "index"})));
 
     // --- samples
     //
@@ -411,7 +448,8 @@ std::vector<Tool> builtinTools()
         make("audio.move",
              "Déplace un clip audio sur la timeline. Il garde sa durée : un sample ne s'étire pas.",
              schema({{"clipId", identifier("Identifiant du clip audio, tel que l'état le nomme.")},
-                     {"startBeats", field("number", "Nouvelle position sur la timeline, en temps.")}},
+                     {"startBeats", field("number", "Nouvelle position sur la timeline, en temps.")},
+                     {"laneId", optionalLane}},
                     {"clipId", "startBeats"})));
 
     tools.push_back(make(

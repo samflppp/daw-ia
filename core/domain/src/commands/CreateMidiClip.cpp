@@ -51,9 +51,18 @@ Value CreateMidiClip::payload() const
 
 Result<Value> CreateMidiClip::apply(ProjectState& state) const
 {
+    // The pattern's line is created with it, as it has always been drawn; the
+    // revert takes it away with the pattern, since nothing else can be on a
+    // line created this instant.
+    const auto hadLane =
+        state.findLane(ProjectState::laneOfPattern(ProjectState::patternIdForClip(clipId_))) != nullptr;
+
     auto added = state.addSingleTrackPattern(trackId_, clipId_, startBeats_, lengthBeats_);
     if (!added)
         return added.error();
+
+    if (!hadLane)
+        return Value::object({{"clipId", Value{clipId_.toString()}}, {"laneCreated", Value{true}}});
 
     // Undoing a creation only needs to know what to remove, and the clip names
     // all three: the pattern and the placement are derived from it. The record
@@ -73,8 +82,18 @@ Result<void> CreateMidiClip::revert(ProjectState& state, const Value& undoRecord
         return fail(clipId.error().code, "clipId: " + clipId.error().message);
 
     // The pattern goes, and removePattern takes the placement with it. The row
-    // goes with the pattern that held it, so there is nothing else to undo.
-    return state.removePattern(ProjectState::patternIdForClip(clipId.value()));
+    // goes with the pattern that held it; the line goes if it came with it.
+    const auto patternId = ProjectState::patternIdForClip(clipId.value());
+    if (auto removed = state.removePattern(patternId); !removed)
+        return removed;
+
+    if (const auto* created = undoRecord.find("laneCreated"); created != nullptr)
+    {
+        auto flag = created->asBool();
+        if (flag.ok() && flag.value())
+            return state.removeLane(ProjectState::laneOfPattern(patternId));
+    }
+    return {};
 }
 
 } // namespace daw::domain

@@ -33,7 +33,11 @@ class CreatePattern final : public Command
 public:
     static constexpr std::string_view commandType = "pattern.create";
 
-    CreatePattern(PatternId patternId, std::string name, double lengthBeats);
+    // ownLane: whether the pattern comes with a line of its own, at the end
+    // of the pattern lines — what every pattern had until S17, and what a
+    // payload without the field still means. A pattern made to be laid on an
+    // existing line (the multi-track zone) says false.
+    CreatePattern(PatternId patternId, std::string name, double lengthBeats, bool ownLane = true);
 
     [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
 
@@ -48,6 +52,7 @@ private:
     PatternId patternId_;
     std::string name_;
     double lengthBeats_;
+    bool ownLane_;
 };
 
 // pattern.place — lays a pattern on the timeline at a beat.
@@ -60,7 +65,9 @@ class PlacePattern final : public Command
 public:
     static constexpr std::string_view commandType = "pattern.place";
 
-    PlacePattern(PlacementId placementId, PatternId patternId, double startBeats);
+    // A nil line — or a payload written before S17, which names none — lays it
+    // on the line of its pattern, creating that line if it is missing.
+    PlacePattern(PlacementId placementId, PatternId patternId, double startBeats, LaneId laneId = {});
 
     [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
 
@@ -75,6 +82,7 @@ private:
     PlacementId placementId_;
     PatternId patternId_;
     double startBeats_;
+    LaneId laneId_;
 };
 
 // pattern.add_track — opens a track's row in a pattern.
@@ -164,6 +172,10 @@ private:
 // A placement of a pattern that is gone would name nothing, so they leave
 // together. The undo record carries all of it, with the ranks, so an undo puts
 // back the same arrangement and not merely an equivalent one.
+//
+// The pattern's own line goes too when it is left empty and unnamed: the S16
+// playlist lost that line with the pattern, and a line the user named or
+// filed something else on is the user's.
 class RemovePattern final : public Command
 {
 public:
@@ -182,16 +194,19 @@ private:
     PatternId patternId_;
 };
 
-// placement.move — lays an existing placement at another beat.
+// placement.move — lays an existing placement at another beat, and, since
+// S17, on another line.
 //
-// Coalesces per placement: dragging a block across the playlist is one
-// history entry, and the undo puts it back where the drag started.
+// Coalesces per placement: dragging a block across the playlist, sideways or
+// up and down, is one history entry, and the undo puts it back where the drag
+// started. A nil line keeps the line it had, which is what a payload written
+// before S17 means.
 class MovePlacement final : public Command
 {
 public:
     static constexpr std::string_view commandType = "placement.move";
 
-    MovePlacement(PlacementId placementId, double startBeats);
+    MovePlacement(PlacementId placementId, double startBeats, LaneId laneId = {});
 
     [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
 
@@ -205,6 +220,7 @@ public:
 private:
     PlacementId placementId_;
     double startBeats_;
+    LaneId laneId_;
 };
 
 // placement.remove — takes one laying off the timeline. The pattern stays: it

@@ -97,8 +97,11 @@ TEST_CASE("A refused mutation changes nothing")
         CHECK(state.addNote(clipId, note).code() == ErrorCode::invalidArgument);
 
         // The pattern added by this subcase is the only expected difference,
-        // and removing it takes its placement and its row with it.
-        REQUIRE(state.removePattern(ProjectState::patternIdForClip(clipId)).ok());
+        // and removing it takes its placement and its row with it. Its line
+        // stays: lines belong to the user, and only pattern.remove prunes it.
+        const auto patternId = ProjectState::patternIdForClip(clipId);
+        REQUIRE(state.removePattern(patternId).ok());
+        REQUIRE(state.removeLane(ProjectState::laneOfPattern(patternId)).ok());
     }
 
     CHECK(state.toValue() == before);

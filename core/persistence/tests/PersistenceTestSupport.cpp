@@ -6,6 +6,7 @@
 #include "daw/domain/commands/CreateMidiClip.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
+#include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/project/ProjectState.h"
@@ -431,6 +432,88 @@ int extendAsRackSession(const std::filesystem::path& projectFolder)
     if (!store.value()->close())
         return 8;
 
+    return 0;
+}
+
+int writeS16Session(const std::filesystem::path& projectFolder, const std::filesystem::path& stateFile)
+{
+    {
+        auto store = persistence::ProjectStore::open(persistence::ProjectFolder{projectFolder});
+        if (!store)
+            return 2;
+
+        Session session;
+        store.value()->startRecording(session.bus);
+
+        const auto kick = TrackId::parse(s16::kickTrack).value();
+        const auto bass = TrackId::parse(s16::bassTrack).value();
+        const auto drums = PatternId::parse(s16::drumPattern).value();
+        const auto line = PatternId::parse(s16::bassPattern).value();
+        const auto drumRow = ClipId::parse(s16::drumRow).value();
+        const auto bassRow = ClipId::parse(s16::bassRow).value();
+
+        // Each command below is built without a line, so its payload is the
+        // one S16 wrote, byte for byte: the fields S17 added are written only
+        // when they say something.
+        std::vector<std::unique_ptr<Command>> commands;
+        commands.push_back(std::make_unique<AddTrack>(kick, "Kick", 0.0));
+        commands.push_back(std::make_unique<AddTrack>(bass, "Bass", -3.0));
+        commands.push_back(std::make_unique<CreatePattern>(drums, "Beat", 4.0));
+        commands.push_back(std::make_unique<AddPatternTrack>(drums, drumRow, kick));
+        commands.push_back(std::make_unique<CreatePattern>(line, "Bass", 4.0));
+        commands.push_back(std::make_unique<AddPatternTrack>(line, bassRow, bass));
+        commands.push_back(
+            std::make_unique<PlacePattern>(PlacementId::parse(s16::drumAt0).value(), drums, 0.0));
+        commands.push_back(
+            std::make_unique<PlacePattern>(PlacementId::parse(s16::drumAt4).value(), drums, 4.0));
+        commands.push_back(
+            std::make_unique<PlacePattern>(PlacementId::parse(s16::bassAt0).value(), line, 0.0));
+
+        SampleRef sample{};
+        sample.blob.digest = std::string(BlobRef::digestLength, 'b');
+        sample.blob.byteCount = 88200;
+        sample.name = "Crash.wav";
+        sample.format = "wav";
+        sample.seconds = 1.0;
+        commands.push_back(
+            std::make_unique<PlaceAudio>(AudioClipId::parse(s16::sampleClip).value(), kick, sample, 8.0));
+
+        for (auto& command : commands)
+        {
+            if (!session.bus.execute(std::move(command)))
+                return 3;
+        }
+
+        int beat = 0;
+        for (const int pitch : {36, 38, 36, 38})
+        {
+            Note note{};
+            note.id = NoteId::parse("01JBWQ7Z0000000000S16N0TE" + std::to_string(beat)).value();
+            note.pitch = pitch;
+            note.velocity = 100;
+            note.startBeats = static_cast<double>(beat);
+            note.lengthBeats = 0.25;
+            ++beat;
+            if (!session.bus.execute(std::make_unique<AddNote>(drumRow, note)))
+                return 4;
+        }
+
+        // The state an S16 build serialised: S17 leaves the lines out when
+        // they are the ones S16 drew, so this is the same text.
+        if (!writeTextFile(stateFile, json::write(session.state.toValue())))
+            return 5;
+
+        store.value()->stopRecording();
+        if (!store.value()->close())
+            return 6;
+    }
+
+    // Back to the version S16 wrote, as writeLegacySession does for S8.
+    auto database = persistence::Database::open(persistence::ProjectFolder{projectFolder}.databaseFile());
+    if (!database)
+        return 7;
+    if (!database.value().execute("UPDATE meta SET value = '4' WHERE key = 'schema_version'"))
+        return 8;
     return 0;
 }
 

@@ -23,16 +23,36 @@ Result<IdType> idAt(const Value& value, std::string_view key)
     return parsed.value();
 }
 
+// A line is optional in every payload that can carry one: absent is what a
+// payload written before S17 says, and it reads as nil.
+Result<LaneId> optionalLaneAt(const Value& value)
+{
+    if (value.find("laneId") == nullptr)
+        return LaneId{};
+    return idAt<LaneId>(value, "laneId");
+}
+
+// Whether an undo record says a line was created; absent means no.
+bool flagAt(const Value& record, std::string_view key)
+{
+    const auto* value = record.find(key);
+    if (value == nullptr)
+        return false;
+    auto flag = value->asBool();
+    return flag.ok() && flag.value();
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
 // pattern.create
 // ---------------------------------------------------------------------------
 
-CreatePattern::CreatePattern(PatternId patternId, std::string name, double lengthBeats)
+CreatePattern::CreatePattern(PatternId patternId, std::string name, double lengthBeats, bool ownLane)
     : patternId_{patternId}
     , name_{std::move(name)}
     , lengthBeats_{lengthBeats}
+    , ownLane_{ownLane}
 {
 }
 
@@ -50,15 +70,29 @@ Result<std::unique_ptr<Command>> CreatePattern::fromPayload(const Value& payload
     if (!lengthBeats)
         return lengthBeats.error();
 
+    auto ownLane = true;
+    if (const auto* value = payload.find("ownLane"); value != nullptr)
+    {
+        auto flag = value->asBool();
+        if (!flag)
+            return fail(flag.error().code, "ownLane: " + flag.error().message);
+        ownLane = flag.value();
+    }
+
     return std::unique_ptr<Command>{
-        new CreatePattern{patternId.value(), std::move(name).value(), lengthBeats.value()}};
+        new CreatePattern{patternId.value(), std::move(name).value(), lengthBeats.value(), ownLane}};
 }
 
 Value CreatePattern::payload() const
 {
-    return Value::object({{"patternId", Value{patternId_.toString()}},
+    Value::Object members{{"patternId", Value{patternId_.toString()}},
                           {"name", Value{name_}},
-                          {"lengthBeats", Value{lengthBeats_}}});
+                          {"lengthBeats", Value{lengthBeats_}}};
+
+    // Only when false: a pattern with its own line serialises as before S17.
+    if (!ownLane_)
+        members.emplace_back("ownLane", Value{false});
+    return Value::object(std::move(members));
 }
 
 Result<Value> CreatePattern::apply(ProjectState& state) const
@@ -72,7 +106,16 @@ Result<Value> CreatePattern::apply(ProjectState& state) const
     if (!added)
         return added.error();
 
-    return Value::object({{"patternId", Value{patternId_.toString()}}});
+    auto laneCreated = false;
+    if (ownLane_)
+    {
+        auto ensured = state.ensureLaneOfPattern(patternId_);
+        if (!ensured)
+            return ensured.error();
+        laneCreated = ensured.value();
+    }
+
+    return Value::object({{"patternId", Value{patternId_.toString()}}, {"laneCreated", Value{laneCreated}}});
 }
 
 Result<void> CreatePattern::revert(ProjectState& state, const Value& undoRecord) const
@@ -81,17 +124,23 @@ Result<void> CreatePattern::revert(ProjectState& state, const Value& undoRecord)
     if (!patternId)
         return patternId.error();
 
-    return state.removePattern(patternId.value());
+    if (auto removed = state.removePattern(patternId.value()); !removed)
+        return removed;
+
+    if (flagAt(undoRecord, "laneCreated"))
+        return state.removeLane(ProjectState::laneOfPattern(patternId.value()));
+    return {};
 }
 
 // ---------------------------------------------------------------------------
 // pattern.place
 // ---------------------------------------------------------------------------
 
-PlacePattern::PlacePattern(PlacementId placementId, PatternId patternId, double startBeats)
+PlacePattern::PlacePattern(PlacementId placementId, PatternId patternId, double startBeats, LaneId laneId)
     : placementId_{placementId}
     , patternId_{patternId}
     , startBeats_{startBeats}
+    , laneId_{laneId}
 {
 }
 
@@ -109,15 +158,22 @@ Result<std::unique_ptr<Command>> PlacePattern::fromPayload(const Value& payload)
     if (!startBeats)
         return startBeats.error();
 
+    auto laneId = optionalLaneAt(payload);
+    if (!laneId)
+        return laneId.error();
+
     return std::unique_ptr<Command>{
-        new PlacePattern{placementId.value(), patternId.value(), startBeats.value()}};
+        new PlacePattern{placementId.value(), patternId.value(), startBeats.value(), laneId.value()}};
 }
 
 Value PlacePattern::payload() const
 {
-    return Value::object({{"placementId", Value{placementId_.toString()}},
+    Value::Object members{{"placementId", Value{placementId_.toString()}},
                           {"patternId", Value{patternId_.toString()}},
-                          {"startBeats", Value{startBeats_}}});
+                          {"startBeats", Value{startBeats_}}};
+    if (!laneId_.isNil())
+        members.emplace_back("laneId", Value{laneId_.toString()});
+    return Value::object(std::move(members));
 }
 
 Result<Value> PlacePattern::apply(ProjectState& state) const
@@ -126,12 +182,33 @@ Result<Value> PlacePattern::apply(ProjectState& state) const
     placement.id = placementId_;
     placement.patternId = patternId_;
     placement.startBeats = startBeats_;
+    placement.laneId = laneId_;
 
-    auto placed = state.addPlacement(placement);
+    // Without a line, the pattern's own, which may have to be created — and
+    // then taken away again by the undo.
+    auto laneCreated = false;
+    if (laneId_.isNil())
+    {
+        if (state.findPattern(patternId_) == nullptr)
+            return fail(ErrorCode::notFound, "no such pattern: " + patternId_.toString());
+        auto ensured = state.ensureLaneOfPattern(patternId_);
+        if (!ensured)
+            return ensured.error();
+        laneCreated = ensured.value();
+        placement.laneId = ProjectState::laneOfPattern(patternId_);
+    }
+
+    auto placed = state.insertPlacement(placement, state.arrangement().size());
     if (!placed)
+    {
+        if (laneCreated)
+            static_cast<void>(state.removeLane(placement.laneId));
         return placed.error();
+    }
 
-    return Value::object({{"placementId", Value{placementId_.toString()}}});
+    return Value::object({{"placementId", Value{placementId_.toString()}},
+                          {"laneId", Value{placement.laneId.toString()}},
+                          {"laneCreated", Value{laneCreated}}});
 }
 
 Result<void> PlacePattern::revert(ProjectState& state, const Value& undoRecord) const
@@ -140,7 +217,17 @@ Result<void> PlacePattern::revert(ProjectState& state, const Value& undoRecord) 
     if (!placementId)
         return placementId.error();
 
-    return state.removePlacement(placementId.value());
+    if (auto removed = state.removePlacement(placementId.value()); !removed)
+        return removed;
+
+    if (flagAt(undoRecord, "laneCreated"))
+    {
+        auto laneId = idAt<LaneId>(undoRecord, "laneId");
+        if (!laneId)
+            return laneId.error();
+        return state.removeLane(laneId.value());
+    }
+    return {};
 }
 
 // ---------------------------------------------------------------------------
@@ -365,14 +452,28 @@ Result<Value> RemovePattern::apply(ProjectState& state) const
             {{"placement", placement.toValue()}, {"index", Value{static_cast<std::int64_t>(rank)}}}));
     }
 
-    auto record = Value::object({{"pattern", pattern->toValue()},
-                                 {"index", Value{static_cast<std::int64_t>(index.value())}},
-                                 {"placements", Value::array(std::move(placements))}});
+    Value::Object members{{"pattern", pattern->toValue()},
+                          {"index", Value{static_cast<std::int64_t>(index.value())}},
+                          {"placements", Value::array(std::move(placements))}};
 
     if (auto removed = state.removePattern(patternId_); !removed)
         return removed.error();
 
-    return record;
+    // Its own line, if it is left empty and nobody named it.
+    const auto ownLane = ProjectState::laneOfPattern(patternId_);
+    if (const auto* lane = state.findLane(ownLane);
+        lane != nullptr && lane->name.empty() && state.laneIsEmpty(ownLane))
+    {
+        auto laneRank = state.laneIndex(ownLane);
+        if (!laneRank)
+            return laneRank.error();
+        members.emplace_back("lane", lane->toValue());
+        members.emplace_back("laneIndex", Value{static_cast<std::int64_t>(laneRank.value())});
+        if (auto dropped = state.removeLane(ownLane); !dropped)
+            return dropped.error();
+    }
+
+    return Value::object(std::move(members));
 }
 
 Result<void> RemovePattern::revert(ProjectState& state, const Value& undoRecord) const
@@ -419,6 +520,23 @@ Result<void> RemovePattern::revert(ProjectState& state, const Value& undoRecord)
         restored.emplace_back(placement.value(), static_cast<std::size_t>(rank.value()));
     }
 
+    // The line first: the placements name it.
+    if (const auto* laneValue = undoRecord.find("lane"); laneValue != nullptr)
+    {
+        auto lane = Lane::fromValue(*laneValue);
+        if (!lane)
+            return lane.error();
+        auto laneRank = undoRecord.intAt("laneIndex");
+        if (!laneRank)
+            return laneRank.error();
+        if (laneRank.value() < 0)
+            return fail(ErrorCode::invalidPayload, "laneIndex is negative");
+        if (auto laneBack =
+                state.insertLane(std::move(lane).value(), static_cast<std::size_t>(laneRank.value()));
+            !laneBack)
+            return laneBack;
+    }
+
     auto inserted = state.insertPattern(std::move(pattern).value(), static_cast<std::size_t>(index.value()));
     if (!inserted)
         return inserted;
@@ -436,9 +554,10 @@ Result<void> RemovePattern::revert(ProjectState& state, const Value& undoRecord)
 // placement.move
 // ---------------------------------------------------------------------------
 
-MovePlacement::MovePlacement(PlacementId placementId, double startBeats)
+MovePlacement::MovePlacement(PlacementId placementId, double startBeats, LaneId laneId)
     : placementId_{placementId}
     , startBeats_{startBeats}
+    , laneId_{laneId}
 {
 }
 
@@ -452,13 +571,21 @@ Result<std::unique_ptr<Command>> MovePlacement::fromPayload(const Value& payload
     if (!startBeats)
         return startBeats.error();
 
-    return std::unique_ptr<Command>{new MovePlacement{placementId.value(), startBeats.value()}};
+    auto laneId = optionalLaneAt(payload);
+    if (!laneId)
+        return laneId.error();
+
+    return std::unique_ptr<Command>{
+        new MovePlacement{placementId.value(), startBeats.value(), laneId.value()}};
 }
 
 Value MovePlacement::payload() const
 {
-    return Value::object(
-        {{"placementId", Value{placementId_.toString()}}, {"startBeats", Value{startBeats_}}});
+    Value::Object members{{"placementId", Value{placementId_.toString()}},
+                          {"startBeats", Value{startBeats_}}};
+    if (!laneId_.isNil())
+        members.emplace_back("laneId", Value{laneId_.toString()});
+    return Value::object(std::move(members));
 }
 
 Result<Value> MovePlacement::apply(ProjectState& state) const
@@ -468,12 +595,14 @@ Result<Value> MovePlacement::apply(ProjectState& state) const
         return fail(ErrorCode::notFound, "no such placement: " + placementId_.toString());
 
     const auto previous = placement->startBeats;
+    const auto previousLane = placement->laneId;
 
-    if (auto moved = state.movePlacement(placementId_, startBeats_); !moved)
+    if (auto moved = state.movePlacement(placementId_, startBeats_, laneId_); !moved)
         return moved.error();
 
-    return Value::object(
-        {{"placementId", Value{placementId_.toString()}}, {"previousStartBeats", Value{previous}}});
+    return Value::object({{"placementId", Value{placementId_.toString()}},
+                          {"previousStartBeats", Value{previous}},
+                          {"previousLaneId", Value{previousLane.toString()}}});
 }
 
 Result<void> MovePlacement::revert(ProjectState& state, const Value& undoRecord) const
@@ -486,7 +615,16 @@ Result<void> MovePlacement::revert(ProjectState& state, const Value& undoRecord)
     if (!previous)
         return previous.error();
 
-    return state.movePlacement(placementId.value(), previous.value());
+    LaneId previousLane{};
+    if (undoRecord.find("previousLaneId") != nullptr)
+    {
+        auto lane = idAt<LaneId>(undoRecord, "previousLaneId");
+        if (!lane)
+            return lane.error();
+        previousLane = lane.value();
+    }
+
+    return state.movePlacement(placementId.value(), previous.value(), previousLane);
 }
 
 bool MovePlacement::canCoalesceWith(const Command& newer) const noexcept

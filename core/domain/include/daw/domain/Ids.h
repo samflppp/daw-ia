@@ -95,6 +95,7 @@ struct TempoPointIdTag;
 struct PatternIdTag;
 struct PlacementIdTag;
 struct AudioClipIdTag;
+struct LaneIdTag;
 struct AutomationLineIdTag;
 struct AutomationPointIdTag;
 
@@ -130,6 +131,12 @@ using PlacementId = EntityId<PlacementIdTag>;
 // on, and a beat. Its own kind of identifier, because it is neither a pattern
 // nor a placement of one: it holds no note, and nothing edits it from a rack.
 using AudioClipId = EntityId<AudioClipIdTag>;
+
+// Identifies one line of the playlist. A line holds blocks — placements and
+// audio clips — and says nothing about how they sound: it is where the user
+// filed them. Named rather than ranked, so that reordering the lines rewrites
+// no block.
+using LaneId = EntityId<LaneIdTag>;
 
 // Identifies one tempo change on the timeline. A point is named rather than
 // located because it moves: a payload that designated a point by its position

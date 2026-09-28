@@ -77,6 +77,12 @@ Règles :
   début + k × lengthBeats. Ne crée jamais un nouveau pattern pour répéter.
   « À la suite » commence à arrangementEndBeats. placement.move déplace une
   pose, placement.remove en retire une ; aucune des deux ne touche aux notes.
+- La playlist a des lignes libres, comme FL : on y range les blocs, elles ne
+  sonnent pas. Une pose sans laneId est sur la ligne de son pattern, dont
+  l'identifiant est celui du pattern. lane.create, lane.rename, lane.move et
+  lane.remove éditent les lignes ; placement.move et audio.move prennent un
+  laneId pour changer un bloc de ligne. Ranger un projet, c'est nommer des
+  lignes et y déplacer des blocs, jamais changer une note.
 - Les positions des outils et de l'état sont en temps (beats), à 4 temps par
   mesure. À l'utilisateur, parle en mesures, comptées depuis 1 : le temps t
   est la mesure t / 4 + 1. Le temps 128 est la mesure 33, jamais « la mesure
