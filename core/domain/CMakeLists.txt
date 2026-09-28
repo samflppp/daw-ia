@@ -21,6 +21,7 @@ add_library(daw_domain STATIC
     src/generation/Learning.cpp
     src/generation/Phrase.cpp
     src/generation/Transform.cpp
+    src/tidy/Roles.cpp
     src/generation/StyleModel.cpp
     src/commands/AddNote.cpp
     src/commands/AutomationCommands.cpp
