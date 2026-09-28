@@ -98,3 +98,20 @@ résultat.
 
 PRÉALABLE JURIDIQUE, hors du dépôt : vérifier ce que le contrat d'édition dit de l'exploitation
 dérivée des compositions. Entraîner un modèle commercial sur des œuvres éditées n'est pas neutre.
+
+## Le geste de génération, après la S16
+
+Notés en construisant la fenêtre, l'écoute et les retouches, non construits :
+
+- **Les variantes côte à côte.** Aujourd'hui une flèche et un compteur (« 2 / 5 »). Trois
+  propositions en miniature sous la fenêtre, qu'on écoute l'une après l'autre, se choisiraient à
+  l'oreille sans les parcourir.
+- **Un modèle plus rapide pour lire le prompt.** La lecture passe par le modèle du copilote, à
+  effort bas. Un modèle plus petit répondrait plus vite pour une simple mise en champs ; le choix
+  du modèle reste à toi, et il se mesure sur de vrais prompts avant d'être changé.
+- **Retoucher des notes choisies une à une,** sans toucher aux autres de la zone. Aujourd'hui la
+  zone est la plage des notes choisies, et la retouche reprend toutes les notes de cette plage.
+- **L'écoute en SONG sur un autre placement que le premier.** Elle boucle sur le premier
+  placement du pattern ; la tête de lecture pourrait choisir celui qu'on regarde.
+- **Des retouches combinées :** « plus sombre et plus calme » ne prend aujourd'hui que la première
+  consigne reconnue.

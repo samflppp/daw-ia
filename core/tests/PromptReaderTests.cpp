@@ -1,5 +1,6 @@
 #include "daw/ui/model/PromptReader.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <vector>
@@ -37,10 +38,10 @@ struct Copilot
     }
 };
 
-Interpretation chords()
+PromptReader::Reading chords()
 {
-    Interpretation out{};
-    out.constraints.role = Role::chords;
+    PromptReader::Reading out{};
+    out.interpretation.constraints.role = Role::chords;
     return out;
 }
 
@@ -138,4 +139,18 @@ TEST_CASE("prompt reading: a second prompt replaces the first, a cancelled one n
     copilot.answer(copilot.asked[2], chords());
     reader.expire();
     CHECK(answers.size() == 1);
+}
+
+TEST_CASE("prompt reading: the local words that ask to rework notes are used, not ignored")
+{
+    const auto reading = LocalPromptReader::parse("plus sombre en croches");
+    REQUIRE(reading.transform.has_value());
+    CHECK(*reading.transform == domain::generation::Transform::darker);
+    // "en" is a filler the S14 words report; "plus" and "sombre" were used.
+    const auto& ignored = reading.interpretation.ignored;
+    CHECK(std::find(ignored.begin(), ignored.end(), "plus") == ignored.end());
+    CHECK(std::find(ignored.begin(), ignored.end(), "sombre") == ignored.end());
+    CHECK(reading.interpretation.constraints.resolution == domain::generation::Resolution::eighth);
+
+    CHECK_FALSE(LocalPromptReader::parse("Am basse").transform.has_value());
 }

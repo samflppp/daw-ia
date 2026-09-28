@@ -105,7 +105,8 @@ def test_the_reading_tool_is_pattern_generate_without_the_placement() -> None:
     tool = reading_tool(GENERATE)
     properties = tool["input_schema"]["properties"]
     assert tool["name"] == READ_TOOL
-    assert set(properties) == {"key", "role", "density", "form", "ignored"}
+    assert set(properties) == {"key", "role", "density", "form", "transform", "ignored"}
+    assert "keep_rhythm" in properties["transform"]["enum"]
     assert properties["role"] == GENERATE["input_schema"]["properties"]["role"]
     assert "required" not in tool["input_schema"]
 
@@ -178,3 +179,17 @@ def test_a_daw_without_the_generator_is_said() -> None:
         assert "pattern.generate" in read["message"]
     finally:
         fake.stop()
+
+
+def test_notes_in_the_zone_are_reworked_as_the_model_says(daw: FakeDaw) -> None:
+    answer = {"transform": "darker", "ignored": []}
+    provider = ScriptedProvider([read_turn(answer), read_turn(answer)])
+    reader = Reader(connected(daw), provider)
+
+    read = reader.read("rends-le plus sombre", {**ZONE, "hasNotes": True})
+    assert read["transform"] == "darker"
+    assert "transform" not in read["interpretation"]
+
+    # An empty zone has nothing to rework: the transformation is not passed on.
+    read = reader.read("rends-le plus sombre", ZONE)
+    assert "transform" not in read

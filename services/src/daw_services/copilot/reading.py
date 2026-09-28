@@ -26,6 +26,19 @@ GENERATE_TOOL = "pattern.generate"
 # Where to write is the window's business, not the prompt's.
 PLACEMENT_FIELDS = ("clipId", "fromBeats", "toBeats", "variant")
 
+# How notes already in the zone are reworked (S16). The names are the DAW's
+# (generation/Transform.h).
+TRANSFORMS = {
+    "keep_rhythm": "garder le rythme, changer les hauteurs",
+    "keep_pitches": "garder les hauteurs, changer le rythme",
+    "variation": "une variante légère, comme un A' : une seule note change",
+    "darker": "plus sombre : même rythme, notes assombries",
+    "brighter": "plus clair : même rythme, notes éclaircies",
+    "busier": "plus rythmé : mêmes notes, plus d'attaques",
+    "calmer": "plus calme, plus simple : mêmes notes, moins d'attaques",
+    "humanize": "humaniser : mêmes notes, placements et vélocités moins carrés",
+}
+
 # Short answer, little thinking: this is a word-to-field mapping, and the
 # window waits for it.
 READ_MAX_TOKENS = 1024
@@ -48,6 +61,9 @@ toi, tu dis seulement ce qu'elle demande, en contraintes.
 Appelle {READ_TOOL} une seule fois, sans rien écrire d'autre.
 - Ne remplis un champ que si la demande le dit ou l'implique clairement. Un champ omis
   est déduit des notes autour de la zone : c'est souvent le mieux.
+- Si la zone contient déjà des notes (hasNotes), la demande les retravaille : dis
+  comment dans transform. Sans consigne claire, keep_rhythm. Une tonalité ou un
+  registre demandés en plus se mettent dans leurs champs.
 - Mets dans ignored les mots de la demande qui portent une intention musicale que
   tu n'as pu traduire en aucun champ. N'y mets pas les mots vides (« fais-moi », « des »).
 
@@ -61,6 +77,12 @@ def reading_tool(generate: dict[str, Any]) -> dict[str, Any]:
         name: value
         for name, value in dict(schema.get("properties") or {}).items()
         if name not in PLACEMENT_FIELDS
+    }
+    properties["transform"] = {
+        "type": "string",
+        "enum": list(TRANSFORMS),
+        "description": "Seulement si la zone contient des notes : comment les retravailler. "
+        + " ; ".join(f"{name} = {meaning}" for name, meaning in TRANSFORMS.items()),
     }
     properties["ignored"] = {
         "type": "array",
@@ -113,7 +135,14 @@ class Reader:
 
         for call in turn.tool_calls:
             if call.name == READ_TOOL and turn.stop_reason != "max_tokens":
-                return {"interpretation": interpretation_of(call.arguments), "usage": turn.usage.as_dict()}
+                read: dict[str, Any] = {
+                    "interpretation": interpretation_of(call.arguments),
+                    "usage": turn.usage.as_dict(),
+                }
+                transform = call.arguments.get("transform")
+                if zone.get("hasNotes") and transform in TRANSFORMS:
+                    read["transform"] = transform
+                return read
 
         return {
             "failed": True,
@@ -133,11 +162,23 @@ class Reader:
 
 def interpretation_of(arguments: dict[str, Any]) -> dict[str, Any]:
     """The S14 Interpretation shape: the constraint fields, ignored, conflicts."""
-    out = {name: value for name, value in arguments.items() if name not in (*PLACEMENT_FIELDS, "ignored")}
+    out = {
+        name: value
+        for name, value in arguments.items()
+        if name not in (*PLACEMENT_FIELDS, "ignored", "transform")
+    }
     ignored = arguments.get("ignored") or []
     out["ignored"] = [str(word) for word in ignored if str(word).strip()]
     out["conflicts"] = []
     return out
 
 
-__all__ = ["READING_PROMPT", "READ_TOOL", "Reader", "Usage", "interpretation_of", "reading_tool"]
+__all__ = [
+    "READING_PROMPT",
+    "READ_TOOL",
+    "TRANSFORMS",
+    "Reader",
+    "Usage",
+    "interpretation_of",
+    "reading_tool",
+]

@@ -4,6 +4,7 @@
 #include "daw/ui/PanelRegistry.h"
 #include "daw/ui/model/GhostProposal.h"
 #include "daw/ui/model/PromptReader.h"
+#include "daw/ui/model/TransformProposal.h"
 #include "daw/ui/panels/GenerationPanel.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -102,7 +103,14 @@ public:
     [[nodiscard]] juce::Point<int> velocityPointFor(const domain::Note& note, int velocity) const;
 
     // --- generation. Read by the verification.
-    [[nodiscard]] bool proposing() const noexcept { return proposal_.has_value(); }
+    [[nodiscard]] bool proposing() const noexcept { return proposal_.has_value() || rework_.has_value(); }
+
+    // Notes of the zone reworked rather than new ones (S16): open when the
+    // zone held notes at the prompt.
+    [[nodiscard]] const TransformProposal* rework() const noexcept
+    {
+        return rework_.has_value() ? &*rework_ : nullptr;
+    }
     [[nodiscard]] const GhostProposal* proposal() const noexcept
     {
         return proposal_.has_value() ? &*proposal_ : nullptr;
@@ -127,7 +135,10 @@ public:
     // How long building the style took at the last Ctrl+G: the project
     // counted, mixed with the others and the base. Logged and verified.
     [[nodiscard]] double lastStyleMs() const noexcept { return lastStyleMs_; }
-    [[nodiscard]] int variantRank() const noexcept { return proposal_.has_value() ? proposal_->rank() : -1; }
+    [[nodiscard]] int variantRank() const noexcept
+    {
+        return proposal_.has_value() ? proposal_->rank() : (rework_.has_value() ? rework_->rank() : -1);
+    }
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -233,7 +244,19 @@ private:
     ListeningHost& listening_;
     bool listeningHere_{false}; // this panel started what is heard
     std::optional<GhostProposal> proposal_;
+    std::optional<TransformProposal> rework_;
     std::vector<domain::generation::GhostNote> ghosts_;
+
+    // What either proposal says about where it writes.
+    struct Target
+    {
+        domain::TrackId track;
+        domain::PatternId pattern;
+        double fromBeats{0.0};
+        double toBeats{0.0};
+    };
+    [[nodiscard]] std::optional<Target> target() const;
+    void reshow(); // the notes and the window after a change of variant or context
     juce::String promptedText_;
     juce::String styleLine_;
     double styleShare_{0.0};

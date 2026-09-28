@@ -675,7 +675,9 @@ void PianoRollPanel::paintNotes(juce::Graphics& g, juce::Rectangle<int> area) co
                             static_cast<float>(domain::Note::highestVelocity - domain::Note::lowestVelocity);
 
         // A note Tab would replace is drawn faded under the grey ones.
-        if (proposal_.has_value() && proposal_->replaces(note))
+        const auto where = target();
+        if (where.has_value() && note.startBeats >= where->fromBeats - 1e-6 &&
+            note.startBeats < where->toBeats - 1e-6)
             g.setColour(tokens_.colour("color.note.replaced"));
         else
             g.setColour(soft.interpolatedWith(full, amount));
@@ -1311,7 +1313,7 @@ void PianoRollPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::M
 
     // Alt + wheel walks through the variants of a proposal, wherever the
     // pointer is: the eye is on the grey notes, not on a control.
-    if (event.mods.isAltDown() && proposal_.has_value())
+    if (event.mods.isAltDown() && proposing())
     {
         if (wheel.deltaY != 0.0f)
             showVariant(wheel.deltaY < 0.0f ? +1 : -1);

@@ -20,6 +20,7 @@ add_library(daw_domain STATIC
     src/generation/Harmony.cpp
     src/generation/Learning.cpp
     src/generation/Phrase.cpp
+    src/generation/Transform.cpp
     src/generation/StyleModel.cpp
     src/commands/AddNote.cpp
     src/commands/AutomationCommands.cpp

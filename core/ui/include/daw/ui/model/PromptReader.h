@@ -2,6 +2,7 @@
 
 #include "daw/domain/Result.h"
 #include "daw/domain/generation/Constraints.h"
+#include "daw/domain/generation/Transform.h"
 
 #include <cstdint>
 #include <functional>
@@ -39,6 +40,10 @@ public:
     {
         domain::generation::Interpretation interpretation;
 
+        // When the zone holds notes: how the prompt asks to rework them.
+        // Nothing when it does not say; the window then keeps the rhythm.
+        std::optional<domain::generation::Transform> transform;
+
         // True when the copilot's model read it.
         bool remote{false};
 
@@ -69,10 +74,12 @@ public:
     [[nodiscard]] virtual bool reading() const = 0;
 };
 
-// The S14 words, answered at once.
+// The S14 words, answered at once, and the words that ask to rework notes.
 class LocalPromptReader final : public PromptReader
 {
 public:
+    [[nodiscard]] static Reading parse(std::string_view text);
+
     void read(std::string text, Zone zone, Done done) override;
     void cancel() override {}
     [[nodiscard]] bool reading() const override { return false; }
@@ -93,8 +100,7 @@ public:
 class RoutedPromptReader final : public PromptReader
 {
 public:
-    using Answered =
-        std::function<void(std::uint64_t ticket, domain::Result<domain::generation::Interpretation>)>;
+    using Answered = std::function<void(std::uint64_t ticket, domain::Result<Reading>)>;
 
     struct Remote
     {
@@ -132,7 +138,7 @@ private:
         Done done;
     };
 
-    void answered(std::uint64_t ticket, domain::Result<domain::generation::Interpretation> result);
+    void answered(std::uint64_t ticket, domain::Result<Reading> result);
     void local(std::string_view notice);
 
     Remote remote_;

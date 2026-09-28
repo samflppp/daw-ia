@@ -1,19 +1,43 @@
 #include "daw/ui/model/PromptReader.h"
 
+#include <algorithm>
+#include <cctype>
 #include <utility>
 
 namespace daw::ui
 {
 
+PromptReader::Reading LocalPromptReader::parse(std::string_view text)
+{
+    Reading out;
+    out.interpretation = domain::generation::LocalInterpreter::parse(text);
+
+    // "plus sombre" asks to rework: its words are used, not ignored.
+    if (auto asked = domain::generation::readTransform(text); asked.has_value())
+    {
+        out.transform = asked->transform;
+        auto& ignored = out.interpretation.ignored;
+        ignored.erase(std::remove_if(ignored.begin(),
+                                     ignored.end(),
+                                     [&asked](const std::string& word)
+                                     {
+                                         std::string lower = word;
+                                         for (auto& c : lower)
+                                             c = static_cast<char>(
+                                                 std::tolower(static_cast<unsigned char>(c)));
+                                         return std::find(asked->words.begin(), asked->words.end(), lower) !=
+                                                asked->words.end();
+                                     }),
+                      ignored.end());
+    }
+    return out;
+}
+
 void LocalPromptReader::read(std::string text, Zone zone, Done done)
 {
     static_cast<void>(zone);
-    if (!done)
-        return;
-
-    Reading out;
-    out.interpretation = domain::generation::LocalInterpreter::parse(text);
-    done(std::move(out));
+    if (done)
+        done(parse(text));
 }
 
 RoutedPromptReader::RoutedPromptReader(Remote remote)
@@ -34,12 +58,11 @@ void RoutedPromptReader::read(std::string text, Zone zone, Done done)
     }
 
     const auto ticket = pending_->ticket;
-    remote_.ask(
-        ticket,
-        pending_->text,
-        zone,
-        [this](std::uint64_t answeredTicket, domain::Result<domain::generation::Interpretation> result)
-        { answered(answeredTicket, std::move(result)); });
+    remote_.ask(ticket,
+                pending_->text,
+                zone,
+                [this](std::uint64_t answeredTicket, domain::Result<Reading> result)
+                { answered(answeredTicket, std::move(result)); });
 }
 
 void RoutedPromptReader::cancel()
@@ -53,8 +76,7 @@ void RoutedPromptReader::expire()
         local(slowNotice);
 }
 
-void RoutedPromptReader::answered(std::uint64_t ticket,
-                                  domain::Result<domain::generation::Interpretation> result)
+void RoutedPromptReader::answered(std::uint64_t ticket, domain::Result<Reading> result)
 {
     // Late, cancelled, or replaced by another prompt: not the question on
     // screen any more.
@@ -72,9 +94,9 @@ void RoutedPromptReader::answered(std::uint64_t ticket,
     if (!done)
         return;
 
-    Reading out;
-    out.interpretation = std::move(result).value();
+    auto out = std::move(result).value();
     out.remote = true;
+    out.notice.clear();
     done(std::move(out));
 }
 
@@ -88,8 +110,7 @@ void RoutedPromptReader::local(std::string_view notice)
     if (!taken.done)
         return;
 
-    Reading out;
-    out.interpretation = domain::generation::LocalInterpreter::parse(taken.text);
+    auto out = LocalPromptReader::parse(taken.text);
     out.notice = std::string{notice};
     taken.done(std::move(out));
 }
