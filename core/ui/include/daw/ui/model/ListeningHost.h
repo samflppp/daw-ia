@@ -4,6 +4,7 @@
 #include "daw/domain/generation/Generator.h"
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,17 @@ public:
         double fromBeats{0.0}; // in the pattern
         double toBeats{0.0};
         std::vector<domain::generation::GhostNote> notes;
+
+        // Where this laying of the pattern starts in the song (S17, a zone of
+        // the playlist spans several patterns, each at its own beat). Absent,
+        // the pattern is heard where the piano roll's zone always was: its
+        // first placement, or beat 0 in pattern mode.
+        std::optional<double> songBeats{};
+
+        // For a pattern the proposal would create: how long it is. It is then
+        // heard at songBeats, which it requires.
+        bool isNew{false};
+        double lengthBeats{0.0};
     };
 
     ListeningHost() = default;

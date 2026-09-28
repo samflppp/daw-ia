@@ -378,3 +378,38 @@ TEST_CASE("Listening: a transport command ends it, and the project is what plays
     CHECK(ended == 1);
     CHECK(onsetsOf(harness.host.edit()) == std::set<int>{0});
 }
+
+TEST_CASE(
+    "Listening: patterns a zone would create are heard where they would be laid, several tracks at once")
+{
+    // S17: a zone of the playlist proposes a block per line, most of them in
+    // patterns that do not exist yet. They are heard at the beat they would
+    // be laid at, and leave with the listening; the project never holds them.
+    EngineHarness harness;
+    const auto room = ClipId::generate();
+    REQUIRE(harness.bus.execute(harness.createClip(room, 0.0, 16.0)).ok());
+    const auto bass = TrackId::generate();
+    REQUIRE(harness.bus.execute(std::make_unique<AddTrack>(bass, "Bass", 0.0)).ok());
+    const auto bytes = json::write(harness.state.toValue());
+    const auto depth = harness.bus.undoDepth();
+
+    CHECK(onsetsOf(harness.host.edit()).empty());
+
+    daw::engine::ProjectProjector::Audition chords{
+        harness.trackId, PatternId::generate(), 0.0, 4.0, {plain(60, 0.0, 1.0)}};
+    chords.newAtBeats = 8.0;
+    chords.newLengthBeats = 4.0;
+    daw::engine::ProjectProjector::Audition line{
+        bass, PatternId::generate(), 0.0, 4.0, {plain(40, 2.0, 1.0)}};
+    line.newAtBeats = 8.0;
+    line.newLengthBeats = 4.0;
+
+    harness.projector.listen({chords, line}, 8.0, 12.0);
+    CHECK(onsetsOf(harness.host.edit()) == std::set<int>{32, 40}); // beats 8 and 10
+    CHECK(json::write(harness.state.toValue()) == bytes);
+    CHECK(harness.bus.undoDepth() == depth);
+
+    harness.projector.stopListening();
+    CHECK(onsetsOf(harness.host.edit()).empty());
+    CHECK(json::write(harness.state.toValue()) == bytes);
+}

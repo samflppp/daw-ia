@@ -30,6 +30,43 @@ std::string Listening::listen(const std::vector<Line>& lines)
         return {};
     }
 
+    // Lines that say where they are in the song: a zone of the playlist,
+    // across several patterns. Song mode only, which the playlist is.
+    if (lines.front().songBeats.has_value())
+    {
+        if (state_.transport().mode != domain::PlayMode::song)
+            return "Passe en mode SONG pour écouter une zone de la playlist.";
+
+        auto from = std::numeric_limits<double>::max();
+        auto to = std::numeric_limits<double>::lowest();
+        std::vector<engine::ProjectProjector::Audition> auditions;
+        for (const auto& line : lines)
+        {
+            const auto at = line.songBeats.value_or(0.0);
+            engine::ProjectProjector::Audition audition{
+                line.track, line.pattern, line.fromBeats, line.toBeats, {}};
+            if (line.isNew)
+            {
+                audition.newAtBeats = at;
+                audition.newLengthBeats = line.lengthBeats;
+            }
+            for (const auto& ghost : line.notes)
+            {
+                domain::Note note{};
+                note.pitch = ghost.pitch;
+                note.velocity = ghost.velocity;
+                note.startBeats = ghost.startBeats;
+                note.lengthBeats = ghost.lengthBeats;
+                audition.notes.push_back(note);
+            }
+            auditions.push_back(std::move(audition));
+            from = std::min(from, at + line.fromBeats);
+            to = std::max(to, at + line.toBeats);
+        }
+        projector_.listen(std::move(auditions), from, to);
+        return {};
+    }
+
     // Where the pattern sits on the Edit's timeline.
     const auto& transport = state_.transport();
     const auto patternId = lines.front().pattern;

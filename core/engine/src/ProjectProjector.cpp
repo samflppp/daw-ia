@@ -912,11 +912,24 @@ void replaceRange(std::vector<domain::Note>& notes, const ProjectProjector::Audi
         if (found)
             continue;
 
+        const auto key = "listen:" + trackId.toString() + ":";
         const auto* pattern = state.findPattern(audition.pattern);
         if (pattern == nullptr)
+        {
+            // A pattern the proposal would create: laid where it would be,
+            // in song mode only, since pattern mode plays one that exists.
+            if (!audition.newAtBeats.has_value() || transport.mode != domain::PlayMode::song)
+                continue;
+            LaidOutRow fresh{key + "new:" + audition.pattern.toString(),
+                             *audition.newAtBeats,
+                             audition.newLengthBeats,
+                             audition.pattern,
+                             {}};
+            replaceRange(fresh.notes, audition);
+            rows.push_back(std::move(fresh));
             continue;
+        }
 
-        const auto key = "listen:" + trackId.toString() + ":";
         if (transport.mode == domain::PlayMode::pattern)
         {
             if (transport.auditionedPattern == audition.pattern)

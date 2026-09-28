@@ -132,6 +132,13 @@ public:
         double fromBeats{0.0}; // in the pattern
         double toBeats{0.0};
         std::vector<domain::Note> notes; // in the pattern, the range's notes replaced by these
+
+        // A pattern the proposal would create (S17, the multi-track zone):
+        // not in the project, so it has no placement to be heard at. It is
+        // laid here, in song beats, for as long as it lasts, and leaves with
+        // the listening. Ignored for a pattern that exists.
+        std::optional<double> newAtBeats{};
+        double newLengthBeats{0.0};
     };
 
     // Starts, or changes what is heard. The loop is in the Edit's beats. The

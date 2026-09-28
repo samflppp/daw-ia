@@ -22,6 +22,7 @@ add_executable(daw_domain_tests
     LaneTests.cpp
     PatternTests.cpp
     RoleTests.cpp
+    ZoneProposalTests.cpp
     SampleTests.cpp
     TempoCommandTests.cpp
     TransportTests.cpp
