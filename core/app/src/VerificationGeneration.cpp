@@ -252,8 +252,8 @@ void Verification::addGenerationSteps()
                 return;
 
             static_cast<void>(panel->keyPressed(juce::KeyPress{juce::KeyPress::escapeKey}));
-            check(!panel->proposing() && !panel->promptField().isVisible(),
-                  "Échap ferme la zone et efface le gris");
+            check(!panel->proposing() && !panel->generationOpen(),
+                  "Échap ferme la fenêtre et efface le gris");
             untouched("rejeter");
 
             static_cast<void>(panel->keyPressed(juce::KeyPress{'g', juce::ModifierKeys::ctrlModifier, 0}));
@@ -344,7 +344,7 @@ void Verification::addGenerationSteps()
             acceptedGhosts_ = panel->ghostNotes();
             static_cast<void>(panel->keyPressed(juce::KeyPress{juce::KeyPress::tabKey}));
 
-            check(!panel->proposing() && !panel->promptField().isVisible(), "la zone se ferme");
+            check(!panel->proposing() && !panel->generationOpen(), "la fenêtre se ferme");
             check(depth() == generationDepth_ + 1, "une seule entrée d'historique");
             const auto& entries = history_.entries();
             const auto* last = history_.cursor() > 0 ? &entries[history_.cursor() - 1] : nullptr;
