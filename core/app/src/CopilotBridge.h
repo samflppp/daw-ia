@@ -6,12 +6,14 @@
 #include "daw/domain/copilot/StateView.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/ui/model/CopilotHost.h"
+#include "daw/ui/model/PromptReader.h"
 
 #include <juce_events/juce_events.h>
 
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -36,7 +38,9 @@ namespace daw::app
 //
 //   the copilot asks the DAW    state.get, clip.notes, plugins.find,
 //                               mix.levels, tools.list, commands.execute
-//   the DAW asks the copilot    copilot.ask, once per request typed by the user
+//   the DAW asks the copilot    copilot.ask, once per request typed by the user;
+//                               generation.interpret, once per prompt written
+//                               in the generation window (S16)
 //
 // The frame is one JSON object per line, UTF-8. Content-Length framing would
 // buy nothing here: every message is small and a newline cannot appear inside
@@ -89,6 +93,20 @@ public:
     void restart() override;
     [[nodiscard]] std::vector<std::string> capabilities() const override;
 
+    // --- the generation window (S16)
+
+    // True when a prompt can be read by the copilot's model: its process is
+    // connected. Whether the model then answers is another matter.
+    [[nodiscard]] bool canInterpret() const noexcept { return connected_; }
+
+    // Sends a prompt to be read. `answered` is called once, on the message
+    // thread, with the ticket it was given -- unless the process dies first,
+    // in which case the window's wait runs out and the local words answer.
+    void interpret(std::uint64_t ticket,
+                   const std::string& text,
+                   const ui::PromptReader::Zone& zone,
+                   ui::RoutedPromptReader::Answered answered);
+
 private:
     // --- the socket thread
     void run() override;
@@ -131,6 +149,15 @@ private:
     Status status_{Status::stopped};
     std::string statusMessage_;
     std::vector<Line> transcript_;
+
+    // The prompts sent and not yet answered, by request id. The copilot's
+    // own requests are not in it: an id missing here is a copilot.ask.
+    struct Read
+    {
+        std::uint64_t ticket{0};
+        ui::RoutedPromptReader::Answered answered;
+    };
+    std::map<std::int64_t, Read> reads_;
 
     std::mutex writeMutex_;
     std::atomic<std::int64_t> nextRequestId_{1};

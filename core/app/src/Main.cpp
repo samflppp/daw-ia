@@ -6,6 +6,7 @@
 #include "PlaybackProbe.h"
 #include "PluginRack.h"
 #include "PluginWindow.h"
+#include "PromptReading.h"
 #include "SampleLibrary.h"
 #include "SongExporter.h"
 #include "TransportSync.h"
@@ -670,6 +671,7 @@ private:
                                   registry_,
                                   [this] { return rack_->available(); },
                                   [this] { return levels_->toValue(state_); }});
+        promptReader_ = std::make_unique<PromptReading>(*copilot_);
 
         // Where the pages of a windowed workspace were left, kept next to the
         // other settings of this machine and never in the project: a window's
@@ -701,7 +703,7 @@ private:
                                          *sampleLibrary_,
                                          *levels_,
                                          clipboard_,
-                                         promptReader_};
+                                         *promptReader_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();
@@ -1007,7 +1009,7 @@ private:
     std::unique_ptr<EditClock> clock_;
     std::unique_ptr<LevelMonitor> levels_;
     ui::Clipboard clipboard_;
-    ui::LocalPromptReader promptReader_;
+    std::unique_ptr<PromptReading> promptReader_;
     std::unique_ptr<WorkspaceSwitch> switch_;
     std::unique_ptr<CopilotBridge> copilot_;
     std::unique_ptr<PluginRack> rack_;

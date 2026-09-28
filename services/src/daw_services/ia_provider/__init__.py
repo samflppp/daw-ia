@@ -116,6 +116,9 @@ class IAProvider(Protocol):
         system: str,
         messages: Sequence[dict[str, Any]],
         tools: Sequence[dict[str, Any]],
+        *,
+        max_tokens: int = ...,
+        effort: str | None = ...,
     ) -> Turn: ...
 
 
@@ -143,7 +146,11 @@ class AnthropicProvider:
         system: str,
         messages: Sequence[dict[str, Any]],
         tools: Sequence[dict[str, Any]],
+        *,
+        max_tokens: int = MAX_TOKENS,
+        effort: str | None = None,
     ) -> Turn:
+        """One turn. `effort` sets output_config.effort; None leaves the model's default."""
         key = os.environ.get(API_KEY_VARIABLE, "").strip()
         if not key:
             raise ProviderUnavailable(
@@ -169,16 +176,17 @@ class AnthropicProvider:
         if sent_tools:
             sent_tools[-1] = {**sent_tools[-1], "cache_control": {"type": "ephemeral"}}
 
-        body = json.dumps(
-            {
-                "model": self._model,
-                "max_tokens": MAX_TOKENS,
-                "system": [{"type": "text", "text": system}],
-                "messages": list(messages),
-                "tools": sent_tools,
-            },
-            ensure_ascii=False,
-        ).encode("utf-8")
+        request_body: dict[str, Any] = {
+            "model": self._model,
+            "max_tokens": max_tokens,
+            "system": [{"type": "text", "text": system}],
+            "messages": list(messages),
+            "tools": sent_tools,
+        }
+        if effort is not None:
+            request_body["output_config"] = {"effort": effort}
+
+        body = json.dumps(request_body, ensure_ascii=False).encode("utf-8")
 
         request = urllib.request.Request(  # noqa: S310 - the endpoint is ours, and it is https
             self._endpoint,
@@ -252,6 +260,7 @@ class ScriptedProvider:
         self.calls: list[list[dict[str, Any]]] = []
         # What each turn was shown: a test checks what a read handed back.
         self.messages: list[list[dict[str, Any]]] = []
+        self.options: list[dict[str, Any]] = []
 
     @property
     def model(self) -> str:
@@ -262,8 +271,12 @@ class ScriptedProvider:
         system: str,
         messages: Sequence[dict[str, Any]],
         tools: Sequence[dict[str, Any]],
+        *,
+        max_tokens: int = MAX_TOKENS,
+        effort: str | None = None,
     ) -> Turn:
         del system
+        self.options.append({"max_tokens": max_tokens, "effort": effort})
         self.calls.append([dict(tool) for tool in tools])
         self.messages.append(list(messages))
 
