@@ -11,10 +11,42 @@
 #include <array>
 #include <chrono>
 #include <future>
+#include <optional>
 #include <utility>
 
 namespace daw::app
 {
+namespace
+{
+
+// What generation.interpret answered, as the S14 contract reads it.
+[[nodiscard]] domain::Result<domain::generation::Interpretation>
+interpretationOf(const domain::Value& message)
+{
+    if (const auto* failure = message.find("error"); failure != nullptr && !failure->isNull())
+    {
+        const auto text = failure->stringAt("message");
+        return domain::fail(domain::ErrorCode::conflict, text ? text.value() : std::string{"échec"});
+    }
+
+    const auto* result = message.find("result");
+    if (result == nullptr || !result->isObject())
+        return domain::fail(domain::ErrorCode::invalidPayload, "no result");
+
+    if (const auto failed = result->boolAt("failed"); failed && failed.value())
+    {
+        const auto text = result->stringAt("message");
+        return domain::fail(domain::ErrorCode::conflict, text ? text.value() : std::string{"échec"});
+    }
+
+    const auto* interpretation = result->find("interpretation");
+    if (interpretation == nullptr)
+        return domain::fail(domain::ErrorCode::invalidPayload, "no interpretation");
+    return domain::generation::Interpretation::fromValue(*interpretation);
+}
+
+} // namespace
+
 namespace
 {
 
@@ -503,8 +535,39 @@ void CopilotBridge::handleRequest(const Value& message)
 
 void CopilotBridge::handleAnswer(const Value& message)
 {
-    // The only thing the DAW asks the copilot is a request typed by the user,
-    // so an answer is that request's answer.
+    // A prompt of the generation window: parsed here, answered on the
+    // message thread, and nothing in the conversation.
+    if (const auto id = message.intAt("id"); id)
+    {
+        std::optional<Read> read;
+        {
+            const std::lock_guard<std::mutex> lock{mutex_};
+            if (auto found = reads_.find(id.value()); found != reads_.end())
+            {
+                read = std::move(found->second);
+                reads_.erase(found);
+            }
+        }
+        if (read.has_value())
+        {
+            auto interpretation = interpretationOf(message);
+            if (!interpretation)
+                juce::Logger::writeToLog("generation: read failed: " +
+                                         juce::String{interpretation.error().message});
+            juce::MessageManager::callAsync(
+                [answered = std::move(read->answered),
+                 ticket = read->ticket,
+                 result = std::move(interpretation)]
+                {
+                    if (answered)
+                        answered(ticket, result);
+                });
+            return;
+        }
+    }
+
+    // Otherwise, a request typed by the user: an answer is that request's
+    // answer.
     if (const auto* failure = message.find("error"); failure != nullptr && !failure->isNull())
     {
         const auto text = failure->stringAt("message");
@@ -642,6 +705,40 @@ void CopilotBridge::ask(std::string_view request)
                         {"id", Value{nextRequestId_++}},
                         {"method", Value{std::string{"copilot.ask"}}},
                         {"params", Value::object({{"request", Value{std::string{request}}}})}}));
+}
+
+void CopilotBridge::interpret(std::uint64_t ticket,
+                              const std::string& text,
+                              const ui::PromptReader::Zone& zone,
+                              ui::RoutedPromptReader::Answered answered)
+{
+    if (!connected_)
+    {
+        if (answered)
+            answered(ticket, domain::fail(domain::ErrorCode::conflict, "le copilote n'est pas là"));
+        return;
+    }
+
+    Value::Array tracks;
+    for (const auto& name : zone.tracks)
+        tracks.emplace_back(Value{name});
+
+    const auto id = nextRequestId_++;
+    {
+        const std::lock_guard<std::mutex> lock{mutex_};
+        reads_[id] = Read{ticket, std::move(answered)};
+    }
+
+    send(Value::object({{"jsonrpc", Value{std::string{"2.0"}}},
+                        {"id", Value{id}},
+                        {"method", Value{std::string{"generation.interpret"}}},
+                        {"params",
+                         Value::object({{"text", Value{text}},
+                                        {"zone",
+                                         Value::object({{"lengthBeats", Value{zone.lengthBeats}},
+                                                        {"beatsPerBar", Value{zone.beatsPerBar}},
+                                                        {"hasNotes", Value{zone.hasNotes}},
+                                                        {"tracks", Value::array(std::move(tracks))}})}})}}));
 }
 
 void CopilotBridge::setStatus(Status status, std::string message)

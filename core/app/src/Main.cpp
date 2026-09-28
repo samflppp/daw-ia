@@ -2,10 +2,12 @@
 #include "CopilotBridge.h"
 #include "EditClock.h"
 #include "LevelMonitor.h"
+#include "Listening.h"
 #include "MainWindow.h"
 #include "PlaybackProbe.h"
 #include "PluginRack.h"
 #include "PluginWindow.h"
+#include "PromptReading.h"
 #include "SampleLibrary.h"
 #include "SongExporter.h"
 #include "TransportSync.h"
@@ -310,6 +312,7 @@ public:
         copilot_.reset();
         clock_.reset();
         bridge_.reset();
+        listening_.reset(); // it holds the projector
         projector_.reset();
         contentStore_.reset();
         engineHost_.reset();
@@ -360,7 +363,13 @@ private:
         actions.openProject = [this] { chooseProjectToOpen(); };
         actions.save = [this] { saveNow(); };
         actions.saveAs = [this] { chooseSaveAs(); };
-        actions.exportSong = [this] { exporter_->start(); };
+        actions.exportSong = [this]
+        {
+            // An export is the project, never a proposal being listened to.
+            if (listening_ != nullptr)
+                listening_->stop();
+            exporter_->start();
+        };
         actions.learning = [this] { return learning_ != nullptr && learning_->enabled(); };
         actions.toggleLearning = [this]
         {
@@ -670,6 +679,8 @@ private:
                                   registry_,
                                   [this] { return rack_->available(); },
                                   [this] { return levels_->toValue(state_); }});
+        promptReader_ = std::make_unique<PromptReading>(*copilot_);
+        listening_ = std::make_unique<Listening>(*projector_, state_);
 
         // Where the pages of a windowed workspace were left, kept next to the
         // other settings of this machine and never in the project: a window's
@@ -700,7 +711,9 @@ private:
                                          *copilot_,
                                          *sampleLibrary_,
                                          *levels_,
-                                         clipboard_};
+                                         clipboard_,
+                                         *promptReader_,
+                                         *listening_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();
@@ -1006,6 +1019,8 @@ private:
     std::unique_ptr<EditClock> clock_;
     std::unique_ptr<LevelMonitor> levels_;
     ui::Clipboard clipboard_;
+    std::unique_ptr<PromptReading> promptReader_;
+    std::unique_ptr<Listening> listening_;
     std::unique_ptr<WorkspaceSwitch> switch_;
     std::unique_ptr<CopilotBridge> copilot_;
     std::unique_ptr<PluginRack> rack_;

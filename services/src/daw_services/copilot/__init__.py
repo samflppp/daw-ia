@@ -30,6 +30,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from daw_services.copilot.reading import TRANSLATION_RULES, Reader
 from daw_services.ia_provider import (
     DEFAULT_MODEL,
     AnthropicProvider,
@@ -44,7 +45,7 @@ MAX_TURNS = 8
 NEW_ID_PATTERN = re.compile(r"^\$new:[a-z0-9_-]{1,32}$")
 CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
-SYSTEM_PROMPT = """Tu pilotes un logiciel de musique. Tu réponds en français, brièvement.
+SYSTEM_PROMPT = f"""Tu pilotes un logiciel de musique. Tu réponds en français, brièvement.
 
 Ce que tu peux faire :
 - lire l'état du projet, les notes d'un clip, les plugins installés ;
@@ -84,11 +85,10 @@ Règles :
 - Pour écrire de la musique (des accords, une mélodie, une basse, un rythme),
   appelle pattern.generate sur la ligne où elle doit aller, une fois par ligne.
   Le générateur du DAW écrit des notes justes, répétées selon une forme, dans
-  le style appris de l'utilisateur. Traduis l'intention en contraintes :
-  « triste », « sombre », « mélancolique » donnent une tonalité mineure ;
-  « calme » une densité sparse ; « énergique » dense ; « grave » le registre
-  low. Dis dans ta phrase finale ce que tu as choisi. N'utilise note.add que
-  pour des notes que l'utilisateur dicte une à une.
+  le style appris de l'utilisateur. Dis dans ta phrase finale ce que tu as
+  choisi. N'utilise note.add que pour des notes que l'utilisateur dicte une à
+  une.
+- {TRANSLATION_RULES}
 - La ligne doit exister avant pattern.generate : crée-la dans la même requête
   (clip.create_midi, ou pattern.add_track) et donne son $new: comme clipId.
 - Un instrument se charge avec track.add puis plugin.insert sur cette piste ;
@@ -397,6 +397,23 @@ def run(port: int, provider: IAProvider | None = None) -> int:
         )
         return answer.as_dict()
 
+    reader = Reader(peer, chosen)
+
+    def interpret(params: dict[str, Any]) -> dict[str, Any]:
+        text = str(params.get("text", "")).strip()
+        zone = params.get("zone") if isinstance(params.get("zone"), dict) else {}
+        if not text:
+            return {"failed": True, "message": "Rien à lire."}
+        read = reader.read(text, zone)
+        usage = read.get("usage") or {}
+        print(
+            f"lecture : {usage.get('inputTokens', 0)} jetons en entrée, "
+            f"{usage.get('outputTokens', 0)} en sortie",
+            flush=True,
+        )
+        return read
+
     peer.on("copilot.ask", ask)
+    peer.on("generation.interpret", interpret)
     peer.serve_forever()
     return 0

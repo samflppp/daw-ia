@@ -19,10 +19,7 @@ constexpr int playheadRefreshMs = 33;
 
 constexpr int semitonesPerOctave = 12;
 
-// One sixteenth. The grid the beatmaker workspace draws is the grid it snaps
-// to: a note that lands between two lines it can see is a note the user has to
-// fight.
-constexpr double gridStepBeats = 0.25;
+constexpr double gridStepBeats = PianoRollPanel::gridStepBeats;
 
 constexpr int defaultVelocity = 100;
 constexpr int lowestVisiblePitch = 0;
@@ -72,7 +69,10 @@ constexpr double pixelsPerVelocityStep = 1.5;
 } // namespace
 
 PianoRollPanel::PianoRollPanel(const PanelContext& context)
-    : tokens_(context.tokens)
+    : bar_(context.tokens, context.lookAndFeel)
+    , reader_(context.prompts)
+    , listening_(context.listening)
+    , tokens_(context.tokens)
     , lookAndFeel_(context.lookAndFeel)
     , bus_(context.bus)
     , state_(context.state)
@@ -104,14 +104,32 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
     addAndMakeVisible(channelChooser_);
     rebuildChannelChooser();
 
-    // The generation field, hidden until Ctrl+G.
-    prompt_.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
-    prompt_.setTextToShowWhenEmpty(
-        juce::String::fromUTF8(u8"Am doubles dense grave basse — Entrée génère, Tab garde, Échap rejette"),
-        tokens_.colour("color.text.disabled"));
-    prompt_.setTabKeyUsedAsCharacter(false);
-    prompt_.onKey = [this](const juce::KeyPress& key) { return generationKey(key); };
-    addChildComponent(prompt_);
+    // The way into generation, where it can be seen: a gesture known only
+    // from the keyboard does not exist for someone new, and someone new is
+    // the most frequent case.
+    generate_.setButtonText(juce::String::fromUTF8(u8"✦ Générer"));
+    generate_.setTooltip(juce::String::fromUTF8(u8"Choisis une zone (Maj + glisser sur la règle, ou des "
+                                                u8"notes), puis dis ce que tu veux entendre (Ctrl+G)"));
+    generate_.setWantsKeyboardFocus(false);
+    generate_.onClick = [this] { openPrompt(); };
+    addAndMakeVisible(generate_);
+
+    // The generation window, hidden until asked for.
+    bar_.onKey = [this](const juce::KeyPress& key) { return generationKey(key); };
+    bar_.onVariant = [this](int delta) { showVariant(delta); };
+    bar_.onAccept = [this] { acceptProposal(); };
+    bar_.onListen = [this] { toggleListening(); };
+    bar_.onClose = [this]
+    {
+        closeProposal();
+        repaint();
+    };
+    bar_.onHeightChanged = [this]
+    {
+        placeBar();
+        repaint();
+    };
+    addChildComponent(bar_);
 
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
@@ -124,6 +142,8 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
 
 PianoRollPanel::~PianoRollPanel()
 {
+    stopListening();
+    reader_.cancel();
     stopTimer();
     selection_.removeChangeListener(this);
     project_.removeChangeListener(this);
@@ -213,28 +233,30 @@ void PianoRollPanel::resized()
     if (!titled_)
         header.removeFromLeft(tokens_.integer("metric.pianoRoll.keyboardWidth") * 2);
     channelChooser_.setBounds(header.removeFromLeft(tokens_.integer("metric.pianoRoll.keyboardWidth") * 2));
+    generate_.setBounds(header.removeFromRight(tokens_.integer("metric.generation.buttonWidth")));
+
+    placeBar();
 
     // Smaller, the window may have lost the notes it showed.
     revealNotes();
-    placePrompt();
 }
 
 // Here and not with the rest of generation: placing a child is for the panel
-// file itself, as the hygiene rule 2 has it.
-void PianoRollPanel::placePrompt()
+// file itself, as the hygiene rule 2 has it. The window takes the bottom of
+// the panel, under the velocity lane: the grid shrinks, the notes stay seen.
+void PianoRollPanel::placeBar()
 {
-    if (!prompt_.isVisible())
+    if (!bar_.isVisible())
         return;
+    bar_.setBounds(getLocalBounds().removeFromBottom(bar_.preferredHeight()));
+}
 
-    const auto grid = gridArea();
-    const auto width = std::min(tokens_.integer("metric.pianoRoll.promptWidth"), grid.getWidth());
-    const auto shown = shownRange();
-    const auto left = shown.has_value() ? xForBeat(shown->first) : grid.getX();
-
-    prompt_.setBounds(std::clamp(left, grid.getX(), std::max(grid.getX(), grid.getRight() - width)),
-                      grid.getY() + tokens_.integer("space.xs"),
-                      width,
-                      tokens_.integer("metric.pianoRoll.promptHeight"));
+juce::Rectangle<int> PianoRollPanel::bodyArea() const
+{
+    auto area = getLocalBounds();
+    if (bar_.isVisible())
+        area.removeFromBottom(bar_.preferredHeight());
+    return area;
 }
 
 void PianoRollPanel::rebuildChannelChooser()
@@ -378,7 +400,7 @@ juce::Rectangle<int> PianoRollPanel::rulerArea() const
 
 juce::Rectangle<int> PianoRollPanel::gridArea() const
 {
-    auto area = getLocalBounds();
+    auto area = bodyArea();
     area.removeFromTop(tokens_.integer("metric.panel.headerHeight"));
     area.removeFromLeft(tokens_.integer("metric.pianoRoll.keyboardWidth"));
     area.removeFromTop(tokens_.integer("metric.pianoRoll.rulerHeight"));
@@ -562,7 +584,6 @@ void PianoRollPanel::paint(juce::Graphics& g)
     paintRange(g, area);
     paintVelocityLane(g);
     paintPlayhead(g, area);
-    paintProposalLine(g);
 }
 
 void PianoRollPanel::paintEmpty(juce::Graphics& g) const
@@ -999,8 +1020,14 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
                 std::min(snapped(beatAtX(event.getPosition().getX())), patternLength() - gridStepBeats);
             rangeAnchor_ = anchor;
             range_ = std::make_pair(anchor, anchor + gridStepBeats);
-            placePrompt();
             repaint();
+            return;
+        }
+
+        // The chip at the end of the range: the window, for that range.
+        if (const auto chip = rangeChip(); chip.has_value() && chip->contains(event.getPosition()))
+        {
+            openPrompt();
             return;
         }
 
@@ -1116,7 +1143,6 @@ void PianoRollPanel::mouseDrag(const juce::MouseEvent& event)
         const auto from = std::min(*rangeAnchor_, at);
         const auto to = std::max(*rangeAnchor_ + gridStepBeats, at);
         range_ = std::make_pair(from, std::min(to, patternLength()));
-        placePrompt();
         repaint();
         return;
     }

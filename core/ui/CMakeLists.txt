@@ -21,6 +21,7 @@ add_library(daw_ui_workspace STATIC
     src/model/GhostProposal.cpp
     src/model/NoteClipboard.cpp
     src/model/PatternPreviews.cpp
+    src/model/PromptReader.cpp
     src/model/SampleSearch.cpp
     src/model/TempoEditing.cpp
     src/model/WaveformPeaks.cpp)
@@ -89,6 +90,7 @@ target_sources(daw_ui INTERFACE
     src/panels/TrackListPanel.cpp
     src/panels/PianoRollPanel.cpp
     src/panels/PianoRollGeneration.cpp
+    src/panels/GenerationPanel.cpp
     src/panels/ChannelRackPanel.cpp
     src/panels/PlaylistPanel.cpp
     src/panels/PlaylistTempoLane.cpp

@@ -4,6 +4,7 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/generation/Harmony.h"
+#include "daw/domain/generation/Phrase.h"
 #include "daw/domain/serialization/Json.h"
 #include "daw/engine/PitchDetection.h"
 #include "daw/engine/Rendering.h"
@@ -130,25 +131,65 @@ void Verification::addGenerationSteps()
             check(generationDepth_ == savedDepth_ + 1, "choisir une plage n'écrit rien");
         });
 
-    add("Ctrl+G : la zone s'ouvre au-dessus de la plage, et des notes grises, sans rien écrire",
-        [this, roll, untouched, ghostsLegal]
+    add("S16 : Ctrl+G ouvre la fenêtre sous le piano-roll, hors de la grille, et ne propose rien avant le "
+        "prompt",
+        [this, roll, untouched, enter]
         {
             auto* panel = roll();
             if (panel == nullptr)
                 return;
+            check(panel->generateButton().isShowing(), "le bouton « Générer » est visible dans l'en-tête");
             static_cast<void>(panel->keyPressed(juce::KeyPress{'g', juce::ModifierKeys::ctrlModifier, 0}));
 
-            check(panel->promptField().isVisible(), "la zone de saisie est ouverte");
-            check(panel->proposing(), "une proposition est à l'écran");
-            ghostsLegal("zone vide");
+            check(panel->generationOpen(), "la fenêtre est ouverte");
+            // The grid ends where the velocity lane begins: under the lane is
+            // under the notes.
+            const auto window = panel->generationBar().getBounds();
+            check(window.getY() >= panel->velocityLane().getBottom() &&
+                      window.getY() > panel->ruler().getBottom(),
+                  "elle est sous la grille et sous les vélocités, jamais sur les notes");
+            check(!panel->proposing() && panel->ghostNotes().empty(), "rien n'est proposé avant le prompt");
+
+            enter({});
+            check(!panel->proposing(), "Entrée sur un prompt vide : toujours rien");
+            note("la fenêtre dit : « " + panel->generationBar().message().toStdString() + " »");
+            untouched("ouvrir la fenêtre");
+        });
+
+    add("« propose-moi quelque chose », Entrée : des notes grises et une phrase courte ; la ligne technique "
+        "est repliée",
+        [this, roll, untouched, ghostsLegal, enter]
+        {
+            enter(juce::String::fromUTF8("propose-moi quelque chose"));
+            auto* panel = roll();
+            check(panel != nullptr && panel->proposing(), "une proposition est à l'écran");
+            if (panel == nullptr || !panel->proposing())
+                return;
+            ghostsLegal("rien d'imposé");
             // Nothing harmonic in the pattern: the kicks and hats are one
             // pitch each. The key is the default, and says so.
             const auto* proposal = panel->proposal();
             check(proposal != nullptr &&
                       proposal->constraints().key.source != domain::generation::Source::deduced,
                   "aucune tonalité lue dans des lignes de batterie");
+
+            const auto sentence = panel->proposalSentence();
+            note("phrase : « " + sentence.toStdString() + " »");
+            const auto length = juce::String::fromUTF8(
+                domain::generation::lengthWords(
+                    proposal != nullptr ? proposal->toBeats() - proposal->fromBeats() : 0.0,
+                    state_.beatsPerBar())
+                    .c_str());
+            check(sentence.startsWith(length),
+                  "la phrase dit la longueur : « " + length.toStdString() + " »");
+            check(!sentence.contains(juce::String::fromUTF8("(déduit)")) && !sentence.contains("AABA") &&
+                      !sentence.contains(juce::String::fromUTF8("variante")),
+                  "la phrase ne parle pas la langue du moteur");
+            check(!panel->generationBar().detailsOpen(), "les détails sont repliés par défaut");
+            check(panel->proposalLine().contains(juce::String::fromUTF8("(déduit)")),
+                  "les détails gardent ce que le moteur a choisi");
             untouched("proposer");
-            snapshot("s14-notes-fantomes");
+            snapshot("s16-fenetre");
         });
 
     add("« Am doubles dense grave basse sombre », Entrée : une basse en La mineur ; « sombre » est dit "
@@ -203,6 +244,59 @@ void Verification::addGenerationSteps()
             untouched("parcourir les variantes");
         });
 
+    // --- S16: listening before writing. The effect is measured on the Lead's
+    // own meter, the state and the history are compared to the byte.
+    add(
+        "S16 : ▶ Écouter : la basse proposée joue en boucle sur le Lead, sans rien écrire",
+        [roll]
+        {
+            if (auto* panel = roll(); panel != nullptr)
+                panel->generationBar().listenButton().triggerClick();
+        },
+        [this, roll]
+        {
+            auto* panel = roll();
+            return panel != nullptr && panel->listeningToProposal() && clock_.isPlaying() &&
+                   levelOf(leadTrack_.toString()).peakDb > -60.0f;
+        },
+        6000.0);
+
+    add("pendant l'écoute : le Lead sonne, le projet et l'historique n'ont pas bougé ; une autre variante "
+        "s'entend aussitôt",
+        [this, roll, untouched, enter]
+        {
+            auto* panel = roll();
+            if (panel == nullptr)
+                return;
+            const auto lead = levelOf(leadTrack_.toString());
+            note("Lead pendant l'écoute : crête " + juce::String(lead.peakDb, 1).toStdString() + " dBFS");
+            check(lead.peakDb > -60.0f, "le Lead sonne : ce sont les notes grises, il n'en a aucune écrite");
+            check(panel->generationBar().isListening(), "le bouton dit « Arrêter »");
+            untouched("écouter");
+
+            const auto before = panel->ghostNotes();
+            enter(panel->promptField().getText());
+            check(panel->ghostNotes() != before, "une autre variante");
+            check(panel->listeningToProposal() && clock_.isPlaying(),
+                  "l'écoute continue, sur la nouvelle variante");
+            untouched("changer de variante en écoutant");
+        });
+
+    add("Ctrl+Espace arrête l'écoute : le transport revient où le domaine le dit",
+        [this, roll, untouched]
+        {
+            auto* panel = roll();
+            if (panel == nullptr)
+                return;
+            static_cast<void>(panel->keyPressed(
+                juce::KeyPress{juce::KeyPress::spaceKey, juce::ModifierKeys::ctrlModifier, 0}));
+            check(!panel->listeningToProposal() && !panel->generationBar().isListening(),
+                  "l'écoute est arrêtée");
+            check(!clock_.isPlaying(), "à l'arrêt, comme le domaine");
+            check(panel->proposing(), "la proposition est toujours là");
+            untouched("arrêter l'écoute");
+        });
+
     add("désordre : Échap rejette, puis Ctrl+G deux fois de suite sans accepter",
         [this, roll, untouched, enter]
         {
@@ -211,13 +305,13 @@ void Verification::addGenerationSteps()
                 return;
 
             static_cast<void>(panel->keyPressed(juce::KeyPress{juce::KeyPress::escapeKey}));
-            check(!panel->proposing() && !panel->promptField().isVisible(),
-                  "Échap ferme la zone et efface le gris");
+            check(!panel->proposing() && !panel->generationOpen(),
+                  "Échap ferme la fenêtre et efface le gris");
             untouched("rejeter");
 
             static_cast<void>(panel->keyPressed(juce::KeyPress{'g', juce::ModifierKeys::ctrlModifier, 0}));
             static_cast<void>(panel->keyPressed(juce::KeyPress{'g', juce::ModifierKeys::ctrlModifier, 0}));
-            check(panel->proposing(), "une proposition, une seule");
+            check(panel->generationOpen() && !panel->proposing(), "une fenêtre, et rien de proposé");
             enter("Am doubles dense grave basse");
             check(panel->proposing(), "la basse est de nouveau proposée");
             untouched("générer deux fois");
@@ -303,7 +397,7 @@ void Verification::addGenerationSteps()
             acceptedGhosts_ = panel->ghostNotes();
             static_cast<void>(panel->keyPressed(juce::KeyPress{juce::KeyPress::tabKey}));
 
-            check(!panel->proposing() && !panel->promptField().isVisible(), "la zone se ferme");
+            check(!panel->proposing() && !panel->generationOpen(), "la fenêtre se ferme");
             check(depth() == generationDepth_ + 1, "une seule entrée d'historique");
             const auto& entries = history_.entries();
             const auto* last = history_.cursor() > 0 ? &entries[history_.cursor() - 1] : nullptr;

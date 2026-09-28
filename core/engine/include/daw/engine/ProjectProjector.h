@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -107,6 +108,45 @@ public:
     };
 
     [[nodiscard]] const Stats& stats() const noexcept { return stats_; }
+
+    // --- listening before writing (S16)
+    //
+    // A proposal heard in a loop, without entering the project or its history.
+    // ProjectState stays the one truth: nothing here reads back into it, and
+    // the transport commands are not used, because they would change its
+    // transport. What changes is only the Edit, which was always a projection:
+    // while a row is listened to, its clips are laid with the notes of the
+    // range replaced by the proposed ones -- exactly what Tab would write -- and
+    // the engine loops over the range.
+    //
+    // Nothing new runs in the audio callback. The clips are rewritten here, on
+    // the message thread, the way every edit of a note has reached the engine
+    // since S3, and Tracktion rebuilds its playback graph off the audio thread.
+    //
+    // Any transport command ends the listening first: the person asked for
+    // the project, not for the proposal.
+    struct Audition
+    {
+        domain::TrackId track;
+        domain::PatternId pattern;
+        double fromBeats{0.0}; // in the pattern
+        double toBeats{0.0};
+        std::vector<domain::Note> notes; // in the pattern, the range's notes replaced by these
+    };
+
+    // Starts, or changes what is heard. The loop is in the Edit's beats. The
+    // playhead goes to its start when the engine was stopped or the loop moved;
+    // another variant of the same range keeps playing where it is.
+    void listen(std::vector<Audition> auditions, double loopStartBeats, double loopEndBeats);
+
+    // Back to the project: its clips, its loop, and its transport -- stopped
+    // where the domain says unless the domain says it plays.
+    void stopListening();
+
+    [[nodiscard]] bool listening() const noexcept { return listenLoop_.has_value(); }
+
+    // Called when a listening ends on its own: a transport command.
+    std::function<void()> onListeningEnded;
 
     void onExecuted(const domain::Receipt& receipt) override;
     void onCoalesced(const domain::Receipt& receipt) override;
@@ -281,6 +321,9 @@ private:
 
     domain::Value projectedLoop_;
     Stats stats_;
+
+    std::vector<Audition> auditions_;
+    std::optional<std::pair<double, double>> listenLoop_;
 
     // The master's last projected form, like a track's.
     domain::Value projectedMaster_;

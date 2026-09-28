@@ -12,6 +12,8 @@ target_sources(daw_app PRIVATE
     src/MainWindow.cpp
     src/AppShellView.cpp
     src/CopilotBridge.cpp
+    src/PromptReading.cpp
+    src/Listening.cpp
     src/PluginWindow.cpp
     src/PluginRack.cpp
     src/EditClock.cpp
