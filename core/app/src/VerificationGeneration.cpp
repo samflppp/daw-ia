@@ -5,6 +5,7 @@
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/generation/Harmony.h"
 #include "daw/domain/generation/Phrase.h"
+#include "daw/domain/generation/Transform.h"
 #include "daw/domain/serialization/Json.h"
 #include "daw/engine/PitchDetection.h"
 #include "daw/engine/Rendering.h"
@@ -15,6 +16,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace daw::app
@@ -536,6 +538,147 @@ void Verification::addGenerationSteps()
                   "au moins neuf sur dix mesurées");
             check(outOfKey == 0, "aucune hauteur entendue hors de La mineur");
             check(wrong == 0, "chaque note sonne à la hauteur écrite");
+        });
+
+    // --- S16: reworking notes that exist. The notes just written are the zone;
+    // what each prompt keeps and changes is measured on the notes, before and
+    // after, and nothing is written before Tab.
+    const auto reworkBase = std::make_shared<std::string>();
+    const auto reworkDepth = std::make_shared<std::size_t>(0);
+    const auto rhythmOf = [](const std::vector<domain::generation::GhostNote>& notes)
+    {
+        std::vector<std::tuple<long long, long long, int>> out;
+        for (const auto& ghost : notes)
+            out.emplace_back(std::llround(ghost.startBeats * 960.0),
+                             std::llround(ghost.lengthBeats * 960.0),
+                             ghost.velocity);
+        std::sort(out.begin(), out.end());
+        return out;
+    };
+    const auto pitchesOf = [](std::vector<domain::generation::GhostNote> notes)
+    {
+        std::stable_sort(notes.begin(),
+                         notes.end(),
+                         [](const auto& lhs, const auto& rhs) { return lhs.startBeats < rhs.startBeats; });
+        std::vector<int> out;
+        for (const auto& ghost : notes)
+            out.push_back(ghost.pitch);
+        return out;
+    };
+    const auto reworkUntouched = [this, reworkBase, reworkDepth](const std::string& what)
+    {
+        check(domain::json::write(state_.toValue()) == *reworkBase, what + " : le projet n'a pas bougé");
+        check(depth() == *reworkDepth, what + " : aucune entrée d'historique");
+    };
+
+    add("S16 retouche : les notes écrites dans la plage, Ctrl+G, « garde le rythme, change les notes »",
+        [this, roll, enter, reworkBase, reworkDepth, reworkUntouched, rhythmOf, pitchesOf]
+        {
+            auto* panel = roll();
+            if (panel == nullptr)
+                return;
+            *reworkBase = domain::json::write(state_.toValue());
+            *reworkDepth = depth();
+
+            static_cast<void>(panel->keyPressed(juce::KeyPress{'g', juce::ModifierKeys::ctrlModifier, 0}));
+            enter(juce::String::fromUTF8("garde le rythme, change les notes"));
+            const auto* rework = panel->rework();
+            check(rework != nullptr && panel->proposal() == nullptr,
+                  "les notes de la zone sont reprises, pas écrasées");
+            if (rework == nullptr)
+                return;
+
+            const auto& before = rework->source();
+            const auto& after = panel->ghostNotes();
+            check(before.size() == acceptedGhosts_.size(), "la source : les notes écrites par Tab");
+            check(rhythmOf(after) == rhythmOf(before), "mêmes attaques, mêmes durées, mêmes vélocités");
+            const auto was = pitchesOf(before);
+            const auto now = pitchesOf(after);
+            std::size_t changed = 0;
+            for (std::size_t i = 0; i < std::min(was.size(), now.size()); ++i)
+                changed += was[i] != now[i] ? 1U : 0U;
+            note(std::to_string(changed) + " hauteurs changées sur " + std::to_string(now.size()));
+            check(changed * 2 >= now.size(), "au moins la moitié des hauteurs changent");
+            const domain::generation::Key aMinor{9, domain::generation::Mode::minor};
+            check(std::all_of(after.begin(),
+                              after.end(),
+                              [aMinor](const auto& ghost)
+                              { return domain::generation::inScale(ghost.pitch, aMinor); }),
+                  "toutes en La mineur");
+            note("phrase : « " + panel->proposalSentence().toStdString() + " »");
+            check(panel->proposalSentence() == juce::String::fromUTF8("même rythme, d'autres notes"),
+                  "la phrase dit ce qui change");
+            reworkUntouched("retoucher");
+            snapshot("s16-retouche");
+        });
+
+    add("« plus sombre » : même rythme, plus bas ; « humanise » : mêmes hauteurs, placements à 1/64 près",
+        [roll, enter, reworkUntouched, rhythmOf, pitchesOf, this]
+        {
+            auto* panel = roll();
+            if (panel == nullptr)
+                return;
+
+            enter(juce::String::fromUTF8("plus sombre"));
+            const auto* rework = panel->rework();
+            check(rework != nullptr && rework->transform() == domain::generation::Transform::darker,
+                  "« plus sombre » est compris");
+            if (rework == nullptr)
+                return;
+            const auto mean = [](const auto& notes)
+            {
+                double sum = 0.0;
+                for (const auto& ghost : notes)
+                    sum += ghost.pitch;
+                return notes.empty() ? 0.0 : sum / static_cast<double>(notes.size());
+            };
+            check(rhythmOf(panel->ghostNotes()) == rhythmOf(rework->source()),
+                  "sombre : le rythme est gardé");
+            check(mean(panel->ghostNotes()) < mean(rework->source()), "sombre : les hauteurs descendent");
+
+            enter(juce::String::fromUTF8("humanise"));
+            rework = panel->rework();
+            check(rework != nullptr && rework->transform() == domain::generation::Transform::humanize,
+                  "« humanise » est compris");
+            if (rework == nullptr)
+                return;
+            check(pitchesOf(panel->ghostNotes()) == pitchesOf(rework->source()),
+                  "humanise : les hauteurs sont gardées");
+            auto widest = 0.0;
+            auto source = rework->source();
+            auto moved = panel->ghostNotes();
+            for (std::size_t i = 0; i < std::min(source.size(), moved.size()); ++i)
+                widest = std::max(widest, std::abs(source[i].startBeats - moved[i].startBeats));
+            note("plus grand décalage : " + juce::String(widest, 4).toStdString() + " temps");
+            check(widest > 0.0 && widest <= 1.0 / 64.0 + 1e-9,
+                  "humanise : chaque attaque bouge d'1/64 de temps au plus");
+            reworkUntouched("retoucher encore");
+        });
+
+    add("Tab : la retouche est une entrée « retouche », du générateur ; Ctrl+Z rend les notes d'avant",
+        [this, roll, reworkBase, reworkDepth]
+        {
+            auto* panel = roll();
+            if (panel == nullptr || panel->rework() == nullptr)
+                return;
+            const auto shown = panel->ghostNotes();
+            static_cast<void>(panel->keyPressed(juce::KeyPress{juce::KeyPress::tabKey}));
+
+            check(depth() == *reworkDepth + 1, "une seule entrée d'historique");
+            const auto& entries = history_.entries();
+            const auto* last = history_.cursor() > 0 ? &entries[history_.cursor() - 1] : nullptr;
+            check(last != nullptr && last->actor == domain::Actor::generator, "marquée générateur");
+            if (last != nullptr)
+                note("libellé : « " + std::string{last->label()} + " »");
+
+            const auto* pattern = state_.findPattern(selection_.pattern());
+            const auto* row = pattern != nullptr ? pattern->findClipForTrack(leadTrack_) : nullptr;
+            check(row != nullptr && row->notes.size() == shown.size(),
+                  "ce qui est écrit est ce qui était gris");
+
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == *reworkBase,
+                  "Ctrl+Z : les notes d'avant, à l'octet près");
         });
 
     add("Ctrl+Z défait la génération d'un coup ; tout défaire",

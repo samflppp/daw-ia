@@ -22,6 +22,7 @@ add_library(daw_ui_workspace STATIC
     src/model/NoteClipboard.cpp
     src/model/PatternPreviews.cpp
     src/model/PromptReader.cpp
+    src/model/TransformProposal.cpp
     src/model/SampleSearch.cpp
     src/model/TempoEditing.cpp
     src/model/WaveformPeaks.cpp)

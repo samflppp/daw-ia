@@ -26,7 +26,7 @@ bool PianoRollPanel::generationKey(const juce::KeyPress& key)
         return true;
     }
 
-    const auto open = proposal_.has_value() || bar_.isVisible();
+    const auto open = proposing() || bar_.isVisible();
     if (key == juce::KeyPress::escapeKey)
     {
         if (open)
@@ -120,6 +120,7 @@ void PianoRollPanel::openPrompt()
                                               : u8"par ex. : des accords tristes en la mineur"));
 
     proposal_.reset();
+    rework_.reset();
     ghosts_.clear();
     promptedText_ = {};
     bar_.setVisible(true);
@@ -144,7 +145,7 @@ void PianoRollPanel::generateFromPrompt()
 
     // Enter on the words that made what is on screen asks for another answer
     // to the same question, not for the same answer again.
-    if (proposal_.has_value() && text == promptedText_)
+    if (proposing() && text == promptedText_)
     {
         showVariant(+1);
         return;
@@ -164,6 +165,7 @@ void PianoRollPanel::generateFromPrompt()
 
     // The grey notes of an older prompt leave: they answer another question.
     proposal_.reset();
+    rework_.reset();
     ghosts_.clear();
     promptedText_ = text;
     bar_.showReading();
@@ -193,26 +195,51 @@ void PianoRollPanel::generateFromPrompt()
                                    std::shared_ptr<const domain::generation::StyleModel>{}, &base};
             lastStyleMs_ = juce::Time::getMillisecondCounterHiRes() - started;
 
-            auto opened = GhostProposal::open(
-                state_, patternId, trackId, zoneFrom, zoneTo, reading.interpretation, std::move(model));
-            if (!opened)
+            // Notes in the zone: they are reworked, not written over. The
+            // prompt says how; without a word for it, the rhythm is kept.
+            domain::generation::Role role{};
+            if (zoneHasNotes())
             {
-                juce::Logger::writeToLog("generation: refused: " + juce::String{opened.error().message});
-                bar_.showMessage(juce::String::fromUTF8(u8"Rien à proposer dans cette zone."));
-                return;
+                const auto how = reading.transform.value_or(domain::generation::Transform::keepRhythm);
+                auto opened = TransformProposal::open(state_,
+                                                      patternId,
+                                                      trackId,
+                                                      zoneFrom,
+                                                      zoneTo,
+                                                      reading.interpretation,
+                                                      how,
+                                                      std::move(model));
+                if (!opened)
+                {
+                    juce::Logger::writeToLog("generation: refused: " + juce::String{opened.error().message});
+                    bar_.showMessage(juce::String::fromUTF8(u8"Rien à retoucher dans cette zone."));
+                    return;
+                }
+                rework_ = std::move(opened).value();
+                role = rework_->constraints().role.value;
             }
-
-            proposal_ = std::move(opened).value();
-            const auto role = proposal_->constraints().role.value;
+            else
+            {
+                auto opened = GhostProposal::open(
+                    state_, patternId, trackId, zoneFrom, zoneTo, reading.interpretation, std::move(model));
+                if (!opened)
+                {
+                    juce::Logger::writeToLog("generation: refused: " + juce::String{opened.error().message});
+                    bar_.showMessage(juce::String::fromUTF8(u8"Rien à proposer dans cette zone."));
+                    return;
+                }
+                proposal_ = std::move(opened).value();
+                role = proposal_->constraints().role.value;
+            }
             styleLine_ = juce::String::fromUTF8(
                 (learning != nullptr ? learning->describe(role) : base.origin()).c_str());
             styleShare_ = learning != nullptr ? learning->share(role) : 0.0;
-            ghosts_ = proposal_->notes();
+            ghosts_ = proposal_.has_value() ? proposal_->notes() : rework_->notes();
             showProposal(reading);
             listenAgain();
             juce::Logger::writeToLog("generation: " + proposalLine() + " · " + juce::String(ghosts_.size()) +
-                                     " notes · " + juce::String(proposal_->lastDrawMs(), 2) +
-                                     " ms · style en " + juce::String(lastStyleMs_, 2) + " ms" +
+                                     " notes · " + juce::String(lastGenerationMs(), 2) + " ms · style en " +
+                                     juce::String(lastStyleMs_, 2) + " ms" +
                                      (reading.remote ? " · lu à distance" : " · lu en local"));
             repaint();
         });
@@ -220,13 +247,14 @@ void PianoRollPanel::generateFromPrompt()
 
 void PianoRollPanel::showProposal(const PromptReader::Reading& reading)
 {
-    if (!proposal_.has_value())
+    if (!proposing())
         return;
 
     GenerationPanel::Shown shown;
     shown.sentence = proposalSentence();
     shown.notice = juce::String::fromUTF8(reading.notice.c_str());
-    const auto& ignored = proposal_->interpretation().ignored;
+    const auto& ignored =
+        proposal_.has_value() ? proposal_->interpretation().ignored : rework_->interpretation().ignored;
     if (!ignored.empty())
     {
         shown.unused = juce::String::fromUTF8(u8"Je n'ai pas utilisé :");
@@ -234,25 +262,39 @@ void PianoRollPanel::showProposal(const PromptReader::Reading& reading)
             shown.unused << " " << juce::String::fromUTF8(word.c_str());
     }
     shown.details = proposalLine();
-    shown.rank = proposal_->rank();
-    shown.drawn = proposal_->drawn();
+    shown.rank = variantRank();
+    shown.drawn = proposal_.has_value() ? proposal_->drawn() : rework_->drawn();
     bar_.showProposal(shown);
     lastReading_ = reading;
 }
 
 void PianoRollPanel::showVariant(int delta)
 {
-    if (!proposal_.has_value())
+    if (!proposing())
         return;
 
-    const auto before = proposal_->rank();
-    if (proposal_->shift(delta) == before)
+    const auto before = variantRank();
+    const auto after = proposal_.has_value() ? proposal_->shift(delta) : rework_->shift(delta);
+    if (after == before)
         return;
+    reshow();
+}
 
-    ghosts_ = proposal_->notes();
+void PianoRollPanel::reshow()
+{
+    ghosts_ = proposal_.has_value() ? proposal_->notes() : rework_->notes();
     showProposal(lastReading_);
     listenAgain();
     repaint();
+}
+
+std::optional<PianoRollPanel::Target> PianoRollPanel::target() const
+{
+    if (proposal_.has_value())
+        return Target{proposal_->track(), proposal_->pattern(), proposal_->fromBeats(), proposal_->toBeats()};
+    if (rework_.has_value())
+        return Target{rework_->track(), rework_->pattern(), rework_->fromBeats(), rework_->toBeats()};
+    return std::nullopt;
 }
 
 // --- listening ------------------------------------------------------------------------
@@ -264,11 +306,11 @@ void PianoRollPanel::toggleListening()
         stopListening();
         return;
     }
-    if (!proposal_.has_value())
+    const auto where = target();
+    if (!where.has_value())
         return;
 
-    ListeningHost::Line line{
-        proposal_->track(), proposal_->pattern(), proposal_->fromBeats(), proposal_->toBeats(), ghosts_};
+    ListeningHost::Line line{where->track, where->pattern, where->fromBeats, where->toBeats, ghosts_};
     const auto refused = listening_.listen({line});
     if (!refused.empty())
     {
@@ -289,11 +331,11 @@ void PianoRollPanel::toggleListening()
 
 void PianoRollPanel::listenAgain()
 {
-    if (!listeningHere_ || !proposal_.has_value())
+    const auto where = target();
+    if (!listeningHere_ || !where.has_value())
         return;
 
-    ListeningHost::Line line{
-        proposal_->track(), proposal_->pattern(), proposal_->fromBeats(), proposal_->toBeats(), ghosts_};
+    ListeningHost::Line line{where->track, where->pattern, where->fromBeats, where->toBeats, ghosts_};
     if (!listening_.listen({line}).empty())
         stopListening();
 }
@@ -313,6 +355,7 @@ void PianoRollPanel::closeProposal()
     stopListening();
     reader_.cancel();
     proposal_.reset();
+    rework_.reset();
     ghosts_.clear();
     promptedText_ = {};
     bar_.setVisible(false);
@@ -323,17 +366,19 @@ void PianoRollPanel::closeProposal()
 
 void PianoRollPanel::acceptProposal()
 {
-    if (!proposal_.has_value())
+    const auto where = target();
+    if (!where.has_value())
         return;
 
     // Taken out first: the group below notifies, and a proposal still open
     // then would see its own notes as a change of context and regenerate.
-    auto taken = std::move(*proposal_);
+    auto taken = std::move(proposal_);
+    auto reworked = std::move(rework_);
     closeProposal();
 
     const auto* owner = track();
     const auto* shown = pattern();
-    if (owner == nullptr || shown == nullptr || owner->id != taken.track() || shown->id != taken.pattern())
+    if (owner == nullptr || shown == nullptr || owner->id != where->track || shown->id != where->pattern)
         return;
 
     std::vector<std::unique_ptr<domain::Command>> commands;
@@ -352,7 +397,7 @@ void PianoRollPanel::acceptProposal()
         commands = std::move(opening.commands);
     }
 
-    auto acceptance = taken.accept(state_, row);
+    auto acceptance = taken.has_value() ? taken->accept(state_, row) : reworked->accept(state_, row);
     for (auto& command : acceptance.commands)
         commands.push_back(std::move(command));
     if (commands.empty())
@@ -373,29 +418,27 @@ void PianoRollPanel::acceptProposal()
 
 void PianoRollPanel::refreshProposal()
 {
-    if (!proposal_.has_value())
+    const auto where = target();
+    if (!where.has_value())
         return;
 
     // Another row or another pattern on screen: the proposal was for the one
     // that left.
     const auto* owner = track();
     const auto* shown = pattern();
-    if (owner == nullptr || shown == nullptr || owner->id != proposal_->track() ||
-        shown->id != proposal_->pattern())
+    if (owner == nullptr || shown == nullptr || owner->id != where->track || shown->id != where->pattern)
     {
         closeProposal();
         return;
     }
 
-    switch (proposal_->refresh(state_))
+    switch (proposal_.has_value() ? proposal_->refresh(state_) : rework_->refresh(state_))
     {
     case GhostProposal::Refresh::closed:
         closeProposal();
         return;
     case GhostProposal::Refresh::regenerated:
-        ghosts_ = proposal_->notes();
-        showProposal(lastReading_);
-        listenAgain();
+        reshow();
         juce::Logger::writeToLog("generation: context changed, regenerated");
         break;
     case GhostProposal::Refresh::unchanged:
@@ -410,14 +453,20 @@ double PianoRollPanel::lastGenerationMs() const noexcept
 
 juce::String PianoRollPanel::proposalLine() const
 {
-    if (!proposal_.has_value())
+    if (!proposing())
         return {};
 
-    auto line = juce::String::fromUTF8(domain::generation::describe(proposal_->constraints()).c_str());
-    line << juce::String::fromUTF8(" · variante ") << (proposal_->rank() + 1) << "/" << proposal_->drawn();
+    const auto& constraints = proposal_.has_value() ? proposal_->constraints() : rework_->constraints();
+    auto line = juce::String::fromUTF8(domain::generation::describe(constraints).c_str());
+    if (rework_.has_value())
+        line << juce::String::fromUTF8(" · retouche : ")
+             << juce::String::fromUTF8(std::string{domain::generation::nameOf(rework_->transform())}.c_str())
+             << " (" << static_cast<int>(rework_->source().size()) << " notes)";
+    line << juce::String::fromUTF8(" · variante ") << (variantRank() + 1) << "/"
+         << (proposal_.has_value() ? proposal_->drawn() : rework_->drawn());
     line << juce::String::fromUTF8(" · style : ") << styleLine_;
 
-    const auto& read = proposal_->interpretation();
+    const auto& read = proposal_.has_value() ? proposal_->interpretation() : rework_->interpretation();
     if (!read.ignored.empty())
     {
         line << juce::String::fromUTF8(" · ignoré :");
@@ -431,6 +480,10 @@ juce::String PianoRollPanel::proposalLine() const
 
 juce::String PianoRollPanel::proposalSentence() const
 {
+    // A rework says what it did to the notes, in a musician's words.
+    if (rework_.has_value())
+        return juce::String::fromUTF8(
+            std::string{domain::generation::describe(rework_->transform())}.c_str());
     if (!proposal_.has_value())
         return {};
 
@@ -445,8 +498,8 @@ juce::String PianoRollPanel::proposalSentence() const
 
 std::optional<std::pair<double, double>> PianoRollPanel::shownRange() const
 {
-    if (proposal_.has_value())
-        return std::make_pair(proposal_->fromBeats(), proposal_->toBeats());
+    if (const auto where = target(); where.has_value())
+        return std::make_pair(where->fromBeats, where->toBeats);
     return range_;
 }
 

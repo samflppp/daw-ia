@@ -19,9 +19,9 @@ namespace daw::app
 namespace
 {
 
-// What generation.interpret answered, as the S14 contract reads it.
-[[nodiscard]] domain::Result<domain::generation::Interpretation>
-interpretationOf(const domain::Value& message)
+// What generation.interpret answered: an interpretation in the S14 contract,
+// and, for notes to rework, the transformation asked for.
+[[nodiscard]] domain::Result<ui::PromptReader::Reading> readingOf(const domain::Value& message)
 {
     if (const auto* failure = message.find("error"); failure != nullptr && !failure->isNull())
     {
@@ -42,7 +42,15 @@ interpretationOf(const domain::Value& message)
     const auto* interpretation = result->find("interpretation");
     if (interpretation == nullptr)
         return domain::fail(domain::ErrorCode::invalidPayload, "no interpretation");
-    return domain::generation::Interpretation::fromValue(*interpretation);
+    auto read = domain::generation::Interpretation::fromValue(*interpretation);
+    if (!read)
+        return read.error();
+
+    ui::PromptReader::Reading out;
+    out.interpretation = std::move(read).value();
+    if (const auto name = result->stringAt("transform"); name)
+        out.transform = domain::generation::transformNamed(name.value());
+    return out;
 }
 
 } // namespace
@@ -550,14 +558,11 @@ void CopilotBridge::handleAnswer(const Value& message)
         }
         if (read.has_value())
         {
-            auto interpretation = interpretationOf(message);
-            if (!interpretation)
-                juce::Logger::writeToLog("generation: read failed: " +
-                                         juce::String{interpretation.error().message});
+            auto reading = readingOf(message);
+            if (!reading)
+                juce::Logger::writeToLog("generation: read failed: " + juce::String{reading.error().message});
             juce::MessageManager::callAsync(
-                [answered = std::move(read->answered),
-                 ticket = read->ticket,
-                 result = std::move(interpretation)]
+                [answered = std::move(read->answered), ticket = read->ticket, result = std::move(reading)]
                 {
                     if (answered)
                         answered(ticket, result);
