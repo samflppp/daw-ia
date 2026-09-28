@@ -75,9 +75,14 @@ void Verification::addZoneSteps()
 
             const auto first = static_cast<int>(state_.lanes().size()) - 3;
             const auto last = first + 2;
+            // Both corners in sight before either is aimed at: bringing the
+            // second into view must not move the first.
+            static_cast<void>(playlistBeat(last, zone->fromBeats + 4.0 * bar - 0.5));
             static_cast<void>(playlistBeat(first, zone->fromBeats + 0.5));
-            const auto from = playlistBeat(first, zone->fromBeats + 0.5);
             const auto to = playlistBeat(last, zone->fromBeats + 4.0 * bar - 0.5);
+            const auto from = playlistBeat(first, zone->fromBeats + 0.5);
+            check(playlistBeat(last, zone->fromBeats + 4.0 * bar - 0.5) == to,
+                  "les deux coins de la zone sont à l'écran ensemble");
             drag(*view, from, to, false, false, false, true);
 
             check(view->hasZone(), "une zone est dessinée");
@@ -172,9 +177,13 @@ void Verification::addZoneSteps()
             auto laid = 0;
             for (const auto& placement : state_.arrangement())
             {
-                if (std::find(zone->lanes.begin(), zone->lanes.end(), placement.laneId) !=
-                        zone->lanes.end() &&
-                    std::abs(placement.startBeats - zone->fromBeats) < 1e-9)
+                const auto line = std::find(zone->lanes.begin(), zone->lanes.end(), placement.laneId);
+                if (line == zone->lanes.end())
+                    continue;
+                note("bloc sur la ligne " + std::to_string(line - zone->lanes.begin() + 1) + " au temps " +
+                     std::to_string(placement.startBeats) + " (zone au temps " +
+                     std::to_string(zone->fromBeats) + ")");
+                if (std::abs(placement.startBeats - zone->fromBeats) < 1e-9)
                     ++laid;
             }
             check(laid == 3, "un bloc sur chacune des trois lignes, au début de la zone");
