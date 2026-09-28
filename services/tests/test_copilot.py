@@ -461,3 +461,14 @@ def test_the_omnisphere_request_is_one_group_ending_in_one_generation() -> None:
         assert daw.checked
     finally:
         daw.stop()
+
+
+def test_the_model_is_told_that_a_progression_needs_several_bars() -> None:
+    # The generator changes chord once per bar: asked for chords on a pattern of
+    # one bar, it gives one chord. The rule that prevents it lives in the prompt,
+    # since only the model decides the range it generates on.
+    from daw_services.copilot import SYSTEM_PROMPT
+
+    assert "qu'un accord" in SYSTEM_PROMPT
+    assert "pattern.set_length" in SYSTEM_PROMPT
+    assert "lengthBeats 16" in SYSTEM_PROMPT

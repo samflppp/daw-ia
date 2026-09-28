@@ -97,6 +97,12 @@ Règles :
 - {TRANSLATION_RULES}
 - La ligne doit exister avant pattern.generate : crée-la dans la même requête
   (clip.create_midi, ou pattern.add_track) et donne son $new: comme clipId.
+- Le générateur change d'accord à chaque mesure : sur une mesure, il n'y a
+  qu'un accord. Des accords, une basse ou une mélodie se demandent sur une
+  progression : quatre mesures (16 temps en 4/4) sauf si l'utilisateur dit
+  une autre longueur. Un clip.create_midi pour cela a lengthBeats 16 ; un
+  pattern existant plus court s'allonge d'abord avec pattern.set_length, dans
+  la même requête. Ne raccourcis jamais un pattern pour cela.
 - Un instrument se charge avec track.add puis plugin.insert sur cette piste ;
   cherche d'abord le plugin (plugins.search) pour son identifiant exact.
 - Si un appel est refusé par le DAW, le résultat de l'outil le dit : corrige
