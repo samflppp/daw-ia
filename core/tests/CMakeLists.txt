@@ -38,7 +38,9 @@ add_executable(daw_domain_tests
     FormTests.cpp
     GenerationTests.cpp
     GhostProposalTests.cpp
-    LearningTests.cpp)
+    LearningTests.cpp
+    PhraseTests.cpp
+    PromptReaderTests.cpp)
 
 target_link_libraries(daw_domain_tests PRIVATE daw::domain daw::ui_workspace doctest::doctest)
 daw_set_warnings(daw_domain_tests)
