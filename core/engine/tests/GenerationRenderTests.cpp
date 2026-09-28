@@ -1,5 +1,7 @@
 #include "EngineTestSupport.h"
+#include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/generation/Harmony.h"
+#include "daw/domain/serialization/Json.h"
 #include "daw/engine/PitchDetection.h"
 #include "daw/ui/model/GhostProposal.h"
 
@@ -236,4 +238,143 @@ TEST_CASE("An AABA melody is heard as one bar three times and another bar in thi
         CHECK(heardInBar(onsets, 3) == first);
         CHECK(heardInBar(onsets, 2) != first);
     }
+}
+
+// --- S16: listening before writing ----------------------------------------------------
+//
+// The proof is a render, and the state around it. While a proposal is listened
+// to, the render has its attacks and its pitches in the range, and not the
+// notes it would replace; the notes outside the range still sound. The project
+// and the history do not move by one byte. When the listening stops, the
+// render is the one from before.
+
+namespace
+{
+
+Note plain(int pitch, double start, double length)
+{
+    Note out{};
+    out.pitch = pitch;
+    out.velocity = 100;
+    out.startBeats = start;
+    out.lengthBeats = length;
+    return out;
+}
+
+std::set<int> onsetsOf(tracktion::Edit& edit)
+{
+    const auto heard = listen(edit, {});
+    return {heard.onsets.begin(), heard.onsets.end()};
+}
+
+std::string spelled(const std::set<int>& onsets)
+{
+    std::string out;
+    for (const auto onset : onsets)
+        out += std::to_string(onset) + " ";
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("Listening: the proposal is heard in its range, the project and its history do not move, and "
+          "stopping gives the render back")
+{
+    EngineHarness harness;
+    const auto row = ClipId::generate();
+    REQUIRE(harness.bus.execute(harness.createClip(row, 0.0, 16.0)).ok());
+
+    // The person's notes: one before the range, one inside it.
+    auto kept = plain(57, 0.0, 1.0);
+    kept.id = NoteId::generate();
+    auto replaced = plain(64, 8.0, 1.0);
+    replaced.id = NoteId::generate();
+    REQUIRE(harness.bus.execute(std::make_unique<AddNote>(row, kept)).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<AddNote>(row, replaced)).ok());
+
+    const auto before = onsetsOf(harness.host.edit());
+    MESSAGE("before: " << spelled(before));
+    CHECK(before == std::set<int>{0, 32});
+
+    const auto bytes = json::write(harness.state.toValue());
+    const auto depth = harness.bus.undoDepth();
+
+    // Two notes proposed in beats 4 to 12: at 4 and at 6.
+    daw::engine::ProjectProjector::Audition audition{harness.trackId,
+                                                     ProjectState::patternIdForClip(row),
+                                                     4.0,
+                                                     12.0,
+                                                     {plain(67, 4.0, 1.0), plain(69, 6.0, 1.0)}};
+    harness.projector.listen({audition}, 4.0, 12.0);
+    CHECK(harness.projector.listening());
+
+    const std::vector<Note> heardNotes{plain(57, 0.0, 1.0), plain(67, 4.0, 1.0), plain(69, 6.0, 1.0)};
+    const auto heard = listen(harness.host.edit(), heardNotes);
+    const std::set<int> during{heard.onsets.begin(), heard.onsets.end()};
+    MESSAGE("listening: " << spelled(during));
+    CHECK(during == std::set<int>{0, 16, 24}); // the note kept, the two proposed; not the one replaced
+    CHECK(heard.pitches[1] % 12 == 67 % 12);
+    CHECK(heard.pitches[2] % 12 == 69 % 12);
+
+    CHECK(json::write(harness.state.toValue()) == bytes); // the project, to the byte
+    CHECK(harness.bus.undoDepth() == depth);              // no history entry
+
+    // Another variant: the same range, other notes.
+    audition.notes = {plain(72, 10.0, 1.0)};
+    harness.projector.listen({audition}, 4.0, 12.0);
+    CHECK(onsetsOf(harness.host.edit()) == std::set<int>{0, 40});
+
+    harness.projector.stopListening();
+    CHECK_FALSE(harness.projector.listening());
+    CHECK(onsetsOf(harness.host.edit()) == before);
+    CHECK(json::write(harness.state.toValue()) == bytes);
+    CHECK(harness.bus.undoDepth() == depth);
+}
+
+TEST_CASE("Listening: a row the proposal would open is heard, and leaves with the listening")
+{
+    EngineHarness harness;
+    const auto row = ClipId::generate();
+    REQUIRE(harness.bus.execute(harness.createClip(row, 0.0, 16.0)).ok());
+    const auto pattern = ProjectState::patternIdForClip(row);
+
+    // A second channel, with no row in the pattern yet.
+    const auto lead = TrackId::generate();
+    REQUIRE(harness.bus.execute(std::make_unique<AddTrack>(lead, "Lead", 0.0)).ok());
+    REQUIRE(harness.state.findPattern(pattern)->findClipForTrack(lead) == nullptr);
+    const auto bytes = json::write(harness.state.toValue());
+
+    CHECK(onsetsOf(harness.host.edit()).empty());
+
+    harness.projector.listen(
+        {{lead, pattern, 0.0, 16.0, {plain(60, 2.0, 1.0), plain(62, 3.0, 1.0)}}}, 0.0, 16.0);
+    CHECK(onsetsOf(harness.host.edit()) == std::set<int>{8, 12});
+    CHECK(harness.state.findPattern(pattern)->findClipForTrack(lead) == nullptr);
+
+    harness.projector.stopListening();
+    CHECK(onsetsOf(harness.host.edit()).empty());
+    CHECK(json::write(harness.state.toValue()) == bytes);
+}
+
+TEST_CASE("Listening: a transport command ends it, and the project is what plays")
+{
+    EngineHarness harness;
+    const auto row = ClipId::generate();
+    REQUIRE(harness.bus.execute(harness.createClip(row, 0.0, 16.0)).ok());
+    auto note = plain(60, 0.0, 1.0);
+    note.id = NoteId::generate();
+    REQUIRE(harness.bus.execute(std::make_unique<AddNote>(row, note)).ok());
+
+    int ended = 0;
+    harness.projector.onListeningEnded = [&ended] { ++ended; };
+    harness.projector.listen(
+        {{harness.trackId, ProjectState::patternIdForClip(row), 0.0, 16.0, {plain(65, 4.0, 1.0)}}},
+        0.0,
+        16.0);
+    CHECK(onsetsOf(harness.host.edit()) == std::set<int>{16});
+
+    REQUIRE(harness.bus.execute(std::make_unique<TransportStop>()).ok());
+    CHECK_FALSE(harness.projector.listening());
+    CHECK(ended == 1);
+    CHECK(onsetsOf(harness.host.edit()) == std::set<int>{0});
 }

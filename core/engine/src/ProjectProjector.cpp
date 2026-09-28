@@ -5,6 +5,7 @@
 #include "daw/engine/MeterTap.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -78,6 +79,25 @@ ProjectProjector::ProjectProjector(tracktion::Edit& edit,
 
 bool ProjectProjector::applyTransport(const domain::Receipt& receipt)
 {
+    const bool transport = receipt.type == domain::TransportPlay::commandType ||
+                           receipt.type == domain::TransportStop::commandType ||
+                           receipt.type == domain::TransportSetPosition::commandType ||
+                           receipt.type == domain::TransportSetLoop::commandType ||
+                           receipt.type == domain::TransportSetMode::commandType;
+    if (!transport)
+        return false;
+
+    // The person asked for the project: whatever was listened to leaves
+    // first, and the command then applies to the project as it is.
+    if (listening())
+    {
+        auditions_.clear();
+        listenLoop_.reset();
+        reconcile();
+        if (onListeningEnded)
+            onListeningEnded();
+    }
+
     // The transport is not project state: it is never serialized, never
     // undone, and the engine moves it on its own. It is therefore driven by
     // the commands themselves and never by a reconciliation, which is also
@@ -158,6 +178,44 @@ void ProjectProjector::onRedone(const domain::Receipt& receipt)
 {
     static_cast<void>(receipt);
     reconcile();
+}
+
+void ProjectProjector::listen(std::vector<Audition> auditions, double loopStartBeats, double loopEndBeats)
+{
+    constexpr double epsilon = 1e-9;
+    const bool moved = !listenLoop_.has_value() || std::abs(listenLoop_->first - loopStartBeats) > epsilon ||
+                       std::abs(listenLoop_->second - loopEndBeats) > epsilon;
+
+    auditions_ = std::move(auditions);
+    listenLoop_ = std::make_pair(loopStartBeats, loopEndBeats);
+    reconcile(); // only the rows listened to are rewritten
+    reconcileLoop(true);
+
+    auto& engineTransport = edit_.getTransport();
+    if (moved || !engineTransport.isPlaying())
+        transport_.setPosition(loopStartBeats);
+    if (!engineTransport.isPlaying())
+        transport_.play();
+}
+
+void ProjectProjector::stopListening()
+{
+    if (!listening())
+        return;
+
+    auditions_.clear();
+    listenLoop_.reset();
+    reconcile();
+    reconcileLoop(true);
+
+    // Where the domain says the transport is. It plays only if the person had
+    // it playing before listening.
+    const auto& transport = state_.transport();
+    if (!transport.playing)
+    {
+        transport_.stop();
+        transport_.setPosition(transport.positionBeats);
+    }
 }
 
 tracktion::AudioTrack* ProjectProjector::findTrack(const domain::TrackId& id, bool companion) const
@@ -759,7 +817,11 @@ struct LaidOutRow
     std::string key;
     double startBeats{0.0};
     double lengthBeats{0.0};
-    const domain::Clip* row{nullptr};
+    domain::PatternId pattern;
+
+    // The row's notes, or, while it is listened to, what Tab would leave in
+    // it. A copy: a listened row has no Clip in the state to point at.
+    std::vector<domain::Note> notes;
 };
 
 // Every clip a track plays, in a fixed order, and what depends on the mode.
@@ -776,7 +838,28 @@ struct LaidOutRow
 //
 // The order is the patterns' own, then the placements' by beat, so two runs on
 // the same state lay the same thing down.
-[[nodiscard]] std::vector<LaidOutRow> laidOutRows(const domain::ProjectState& state, domain::TrackId trackId)
+// The notes Tab would leave in a row: those outside the range, and the
+// proposed ones, in time order.
+void replaceRange(std::vector<domain::Note>& notes, const ProjectProjector::Audition& audition)
+{
+    constexpr double epsilon = 1e-9;
+    notes.erase(std::remove_if(notes.begin(),
+                               notes.end(),
+                               [&audition](const domain::Note& note) {
+                                   return note.startBeats >= audition.fromBeats - epsilon &&
+                                          note.startBeats < audition.toBeats - epsilon;
+                               }),
+                notes.end());
+    notes.insert(notes.end(), audition.notes.begin(), audition.notes.end());
+    std::stable_sort(notes.begin(),
+                     notes.end(),
+                     [](const domain::Note& lhs, const domain::Note& rhs)
+                     { return lhs.startBeats < rhs.startBeats; });
+}
+
+[[nodiscard]] std::vector<LaidOutRow> laidOutRows(const domain::ProjectState& state,
+                                                  domain::TrackId trackId,
+                                                  const std::vector<ProjectProjector::Audition>& auditions)
 {
     std::vector<LaidOutRow> rows;
     const auto& transport = state.transport();
@@ -788,23 +871,71 @@ struct LaidOutRow
             return rows;
 
         if (const auto* row = pattern->findClipForTrack(trackId); row != nullptr)
-            rows.push_back(LaidOutRow{"audition:" + row->id.toString(), 0.0, pattern->lengthBeats, row});
+            rows.push_back(LaidOutRow{
+                "audition:" + row->id.toString(), 0.0, pattern->lengthBeats, pattern->id, row->notes});
+    }
+    else
+    {
+        for (const auto& pattern : state.patterns())
+        {
+            const auto* row = pattern.findClipForTrack(trackId);
+            if (row == nullptr)
+                continue;
 
-        return rows;
+            for (const auto* placement : state.placementsOf(pattern.id))
+            {
+                rows.push_back(LaidOutRow{placement->id.toString() + ":" + row->id.toString(),
+                                          placement->startBeats,
+                                          pattern.lengthBeats,
+                                          pattern.id,
+                                          row->notes});
+            }
+        }
     }
 
-    for (const auto& pattern : state.patterns())
+    // What is listened to. A row that exists keeps its key, so only its notes
+    // are rewritten; a row the proposal would open gets clips of its own,
+    // keyed apart, that leave with the listening.
+    for (const auto& audition : auditions)
     {
-        const auto* row = pattern.findClipForTrack(trackId);
-        if (row == nullptr)
+        if (audition.track != trackId)
             continue;
 
-        for (const auto* placement : state.placementsOf(pattern.id))
+        bool found = false;
+        for (auto& laid : rows)
         {
-            rows.push_back(LaidOutRow{placement->id.toString() + ":" + row->id.toString(),
-                                      placement->startBeats,
-                                      pattern.lengthBeats,
-                                      row});
+            if (laid.pattern != audition.pattern)
+                continue;
+            found = true;
+            replaceRange(laid.notes, audition);
+        }
+        if (found)
+            continue;
+
+        const auto* pattern = state.findPattern(audition.pattern);
+        if (pattern == nullptr)
+            continue;
+
+        const auto key = "listen:" + trackId.toString() + ":";
+        if (transport.mode == domain::PlayMode::pattern)
+        {
+            if (transport.auditionedPattern == audition.pattern)
+                rows.push_back(
+                    LaidOutRow{key + pattern->id.toString(), 0.0, pattern->lengthBeats, pattern->id, {}});
+        }
+        else
+        {
+            for (const auto* placement : state.placementsOf(pattern->id))
+                rows.push_back(LaidOutRow{key + placement->id.toString(),
+                                          placement->startBeats,
+                                          pattern->lengthBeats,
+                                          pattern->id,
+                                          {}});
+        }
+        for (auto& laid : rows)
+        {
+            if (laid.pattern == audition.pattern && laid.notes.empty() && laid.key.rfind(key, 0) == 0)
+                replaceRange(laid.notes, audition);
         }
     }
 
@@ -833,16 +964,16 @@ struct LaidOutRow
     return "audio:" + clip.id.toString();
 }
 
-[[nodiscard]] domain::Value notesValue(const domain::Clip& row)
+[[nodiscard]] domain::Value notesValue(const std::vector<domain::Note>& row)
 {
     domain::Value::Array notes;
-    notes.reserve(row.notes.size());
-    for (const auto& note : row.notes)
+    notes.reserve(row.size());
+    for (const auto& note : row)
         notes.push_back(note.toValue());
     return domain::Value::array(std::move(notes));
 }
 
-void writeNotes(tracktion::MidiClip& clip, const domain::Clip& row)
+void writeNotes(tracktion::MidiClip& clip, const std::vector<domain::Note>& row)
 {
     auto& sequence = clip.getSequence();
     sequence.clear(nullptr);
@@ -850,7 +981,7 @@ void writeNotes(tracktion::MidiClip& clip, const domain::Clip& row)
     // Note positions are relative to the clip, the way Tracktion stores them
     // and the way the domain defines them: a note is written once in the
     // pattern and lands at every placement of it.
-    for (const auto& note : row.notes)
+    for (const auto& note : row)
     {
         sequence.addNote(note.pitch,
                          tracktion::BeatPosition::fromBeats(note.startBeats),
@@ -867,12 +998,12 @@ domain::Value ProjectProjector::playedValue(domain::TrackId trackId) const
 {
     domain::Value::Array entries;
 
-    for (const auto& laid : laidOutRows(state_, trackId))
+    for (const auto& laid : laidOutRows(state_, trackId, auditions_))
     {
         entries.push_back(domain::Value::object({{"key", domain::Value{laid.key}},
                                                  {"startBeats", domain::Value{laid.startBeats}},
                                                  {"lengthBeats", domain::Value{laid.lengthBeats}},
-                                                 {"notes", notesValue(*laid.row)}}));
+                                                 {"notes", notesValue(laid.notes)}}));
     }
 
     for (const auto* clip : laidOutAudio(state_, trackId))
@@ -888,7 +1019,7 @@ domain::Value ProjectProjector::playedValue(domain::TrackId trackId) const
 
 void ProjectProjector::reconcileClips(tracktion::AudioTrack& target, domain::TrackId trackId, bool retimed)
 {
-    const auto wanted = laidOutRows(state_, trackId);
+    const auto wanted = laidOutRows(state_, trackId, auditions_);
 
     const auto isWanted = [&wanted](const juce::String& key)
     {
@@ -923,7 +1054,7 @@ void ProjectProjector::reconcileClips(tracktion::AudioTrack& target, domain::Tra
                                          tracktion::BeatDuration::fromBeats(laid.lengthBeats)};
         const auto time = edit_.tempoSequence.toTime(beats);
 
-        auto notes = notesValue(*laid.row);
+        auto notes = notesValue(laid.notes);
 
         const auto found = std::find_if(
             existing.begin(), existing.end(), [&key](const auto& entry) { return entry.first == key; });
@@ -942,7 +1073,7 @@ void ProjectProjector::reconcileClips(tracktion::AudioTrack& target, domain::Tra
                 continue;
 
             created->state.setProperty(domainClipKeyProperty, key, nullptr);
-            writeNotes(*created, *laid.row);
+            writeNotes(*created, laid.notes);
             ++stats_.clipsInserted;
 
             if (remembered == projectedClips_.end())
@@ -971,7 +1102,7 @@ void ProjectProjector::reconcileClips(tracktion::AudioTrack& target, domain::Tra
 
         if (!(remembered->notes == notes))
         {
-            writeNotes(clip, *laid.row);
+            writeNotes(clip, laid.notes);
             remembered->notes = std::move(notes);
             ++stats_.clipsRewritten;
         }
@@ -1073,7 +1204,7 @@ void ProjectProjector::forgetClipsNotLaidOut()
     std::vector<std::string> keys;
     for (const auto& source : state_.tracks())
     {
-        for (const auto& laid : laidOutRows(state_, source.id))
+        for (const auto& laid : laidOutRows(state_, source.id, auditions_))
             keys.push_back(laid.key);
         for (const auto* clip : laidOutAudio(state_, source.id))
             keys.push_back(audioKey(*clip));
@@ -1104,6 +1235,14 @@ void ProjectProjector::reconcileLoop(bool force)
         looping = pattern != nullptr;
         start = 0.0;
         end = pattern != nullptr ? pattern->lengthBeats : 0.0;
+    }
+
+    // A proposal listened to loops over its own range, whatever the mode.
+    if (listenLoop_.has_value())
+    {
+        looping = true;
+        start = listenLoop_->first;
+        end = listenLoop_->second;
     }
 
     auto wanted = domain::Value::object(
