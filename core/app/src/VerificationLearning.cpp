@@ -199,6 +199,9 @@ void Verification::addLearningSteps()
 
             static_cast<void>(panel->keyPressed(juce::KeyPress{'g', juce::ModifierKeys::ctrlModifier, 0}));
             lineSays(ask(), "appris (1 projet, 32 notes)", "la ligne dit d'où vient le style");
+            note("phrase : « " + panel->proposalSentence().toStdString() + " »");
+            check(panel->proposalSentence().contains(juce::String::fromUTF8("dans ton style")),
+                  "la phrase dit « dans ton style »");
             check(panel->lastStyleMs() < 16.0,
                   "le style est bâti en " + juce::String(panel->lastStyleMs(), 2).toStdString() +
                       " ms, sous 16 ms");

@@ -10,6 +10,7 @@
 #include "daw/ui/model/NoteClipboard.h"
 #include "daw/ui/model/PluginHost.h"
 #include "daw/ui/model/ProjectObserver.h"
+#include "daw/ui/model/PromptReader.h"
 #include "daw/ui/model/SampleHost.h"
 #include "daw/ui/model/Selection.h"
 #include "daw/ui/model/TransportClock.h"
@@ -65,6 +66,10 @@ struct PanelServices
 
     // What Ctrl+C took in the piano roll.
     Clipboard& clipboard;
+
+    // How the generation window reads a prompt: the copilot's model, and the
+    // local words when it cannot answer.
+    PromptReader& prompts;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

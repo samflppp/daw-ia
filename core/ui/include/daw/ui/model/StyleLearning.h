@@ -73,6 +73,10 @@ public:
     // What the zone says after "style :", for a role, about the last model.
     [[nodiscard]] std::string describe(domain::generation::Role role) const;
 
+    // The part of that role's style learned from the person's projects, 0 to
+    // 1: what the sentence under the grey notes reads to say "dans ton style".
+    [[nodiscard]] double share(domain::generation::Role role) const;
+
     [[nodiscard]] bool enabled() const noexcept { return enabled_; }
     void setEnabled(bool enabled);
 

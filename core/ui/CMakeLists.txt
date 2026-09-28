@@ -90,6 +90,7 @@ target_sources(daw_ui INTERFACE
     src/panels/TrackListPanel.cpp
     src/panels/PianoRollPanel.cpp
     src/panels/PianoRollGeneration.cpp
+    src/panels/GenerationPanel.cpp
     src/panels/ChannelRackPanel.cpp
     src/panels/PlaylistPanel.cpp
     src/panels/PlaylistTempoLane.cpp

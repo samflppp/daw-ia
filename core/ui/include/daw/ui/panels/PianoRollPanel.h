@@ -3,6 +3,8 @@
 #include "daw/domain/generation/Constraints.h"
 #include "daw/ui/PanelRegistry.h"
 #include "daw/ui/model/GhostProposal.h"
+#include "daw/ui/model/PromptReader.h"
+#include "daw/ui/panels/GenerationPanel.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -43,14 +45,24 @@ namespace daw::ui
 // as in FL's event editor. Its gestures are described in
 // PianoRollVelocityLane.cpp.
 //
-// Generation (S14, PianoRollGeneration.cpp): Shift + drag on the ruler picks a
-// range, Ctrl+G opens a small field above it, and the proposed notes are drawn
-// in grey. Enter generates again, Alt + wheel walks through the variants, Tab
-// writes them as one group from the generator, Escape drops them. Until Tab
-// nothing is written: the proposal is a GhostProposal held by this panel.
+// Generation (S16, PianoRollGeneration.cpp). The zone first: Shift + drag on
+// the ruler picks a range, a Ctrl + drag band picks notes, and with neither the
+// zone is the whole pattern. Then the prompt: the "Générer" button of the
+// header, the chip at the end of a range, or Ctrl+G, open the generation
+// window docked under the panel -- never over the notes. Nothing is proposed
+// until a prompt is written; Enter reads it, the proposal is drawn in grey
+// with a short sentence under it, Alt + wheel or the arrows walk through the
+// variants, Tab or Valider writes them as one group from the generator, Escape
+// drops them. Until then nothing is written: the proposal is a GhostProposal
+// held by this panel.
 class PianoRollPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
 {
 public:
+    // One sixteenth. The grid the beatmaker workspace draws is the grid it
+    // snaps to: a note that lands between two lines it can see is a note the
+    // user has to fight.
+    static constexpr double gridStepBeats = 0.25;
+
     explicit PianoRollPanel(const PanelContext& context);
     ~PianoRollPanel() override;
 
@@ -98,8 +110,15 @@ public:
     {
         return ghosts_;
     }
-    [[nodiscard]] juce::TextEditor& promptField() noexcept { return prompt_; }
+    [[nodiscard]] juce::TextEditor& promptField() noexcept { return bar_.field(); }
+    [[nodiscard]] GenerationPanel& generationBar() noexcept { return bar_; }
+    [[nodiscard]] bool generationOpen() const noexcept { return bar_.isVisible(); }
+    [[nodiscard]] juce::TextButton& generateButton() noexcept { return generate_; }
+
+    // The sentence under the grey notes, in a musician's words.
+    [[nodiscard]] juce::String proposalSentence() const;
     [[nodiscard]] std::optional<std::pair<double, double>> range() const { return range_; }
+    // The technical line, shown folded under "Détails".
     [[nodiscard]] juce::String proposalLine() const;
     [[nodiscard]] double lastGenerationMs() const noexcept;
 
@@ -177,21 +196,6 @@ private:
 
     // --- generation (PianoRollGeneration.cpp)
 
-    // A text field that hands Enter, Tab and Escape to the panel before it
-    // would use them itself: Tab would otherwise move the focus, and Escape
-    // would do nothing at all.
-    class PromptField final : public juce::TextEditor
-    {
-    public:
-        std::function<bool(const juce::KeyPress&)> onKey;
-        bool keyPressed(const juce::KeyPress& key) override
-        {
-            if (onKey && onKey(key))
-                return true;
-            return juce::TextEditor::keyPressed(key);
-        }
-    };
-
     [[nodiscard]] bool generationKey(const juce::KeyPress& key);
     void openPrompt();
     void generateFromPrompt();
@@ -199,19 +203,33 @@ private:
     void acceptProposal();
     void closeProposal();
     void refreshProposal();
-    void placePrompt();
+    void placeBar();
+    void showProposal(const PromptReader::Reading& reading);
     [[nodiscard]] std::optional<std::pair<double, double>> shownRange() const;
+
+    // The zone Ctrl+G generates into: the range on the ruler, else the span of
+    // the picked notes, else the whole pattern.
+    [[nodiscard]] std::pair<double, double> zone() const;
+    [[nodiscard]] bool zoneHasNotes() const;
+
+    // The chip at the end of the range on the ruler, which opens the window.
+    [[nodiscard]] std::optional<juce::Rectangle<int>> rangeChip() const;
     void paintRange(juce::Graphics& g, juce::Rectangle<int> area) const;
     void paintGhosts(juce::Graphics& g, juce::Rectangle<int> area) const;
-    void paintProposalLine(juce::Graphics& g) const;
 
-    PromptField prompt_;
+    // Everything under the header that is not the generation window.
+    [[nodiscard]] juce::Rectangle<int> bodyArea() const;
+
+    GenerationPanel bar_;
+    juce::TextButton generate_;
+    PromptReader& reader_;
     std::optional<GhostProposal> proposal_;
     std::vector<domain::generation::GhostNote> ghosts_;
     juce::String promptedText_;
     juce::String styleLine_;
+    double styleShare_{0.0};
+    PromptReader::Reading lastReading_; // what the proposal on screen was read from
     double lastStyleMs_{0.0};
-    domain::generation::LocalInterpreter interpreter_;
 
     // The range picked on the ruler, in pattern beats, and where the drag
     // that picks it started.

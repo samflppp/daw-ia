@@ -27,7 +27,7 @@ namespace daw::ui
 
 juce::Rectangle<int> PianoRollPanel::velocityArea() const
 {
-    auto area = getLocalBounds();
+    auto area = bodyArea();
     area.removeFromLeft(tokens_.integer("metric.pianoRoll.keyboardWidth"));
     return area.removeFromBottom(tokens_.integer("metric.pianoRoll.velocityLaneHeight"));
 }

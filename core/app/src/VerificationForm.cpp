@@ -70,7 +70,7 @@ void Verification::addFormSteps()
         check(motifOf(notes, from, bar, 2) != first, what + " : la mesure 3 en diffère");
     };
 
-    add("S15 : un canal Lead neuf, Maj + glisser sur quatre mesures, Ctrl+G : « AABA (déduit) »",
+    add("S15 : un canal Lead neuf, Maj + glisser sur quatre mesures, Ctrl+G, « propose » : « AABA (déduit) »",
         [this, roll, aaba]
         {
             press("PAT");
@@ -107,6 +107,8 @@ void Verification::addFormSteps()
             generationDepth_ = depth();
 
             static_cast<void>(panel->keyPressed(juce::KeyPress{'g', juce::ModifierKeys::ctrlModifier, 0}));
+            panel->promptField().setText(juce::String::fromUTF8("propose"), false);
+            static_cast<void>(panel->promptField().keyPressed(juce::KeyPress{juce::KeyPress::returnKey}));
             check(panel->proposing(), "une proposition est à l'écran");
             note(panel->proposalLine().toStdString());
             check(panel->proposalLine().contains(juce::String::fromUTF8("AABA (déduit)")),

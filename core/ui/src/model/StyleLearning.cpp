@@ -252,6 +252,11 @@ std::string StyleLearning::describe(domain::generation::Role role) const
            std::to_string(100 - percent) + " % " + baseOrigin_;
 }
 
+double StyleLearning::share(domain::generation::Role role) const
+{
+    return enabled_ ? domain::generation::learnedShare(total_, role) : 0.0;
+}
+
 void StyleLearning::setEnabled(bool enabled)
 {
     enabled_ = enabled;
