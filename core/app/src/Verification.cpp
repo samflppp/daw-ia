@@ -426,14 +426,20 @@ void Verification::click(juce::Component& target, juce::Point<int> at, bool righ
     target.mouseUp(up);
 }
 
-void Verification::drag(
-    juce::Component& target, juce::Point<int> from, juce::Point<int> to, bool ctrl, bool middle, bool shift)
+void Verification::drag(juce::Component& target,
+                        juce::Point<int> from,
+                        juce::Point<int> to,
+                        bool ctrl,
+                        bool middle,
+                        bool shift,
+                        bool alt)
 {
     auto source = juce::Desktop::getInstance().getMainMouseSource();
     const auto now = juce::Time::getCurrentTime();
     const auto held = juce::ModifierKeys{
         (middle ? juce::ModifierKeys::middleButtonModifier : juce::ModifierKeys::leftButtonModifier) |
-        (ctrl ? juce::ModifierKeys::ctrlModifier : 0) | (shift ? juce::ModifierKeys::shiftModifier : 0)};
+        (ctrl ? juce::ModifierKeys::ctrlModifier : 0) | (shift ? juce::ModifierKeys::shiftModifier : 0) |
+        (alt ? juce::ModifierKeys::altModifier : 0)};
     const auto start = from.toFloat();
 
     const juce::MouseEvent down{source,
@@ -830,6 +836,39 @@ void Verification::buildList()
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(domain::json::write(state_.toValue()) == savedState_,
                   "l'arrangement est identique, à l'octet près");
+        });
+
+    add("S17 : glisser un bloc vers le bas le range sur une nouvelle ligne, sans rien changer au son",
+        [this]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            savedState_ = domain::json::write(state_.toValue());
+            savedDepth_ = depth();
+            const auto before = listen("5c-avant-ligne", 120.0);
+            const auto lines = state_.lanes().size();
+            const auto second = state_.arrangement()[1].id;
+
+            // Straight down, from the line of pattern 1 to the empty one under
+            // it: the block keeps its beat and changes line.
+            drag(*playlist, playlistBeat(0, 18.0), playlistBeat(static_cast<int>(lines), 18.0));
+
+            check(state_.lanes().size() == lines + 1, "une ligne de plus, créée par le glissé");
+            const auto* moved = state_.findPlacement(second);
+            check(moved != nullptr && moved->laneId == state_.lanes().back().id,
+                  "le 2e bloc est sur la nouvelle ligne");
+            check(moved != nullptr && std::abs(moved->startBeats - 16.0) < 1e-9,
+                  "à son temps, 16 : un glissé vertical ne décale pas");
+            check(depth() == savedDepth_ + 1, "la ligne et le glissé : une seule entrée d'historique");
+
+            const auto after = listen("5d-apres-ligne", 120.0);
+            check(after.onsets == before.onsets, "les mêmes attaques aux mêmes pas : une ligne ne sonne pas");
+
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == savedState_,
+                  "Ctrl+Z : la ligne et le bloc reviennent, à l'octet près");
         });
 
     add("un deuxième pattern pour le copilote",
@@ -1267,6 +1306,7 @@ void Verification::buildList()
     addGenerationSteps();
     addFormSteps();
     addLearningSteps();
+    addZoneSteps();
 
     // --- the title bar -----------------------------------------------------------
 

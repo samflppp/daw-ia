@@ -50,7 +50,7 @@ int PlaylistPanel::tempoLaneHeight() const
 
 juce::Rectangle<int> PlaylistPanel::tempoLaneArea() const
 {
-    auto area = getLocalBounds();
+    auto area = bodyArea();
     area.removeFromTop(tokens_.integer("metric.panel.headerHeight") +
                        tokens_.integer("metric.playlist.rulerHeight"));
     area.removeFromLeft(tokens_.integer("metric.playlist.headerWidth"));

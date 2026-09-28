@@ -24,6 +24,7 @@ target_sources(daw_app PRIVATE
     src/VerificationAutomation.cpp
     src/VerificationForm.cpp
     src/VerificationGeneration.cpp
+    src/VerificationZone.cpp
     src/VerificationLearning.cpp
     src/SampleLibrary.cpp
     src/SamplePreview.cpp

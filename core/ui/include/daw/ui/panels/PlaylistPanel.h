@@ -2,9 +2,13 @@
 
 #include "daw/ui/PanelRegistry.h"
 #include "daw/ui/model/PatternPreviews.h"
+#include "daw/ui/model/PromptReader.h"
+#include "daw/ui/model/ZoneProposal.h"
+#include "daw/ui/panels/GenerationPanel.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -12,26 +16,33 @@
 namespace daw::ui
 {
 
-// The playlist: the arrangement, one lane per pattern, then one lane per track
-// that holds audio clips.
-//
-// A pattern lane is a pattern and never a track: a placement carries no track,
-// because the pattern already says on which tracks it sounds. An audio lane is
-// a track, because an audio clip does carry one. Both kinds of lane are
-// derived from the state at paint time; nothing about the screen enters the
-// domain, and a copilot that lays a pattern sees it appear with no code here.
+// The playlist: the arrangement, on free lines the way FL Studio has them,
+// then one lane per automation line.
+// A line is the project's (domain::Lane): the user names it, orders it and
+// files any block on it — a placement or an audio clip. It sounds of nothing:
+// what a block plays is its pattern's tracks or its clip's track, whatever
+// line it is on. Under the last line, one more, empty and unnamed: dropping or
+// laying something there creates the line in the same history entry.
 //
 // The gestures are FL Studio's:
-//   click in a pattern lane    pattern.place, at the bar under the pointer
-//   drop a sample              a new track and an audio.place, at the bar
-//   drag a block               the whole selection moves, one history entry
+//   click on a line            lays a pattern there, at the bar: the one the
+//                              line was made for, else the one being edited
+//   drop a sample              a new track and an audio.place, on the line
+//                              under the pointer, at the bar
+//   drag a block               the whole selection moves, sideways and from
+//                              line to line, one history entry
 //   right-click a block        removes it, or the whole selection
 //   Ctrl + drag on empty       selects every block the rectangle touches
 //   Ctrl + click               adds a block to the selection, or takes it out
 //                              (Ctrl + Shift + click, the S10 gesture, too)
-//   Ctrl+C, Ctrl+V             copies the selection, pastes it at the playhead
-//   Ctrl+B                     duplicates the selection right after itself
+//   Ctrl+C, Ctrl+V             copies the selection, pastes it at the playhead,
+//                              each block on the line it was copied from
+//   Ctrl+B                     duplicates the selection right after itself,
+//                              on the same lines
 //   Delete                     removes the selection
+//   drag a line's name         moves the line, its blocks with it
+//   double-click a line's name renames it; right-click: rename, insert,
+//                              remove, and the pattern the line was made for
 // Placing and moving snap to the bar; Shift snaps to the beat.
 //
 // The view, which is this screen's and never the project's:
@@ -52,9 +63,12 @@ namespace daw::ui
 // lane: FL's tempo automation, drawn as the step line it is. Its gestures are
 // described in PlaylistTempoLane.cpp.
 //
-// Then one lane per automation line, under the audio lane of its track when
-// it has one: the same grammar as the tempo lane, described in
-// PlaylistAutomationLane.cpp.
+// Then one lane per automation line, strip by strip: the same grammar as the
+// tempo lane, described in PlaylistAutomationLane.cpp.
+//
+// Alt + drag over several lines draws a zone of generation (S17): one prompt,
+// a part per line in the role the line's name or content says, heard before it
+// is written and written as one history entry. Described in PlaylistZone.cpp.
 class PlaylistPanel final : public juce::Component,
                             public juce::DragAndDropTarget,
                             public juce::FileDragAndDropTarget,
@@ -133,6 +147,17 @@ public:
     // The line the last request to see one named: its lane is lit.
     [[nodiscard]] domain::AutomationLineId shownAutomation() const noexcept { return shownAutomation_; }
 
+    // --- the zone of generation (PlaylistZone.cpp), read by the verification
+    [[nodiscard]] bool hasZone() const noexcept { return zone_.has_value(); }
+    [[nodiscard]] const ZoneProposal* zoneProposal() const noexcept
+    {
+        return zoneProposal_.has_value() ? &*zoneProposal_ : nullptr;
+    }
+    [[nodiscard]] GenerationPanel& generationBar() noexcept { return bar_; }
+
+    // Opens the window on the zone drawn; Ctrl+G does the same.
+    void openZonePrompt();
+
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
@@ -140,30 +165,33 @@ private:
 
     // --- lanes
     //
-    // The pattern lanes first, then, strip by strip, the audio lane of a
-    // track that holds audio and the automation lanes of that strip. Pattern
-    // lanes being first, a lane below patternLaneCount() is a pattern.
+    // The lines of the project first, in their order; then the empty one that
+    // makes a new line; then, strip by strip, the automation lanes. A lane
+    // below freeLaneCount() is a line of the project.
     struct Lane
     {
         enum class Kind
         {
-            pattern,
-            audio,
+            line,
+            fresh,
             automation
         };
 
-        Kind kind{Kind::pattern};
-        std::size_t pattern{0};
+        Kind kind{Kind::line};
+        domain::LaneId id{};
         domain::TrackId track{};
         domain::AutomationLineId line{};
     };
     [[nodiscard]] std::vector<Lane> lanes() const;
-    [[nodiscard]] int patternLaneCount() const;
-    [[nodiscard]] std::vector<domain::TrackId> audioTracks() const;
+    [[nodiscard]] int freeLaneCount() const;
     [[nodiscard]] int laneCount() const;
-    [[nodiscard]] int laneOfTrack(domain::TrackId trackId) const;
+
+    // What a line is called on screen: its name, or, unnamed, what it was
+    // made for — its pattern or its track, as S16 labelled it — or its rank.
+    [[nodiscard]] juce::String laneLabel(const domain::Lane& lane, int rank) const;
 
     // --- geometry
+    [[nodiscard]] juce::Rectangle<int> bodyArea() const;   // above the generation window
     [[nodiscard]] juce::Rectangle<int> headerArea() const; // the lane names
     [[nodiscard]] juce::Rectangle<int> rulerArea() const;
     [[nodiscard]] juce::Rectangle<int> gridArea() const;
@@ -241,7 +269,8 @@ private:
     [[nodiscard]] std::optional<double> startOf(const Item& item) const;
     [[nodiscard]] double lengthOf(const Item& item) const;
     [[nodiscard]] int laneOf(const Item& item) const;
-    [[nodiscard]] juce::Rectangle<int> bounds(const Item& item, double offsetBeats = 0.0) const;
+    [[nodiscard]] juce::Rectangle<int>
+    bounds(const Item& item, double offsetBeats = 0.0, int laneOffset = 0) const;
     [[nodiscard]] std::optional<Item> itemAt(juce::Point<int> point) const;
     [[nodiscard]] bool isSelected(const Item& item) const;
 
@@ -270,9 +299,39 @@ private:
     void placeAt(int lane, double beats);
     void showLaneMenu(int lane);
     void renamePattern(domain::PatternId patternId);
+    void renameLane(domain::LaneId laneId);
     void dropSample(const juce::File& file, juce::Point<int> at);
 
-    void moveSelection(double offsetBeats);
+    // The line a lane index names, for a command: an existing line, or, on
+    // the fresh lane, a new one whose lane.create goes first in `commands`.
+    // Nothing outside the lines.
+    [[nodiscard]] std::optional<domain::LaneId>
+    lineFor(int lane, std::vector<std::unique_ptr<domain::Command>>& commands) const;
+
+    void moveSelection(double offsetBeats, int laneOffset);
+
+    // --- the zone of generation (PlaylistZone.cpp)
+    struct Zone
+    {
+        int firstLane{0}; // lines of the project, both included
+        int lastLane{0};
+        double fromBeats{0.0};
+        double toBeats{0.0};
+    };
+    [[nodiscard]] std::optional<Zone> zoneBetween(juce::Point<int> from, juce::Point<int> to) const;
+    [[nodiscard]] juce::Rectangle<int> zoneArea(const Zone& zone) const;
+    [[nodiscard]] juce::Rectangle<int> zonePill() const; // « ✦ Générer », at the zone's corner
+    void paintZone(juce::Graphics& g, juce::Rectangle<int> grid) const;
+    bool zoneKey(const juce::KeyPress& key);
+    void generateZone();
+    void showZoneProposal(const PromptReader::Reading& reading);
+    void showZoneVariant(int delta);
+    void acceptZone();
+    void closeZone();
+    void toggleZoneListening();
+    void listenZoneAgain();
+    void stopZoneListening();
+    void placeBar();
     void removeSelection();
     void copySelection();
     void pasteAt(double beats);
@@ -332,9 +391,21 @@ private:
     struct Move
     {
         double grabBeats{0.0};
+        int grabLane{0};
         double offsetBeats{0.0};
+        int laneOffset{0};
     };
     std::optional<Move> move_;
+
+    // A line's name being dragged up or down: one lane.move per line crossed,
+    // merged by the gesture into one history entry.
+    struct LaneDrag
+    {
+        domain::LaneId id{};
+        domain::GestureId gesture{};
+        bool moved{false};
+    };
+    std::optional<LaneDrag> laneDrag_;
 
     // A Ctrl + drag in progress, in panel coordinates.
     std::optional<juce::Rectangle<int>> band_;
@@ -346,6 +417,7 @@ private:
         bool audio{false};
         domain::PatternId patternId{};
         domain::TrackId trackId{};
+        domain::LaneId laneId{};
         std::optional<domain::SampleRef> sample;
         double offsetBeats{0.0};
     };
@@ -374,6 +446,17 @@ private:
 
     // True in a page window, whose title bar names the panel already.
     bool titled_{false};
+
+    // The zone of generation, being drawn or drawn, and what was proposed.
+    PromptReader& reader_;
+    ListeningHost& listening_;
+    GenerationPanel bar_;
+    std::optional<Zone> zone_;
+    std::optional<juce::Point<int>> zoneStart_;
+    std::optional<ZoneProposal> zoneProposal_;
+    PromptReader::Reading lastReading_;
+    juce::String promptedText_;
+    bool listeningHere_{false};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PlaylistPanel)
 };

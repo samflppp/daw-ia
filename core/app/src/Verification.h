@@ -208,6 +208,12 @@ private:
     // person's eighths learned and measured, the save, the menu, forgetting.
     void addLearningSteps();
 
+    // S17: the zone of the playlist over three lines named Accords, Basse and
+    // Mélodie. Alt + drag, Ctrl+G, one prompt; three parts in the roles the
+    // names say, each on its line and its track; heard before being written;
+    // Tab is one entry, and one Ctrl+Z takes the three away.
+    void addZoneSteps();
+
     // A render of the Edit as it plays, kept whole in memory, and its level
     // window by window between two beats of the song: the RMS of each
     // channel, in dB.
@@ -272,7 +278,8 @@ private:
               juce::Point<int> to,
               bool ctrl = false,
               bool middle = false,
-              bool shift = false);
+              bool shift = false,
+              bool alt = false);
 
     // A short burst and silence, as a WAV file: a drum hit an onset detector
     // cannot miss.
