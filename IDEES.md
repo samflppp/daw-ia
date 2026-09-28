@@ -115,3 +115,24 @@ Notés en construisant la fenêtre, l'écoute et les retouches, non construits :
   placement du pattern ; la tête de lecture pourrait choisir celui qu'on regarde.
 - **Des retouches combinées :** « plus sombre et plus calme » ne prend aujourd'hui que la première
   consigne reconnue.
+
+## La playlist et le rangement, après la S17
+
+Notés en construisant les lignes libres, le classifieur de rôle et la zone multi-pistes, non
+construits :
+
+- **Couper le son d'une ligne,** comme FL le fait d'une piste de playlist. La ligne ne sonne pas
+  aujourd'hui, par choix : c'est ce qui garde la projection et l'écoute intactes. Un mute de ligne
+  serait un champ de plus et une règle de projection, à exposer avant.
+- **Les automations en blocs,** rangées sur les lignes comme dans FL. Aujourd'hui ce sont des
+  courbes de paramètre sous les lignes, sur toute la chanson.
+- **Des lignes de couleur et de hauteur choisies.** C'est un état d'écran : il irait dans les
+  préférences de la fenêtre, pas dans le projet.
+- **Lire « fa# mineur » en local.** Le lecteur local lit « F#m » ; la tonalité en toutes lettres
+  passe par le copilote. Le repli hors ligne la perd.
+- **La zone qui crée ses canaux.** Une ligne « Basse » sans piste de basse est laissée de côté,
+  et la fenêtre le dit. Créer le canal, avec un instrument, demanderait un choix de plugin.
+- **Le rôle d'une ligne corrigé à la main** dans la fenêtre de la zone (« non, celle-ci est une
+  nappe »), sans renommer la ligne.
+- **« Ranger le projet » par le copilote seul,** en une requête : il a les outils (lane.*,
+  placement.move avec laneId) et voit les lignes nommées.
