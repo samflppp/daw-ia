@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace daw::ui
 {
@@ -23,6 +24,8 @@ namespace daw::ui
 //   click             the channel the piano roll edits
 //   double-click      rename it
 //   right-click       rename it, or remove it
+//   click a grey name accept the name the channel's preset, sample or notes
+//                     suggest (S17), shown next to a name nobody chose
 // Each is one command or one group: one Ctrl+Z.
 //
 // The step grid it held until S11 is gone, on purpose: two places to write
@@ -73,6 +76,15 @@ public:
         renameItem = 1,
         removeItem = 2
     };
+
+    // The name a channel's own clues suggest, when its name is one nobody
+    // chose (« Piste 3 », the plugin's name): what the preset, the sample or
+    // the notes say it plays. Empty when there is nothing to suggest.
+    // Computed, never stored: the project keeps only the name accepted.
+    [[nodiscard]] std::string suggestedName(const domain::Track& track) const;
+
+    // Where that suggestion is drawn, for the row: a click there accepts it.
+    [[nodiscard]] juce::Rectangle<int> suggestionBounds(int row) const;
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;

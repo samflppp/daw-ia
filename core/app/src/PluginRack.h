@@ -41,6 +41,8 @@ public:
 
     void rescan() override;
 
+    [[nodiscard]] std::string presetName(domain::PluginId pluginId) const override;
+
     // Closes every window, before the Edit that holds the plugins goes.
     void closeAll();
 

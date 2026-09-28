@@ -3,6 +3,7 @@
 #include "daw/domain/Ids.h"
 #include "daw/domain/project/ProjectState.h"
 
+#include <string>
 #include <vector>
 
 namespace daw::ui
@@ -51,6 +52,16 @@ public:
     // Scans the machine again. Long, so it is asked for, never done on its
     // own behind a click the user did not make.
     virtual void rescan() = 0;
+
+    // The preset the plugin says it has loaded (S17), for naming a track.
+    // Empty when it says nothing: many synths show their preset in their own
+    // window only, and a CLAP plugin answers with its own name, which is not
+    // a preset. Read, never stored: the preset lives in the plugin's blob.
+    [[nodiscard]] virtual std::string presetName(domain::PluginId pluginId) const
+    {
+        static_cast<void>(pluginId);
+        return {};
+    }
 };
 
 } // namespace daw::ui

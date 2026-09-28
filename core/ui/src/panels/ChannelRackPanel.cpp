@@ -4,6 +4,7 @@
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
+#include "daw/domain/tidy/Roles.h"
 #include "daw/ui/model/PatternEditing.h"
 
 #include <algorithm>
@@ -97,6 +98,42 @@ juce::String ChannelRackPanel::instrumentName(const domain::Track& track) const
             return juce::String::fromUTF8(plugin.ref.name.c_str());
     }
     return juce::String{u8"synthé intégré"};
+}
+
+std::string ChannelRackPanel::suggestedName(const domain::Track& track) const
+{
+    // Only over a name nobody chose: « Piste 3 », or the instrument's own
+    // name, which says what plays and not what is played.
+    const auto instrument = instrumentName(track).toStdString();
+    if (!domain::tidy::isDefaultName(track.name) && track.name != instrument)
+        return {};
+
+    const domain::tidy::PresetNames presets = [this](domain::TrackId id) -> std::string
+    {
+        const auto* found = state_.findTrack(id);
+        if (found == nullptr)
+            return {};
+        for (const auto& plugin : found->plugins)
+        {
+            if (plugins_.isInstrument(plugin.ref))
+                return plugins_.presetName(plugin.id);
+        }
+        return {};
+    };
+
+    const auto guess = domain::tidy::classifyTrack(state_, track.id, presets);
+    if (guess.family == domain::tidy::Family::unknown || guess.evidence == domain::tidy::Evidence::trackName)
+        return {};
+
+    auto name = domain::tidy::suggestedName(guess.family);
+    return name == track.name ? std::string{} : name;
+}
+
+juce::Rectangle<int> ChannelRackPanel::suggestionBounds(int row) const
+{
+    auto content = channelBounds(row).reduced(tokens_.integer("space.sm"), 0);
+    content.removeFromLeft(tokens_.integer("metric.channelRack.channelWidth"));
+    return content.removeFromRight(tokens_.integer("metric.channelRack.channelWidth"));
 }
 
 // --- painting ---------------------------------------------------------------
@@ -198,6 +235,18 @@ void ChannelRackPanel::paintChannels(juce::Graphics& g, juce::Rectangle<int> are
         g.setColour(tokens_.colour("color.text.tertiary"));
         g.setFont(lookAndFeel_.typography().sans("font.size.micro", "font.weight.regular"));
         g.drawText(instrumentName(track), content, juce::Justification::centredLeft, true);
+
+        // A name to accept, in grey, like a proposal: nothing is written
+        // until it is clicked.
+        if (const auto suggestion = suggestedName(track); !suggestion.empty())
+        {
+            g.setColour(tokens_.colour("color.note.ghost"));
+            g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
+            g.drawText(juce::String::fromUTF8(u8"→ ") + juce::String::fromUTF8(suggestion.c_str()),
+                       suggestionBounds(static_cast<int>(index)),
+                       juce::Justification::centredRight,
+                       true);
+        }
     }
 
     g.restoreState();
@@ -214,6 +263,15 @@ void ChannelRackPanel::mouseDown(const juce::MouseEvent& event)
     if (event.mods.isRightButtonDown())
     {
         showChannelMenu(row);
+        return;
+    }
+
+    // The grey name, accepted: one track.rename, one Ctrl+Z.
+    const auto& track = state_.tracks()[static_cast<std::size_t>(row)];
+    if (const auto suggestion = suggestedName(track);
+        !suggestion.empty() && suggestionBounds(row).contains(event.getPosition()))
+    {
+        static_cast<void>(bus_.execute(std::make_unique<domain::RenameTrack>(track.id, suggestion)));
         return;
     }
 

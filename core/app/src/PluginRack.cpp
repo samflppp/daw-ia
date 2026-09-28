@@ -123,6 +123,21 @@ void PluginRack::rescan()
         juce::Logger::writeToLog("plugin list not saved: " + juce::String(saved.error().message));
 }
 
+std::string PluginRack::presetName(domain::PluginId pluginId) const
+{
+    auto* external = dynamic_cast<tracktion::ExternalPlugin*>(find(pluginId));
+    auto* instance = external != nullptr ? external->getAudioPluginInstance() : nullptr;
+    if (instance == nullptr || instance->getNumPrograms() <= 0)
+        return {};
+
+    // A plugin that answers with its own name says nothing about its preset:
+    // a CLAP plugin here, and a VST3 without a program list.
+    const auto program = instance->getProgramName(instance->getCurrentProgram()).trim();
+    if (program.isEmpty() || program == instance->getName())
+        return {};
+    return program.toStdString();
+}
+
 void PluginRack::closeAll()
 {
     windows_.clear();
