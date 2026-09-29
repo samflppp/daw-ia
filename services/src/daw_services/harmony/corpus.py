@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from daw_services.harmony import midi
-from daw_services.harmony.theory import Key, detect_chord, detect_key, diatonic_index, parse_key
+from daw_services.harmony.theory import Key, degree_index, detect_chord, detect_key, parse_key
 
 FORMAT = "daw-ia.style"
 VERSION = 1
@@ -227,7 +227,7 @@ def count_line(
         if role == "rhythm":
             continue
 
-        index = diatonic_index(event.pitch, key)
+        index = degree_index(event.pitch, key)
         if index is None:
             report.out_of_key += 1
             continue

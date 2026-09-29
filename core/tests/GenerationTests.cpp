@@ -1,9 +1,11 @@
 #include "daw/domain/generation/Constraints.h"
 #include "daw/domain/generation/Generator.h"
 #include "daw/domain/generation/Harmony.h"
+#include "daw/domain/generation/Learning.h"
 #include "daw/domain/generation/StyleModel.h"
 #include "daw/domain/serialization/Json.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -202,6 +204,37 @@ TEST_CASE("a diatonic index and its pitch are the two sides of one thing")
     }
     CHECK(inScale(69, aMinor));
     CHECK_FALSE(inScale(68, aMinor)); // G#: harmonic minor is not in the scale
+}
+
+TEST_CASE("the rules accept the raised seventh of the minor, and the generator does not write it")
+{
+    // The cases test_corpus.py pins for degree_index.
+    const Key aMinor{9, Mode::minor};
+    const Key cMajor{0, Mode::major};
+    for (int pitch = 0; pitch <= 127; ++pitch)
+    {
+        const auto fromTonic = ((pitch - 9) % 12 + 12) % 12;
+        CHECK(isLegal(pitch, aMinor) == (inScale(pitch, aMinor) || fromTonic == 11));
+    }
+    CHECK(degreeIndex(68, aMinor) == diatonicIndex(67, aMinor)); // G# is the seventh degree
+    CHECK_FALSE(diatonicIndex(68, aMinor).has_value());          // the generator's scale does not change
+    CHECK_FALSE(isLegal(66, aMinor));                            // F#: the melodic minor is not in the rule
+    CHECK_FALSE(isLegal(70, cMajor));                            // Bb: nothing raised in major
+    CHECK(degreeIndex(71, cMajor) == diatonicIndex(71, cMajor));
+
+    const auto legal = legalPitches(aMinor, 0, 127);
+    CHECK(std::find(legal.begin(), legal.end(), 68) == legal.end());
+}
+
+TEST_CASE("a raised seventh someone wrote is counted, not refused")
+{
+    const Key aMinor{9, Mode::minor};
+    RoleCounts counts;
+    countLine(counts, {{0, 4, 69, 100}, {4, 4, 68, 100}, {8, 4, 69, 100}}, aMinor, 16, Role::melody);
+
+    CHECK(counts.tables.degree["s"][6] == doctest::Approx(1.0));
+    CHECK(counts.tables.interval[""][-1] == doctest::Approx(1.0));
+    CHECK(counts.tables.interval[""][1] == doctest::Approx(1.0));
 }
 
 TEST_CASE("the key and the chords are read from what sounds")

@@ -62,6 +62,19 @@ def diatonic_index(pitch: int, key: Key) -> int | None:
     return octave * 7 + key.scale.index(within)
 
 
+def degree_index(pitch: int, key: Key) -> int | None:
+    """The rules that judge a written note: the scale, plus in minor the raised
+    seventh of the harmonic minor (the G# of A minor), counted as the seventh
+    degree. The generator writes the natural scale. Mirrors degreeIndex in
+    Harmony.cpp."""
+    index = diatonic_index(pitch, key)
+    if index is not None:
+        return index
+    if key.minor and (pitch - key.tonic) % 12 == 11:
+        return diatonic_index(pitch - 1, key)
+    return None
+
+
 def _correlation(heard: list[float], profile: tuple[float, ...], tonic: int) -> float:
     mean_heard = sum(heard) / 12
     mean_profile = sum(profile) / 12

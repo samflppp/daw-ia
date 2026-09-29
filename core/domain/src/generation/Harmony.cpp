@@ -107,6 +107,24 @@ bool inScale(int pitch, Key key) noexcept
     return diatonicIndex(pitch, key).has_value();
 }
 
+std::optional<int> degreeIndex(int pitch, Key key) noexcept
+{
+    if (const auto index = diatonicIndex(pitch, key); index.has_value())
+        return index;
+
+    // A semitone under the tonic, in minor: the leading tone. The natural
+    // seventh sits a tone under, so the pitch below it is in the scale.
+    const auto fromTonic = ((pitch - key.tonic) % semitones + semitones) % semitones;
+    if (key.mode == Mode::minor && fromTonic == semitones - 1)
+        return diatonicIndex(pitch - 1, key);
+    return std::nullopt;
+}
+
+bool isLegal(int pitch, Key key) noexcept
+{
+    return degreeIndex(pitch, key).has_value();
+}
+
 std::vector<int> legalPitches(Key key, int low, int high)
 {
     std::vector<int> out;

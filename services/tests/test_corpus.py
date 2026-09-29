@@ -10,7 +10,7 @@ import pytest
 
 from daw_services.__main__ import main
 from daw_services.harmony import corpus, midi
-from daw_services.harmony.theory import Key, detect_chord, detect_key, diatonic_index, parse_key
+from daw_services.harmony.theory import Key, degree_index, detect_chord, detect_key, diatonic_index, parse_key
 
 FIXTURE = Path(__file__).parent / "fixtures" / "style-small.json"
 PPQ = 96
@@ -126,6 +126,32 @@ def test_the_rules_agree_with_the_generator() -> None:
     assert parse_key("F#m") == Key(6, True)
     assert parse_key("Bb") == Key(10, False)
     assert parse_key("sombre") is None
+
+
+def test_the_rules_accept_the_raised_seventh_of_the_minor() -> None:
+    # The cases GenerationTests.cpp pins for degreeIndex.
+    a_minor = Key(9, True)
+    c_major = Key(0, False)
+    for pitch in range(128):
+        index = degree_index(pitch, a_minor)
+        assert (index is not None) == ((pitch - 9) % 12 in (0, 2, 3, 5, 7, 8, 10, 11))
+    assert degree_index(68, a_minor) == diatonic_index(67, a_minor)  # G# is the seventh degree
+    assert diatonic_index(68, a_minor) is None  # the generator's scale does not change
+    assert degree_index(66, a_minor) is None  # F#: the melodic minor is not in the rule
+    assert degree_index(70, c_major) is None  # Bb: nothing raised in major
+    assert degree_index(71, c_major) == diatonic_index(71, c_major)
+
+
+def test_a_raised_seventh_is_counted_not_refused() -> None:
+    a_minor = Key(9, True)
+    tables, report = corpus.Tables(), corpus.Report()
+    events = [corpus.Event(0, 4, 69, 100), corpus.Event(4, 4, 68, 100), corpus.Event(8, 4, 69, 100)]
+    corpus.count_line(tables, events, a_minor, 16, report, "melody")
+    assert report.out_of_key == 0
+    assert report.in_key == 3
+    assert tables.degree["s"][6] == 1
+    assert tables.interval[""][-1] == 1
+    assert tables.interval[""][1] == 1
 
 
 # --- the pipeline -------------------------------------------------------------------

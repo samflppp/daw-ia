@@ -37,6 +37,15 @@ inline constexpr double stepBeats = 1.0 / stepsPerBeat;
 [[nodiscard]] std::optional<int> diatonicIndex(int pitch, Key key) noexcept;
 [[nodiscard]] int pitchOfIndex(int index, Key key) noexcept;
 
+// The rules that judge a note someone wrote. In minor they also accept the
+// raised seventh of the harmonic minor (the G# of A minor), which drill and
+// trap live on: it is counted as the seventh degree, the one it raises. Only
+// what is read changes; the generator writes the natural scale, through
+// diatonicIndex and legalPitches, as it always has. Mirrored by
+// degree_index in theory.py.
+[[nodiscard]] std::optional<int> degreeIndex(int pitch, Key key) noexcept;
+[[nodiscard]] bool isLegal(int pitch, Key key) noexcept;
+
 // Every pitch of the key between low and high, both included, ascending.
 [[nodiscard]] std::vector<int> legalPitches(Key key, int low, int high);
 

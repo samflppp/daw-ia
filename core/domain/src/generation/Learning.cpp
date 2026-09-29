@@ -397,7 +397,7 @@ void countLine(RoleCounts& counts, const std::vector<LineEvent>& events, Key key
         if (role == Role::rhythm)
             continue;
 
-        const auto index = diatonicIndex(event.pitch, key);
+        const auto index = degreeIndex(event.pitch, key);
         if (!index.has_value())
             continue;
 
