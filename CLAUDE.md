@@ -11,6 +11,10 @@ mixage, routage et paramètres via le Command Bus ; un moteur génératif (à ve
 l'audio par le même bus. Windows est la seule cible produit. Projet mené en solo, en incubateur, vers un
 comité en mars 2027, sur un plan de 26 semaines dont chaque semaine ferme sur un bilan dans `docs/`.
 
+**Cap actuel.** Jalon go/no-go atteint en S8. S18–S19 : ergonomie (zoom continu sur une seule toile
+playlist/piano-roll, grammaire de navigation unique). Ensuite, d'autres fonctionnalités d'IA, puis le
+fine-tune du modèle. Plus aucun verbe ajouté au domaine sans une raison de démonstration.
+
 ## 2. Décisions d'architecture acquises — ne jamais rouvrir
 
 | Décision | Semaine | Pourquoi |
