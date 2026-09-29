@@ -223,8 +223,17 @@ Sur `main`, compilée chez toi, avec carte son et clé d'API.
 7. **Le nom par le preset.** Un canal sur un VST3 dont le preset s'appelle « … Bass … », nom par défaut :
    « → Basse » doit apparaître en gris dans le channel rack. Dis-moi quels synthés annoncent leur preset.
 
-## 11. Reste à faire
+## 11. Après le bilan : un seul accord au lieu d'une progression
 
+Ton premier essai sur ta machine : « fais des accords triste sur le omnisphere » donnait **un seul accord** tenu.
+Le générateur change d'accord à chaque mesure, et le copilote avait généré sur un pattern d'**une** mesure, la
+longueur par défaut. Le moteur n'était pas en cause. Le copilote allonge maintenant le pattern à quatre mesures
+(`pattern.set_length`, ou `clip.create_midi` de 16 temps) avant de générer, sauf longueur demandée (`e707259`, un
+test Python, cassé une fois). Ton écoute : quatre mesures en la mineur, « ça sonne bien triste ».
+
+## 12. Reste à faire
+
+- La zone multi-pistes à l'oreille (§10, étapes 4 à 6) : le test le plus important, pas encore fait.
 - Ton écoute (§10), et les vérifications de l'application sur ta machine, avec carte son et copilote.
 - « Ranger le projet » (§6), si tu le veux toujours comme geste.
 - Le bug intermittent : il ne s'est pas présenté cette semaine.
