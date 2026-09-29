@@ -2,6 +2,7 @@
 #include "daw/domain/commands/AutomationCommands.h"
 #include "daw/domain/commands/MixCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
+#include "daw/domain/commands/TransportCommands.h"
 #include "daw/ui/model/AutomationEditing.h"
 
 #include <cmath>
@@ -87,4 +88,45 @@ TEST_CASE("a wheel notch lands on a round value, and never outside the range")
 
     CHECK(automationEditing::stepCurve(0.0, 1) == doctest::Approx(0.1));
     CHECK(automationEditing::stepCurve(0.95, 2) == doctest::Approx(1.0));
+}
+
+TEST_CASE("a slider shows the curve while the song plays, and the project otherwise")
+{
+    Harness harness;
+    REQUIRE(harness.bus.execute(harness.setVolume(-3.0)).ok());
+    const auto target = AutomationTarget::volumeOf(harness.trackId);
+
+    // No line yet: the project, playing or not.
+    CHECK(automationEditing::shownValue(harness.state, target, true, 2.0) == doctest::Approx(-3.0));
+
+    // An empty line drives nothing.
+    const auto lineId = automationEditing::open(harness.bus, harness.state, target);
+    REQUIRE_FALSE(lineId.isNil());
+    CHECK(automationEditing::shownValue(harness.state, target, true, 2.0) == doctest::Approx(-3.0));
+
+    for (const auto& [beats, value] : {std::pair{0.0, 0.0}, std::pair{8.0, -40.0}})
+    {
+        AutomationPoint point{};
+        point.id = AutomationPointId::generate();
+        point.beats = beats;
+        point.value = value;
+        REQUIRE(harness.bus.execute(std::make_unique<AddAutomationPoint>(lineId, point)).ok());
+    }
+
+    const auto* line = harness.state.findAutomationLineFor(target);
+    REQUIRE(line != nullptr);
+
+    // Playing the song: the value the line plays there, which moves.
+    const auto early = automationEditing::shownValue(harness.state, target, true, 1.0);
+    const auto late = automationEditing::shownValue(harness.state, target, true, 7.0);
+    CHECK(early == doctest::Approx(line->valueAt(1.0)));
+    CHECK(late == doctest::Approx(line->valueAt(7.0)));
+    CHECK(late < early);
+
+    // Stopped: the project's fader.
+    CHECK(automationEditing::shownValue(harness.state, target, false, 7.0) == doctest::Approx(-3.0));
+
+    // Pattern mode plays no automation: the project's fader again.
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetMode>(PlayMode::pattern, PatternId{})).ok());
+    CHECK(automationEditing::shownValue(harness.state, target, true, 7.0) == doctest::Approx(-3.0));
 }

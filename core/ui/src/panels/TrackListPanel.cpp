@@ -23,6 +23,7 @@ public:
         domain::CommandBus& bus,
         const domain::ProjectState& state,
         Selection& selection,
+        const TransportClock& clock,
         domain::TrackId trackId,
         int position)
         : tokens_(tokens)
@@ -30,6 +31,7 @@ public:
         , bus_(bus)
         , state_(state)
         , selection_(selection)
+        , clock_(clock)
         , trackId_(trackId)
         , position_(position)
     {
@@ -175,6 +177,18 @@ public:
         repaint();
     }
 
+    // The volume and the pan as they should be shown now: the curve while the
+    // song plays, the project otherwise, and the hand while it holds them.
+    void follow()
+    {
+        const auto playing = clock_.isPlaying();
+        const auto beats = clock_.positionBeats();
+        volume_.follow(automationEditing::shownValue(
+            state_, domain::AutomationTarget::volumeOf(trackId_), playing, beats));
+        pan_.follow(
+            automationEditing::shownValue(state_, domain::AutomationTarget::panOf(trackId_), playing, beats));
+    }
+
     // Reads the project again. Called after every change the bus reports, so a
     // volume set by a copilot moves this fader exactly like a drag would.
     void refresh()
@@ -192,10 +206,9 @@ public:
                         track->muted ? tokens_.colour("color.text.disabled")
                                      : tokens_.colour("color.text.primary"));
 
-        // dontSendNotification: setting the slider from the state must not send
-        // a command back, or a projection would fight the user's own movement.
-        volume_.setValue(track->volumeDb, juce::dontSendNotification);
-        pan_.setValue(track->pan, juce::dontSendNotification);
+        // Setting the slider from the state must not send a command back, or a
+        // projection would fight the user's own movement.
+        follow();
         mute_.setToggleState(track->muted, juce::dontSendNotification);
         bypass_.setToggleState(chainIsBypassed(*track), juce::dontSendNotification);
         bypass_.setEnabled(!track->plugins.empty());
@@ -418,6 +431,7 @@ private:
     domain::CommandBus& bus_;
     const domain::ProjectState& state_;
     Selection& selection_;
+    const TransportClock& clock_;
     domain::TrackId trackId_;
     int position_;
 
@@ -444,6 +458,7 @@ TrackListPanel::TrackListPanel(const PanelContext& context)
     , state_(context.state)
     , project_(context.project)
     , selection_(context.selection)
+    , clock_(context.clock)
 {
     titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
@@ -459,10 +474,14 @@ TrackListPanel::TrackListPanel(const PanelContext& context)
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
     rebuild();
+
+    // Thirty times a second, like the mixer: a fade reads as a movement.
+    startTimerHz(30);
 }
 
 TrackListPanel::~TrackListPanel()
 {
+    stopTimer();
     selection_.removeChangeListener(this);
     project_.removeChangeListener(this);
     setLookAndFeel(nullptr);
@@ -517,6 +536,12 @@ void TrackListPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     rebuild();
 }
 
+void TrackListPanel::timerCallback()
+{
+    for (auto* row : rows_)
+        row->follow();
+}
+
 void TrackListPanel::rebuild()
 {
     rows_.clear();
@@ -525,8 +550,8 @@ void TrackListPanel::rebuild()
     int position = 0;
     for (const auto& track : state_.tracks())
     {
-        auto row =
-            std::make_unique<Row>(tokens_, lookAndFeel_, bus_, state_, selection_, track.id, position++);
+        auto row = std::make_unique<Row>(
+            tokens_, lookAndFeel_, bus_, state_, selection_, clock_, track.id, position++);
 
         rows_.push_back(row.get());
         rowHolder_->addAndMakeVisible(row.release());

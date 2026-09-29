@@ -227,8 +227,7 @@ public:
         name_.setColour(juce::Label::textColourId,
                         tokens_.colour(state_.isAudible(id_) ? "color.text.primary" : "color.text.disabled"));
 
-        fader_.setValue(strip->volumeDb, juce::dontSendNotification);
-        pan_.setValue(strip->pan, juce::dontSendNotification);
+        follow();
         mute_.setToggleState(strip->muted, juce::dontSendNotification);
 
         inserts_.clear();
@@ -280,6 +279,20 @@ public:
         }
 
         repaint();
+    }
+
+    // The fader and the pan as they should be shown now: the curve while the
+    // song plays, the project otherwise, and the hand while it holds them.
+    void follow()
+    {
+        const auto playing = owner_.clock_.isPlaying();
+        const auto beats = owner_.clock_.positionBeats();
+        const auto shown = [&](const domain::AutomationTarget& target)
+        { return automationEditing::shownValue(state_, target, playing, beats); };
+        const auto faderMoved = fader_.follow(shown(domain::AutomationTarget::volumeOf(id_)));
+        pan_.follow(shown(domain::AutomationTarget::panOf(id_)));
+        if (faderMoved)
+            repaint(readoutArea_);
     }
 
     void paint(juce::Graphics& g) override
@@ -476,6 +489,7 @@ MixerPanel::MixerPanel(const PanelContext& context)
     , state_(context.state)
     , project_(context.project)
     , selection_(context.selection)
+    , clock_(context.clock)
     , copilot_(context.copilot)
     , levels_(context.levels)
     , titled_(context.titled)
@@ -520,10 +534,15 @@ MixerPanel::MixerPanel(const PanelContext& context)
     project_.addChangeListener(this);
     levels_.addChangeListener(this);
     rebuild();
+
+    // Thirty times a second, like the meters: fast enough for a fade to read
+    // as a movement, not a series of jumps.
+    startTimerHz(30);
 }
 
 MixerPanel::~MixerPanel()
 {
+    stopTimer();
     levels_.removeChangeListener(this);
     project_.removeChangeListener(this);
     setLookAndFeel(nullptr);
@@ -574,6 +593,16 @@ void MixerPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
         refresh();
     else
         rebuild();
+}
+
+void MixerPanel::timerCallback()
+{
+    // Stopped with no line to follow, every strip already shows the project:
+    // follow() finds nothing to move and repaints nothing.
+    for (auto& strip : strips_)
+        strip->follow();
+    if (master_ != nullptr)
+        master_->follow();
 }
 
 void MixerPanel::rebuild()

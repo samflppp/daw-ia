@@ -17,7 +17,7 @@ namespace daw::ui
 // state holds, and moving it sends a command instead of writing a value
 // anywhere. That is what makes a track created by MCP, by a replay or by a
 // copilot appear here without a line of code for each case.
-class TrackListPanel final : public juce::Component, private juce::ChangeListener
+class TrackListPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
 {
 public:
     explicit TrackListPanel(const PanelContext& context);
@@ -30,6 +30,7 @@ private:
     class Row;
 
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+    void timerCallback() override;
     void rebuild();
     void addTrack();
 
@@ -39,6 +40,7 @@ private:
     const domain::ProjectState& state_;
     ProjectObserver& project_;
     Selection& selection_;
+    const TransportClock& clock_;
 
     juce::Viewport viewport_;
     std::unique_ptr<juce::Component> rowHolder_;

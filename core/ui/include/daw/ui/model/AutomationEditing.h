@@ -44,6 +44,15 @@ namespace daw::ui::automationEditing
 // the plugin parameter as the project stores it (0.5 when never touched).
 [[nodiscard]] double staticValue(const domain::ProjectState& state, const domain::AutomationTarget& target);
 
+// What a slider shows: while the song plays, the value its line plays there;
+// stopped, in pattern mode (where no automation plays), or with no point to
+// follow, the value the project holds. The hand on the slider is the caller's
+// business: it shows the hand, not this.
+[[nodiscard]] double shownValue(const domain::ProjectState& state,
+                                const domain::AutomationTarget& target,
+                                bool playing,
+                                double positionBeats);
+
 // The right-click on a slider: the target's line, created empty when it has
 // none, in one history entry. Nil when the bus refused.
 [[nodiscard]] domain::AutomationLineId

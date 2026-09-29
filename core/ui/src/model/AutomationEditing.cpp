@@ -163,6 +163,17 @@ double staticValue(const domain::ProjectState& state, const domain::AutomationTa
     return target.kind == Kind::volume ? strip->volumeDb : strip->pan;
 }
 
+double shownValue(const domain::ProjectState& state,
+                  const domain::AutomationTarget& target,
+                  bool playing,
+                  double positionBeats)
+{
+    if (playing && state.transport().mode == domain::PlayMode::song)
+        if (const auto* line = state.findAutomationLineFor(target); line != nullptr && !line->points.empty())
+            return line->valueAt(positionBeats);
+    return staticValue(state, target);
+}
+
 domain::AutomationLineId
 open(domain::CommandBus& bus, const domain::ProjectState& state, const domain::AutomationTarget& target)
 {

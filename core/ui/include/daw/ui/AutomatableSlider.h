@@ -2,6 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <cmath>
 #include <functional>
 
 namespace daw::ui
@@ -16,6 +17,17 @@ class AutomatableSlider final : public juce::Slider
 {
 public:
     std::function<void()> onAutomate;
+
+    // Shows a value the panel read (the project, or the curve while the song
+    // plays) without sending it back. The hand wins: while a button is down on
+    // the slider, it shows the hand. True when the slider moved.
+    bool follow(double value)
+    {
+        if (isMouseButtonDown() || std::abs(getValue() - value) < 1.0e-6)
+            return false;
+        setValue(value, juce::dontSendNotification);
+        return true;
+    }
 
     void mouseDown(const juce::MouseEvent& event) override
     {

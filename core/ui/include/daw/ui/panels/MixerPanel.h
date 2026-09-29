@@ -19,9 +19,14 @@ namespace daw::ui
 // holds a value the project does not. The meters beside each fader read the
 // engine's taps, thirty times a second.
 //
+// A fader or a pan with an automation line follows the line while the song
+// plays, and the project stopped. The hand wins while it holds the slider;
+// released, the slider goes back to the curve. Moving it still writes the
+// project's value, which the line covers as long as it has points.
+//
 // "Mixer par l'IA" calls no model. It runs the check of MixingReadiness against
 // what the copilot can reach, and says what is still missing.
-class MixerPanel final : public juce::Component, private juce::ChangeListener
+class MixerPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
 {
 public:
     explicit MixerPanel(const PanelContext& context);
@@ -44,6 +49,7 @@ private:
     class Content;
 
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+    void timerCallback() override;
     void rebuild();
     void refresh();
     void runReadiness();
@@ -54,6 +60,7 @@ private:
     const domain::ProjectState& state_;
     ProjectObserver& project_;
     Selection& selection_;
+    const TransportClock& clock_;
     CopilotHost& copilot_;
     LevelSource& levels_;
     bool titled_{false};
