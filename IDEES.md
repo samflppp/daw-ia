@@ -128,8 +128,6 @@ construits :
   courbes de paramètre sous les lignes, sur toute la chanson.
 - **Des lignes de couleur et de hauteur choisies.** C'est un état d'écran : il irait dans les
   préférences de la fenêtre, pas dans le projet.
-- **Lire « fa# mineur » en local.** Le lecteur local lit « F#m » ; la tonalité en toutes lettres
-  passe par le copilote. Le repli hors ligne la perd.
 - **La zone qui crée ses canaux.** Une ligne « Basse » sans piste de basse est laissée de côté,
   et la fenêtre le dit. Créer le canal, avec un instrument, demanderait un choix de plugin.
 - **Le rôle d'une ligne corrigé à la main** dans la fenêtre de la zone (« non, celle-ci est une

@@ -1,8 +1,12 @@
 #include "daw/domain/generation/Constraints.h"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
+#include <initializer_list>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace daw::domain::generation
 {
@@ -64,6 +68,95 @@ constexpr std::array<std::string_view, 12> frenchNames{
         return std::nullopt;
 
     return key;
+}
+
+// The key said in French, over one to three words: "fa dièse mineur",
+// "si bémol majeur", "la mineur", "fa# mineur", "mib majeur", "fa dièse". A
+// note name alone is not a key: "la" and "si" are also plain French words,
+// and "la mélodie" asks for no key. It takes a mode word, or an accidental
+// word, which leaves no doubt. Lower case already. The key and how many words
+// it took.
+[[nodiscard]] std::optional<std::pair<Key, std::size_t>> parseFrenchKey(const std::vector<std::string>& words,
+                                                                        std::size_t at)
+{
+    static constexpr std::array<std::pair<std::string_view, int>, 8> notes{
+        {{"do", 0}, {"ré", 2}, {"re", 2}, {"mi", 4}, {"fa", 5}, {"sol", 7}, {"la", 9}, {"si", 11}}};
+
+    std::string_view word = words[at];
+    int tonic = -1;
+    for (const auto& [name, pitchClass] : notes)
+    {
+        if (word.substr(0, name.size()) == name)
+        {
+            tonic = pitchClass;
+            word.remove_prefix(name.size());
+            break;
+        }
+    }
+    if (tonic < 0)
+        return std::nullopt;
+
+    // "fa#", "sib", "fa#m" in one word; anything else glued to the name is
+    // another word.
+    auto sure = false;
+    auto minorGlued = false;
+    if (!word.empty() && word.front() == '#')
+    {
+        tonic += 1;
+        sure = true;
+        word.remove_prefix(1);
+    }
+    else if (!word.empty() && word.front() == 'b')
+    {
+        tonic += 11;
+        sure = true;
+        word.remove_prefix(1);
+    }
+    if (word == "m")
+    {
+        minorGlued = true;
+        sure = true;
+    }
+    else if (!word.empty())
+        return std::nullopt;
+
+    auto next = at + 1;
+    const auto isWord = [&](std::initializer_list<std::string_view> accepted)
+    {
+        return next < words.size() &&
+               std::find(accepted.begin(), accepted.end(), std::string_view{words[next]}) != accepted.end();
+    };
+
+    if (minorGlued)
+        return std::pair{Key{tonic % 12, Mode::minor}, std::size_t{1}};
+
+    if (!sure && isWord({"dièse", "diese", "#"}))
+    {
+        tonic += 1;
+        sure = true;
+        ++next;
+    }
+    else if (!sure && isWord({"bémol", "bemol", "b"}))
+    {
+        tonic += 11;
+        sure = true;
+        ++next;
+    }
+
+    Key key{};
+    key.tonic = tonic % 12;
+    key.mode = Mode::major;
+    if (isWord({"mineur", "mineure", "minor", "min", "m"}))
+    {
+        key.mode = Mode::minor;
+        ++next;
+    }
+    else if (isWord({"majeur", "majeure", "major", "maj"}))
+        ++next;
+    else if (!sure)
+        return std::nullopt;
+
+    return std::pair{key, next - at};
 }
 
 template <typename T>
@@ -446,22 +539,41 @@ Interpretation LocalInterpreter::parse(std::string_view text)
     std::optional<std::string> roleWord;
     std::optional<std::string> formWord;
 
+    // The words first, then read with a look ahead: a key said in French
+    // spans several of them.
+    std::vector<std::string_view> originals;
+    std::vector<std::string> words;
     std::size_t at = 0;
     while (at < text.size())
     {
-        while (at < text.size() && (text[at] == ' ' || text[at] == '\t' || text[at] == ','))
+        while (at < text.size() && (text[at] == ' ' || text[at] == '	' || text[at] == ','))
             ++at;
         auto end = at;
-        while (end < text.size() && text[end] != ' ' && text[end] != '\t' && text[end] != ',')
+        while (end < text.size() && text[end] != ' ' && text[end] != '	' && text[end] != ',')
             ++end;
         if (end == at)
             break;
 
-        const auto original = text.substr(at, end - at);
-        const auto word = lowered(original);
+        originals.push_back(text.substr(at, end - at));
+        words.push_back(lowered(originals.back()));
         at = end;
+    }
 
-        if (auto role = lookup(roleWords, word); role.has_value())
+    for (std::size_t index = 0; index < words.size(); ++index)
+    {
+        const auto original = originals[index];
+        const auto& word = words[index];
+
+        if (auto french = parseFrenchKey(words, index); french.has_value())
+        {
+            const auto last = index + french->second - 1;
+            const auto said = text.substr(static_cast<std::size_t>(original.data() - text.data()),
+                                          static_cast<std::size_t>(originals[last].data() - original.data()) +
+                                              originals[last].size());
+            assign(out.constraints.key, french->first, said, keyWord, out);
+            index = last;
+        }
+        else if (auto role = lookup(roleWords, word); role.has_value())
             assign(out.constraints.role, *role, original, roleWord, out);
         else if (auto resolution = lookup(resolutionWords, word); resolution.has_value())
             assign(out.constraints.resolution, *resolution, original, resolutionWord, out);

@@ -117,6 +117,38 @@ TEST_CASE("the local interpreter keeps the last of two words for one field and s
     CHECK(read.conflicts.front() == "croches puis doubles : doubles retenu");
 }
 
+TEST_CASE("the local interpreter reads a key said in French words")
+{
+    const auto keyOf = [](std::string_view text) { return LocalInterpreter::parse(text).constraints.key; };
+
+    CHECK(keyOf("une boucle trap en fa dièse mineur") == Key{6, Mode::minor});
+    CHECK(keyOf("fa diese mineur") == Key{6, Mode::minor});
+    CHECK(keyOf("Si bémol majeur") == Key{10, Mode::major});
+    CHECK(keyOf("mi bemol mineur") == Key{3, Mode::minor});
+    CHECK(keyOf("en ré mineur") == Key{2, Mode::minor});
+    CHECK(keyOf("la mineur") == Key{9, Mode::minor});
+    CHECK(keyOf("do majeur") == Key{0, Mode::major});
+    CHECK(keyOf("fa# mineur") == Key{6, Mode::minor});
+    CHECK(keyOf("fa#m") == Key{6, Mode::minor});
+    CHECK(keyOf("mib majeur") == Key{3, Mode::major});
+    CHECK(keyOf("sol dièse") == Key{8, Mode::major});
+
+    // A note name alone is a plain word: no key, and no word eaten.
+    const auto plain = LocalInterpreter::parse("la mélodie si douce");
+    CHECK_FALSE(plain.constraints.key.has_value());
+    CHECK(plain.constraints.role == Role::melody);
+
+    // The words that made the key are not said to be ignored.
+    const auto read = LocalInterpreter::parse("fa dièse mineur doubles");
+    CHECK(read.constraints.resolution == Resolution::sixteenth);
+    CHECK(read.ignored.empty());
+
+    // Two keys: the last one wins, said in the words that were typed.
+    const auto twice = LocalInterpreter::parse("Am puis fa dièse mineur");
+    REQUIRE(twice.conflicts.size() == 1);
+    CHECK(twice.conflicts.front() == "Am puis fa dièse mineur : fa dièse mineur retenu");
+}
+
 TEST_CASE("an empty text is no constraint at all")
 {
     const auto read = LocalInterpreter::parse("   ");
