@@ -5,6 +5,7 @@
 #include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/tidy/Roles.h"
+#include "daw/ui/model/LaneEditing.h"
 #include "daw/ui/model/PatternEditing.h"
 
 #include <algorithm>
@@ -294,26 +295,25 @@ void ChannelRackPanel::showChannelMenu(int row)
 
     const auto trackId = state_.tracks()[static_cast<std::size_t>(row)].id;
     juce::Component::SafePointer<ChannelRackPanel> safe{this};
-    menu.showMenuAsync(
-        juce::PopupMenu::Options{}.withTargetComponent(this),
-        [safe, trackId](int chosen)
-        {
-            if (safe == nullptr)
-                return;
+    menu.showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(this),
+                       [safe, trackId](int chosen)
+                       {
+                           if (safe == nullptr)
+                               return;
 
-            const auto& tracks = safe->state_.tracks();
-            const auto found =
-                std::find_if(tracks.begin(),
-                             tracks.end(),
-                             [trackId](const domain::Track& track) { return track.id == trackId; });
-            if (found == tracks.end())
-                return;
+                           const auto& tracks = safe->state_.tracks();
+                           const auto found = std::find_if(tracks.begin(),
+                                                           tracks.end(),
+                                                           [trackId](const domain::Track& track)
+                                                           { return track.id == trackId; });
+                           if (found == tracks.end())
+                               return;
 
-            if (chosen == renameItem)
-                safe->renameChannel(static_cast<int>(found - tracks.begin()));
-            else if (chosen == removeItem)
-                static_cast<void>(safe->bus_.execute(std::make_unique<domain::RemoveTrack>(trackId)));
-        });
+                           if (chosen == renameItem)
+                               safe->renameChannel(static_cast<int>(found - tracks.begin()));
+                           else if (chosen == removeItem)
+                               static_cast<void>(laneEditing::removeTrack(safe->bus_, safe->state_, trackId));
+                       });
 }
 
 void ChannelRackPanel::renameChannel(int row)

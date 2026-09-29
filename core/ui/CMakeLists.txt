@@ -19,6 +19,7 @@ add_library(daw_ui_workspace STATIC
     src/model/AutomationEditing.cpp
     src/model/CopilotRequest.cpp
     src/model/GhostProposal.cpp
+    src/model/LaneEditing.cpp
     src/model/ZoneProposal.cpp
     src/model/NoteClipboard.cpp
     src/model/PatternPreviews.cpp

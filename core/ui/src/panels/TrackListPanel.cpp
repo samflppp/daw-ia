@@ -5,6 +5,7 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/ui/AutomatableSlider.h"
 #include "daw/ui/model/AutomationEditing.h"
+#include "daw/ui/model/LaneEditing.h"
 
 #include <algorithm>
 #include <cmath>
@@ -149,14 +150,14 @@ public:
         addAndMakeVisible(remove_);
         remove_.setButtonText("x");
         remove_.setMouseClickGrabsKeyboardFocus(false);
-        remove_.onClick = [bus = &bus_, trackId = trackId_]
+        remove_.onClick = [bus = &bus_, state = &state_, trackId = trackId_]
         {
             // Asynchronous on purpose: removing the track rebuilds the list,
             // which deletes this very row, and a callback must not return into
             // an object its own command has destroyed.
             juce::MessageManager::callAsync(
-                [bus, trackId]
-                { static_cast<void>(bus->execute(std::make_unique<domain::RemoveTrack>(trackId))); });
+                [bus, state, trackId]
+                { static_cast<void>(laneEditing::removeTrack(*bus, *state, trackId)); });
         };
 
         refresh();

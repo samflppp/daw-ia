@@ -6,6 +6,7 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/ui/model/AutomationEditing.h"
+#include "daw/ui/model/LaneEditing.h"
 #include "daw/ui/model/PatternEditing.h"
 
 #include <algorithm>
@@ -1121,20 +1122,18 @@ void PlaylistPanel::removeSelection()
     if (selected_.empty())
         return;
 
-    std::vector<std::unique_ptr<domain::Command>> commands;
+    // The line of a track goes with its last clip, unless someone named it.
+    std::vector<domain::AudioClipId> audio;
+    std::vector<domain::PlacementId> placements;
     for (const auto& item : selected_)
     {
         if (item.audio)
-            commands.push_back(
-                std::make_unique<domain::RemoveAudio>(domain::AudioClipId::parse(item.id).value()));
+            audio.push_back(domain::AudioClipId::parse(item.id).value());
         else
-            commands.push_back(
-                std::make_unique<domain::RemovePlacement>(domain::PlacementId::parse(item.id).value()));
+            placements.push_back(domain::PlacementId::parse(item.id).value());
     }
 
-    domain::GroupOptions group{};
-    group.label = selected_.size() == 1 ? "retirer un bloc" : "retirer la sélection";
-    if (bus_.executeGroup(std::move(commands), group).ok())
+    if (laneEditing::removeBlocks(bus_, state_, audio, placements))
         selected_.clear();
 }
 
