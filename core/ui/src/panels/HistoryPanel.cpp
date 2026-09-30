@@ -47,6 +47,7 @@ HistoryPanel::HistoryPanel(const PanelContext& context)
 {
     titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
     addAndMakeVisible(undo_);
     addAndMakeVisible(redo_);

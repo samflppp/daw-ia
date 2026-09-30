@@ -83,6 +83,7 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
 {
     titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
     setWantsKeyboardFocus(true);
 
     // Choosing a channel is not an edit: it goes to the Selection, the one

@@ -27,6 +27,7 @@ ChannelRackPanel::ChannelRackPanel(const PanelContext& context)
 {
     titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
     // A button that kept the focus after a click would take the next press
     // of Space instead of the transport.

@@ -200,6 +200,7 @@ BrowserPanel::BrowserPanel(const PanelContext& context)
 {
     titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
     tree_.setRootItemVisible(false);
     tree_.setDefaultOpenness(false);

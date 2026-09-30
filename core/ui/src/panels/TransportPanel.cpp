@@ -157,6 +157,7 @@ TransportPanel::TransportPanel(const PanelContext& context)
     , selection_(context.selection)
 {
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
     rewind_ = std::make_unique<IconButton>(tokens_, Icon::rewind, u8"Retour au début");
     play_ = std::make_unique<IconButton>(tokens_, Icon::play, "Lecture");

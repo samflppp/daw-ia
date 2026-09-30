@@ -9,6 +9,7 @@ PlaceholderPanel::PlaceholderPanel(const PanelContext& context)
     , id_(context.id)
 {
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 }
 
 void PlaceholderPanel::paint(juce::Graphics& g)

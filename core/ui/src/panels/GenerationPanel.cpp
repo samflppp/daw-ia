@@ -18,6 +18,7 @@ GenerationPanel::GenerationPanel(const Tokens& tokens, DawLookAndFeel& lookAndFe
     , lookAndFeel_(lookAndFeel)
 {
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
     field_.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
     field_.setTabKeyUsedAsCharacter(false);

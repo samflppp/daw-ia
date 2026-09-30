@@ -4,6 +4,8 @@
 
 #include <juce_events/juce_events.h>
 
+#include <cstdint>
+
 namespace daw::ui
 {
 
@@ -26,6 +28,15 @@ public:
     void onUndone(const domain::Receipt& receipt) override;
     void onRedone(const domain::Receipt& receipt) override;
     void onHistoryTruncated(std::size_t droppedEntries) override;
+
+    // How many changes the bus has reported, counted as it reports them. The
+    // change message arrives later, collapsed; a cache a panel keys on this
+    // number is rebuilt on the first paint after a change, never a frame late,
+    // and never because the view moved (S18 bis).
+    [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }
+
+private:
+    std::uint64_t revision_{0};
 };
 
 } // namespace daw::ui

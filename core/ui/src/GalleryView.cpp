@@ -8,6 +8,7 @@ GalleryView::GalleryView(const Tokens& tokens, DawLookAndFeel& lookAndFeel)
     , lookAndFeel_(lookAndFeel)
 {
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
     for (auto* button : {&play_, &stop_, &record_, &disabled_})
         addAndMakeVisible(*button);

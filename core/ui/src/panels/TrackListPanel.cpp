@@ -463,6 +463,7 @@ TrackListPanel::TrackListPanel(const PanelContext& context)
 {
     titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
     rowHolder_ = std::make_unique<juce::Component>();
     viewport_.setViewedComponent(rowHolder_.get(), false);

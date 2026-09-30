@@ -49,6 +49,7 @@ TitleBarView::TitleBarView(const Tokens& tokens,
     , fade_(std::make_unique<StatusFade>(*this))
 {
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
     file_.setWantsKeyboardFocus(false);
     file_.onClick = [this] { showFileMenu(); };

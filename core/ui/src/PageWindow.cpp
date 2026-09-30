@@ -42,6 +42,7 @@ PageWindow::PageWindow(const Tokens& tokens,
     , panel_(std::move(panel))
 {
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
     addAndMakeVisible(*panel_);
 

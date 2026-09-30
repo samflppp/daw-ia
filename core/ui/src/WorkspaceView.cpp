@@ -55,6 +55,7 @@ WorkspaceView::WorkspaceView(const PanelServices& services, const PanelRegistry&
     , registry_(registry)
 {
     setLookAndFeel(&services_.lookAndFeel);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
     // Without this, a click on a panel that wants no focus leaves the key
     // press with nobody to hand it to.

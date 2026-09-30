@@ -89,6 +89,7 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context)
     bar_.onHeightChanged = [this] { resized(); };
     addChildComponent(bar_);
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
     // The playlist takes the keys it knows — Ctrl+C, Ctrl+V, Ctrl+B, Delete —
     // and lets the others go up to the view: Space and Ctrl+Z still work
@@ -202,9 +203,21 @@ int PlaylistPanel::freeLaneCount() const
     return static_cast<int>(state_.lanes().size());
 }
 
-std::vector<PlaylistPanel::Lane> PlaylistPanel::lanes() const
+const std::vector<PlaylistPanel::Lane>& PlaylistPanel::lanes() const
 {
-    std::vector<Lane> all;
+    return content().lanes;
+}
+
+const PlaylistPanel::Content& PlaylistPanel::content() const
+{
+    if (content_.built && content_.revision == project_.revision())
+        return content_;
+
+    Content fresh;
+    fresh.revision = project_.revision();
+    fresh.built = true;
+
+    auto& all = fresh.lanes;
     for (const auto& lane : state_.lanes())
         all.push_back(Lane{Lane::Kind::line, lane.id, {}, {}});
 
@@ -227,7 +240,60 @@ std::vector<PlaylistPanel::Lane> PlaylistPanel::lanes() const
     for (const auto& bus : state_.buses())
         addLinesOf(bus.id);
     addLinesOf(domain::ProjectState::masterTrackId());
-    return all;
+
+    // What each lane is called, once.
+    for (std::size_t lane = 0; lane < all.size(); ++lane)
+    {
+        const auto& entry = all[lane];
+        if (entry.kind == Lane::Kind::line)
+            fresh.laneLabels.push_back(laneLabel(state_.lanes()[lane], static_cast<int>(lane)));
+        else if (entry.kind == Lane::Kind::fresh)
+            fresh.laneLabels.push_back(juce::String::fromUTF8(u8"+ Nouvelle ligne"));
+        else if (const auto* line = state_.findAutomationLine(entry.line); line != nullptr)
+            fresh.laneLabels.push_back(
+                juce::String::fromUTF8(automationEditing::label(state_, *line).c_str()));
+        else
+            fresh.laneLabels.emplace_back();
+    }
+
+    // The blocks, in the order they are drawn: layings, then samples.
+    const auto laneIndex = [this](domain::LaneId id)
+    {
+        const auto index = state_.laneIndex(id);
+        return index ? static_cast<int>(index.value()) : -1;
+    };
+    for (const auto& placement : state_.arrangement())
+    {
+        Block block{};
+        block.item = Item{false, placement.id.toString()};
+        block.start = placement.startBeats;
+        block.lane = laneIndex(placement.laneId);
+        block.pattern = placement.patternId;
+        if (const auto* pattern = state_.findPattern(placement.patternId); pattern != nullptr)
+        {
+            block.length = pattern->lengthBeats;
+            block.label = juce::String::fromUTF8(patternEditing::displayName(state_, *pattern).c_str());
+        }
+        fresh.blocks.push_back(std::move(block));
+    }
+    for (const auto& clip : state_.audioClips())
+    {
+        Block block{};
+        block.item = Item{true, clip.id.toString()};
+        block.start = clip.startBeats;
+        block.lane = laneIndex(clip.laneId);
+        block.clip = clip.id;
+        block.length = lengthOf(block.item);
+        block.label = juce::String::fromUTF8(clip.sample.name.c_str());
+        fresh.blocks.push_back(std::move(block));
+    }
+
+    for (const auto& block : fresh.blocks)
+        fresh.end = std::max(fresh.end, block.start + block.length);
+
+    content_ = std::move(fresh);
+    ++contentBuilds_;
+    return content_;
 }
 
 int PlaylistPanel::laneCount() const
@@ -302,14 +368,7 @@ juce::Rectangle<int> PlaylistPanel::gridArea() const
 
 double PlaylistPanel::timelineBeats() const
 {
-    double end = 0.0;
-    for (const auto& item : items())
-    {
-        if (const auto start = startOf(item); start.has_value())
-            end = std::max(end, *start + lengthOf(item));
-    }
-
-    const auto wanted = std::max(minimumVisibleBeats, end + roomAfterSongBeats);
+    const auto wanted = std::max(minimumVisibleBeats, content().end + roomAfterSongBeats);
     return std::ceil(wanted / barBeats()) * barBeats();
 }
 
@@ -495,10 +554,8 @@ double PlaylistPanel::snap(double beats, bool fine) const
 std::vector<PlaylistPanel::Item> PlaylistPanel::items() const
 {
     std::vector<Item> all;
-    for (const auto& placement : state_.arrangement())
-        all.push_back(Item{false, placement.id.toString()});
-    for (const auto& clip : state_.audioClips())
-        all.push_back(Item{true, clip.id.toString()});
+    for (const auto& block : content().blocks)
+        all.push_back(block.item);
     return all;
 }
 
@@ -563,19 +620,27 @@ int PlaylistPanel::laneOf(const Item& item) const
 
 juce::Rectangle<int> PlaylistPanel::bounds(const Item& item, double offsetBeats, int laneOffset) const
 {
-    const auto start = startOf(item);
-    const auto home = laneOf(item);
-    if (!start.has_value() || home < 0)
+    for (const auto& block : content().blocks)
+    {
+        if (block.item == item)
+            return blockBounds(block, offsetBeats, laneOffset);
+    }
+    return {};
+}
+
+juce::Rectangle<int> PlaylistPanel::blockBounds(const Block& block, double offsetBeats, int laneOffset) const
+{
+    if (block.lane < 0)
         return {};
 
     // A block being dragged is drawn on the line it would land on, the empty
     // one under the last included.
-    const auto lane = std::clamp(home + laneOffset, 0, freeLaneCount());
+    const auto lane = std::clamp(block.lane + laneOffset, 0, freeLaneCount());
 
     const auto grid = gridArea();
     const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
-    const auto left = xForBeat(std::max(0.0, *start + offsetBeats));
-    const auto right = xForBeat(std::max(0.0, *start + offsetBeats) + lengthOf(item));
+    const auto left = xForBeat(std::max(0.0, block.start + offsetBeats));
+    const auto right = xForBeat(std::max(0.0, block.start + offsetBeats) + block.length);
 
     return juce::Rectangle<int>{
         left, grid.getY() + lane * laneHeight - firstLanePixel(), std::max(1, right - left), laneHeight}
@@ -587,10 +652,10 @@ std::optional<PlaylistPanel::Item> PlaylistPanel::itemAt(juce::Point<int> point)
 {
     // The last one drawn wins, which is the one on top.
     std::optional<Item> found;
-    for (const auto& item : items())
+    for (const auto& block : content().blocks)
     {
-        if (bounds(item).contains(point))
-            found = item;
+        if (blockBounds(block, 0.0, 0).contains(point))
+            found = block.item;
     }
     return found;
 }
@@ -716,23 +781,23 @@ void PlaylistPanel::paintLanes(juce::Graphics& g,
     g.setColour(tokens_.colour("color.surface.panel"));
     g.fillRect(headers);
 
-    const auto all = lanes();
+    const auto& shownContent = content();
+    const auto& all = shownContent.lanes;
+    const auto clip = g.getClipBounds();
     for (int lane = 0; lane < static_cast<int>(all.size()); ++lane)
     {
         const auto y = grid.getY() + lane * laneHeight - firstLanePixel();
-        if (y + laneHeight <= grid.getY())
+        if (y + laneHeight <= std::max(grid.getY(), clip.getY()))
             continue;
-        if (y >= grid.getBottom())
+        if (y >= std::min(grid.getBottom(), clip.getBottom()))
             break;
 
         auto name = headers.withY(y).withHeight(laneHeight);
-        juce::String label;
+        const auto& label = shownContent.laneLabels[static_cast<std::size_t>(lane)];
         const auto& entry = all[static_cast<std::size_t>(lane)];
 
         if (entry.kind == Lane::Kind::line)
         {
-            label = laneLabel(state_.lanes()[static_cast<std::size_t>(lane)], lane);
-
             // The line the pattern being edited was made for is lit: one
             // choice, three screens, as before lines were free.
             if (shown != nullptr && domain::ProjectState::laneOfPattern(shown->id) == entry.id)
@@ -741,16 +806,10 @@ void PlaylistPanel::paintLanes(juce::Graphics& g,
                 g.fillRect(name);
             }
         }
-        else if (entry.kind == Lane::Kind::fresh)
+        else if (entry.kind == Lane::Kind::automation)
         {
-            label = juce::String::fromUTF8(u8"+ Nouvelle ligne");
-        }
-        else if (const auto* line = state_.findAutomationLine(entry.line); line != nullptr)
-        {
-            label = juce::String::fromUTF8(automationEditing::label(state_, *line).c_str());
-
             // The line a slider's right-click asked for is the lit one.
-            if (line->id == shownAutomation_)
+            if (entry.line == shownAutomation_)
             {
                 g.setColour(tokens_.colour("color.state.selected"));
                 g.fillRect(name);
@@ -781,37 +840,23 @@ void PlaylistPanel::paintBlocks(juce::Graphics& g, juce::Rectangle<int> grid) co
     g.saveState();
     g.reduceClipRegion(grid);
 
-    for (const auto& item : items())
+    // Only what the repaint asked for: a window moved over the playlist
+    // uncovers a strip, and the blocks outside it are not visited twice.
+    const auto visible = g.getClipBounds();
+
+    for (const auto& entry : content().blocks)
     {
+        const auto& item = entry.item;
         const auto moving = move_.has_value() && isSelected(item);
-        const auto block = bounds(item, moving ? move_->offsetBeats : 0.0, moving ? move_->laneOffset : 0);
-        if (block.isEmpty() || !block.intersects(grid))
+        const auto block =
+            blockBounds(entry, moving ? move_->offsetBeats : 0.0, moving ? move_->laneOffset : 0);
+        if (block.isEmpty() || !block.intersects(visible))
             continue;
 
-        juce::String label;
-        bool lit = false;
-
-        if (item.audio)
-        {
-            const auto id = domain::AudioClipId::parse(item.id);
-            if (const auto* clip = id ? state_.findAudioClip(id.value()) : nullptr; clip != nullptr)
-                label = juce::String::fromUTF8(clip->sample.name.c_str());
-        }
-        else
-        {
-            const auto id = domain::PlacementId::parse(item.id);
-            const auto* placement = id ? state_.findPlacement(id.value()) : nullptr;
-            const auto* pattern = placement != nullptr ? state_.findPattern(placement->patternId) : nullptr;
-            if (pattern != nullptr)
-            {
-                label = juce::String::fromUTF8(patternEditing::displayName(state_, *pattern).c_str());
-
-                // The layings of the pattern being edited are lit: an edit in
-                // the rack lands in every one of them, and the screen says so
-                // before the ear does.
-                lit = shown != nullptr && pattern->id == shown->id;
-            }
-        }
+        // The layings of the pattern being edited are lit: an edit in the rack
+        // lands in every one of them, and the screen says so before the ear
+        // does.
+        const auto lit = !item.audio && shown != nullptr && entry.pattern == shown->id;
 
         const auto* fill =
             item.audio ? "color.actor.copilot" : (lit ? "color.note.fill" : "color.note.fillSoft");
@@ -824,10 +869,9 @@ void PlaylistPanel::paintBlocks(juce::Graphics& g, juce::Rectangle<int> grid) co
         content.removeFromTop(tokens_.integer("metric.playlist.labelHeight"));
         if (block.getWidth() >= tokens_.integer("metric.playlist.previewMinWidth") && !content.isEmpty())
         {
-            if (item.audio)
+            if (entry.clip.has_value())
             {
-                const auto id = domain::AudioClipId::parse(item.id);
-                if (const auto* clip = id ? state_.findAudioClip(id.value()) : nullptr; clip != nullptr)
+                if (const auto* clip = state_.findAudioClip(*entry.clip); clip != nullptr)
                 {
                     // Nothing yet the first time: the sample is being measured
                     // on another thread, and the block fills in when it is.
@@ -835,14 +879,9 @@ void PlaylistPanel::paintBlocks(juce::Graphics& g, juce::Rectangle<int> grid) co
                         paintWaveform(g, *peaks, block, content, grid);
                 }
             }
-            else
+            else if (const auto* preview = previews_.find(entry.pattern); preview != nullptr)
             {
-                const auto id = domain::PlacementId::parse(item.id);
-                const auto* placement = id ? state_.findPlacement(id.value()) : nullptr;
-                if (const auto* preview =
-                        placement != nullptr ? previews_.find(placement->patternId) : nullptr;
-                    preview != nullptr)
-                    paintPreview(g, *preview, content);
+                paintPreview(g, *preview, content);
             }
         }
 
@@ -857,7 +896,7 @@ void PlaylistPanel::paintBlocks(juce::Graphics& g, juce::Rectangle<int> grid) co
 
         g.setColour(tokens_.colour("color.note.label"));
         g.setFont(lookAndFeel_.typography().sans("font.size.micro", "font.weight.medium"));
-        g.drawText(label,
+        g.drawText(entry.label,
                    block.reduced(tokens_.integer("space.xs"), 0)
                        .removeFromTop(tokens_.integer("metric.playlist.labelHeight") +
                                       tokens_.integer("stroke.hairline")),
@@ -1599,10 +1638,10 @@ void PlaylistPanel::mouseUp(const juce::MouseEvent& event)
         const auto area = *band_;
         band_.reset();
 
-        for (const auto& item : items())
+        for (const auto& block : content().blocks)
         {
-            if (bounds(item).intersects(area) && !isSelected(item))
-                selected_.push_back(item);
+            if (blockBounds(block, 0.0, 0).intersects(area) && !isSelected(block.item))
+                selected_.push_back(block.item);
         }
         repaint();
         return;

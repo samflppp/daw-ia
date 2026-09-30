@@ -127,6 +127,7 @@ public:
         , meter_(owner.tokens_)
     {
         setLookAndFeel(&owner.lookAndFeel_);
+        setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
         addAndMakeVisible(name_);
         name_.setJustificationType(juce::Justification::centred);
@@ -496,6 +497,7 @@ MixerPanel::MixerPanel(const PanelContext& context)
     , content_(std::make_unique<Content>(context.tokens))
 {
     setLookAndFeel(&lookAndFeel_);
+    setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
     addAndMakeVisible(addBus_);
     addBus_.setButtonText("+ Bus");

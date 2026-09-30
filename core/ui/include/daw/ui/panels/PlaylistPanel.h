@@ -8,6 +8,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -158,6 +159,10 @@ public:
     // Opens the window on the zone drawn; Ctrl+G does the same.
     void openZonePrompt();
 
+    // How many times the blocks and lanes the paint reads were built: read by
+    // the verification, which proves a scroll builds nothing.
+    [[nodiscard]] std::size_t contentBuilds() const noexcept { return contentBuilds_; }
+
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
@@ -182,7 +187,7 @@ private:
         domain::TrackId track{};
         domain::AutomationLineId line{};
     };
-    [[nodiscard]] std::vector<Lane> lanes() const;
+    [[nodiscard]] const std::vector<Lane>& lanes() const;
     [[nodiscard]] int freeLaneCount() const;
     [[nodiscard]] int laneCount() const;
 
@@ -265,6 +270,36 @@ private:
     void closeAutomationWheel(bool onlyWhenRested = false);
 
     // --- items
+
+    // What the paint reads of the arrangement: every block with where it
+    // starts, how long it is, its line and its name; every lane and its name;
+    // where the song ends. Built again when the project's revision moved,
+    // never at a paint that follows a scroll or a zoom (S18 bis): the paint
+    // used to rebuild the list of blocks and parse three identifiers per block
+    // for every beat it turned into a pixel.
+    struct Block
+    {
+        Item item;
+        double start{0.0};
+        double length{0.0};
+        int lane{-1};
+        domain::PatternId pattern{};
+        std::optional<domain::AudioClipId> clip;
+        juce::String label;
+    };
+    struct Content
+    {
+        std::uint64_t revision{0};
+        bool built{false};
+        std::vector<Block> blocks;
+        std::vector<Lane> lanes;
+        std::vector<juce::String> laneLabels;
+        double end{0.0};
+    };
+    [[nodiscard]] const Content& content() const;
+    [[nodiscard]] juce::Rectangle<int>
+    blockBounds(const Block& block, double offsetBeats, int laneOffset) const;
+
     [[nodiscard]] std::vector<Item> items() const;
     [[nodiscard]] std::optional<double> startOf(const Item& item) const;
     [[nodiscard]] double lengthOf(const Item& item) const;
@@ -457,6 +492,9 @@ private:
     PromptReader::Reading lastReading_;
     juce::String promptedText_;
     bool listeningHere_{false};
+
+    mutable Content content_;
+    mutable std::size_t contentBuilds_{0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PlaylistPanel)
 };

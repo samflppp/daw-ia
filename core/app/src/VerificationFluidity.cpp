@@ -3,6 +3,7 @@
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/ui/PageWindow.h"
+#include "daw/ui/panels/PlaylistPanel.h"
 
 #include <algorithm>
 #include <cmath>
@@ -237,6 +238,39 @@ void Verification::buildFluidity()
     };
 
     surface("repeint complet de la playlist", "playlist");
+    add("un défilement de la playlist ne reconstruit rien, un changement du projet reconstruit une fois",
+        [this, measures]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+            {
+                check(false, "pas de playlist");
+                return;
+            }
+
+            // The view moves the way a hand moves it: Ctrl + wheel zooms,
+            // Shift + wheel scrolls. Each move is painted.
+            const auto before = playlist->contentBuilds();
+            const auto centre = playlist->getLocalBounds().getCentre();
+            wheel(*playlist, centre, 0.5f, false, true);
+            static_cast<void>(paintMs(*playlist, playlist->getLocalBounds(), juce::NativeImageType{}));
+            wheel(*playlist, centre, -0.25f, true);
+            static_cast<void>(paintMs(*playlist, playlist->getLocalBounds(), juce::NativeImageType{}));
+            wheel(*playlist, centre, -0.25f, false, true);
+            static_cast<void>(paintMs(*playlist, playlist->getLocalBounds(), juce::NativeImageType{}));
+            check(playlist->contentBuilds() == before,
+                  "zoom et défilement : " + std::to_string(playlist->contentBuilds() - before) +
+                      " reconstruction du contenu");
+
+            static_cast<void>(
+                bus_.execute(std::make_unique<domain::RenamePattern>(measures->opened, "Motif ouvert")));
+            static_cast<void>(paintMs(*playlist, playlist->getLocalBounds(), juce::NativeImageType{}));
+            static_cast<void>(paintMs(*playlist, playlist->getLocalBounds(), juce::NativeImageType{}));
+            check(playlist->contentBuilds() == before + 1,
+                  "un pattern renommé : " + std::to_string(playlist->contentBuilds() - before) +
+                      " reconstruction, au premier repeint qui suit");
+        });
+
     surface("repeint complet du piano-roll", "piano_roll");
     surface("repeint complet du mixer", "mixer");
 
