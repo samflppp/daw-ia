@@ -1,5 +1,8 @@
 #include "daw/ui/Tokens.h"
 
+#include <cstring>
+#include <string_view>
+
 #include <DawTokensData.h>
 
 namespace daw::ui
@@ -14,53 +17,49 @@ const Tokens& Tokens::builtIn()
 
 Tokens Tokens::fromJson(const juce::String& json)
 {
-    auto root = juce::JSON::parse(json);
-    jassert(root.isObject()); // tokens.json is malformed
-    return Tokens{std::move(root)};
+    auto table = TokenTable::fromJson(json.toStdString());
+    jassert(table.valid()); // tokens.json is malformed
+    return Tokens{std::move(table)};
 }
 
-Tokens::Tokens(juce::var root)
-    : root_(std::move(root))
+Tokens::Tokens(TokenTable table)
+    : table_(std::move(table))
 {
 }
 
-juce::var Tokens::lookup(juce::StringRef path) const
+const TokenTable::Entry* Tokens::find(juce::StringRef path) const
 {
-    auto node = root_;
-    for (const auto& key : juce::StringArray::fromTokens(juce::String(path), ".", ""))
-    {
-        if (!node.isObject())
-            return {};
-        node = node.getProperty(juce::Identifier(key), {});
-    }
-    return node;
+    const auto* text = path.text.getAddress();
+    return table_.find(std::string_view{text, std::strlen(text)});
 }
 
 bool Tokens::contains(juce::StringRef path) const
 {
-    return !lookup(path).isVoid();
+    return find(path) != nullptr;
 }
 
 juce::Colour Tokens::colour(juce::StringRef path) const
 {
-    const auto value = lookup(path).toString().trim();
-    jassert(value.startsWithChar('#')); // unknown token or wrong type
+    const auto* entry = find(path);
+    jassert(entry != nullptr && entry->kind != TokenTable::Entry::Kind::number &&
+            entry->kind != TokenTable::Entry::Kind::group); // unknown token or wrong type
+    jassert(entry == nullptr ||
+            entry->kind == TokenTable::Entry::Kind::colour); // expected #RRGGBB or #RRGGBBAA
 
-    const auto hex = value.substring(1);
-    if (hex.length() == 6)
-        return juce::Colour::fromString("ff" + hex);
-    if (hex.length() == 8)
-        return juce::Colour::fromString(hex.substring(6) + hex.substring(0, 6));
-
-    jassertfalse; // expected #RRGGBB or #RRGGBBAA
-    return {};
+    if (entry == nullptr || entry->kind != TokenTable::Entry::Kind::colour)
+        return {};
+    return juce::Colour{static_cast<juce::uint32>(entry->argb)};
 }
 
 float Tokens::number(juce::StringRef path) const
 {
-    const auto value = lookup(path);
-    jassert(value.isDouble() || value.isInt() || value.isInt64()); // unknown token or wrong type
-    return static_cast<float>(static_cast<double>(value));
+    const auto* entry = find(path);
+    jassert(entry != nullptr &&
+            entry->kind == TokenTable::Entry::Kind::number); // unknown token or wrong type
+
+    if (entry == nullptr || entry->kind != TokenTable::Entry::Kind::number)
+        return 0.0f;
+    return static_cast<float>(entry->number);
 }
 
 int Tokens::integer(juce::StringRef path) const

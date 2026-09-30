@@ -28,6 +28,7 @@ add_library(daw_ui_workspace STATIC
     src/model/TransformProposal.cpp
     src/model/SampleSearch.cpp
     src/model/TempoEditing.cpp
+    src/model/TokenTable.cpp
     src/model/WaveformPeaks.cpp)
 add_library(daw::ui_workspace ALIAS daw_ui_workspace)
 

@@ -46,6 +46,7 @@ add_executable(daw_domain_tests
     LearningTests.cpp
     PhraseTests.cpp
     PromptReaderTests.cpp
+    TokenTableTests.cpp
     TransformTests.cpp)
 
 target_link_libraries(daw_domain_tests PRIVATE daw::domain daw::ui_workspace doctest::doctest)
@@ -55,6 +56,8 @@ daw_set_warnings(daw_domain_tests)
 # checks the shipped beatmaker layout.
 target_compile_definitions(daw_domain_tests PRIVATE
     DAW_WORKSPACES_DIR="${PROJECT_SOURCE_DIR}/workspaces"
+    # The tokens the interface ships, each read back through the table.
+    DAW_TOKENS_FILE="${PROJECT_SOURCE_DIR}/core/ui/tokens/tokens.json"
     # The style model the corpus pipeline writes from its own test corpus: the
     # contract between services/harmony and the generator, pinned on both sides.
     DAW_SERVICES_FIXTURES="${PROJECT_SOURCE_DIR}/services/tests/fixtures")

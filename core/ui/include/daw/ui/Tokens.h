@@ -1,5 +1,7 @@
 #pragma once
 
+#include "daw/ui/model/TokenTable.h"
+
 #include <juce_graphics/juce_graphics.h>
 
 namespace daw::ui
@@ -9,6 +11,9 @@ namespace daw::ui
 //
 // Hygiene rule 1: every visual value (colour, spacing, size, radius, font size)
 // comes from here. Paths use dots: "color.surface.base", "space.md".
+//
+// Read once: the file is flattened into a table of decoded values when it is
+// loaded (TokenTable), so a call inside a paint loop is one hash of the path.
 class Tokens
 {
 public:
@@ -25,11 +30,11 @@ public:
     [[nodiscard]] bool contains(juce::StringRef path) const;
 
 private:
-    explicit Tokens(juce::var root);
+    explicit Tokens(TokenTable table);
 
-    [[nodiscard]] juce::var lookup(juce::StringRef path) const;
+    [[nodiscard]] const TokenTable::Entry* find(juce::StringRef path) const;
 
-    juce::var root_;
+    TokenTable table_;
 };
 
 } // namespace daw::ui
