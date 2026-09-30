@@ -22,6 +22,7 @@ target_sources(daw_app PRIVATE
     src/PlaybackProbe.cpp
     src/Verification.cpp
     src/VerificationAutomation.cpp
+    src/VerificationFluidity.cpp
     src/VerificationForm.cpp
     src/VerificationGeneration.cpp
     src/VerificationZone.cpp

@@ -208,6 +208,8 @@ public:
                 run = Verification::Run::legacy;
             else if (tokens[index] == "--verify-file")
                 run = Verification::Run::file;
+            else if (tokens[index] == "--verify-fluidite")
+                run = Verification::Run::fluidity;
             else if (tokens[index] != "--verify")
                 continue;
 

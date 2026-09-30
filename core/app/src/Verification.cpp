@@ -100,6 +100,9 @@ void Verification::start()
     case Run::file:
         buildFile();
         break;
+    case Run::fluidity:
+        buildFluidity();
+        break;
     }
 
     report_.add(juce::String::fromUTF8("# Vérification S11 — ") +

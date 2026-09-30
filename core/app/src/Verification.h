@@ -46,6 +46,8 @@ namespace daw::app
 //                    same history depth
 //   --verify-legacy  a project of the first nine weeks: it plays where it
 //                    always did
+//   --verify-fluidite  how long the interface takes to paint, on an empty
+//                    project it fills first
 class Verification final : private juce::Timer, private juce::ChangeListener
 {
 public:
@@ -54,7 +56,8 @@ public:
         list,
         reopen,
         legacy,
-        file
+        file,
+        fluidity
     };
 
     struct Wiring
@@ -139,6 +142,11 @@ private:
     void buildReopen();
     void buildLegacy();
     void buildFile();
+
+    // S18 bis (VerificationFluidity.cpp): repaints timed on a filled project,
+    // the playlist, the piano roll and the mixer whole, and sixty images of an
+    // internal window dragged over the playlist. Median and 95th percentile.
+    void buildFluidity();
 
     // The meters, live and rendered, and the copilot reading them. Part of
     // the list, after the samples: a project with a sampler channel and a
