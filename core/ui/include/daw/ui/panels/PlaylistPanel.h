@@ -210,6 +210,7 @@ public:
     // How long the last repaint of the whole panel took, in milliseconds.
     [[nodiscard]] double lastPaintMs() const noexcept { return lastPaintMs_; }
     [[nodiscard]] std::size_t bandBuilds() const noexcept { return bands_.builds(); }
+    [[nodiscard]] std::size_t imageBuilds() const noexcept { return imageBuilds_; }
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -478,6 +479,20 @@ private:
                           int lane,
                           juce::Rectangle<int> grid) const;
     void paintBandNames(juce::Graphics& g, int lane, juce::Rectangle<int> name) const;
+    [[nodiscard]] const juce::Image& canvasBlockImage(const domain::Placement& placement,
+                                                      const domain::Pattern& pattern,
+                                                      juce::Rectangle<int> inside,
+                                                      const std::vector<BandArea>& areas,
+                                                      float near,
+                                                      bool lit) const;
+    void renderCanvasBlock(juce::Graphics& g,
+                           const domain::Placement& placement,
+                           const domain::Pattern& pattern,
+                           juce::Rectangle<int> inside,
+                           juce::Rectangle<int> content,
+                           const std::vector<BandArea>& areas,
+                           float near,
+                           bool lit) const;
     void contentChanged();
     void catchUp();
     bool canvasMouseDown(const juce::MouseEvent& event);
@@ -677,6 +692,12 @@ private:
     domain::PlacementId hoveredPlacement_{};
     domain::NoteId hoveredNote_{};
     double lastPaintMs_{0.0};
+
+    // The picture of each block, by pattern, line, size and shade: drawn once,
+    // laid as often as the block is laid (PlaylistCanvas.cpp).
+    mutable std::map<std::string, juce::Image> blockImages_;
+    mutable std::uint64_t imagesVersion_{0};
+    mutable std::size_t imageBuilds_{0};
 
     mutable Content content_;
     mutable std::size_t contentBuilds_{0};

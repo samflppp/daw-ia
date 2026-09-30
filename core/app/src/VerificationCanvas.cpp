@@ -384,6 +384,7 @@ void Verification::addCanvasLoadSteps()
             // Twenty frames of a pan at the scale of notes: the cache is not
             // touched by a move of the view.
             const auto builds = view->bandBuilds();
+            const auto images = view->imageBuilds();
             const auto panned =
                 medianPaintMs(*view,
                               20,
@@ -410,9 +411,17 @@ void Verification::addCanvasLoadSteps()
                                       juce::MouseWheelDetails{0.0f, -0.05f, false, false, false});
                               });
             check(view->bandBuilds() == builds, "vingt images de déplacement : aucune rangée recalculée");
+            check(view->imageBuilds() == images,
+                  "vingt images de déplacement : aucune image de bloc redessinée");
+
+            // The playlist of S11 on the same song, for the scale of blocks.
+            auto playlistMs = 0.0;
+            if (auto* playlist = panel("playlist"); playlist != nullptr && playlist->getWidth() > 0)
+                playlistMs = medianPaintMs(*playlist, 20);
 
             note("repeint, médiane de 20 : vue d'ensemble " + ms(overview) + ", approche " + ms(approach) +
-                 ", notes " + ms(notes) + ", déplacement " + ms(panned) + " (" +
+                 ", notes " + ms(notes) + ", déplacement " + ms(panned) +
+                 " ; la playlist, vue d'ensemble : " + ms(playlistMs) + " (" +
                  std::to_string(view->getWidth()) + "×" + std::to_string(view->getHeight()) + ")");
             snapshot("s18-toile-projet-charge");
 

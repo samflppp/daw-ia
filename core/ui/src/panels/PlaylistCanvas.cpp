@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -44,6 +45,11 @@ constexpr int defaultVelocity = 100;
 
 // A framed block leaves this much of the width free on its left.
 constexpr double frameMargin = 0.05;
+
+// A block drawn once and laid many times: up to four megapixels an image, a
+// few hundred images kept. Past that, the block is drawn where it lies.
+constexpr std::int64_t canvasImagePixels = 4'000'000;
+constexpr std::size_t canvasImageCount = 256;
 
 [[nodiscard]] bool isBlackKey(int pitch) noexcept
 {
@@ -390,97 +396,47 @@ void PlaylistPanel::paintCanvasBlock(juce::Graphics& g,
         }
         else
         {
-            const auto scale = canvasScale();
-            const auto near = static_cast<float>(canvas::approach(canvasRow(), scale));
+            const auto near = static_cast<float>(canvas::approach(canvasRow(), canvasScale()));
             const auto* shown = patternEditing::current(state_, selection_);
             const auto lit = shown != nullptr && shown->id == pattern.id;
 
-            g.saveState();
-            g.reduceClipRegion(content);
-
-            // The block becomes a piano roll: its colour gives way to the
-            // grid's as the zoom nears the notes.
-            g.setColour(tokens_.colour(lit ? "color.note.fill" : "color.note.fillSoft")
-                            .interpolatedWith(tokens_.colour("color.grid.rowWhite"), near));
-            g.fillRect(content);
-
-            const auto from = beatAtX(content.getX()) - placement.startBeats;
-            const auto to = beatAtX(content.getRight()) - placement.startBeats;
-            const auto stepPixels = beatWidth() * stepBeats;
-            const auto noteColour = tokens_.colour("color.preview.note")
-                                        .interpolatedWith(tokens_.colour("color.note.fill"), near);
-
-            for (const auto& area : areas)
+            // Every block of a pattern on a line looks the same at a zoom: it
+            // is drawn once into an image and laid as many times as it is
+            // laid. The image goes when the content changes, or the size;
+            // never when the view only moves (S11's rule, kept).
+            const auto pixels = static_cast<std::int64_t>(inside.getWidth()) * inside.getHeight();
+            if (pixels <= canvasImagePixels)
             {
-                const auto band =
-                    area.area.withX(content.getX()).withWidth(content.getWidth()).getIntersection(content);
-                if (band.isEmpty())
-                    continue;
-
-                if (near > 0.0f && area.row >= tokens_.number("metric.canvas.rowShadeMin"))
-                {
-                    g.setColour(tokens_.colour("color.grid.rowBlack").withMultipliedAlpha(near));
-                    for (auto pitch = area.band.low; pitch <= area.band.high; ++pitch)
-                    {
-                        if (!isBlackKey(pitch))
-                            continue;
-                        const auto fromTop = static_cast<double>(area.band.high - pitch);
-                        const auto top = area.area.getY() + static_cast<int>(std::lround(fromTop * area.row));
-                        const auto bottom =
-                            area.area.getY() + static_cast<int>(std::lround((fromTop + 1.0) * area.row));
-                        g.fillRect(band.getX(), top, band.getWidth(), bottom - top);
-                    }
-                }
-
-                if (near > 0.0f && stepPixels >= tokens_.number("metric.canvas.stepLineMin"))
-                {
-                    const auto first = static_cast<int>(std::floor(std::max(0.0, from) / stepBeats));
-                    const auto last =
-                        static_cast<int>(std::ceil(std::min(pattern.lengthBeats, to) / stepBeats));
-                    for (auto step = first; step <= last; ++step)
-                    {
-                        g.setColour(
-                            tokens_.colour(step % 4 == 0 ? "color.grid.beat" : "color.grid.subdivision")
-                                .withMultipliedAlpha(near));
-                        g.fillRect(xForBeat(placement.startBeats + step * stepBeats),
-                                   band.getY(),
-                                   hairline,
-                                   band.getHeight());
-                    }
-                }
-
-                g.setColour(tokens_.colour("color.border.hairline"));
-                g.fillRect(band.getX(), area.area.getBottom() - hairline, band.getWidth(), hairline);
-
-                const auto* row = bands_.notes(pattern.id, area.band.track);
-                if (row == nullptr)
-                    continue;
-
-                const auto [firstNote, lastNote] = row->within(std::max(0.0, from), to);
-                for (auto index = firstNote; index < lastNote; ++index)
-                {
-                    const auto& note = row->notes[index];
-                    if (note.pitch < area.band.low || note.pitch > area.band.high ||
-                        note.startBeats >= pattern.lengthBeats)
-                        continue;
-
-                    const auto rect = noteRect(area, placement.startBeats, pattern.lengthBeats, note);
-                    g.setColour(noteColour);
-                    g.fillRect(rect);
-
-                    if (isPickedNote(note.id))
-                    {
-                        g.setColour(tokens_.colour("color.note.selected"));
-                        g.drawRect(rect, hairline);
-                    }
-                    else if (note.id == hoveredNote_ && placement.id == hoveredPlacement_)
-                    {
-                        g.setColour(tokens_.colour("color.accent.live"));
-                        g.drawRect(rect, hairline);
-                    }
-                }
+                g.drawImageAt(canvasBlockImage(placement, pattern, inside, areas, near, lit),
+                              inside.getX(),
+                              inside.getY());
+            }
+            else
+            {
+                g.saveState();
+                g.reduceClipRegion(content);
+                renderCanvasBlock(g, placement, pattern, inside, content, areas, near, lit);
+                g.restoreState();
             }
 
+            // What the hand picked or points at, over the picture.
+            g.saveState();
+            g.reduceClipRegion(content);
+            for (const auto& area : areas)
+            {
+                const auto* clip = pattern.findClipForTrack(area.band.track);
+                if (clip == nullptr)
+                    continue;
+                for (const auto& note : clip->notes)
+                {
+                    const auto picked = isPickedNote(note.id);
+                    const auto pointed = note.id == hoveredNote_ && placement.id == hoveredPlacement_;
+                    if (!picked && !pointed)
+                        continue;
+                    g.setColour(tokens_.colour(picked ? "color.note.selected" : "color.accent.live"));
+                    g.drawRect(noteRect(area, placement.startBeats, pattern.lengthBeats, note), hairline);
+                }
+            }
             g.restoreState();
         }
     }
@@ -512,6 +468,125 @@ void PlaylistPanel::paintCanvasBlock(juce::Graphics& g,
                            juce::Justification::centredRight,
                            false);
             }
+        }
+    }
+}
+
+const juce::Image& PlaylistPanel::canvasBlockImage(const domain::Placement& placement,
+                                                   const domain::Pattern& pattern,
+                                                   juce::Rectangle<int> inside,
+                                                   const std::vector<BandArea>& areas,
+                                                   float near,
+                                                   bool lit) const
+{
+    if (imagesVersion_ != version_)
+    {
+        blockImages_.clear();
+        imagesVersion_ = version_;
+    }
+
+    // A zoom gliding through its steps would draw an image per step: the
+    // fade is kept to sixteen shades.
+    const auto shade = static_cast<int>(std::lround(near * 16.0f));
+    const auto key = pattern.id.toString() + "|" + placement.laneId.toString() + "|" +
+                     std::to_string(inside.getWidth()) + "x" + std::to_string(inside.getHeight()) + "|" +
+                     std::to_string(shade) + (lit ? "|lit" : "") + "|" + std::to_string(beatWidth());
+    if (const auto found = blockImages_.find(key); found != blockImages_.end())
+        return found->second;
+
+    // Too many zooms kept: start again rather than grow without end.
+    if (blockImages_.size() >= canvasImageCount)
+        blockImages_.clear();
+
+    juce::Image image{
+        juce::Image::ARGB, std::max(1, inside.getWidth()), std::max(1, inside.getHeight()), true};
+    {
+        juce::Graphics drawn{image};
+        drawn.setOrigin(-inside.getPosition());
+        renderCanvasBlock(
+            drawn, placement, pattern, inside, inside, areas, static_cast<float>(shade) / 16.0f, lit);
+    }
+    ++imageBuilds_;
+    return blockImages_.emplace(key, std::move(image)).first->second;
+}
+
+void PlaylistPanel::renderCanvasBlock(juce::Graphics& g,
+                                      const domain::Placement& placement,
+                                      const domain::Pattern& pattern,
+                                      juce::Rectangle<int> inside,
+                                      juce::Rectangle<int> content,
+                                      const std::vector<BandArea>& areas,
+                                      float near,
+                                      bool lit) const
+{
+    const auto hairline = tokens_.integer("stroke.hairline");
+
+    // The block becomes a piano roll: its colour gives way to the grid's as
+    // the zoom nears the notes.
+    g.setColour(tokens_.colour(lit ? "color.note.fill" : "color.note.fillSoft")
+                    .interpolatedWith(tokens_.colour("color.grid.rowWhite"), near));
+    g.fillRect(content);
+
+    const auto from = beatAtX(content.getX()) - placement.startBeats;
+    const auto to = beatAtX(content.getRight()) - placement.startBeats;
+    const auto stepPixels = beatWidth() * stepBeats;
+    const auto noteColour =
+        tokens_.colour("color.preview.note").interpolatedWith(tokens_.colour("color.note.fill"), near);
+    juce::ignoreUnused(inside);
+
+    for (const auto& area : areas)
+    {
+        const auto band =
+            area.area.withX(content.getX()).withWidth(content.getWidth()).getIntersection(content);
+        if (band.isEmpty())
+            continue;
+
+        if (near > 0.0f && area.row >= tokens_.number("metric.canvas.rowShadeMin"))
+        {
+            g.setColour(tokens_.colour("color.grid.rowBlack").withMultipliedAlpha(near));
+            for (auto pitch = area.band.low; pitch <= area.band.high; ++pitch)
+            {
+                if (!isBlackKey(pitch))
+                    continue;
+                const auto fromTop = static_cast<double>(area.band.high - pitch);
+                const auto top = area.area.getY() + static_cast<int>(std::lround(fromTop * area.row));
+                const auto bottom =
+                    area.area.getY() + static_cast<int>(std::lround((fromTop + 1.0) * area.row));
+                g.fillRect(band.getX(), top, band.getWidth(), bottom - top);
+            }
+        }
+
+        if (near > 0.0f && stepPixels >= tokens_.number("metric.canvas.stepLineMin"))
+        {
+            const auto first = static_cast<int>(std::floor(std::max(0.0, from) / stepBeats));
+            const auto last = static_cast<int>(std::ceil(std::min(pattern.lengthBeats, to) / stepBeats));
+            for (auto step = first; step <= last; ++step)
+            {
+                g.setColour(tokens_.colour(step % 4 == 0 ? "color.grid.beat" : "color.grid.subdivision")
+                                .withMultipliedAlpha(near));
+                g.fillRect(xForBeat(placement.startBeats + step * stepBeats),
+                           band.getY(),
+                           hairline,
+                           band.getHeight());
+            }
+        }
+
+        g.setColour(tokens_.colour("color.border.hairline"));
+        g.fillRect(band.getX(), area.area.getBottom() - hairline, band.getWidth(), hairline);
+
+        const auto* row = bands_.notes(pattern.id, area.band.track);
+        if (row == nullptr)
+            continue;
+
+        g.setColour(noteColour);
+        const auto [firstNote, lastNote] = row->within(std::max(0.0, from), to);
+        for (auto index = firstNote; index < lastNote; ++index)
+        {
+            const auto& note = row->notes[index];
+            if (note.pitch < area.band.low || note.pitch > area.band.high ||
+                note.startBeats >= pattern.lengthBeats)
+                continue;
+            g.fillRect(noteRect(area, placement.startBeats, pattern.lengthBeats, note));
         }
     }
 }
