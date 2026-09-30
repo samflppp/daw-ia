@@ -55,6 +55,10 @@ public:
     // verification, which have to prove what was not rebuilt.
     [[nodiscard]] std::size_t builds() const noexcept { return builds_; }
 
+    // The patterns whose preview the last refresh() built: what a screen
+    // repaints when only notes changed (S18 bis).
+    [[nodiscard]] const std::vector<domain::PatternId>& rebuilt() const noexcept { return rebuilt_; }
+
     [[nodiscard]] static PatternPreview build(const domain::Pattern& pattern);
     [[nodiscard]] static std::uint64_t fingerprint(const domain::Pattern& pattern) noexcept;
 
@@ -67,6 +71,7 @@ private:
     };
 
     std::vector<Entry> entries_;
+    std::vector<domain::PatternId> rebuilt_;
     std::size_t builds_{0};
 };
 

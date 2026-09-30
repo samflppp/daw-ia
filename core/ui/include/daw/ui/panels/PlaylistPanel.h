@@ -307,6 +307,10 @@ private:
     [[nodiscard]] juce::Rectangle<int>
     bounds(const Item& item, double offsetBeats = 0.0, int laneOffset = 0) const;
     [[nodiscard]] std::optional<Item> itemAt(juce::Point<int> point) const;
+
+    // What the blocks being moved cover where they are drawn now, with their
+    // outline: a step of the move repaints this before and after (S18 bis).
+    [[nodiscard]] juce::Rectangle<int> movingArea() const;
     [[nodiscard]] bool isSelected(const Item& item) const;
 
     // --- painting
@@ -495,6 +499,10 @@ private:
 
     mutable Content content_;
     mutable std::size_t contentBuilds_{0};
+
+    // The project's revision at the last change heard: what changed since is
+    // what the next one has to repaint.
+    std::uint64_t handledRevision_{0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PlaylistPanel)
 };

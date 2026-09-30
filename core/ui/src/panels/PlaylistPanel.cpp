@@ -153,8 +153,13 @@ void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 
     // The project changed: the previews whose notes changed are rebuilt, the
     // others are kept. Here, and never at paint time.
+    const auto notesOnly = source == &project_ && project_.onlyNotesSince(handledRevision_);
     if (source == &project_)
+    {
+        handledRevision_ = project_.revision();
         static_cast<void>(previews_.refresh(state_));
+    }
+    auto reshaped = false;
 
     // A slider asked to see its automation line: its lane comes into view.
     if (source == &selection_ && selection_.automationRequests() != automationRequests_)
@@ -171,6 +176,7 @@ void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
         bar_.showMessage(
             juce::String::fromUTF8(u8"Le projet a changé sous la zone : écris de nouveau ta demande."));
         resized();
+        reshaped = true;
     }
 
     // A block an undo took away is no longer selectable.
@@ -188,11 +194,42 @@ void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     {
         tempoLaneShown_ = automated;
         resized();
+        reshaped = true;
     }
 
     // A song that grew or shrank moves the bounds of the view: an undo that
     // takes the last bars away must not leave the view past the end.
     updateScrollBars();
+
+    // Only notes changed — a note dragged in the piano roll, a step of the
+    // rack: what changed here is the picture of their pattern, in each block
+    // that lays it. Those blocks are repainted, not the playlist (S18 bis).
+    if (notesOnly && !reshaped && !move_.has_value())
+    {
+        const auto& rebuilt = previews_.rebuilt();
+        const auto outline = tokens_.integer("stroke.hairline") * 2;
+        for (const auto& block : content().blocks)
+        {
+            if (!block.clip.has_value() &&
+                std::find(rebuilt.begin(), rebuilt.end(), block.pattern) != rebuilt.end())
+                repaint(blockBounds(block, 0.0, 0).expanded(outline).getIntersection(gridArea()));
+        }
+        return;
+    }
+
+    // A step of a point being dragged changed that point's line and nothing
+    // else on this screen: its lane is repainted, not the playlist (S18 bis).
+    // The segments on either side of the point move with it, so the lane is
+    // the smallest honest rectangle.
+    if (source == &project_ && automationDrag_.has_value())
+    {
+        if (const auto lane = laneOfAutomation(automationDrag_->line); lane.has_value())
+        {
+            repaint(laneArea(*lane).getIntersection(gridArea()));
+            return;
+        }
+    }
+
     repaint();
 }
 
@@ -1543,8 +1580,10 @@ void PlaylistPanel::mouseDrag(const juce::MouseEvent& event)
 
     if (band_.has_value())
     {
+        // The band as it was and as it is, with its outline: not the grid.
+        const auto before = *band_;
         band_ = juce::Rectangle<int>{bandStart_, event.getPosition()}.getIntersection(gridArea());
-        repaint();
+        repaint(before.getUnion(*band_).expanded(tokens_.integer("stroke.hairline")));
         return;
     }
 
@@ -1587,11 +1626,6 @@ void PlaylistPanel::mouseDrag(const juce::MouseEvent& event)
     const auto overLane = laneAtY(event.getPosition().getY());
     const auto laneOffset =
         overLane >= 0 ? std::min(overLane, freeLaneCount()) - move_->grabLane : move_->laneOffset;
-    if (laneOffset != move_->laneOffset)
-    {
-        move_->laneOffset = laneOffset;
-        repaint();
-    }
 
     // The move snaps as a whole, by the bar (by the beat with Shift): the
     // blocks keep their places relative to each other.
@@ -1599,11 +1633,33 @@ void PlaylistPanel::mouseDrag(const juce::MouseEvent& event)
     const auto step = event.mods.isShiftDown() ? 1.0 : barBeats();
     const auto offset = std::round(raw / step) * step;
 
-    if (offset != move_->offsetBeats)
+    if (laneOffset == move_->laneOffset && offset == move_->offsetBeats)
+        return;
+
+    // Where the blocks were drawn and where they are drawn now; the lines and
+    // the other blocks around are left as they are.
+    const auto before = movingArea();
+    move_->laneOffset = laneOffset;
+    move_->offsetBeats = offset;
+    repaint(before.getUnion(movingArea()));
+}
+
+juce::Rectangle<int> PlaylistPanel::movingArea() const
+{
+    juce::Rectangle<int> area;
+    if (!move_.has_value())
+        return area;
+
+    // The outline of a selected block is two hairlines wide, on its edge.
+    const auto outline = tokens_.integer("stroke.hairline") * 2;
+    for (const auto& block : content().blocks)
     {
-        move_->offsetBeats = offset;
-        repaint();
+        if (!isSelected(block.item))
+            continue;
+        const auto drawn = blockBounds(block, move_->offsetBeats, move_->laneOffset).expanded(outline);
+        area = area.isEmpty() ? drawn : area.getUnion(drawn);
     }
+    return area.getIntersection(gridArea());
 }
 
 void PlaylistPanel::mouseUp(const juce::MouseEvent& event)

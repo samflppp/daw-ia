@@ -218,11 +218,26 @@ public:
             owner_.selection_.selectTrack(id_);
     }
 
-    void refresh()
+    // `force` after a refused choice: the combo shows what the hand chose, and
+    // the project, which did not change, is what it must show again.
+    void refresh(bool force = false)
     {
         const auto* strip = state_.findStrip(id_);
         if (strip == nullptr)
             return;
+
+        // Every command reaches here, a note moved in the piano roll as well:
+        // a strip whose name, state, inserts and routing are what it already
+        // shows follows its fader and pan and stops there. Refilling its
+        // combos and repainting it was a full mixer per step of a drag
+        // (S18 bis).
+        const auto shown = shownKey(*strip);
+        if (!force && shown == shownKey_)
+        {
+            follow();
+            return;
+        }
+        shownKey_ = shown;
 
         name_.setText(text(strip->name), juce::dontSendNotification);
         name_.setColour(juce::Label::textColourId,
@@ -390,7 +405,7 @@ private:
         const auto chosen = busAt(output_.getSelectedId());
         if (!bus_.execute(std::make_unique<domain::SetTrackOutput>(id_, chosen.value_or(domain::TrackId{})))
                  .ok())
-            refresh(); // a loop refused: the combo goes back to what is true
+            refresh(true); // a loop refused: the combo goes back to what is true
     }
 
     void chooseSend()
@@ -411,7 +426,7 @@ private:
         domain::GroupOptions group{};
         group.label = chosen.has_value() ? "envoi" : "retirer l'envoi";
         if (!bus_.executeGroup(std::move(commands), group).ok())
-            refresh();
+            refresh(true);
     }
 
     void execute(std::unique_ptr<domain::Command> command)
@@ -437,12 +452,28 @@ private:
             owner_.selection_.showAutomation(line);
     }
 
+    // Everything refresh() shows but the fader and the pan, in one string.
+    [[nodiscard]] juce::String shownKey(const domain::Track& strip) const
+    {
+        juce::String key = text(strip.name);
+        key << '|' << (state_.isAudible(id_) ? 1 : 0) << (strip.muted ? 1 : 0) << (strip.soloed ? 1 : 0);
+        for (const auto& plugin : strip.plugins)
+            key << '|' << text(plugin.ref.name);
+        key << '|' << juce::String{strip.output.toString()};
+        for (const auto& bus : state_.buses())
+            key << '|' << juce::String{bus.id.toString()} << ':' << text(bus.name);
+        for (const auto& send : strip.sends)
+            key << '|' << juce::String{send.bus.toString()} << ':' << send.levelDb;
+        return key;
+    }
+
     MixerPanel& owner_;
     const Tokens& tokens_;
     domain::CommandBus& bus_;
     const domain::ProjectState& state_;
     domain::TrackId id_;
     Kind kind_;
+    juce::String shownKey_;
 
     juce::Label name_;
     AutomatableSlider fader_;

@@ -80,13 +80,19 @@ TEST_CASE("Moving a placement rebuilds no preview, adding a note rebuilds one")
 
     REQUIRE(project.bus.execute(std::make_unique<MovePlacement>(project.placements[3], 40.0)).ok());
     CHECK(previews.refresh(project.state) == 0);
+    CHECK(previews.rebuilt().empty());
 
     REQUIRE(project.bus.execute(std::make_unique<SetTrackVolume>(project.trackId, -6.0)).ok());
     CHECK(previews.refresh(project.state) == 0);
 
+    // The one rebuilt is named: the playlist repaints its blocks and no others.
     project.addNote(67, 2.0);
     CHECK(previews.refresh(project.state) == 1);
+    CHECK(previews.rebuilt() == std::vector<PatternId>{project.patternId});
     CHECK(previews.find(project.patternId)->notes.size() == 2);
+
+    CHECK(previews.refresh(project.state) == 0);
+    CHECK(previews.rebuilt().empty());
 
     // And an undo is a change of content like any other.
     REQUIRE(project.bus.undo().ok());

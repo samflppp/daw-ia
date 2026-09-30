@@ -375,7 +375,16 @@ private:
         int grabVelocity{0};
         domain::GestureId gesture{};
         bool moved{false};
+
+        // Where the note was last painted, on the grid and in the velocity
+        // lane: a step of the drag repaints that and where the note is now,
+        // not the panel (S18 bis).
+        std::pair<juce::Rectangle<int>, juce::Rectangle<int>> painted;
     };
+
+    // The note being dragged, as painted: its rectangle with the width of a
+    // selection outline, and its stem's column in the velocity lane.
+    [[nodiscard]] std::pair<juce::Rectangle<int>, juce::Rectangle<int>> dragArea() const;
 
     std::optional<Drag> drag_;
 

@@ -5,6 +5,7 @@
 #include <juce_events/juce_events.h>
 
 #include <cstdint>
+#include <string_view>
 
 namespace daw::ui
 {
@@ -35,8 +36,20 @@ public:
     // and never because the view moved (S18 bis).
     [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }
 
+    // Whether every change since `revision` was to notes: added, moved,
+    // stretched, removed, their velocity. A panel that draws notes as a
+    // picture of their pattern repaints the pictures that changed, not
+    // itself (S18 bis).
+    [[nodiscard]] bool onlyNotesSince(std::uint64_t revision) const noexcept
+    {
+        return lastBeyondNotes_ <= revision;
+    }
+
 private:
+    void changed(std::string_view type);
+
     std::uint64_t revision_{0};
+    std::uint64_t lastBeyondNotes_{0};
 };
 
 } // namespace daw::ui

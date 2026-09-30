@@ -191,7 +191,45 @@ void PianoRollPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
                                  }),
                   picked_.end());
 
+    // A step of a note being dragged changed that note and nothing else: the
+    // place it left and the place it took are repainted, the rest of the grid
+    // is not. Another row, or a proposal on screen, and it is the whole panel.
+    if (source == &project_ && drag_.has_value() && !drag_->painted.first.isEmpty() && !proposing() &&
+        shown == revealedRow_)
+    {
+        const auto now = dragArea();
+        repaint(drag_->painted.first.getUnion(now.first));
+        repaint(drag_->painted.second.getUnion(now.second));
+        drag_->painted = now;
+        return;
+    }
+
     repaint();
+    if (drag_.has_value())
+        drag_->painted = dragArea();
+}
+
+std::pair<juce::Rectangle<int>, juce::Rectangle<int>> PianoRollPanel::dragArea() const
+{
+    const auto* edited = clip();
+    if (!drag_.has_value() || edited == nullptr)
+        return {};
+
+    const auto found = std::find_if(edited->notes.begin(),
+                                    edited->notes.end(),
+                                    [this](const domain::Note& note) { return note.id == drag_->noteId; });
+    if (found == edited->notes.end())
+        return {};
+
+    const auto margin = tokens_.integer("stroke.focus");
+    const auto note = noteBounds(*found).expanded(margin);
+
+    // The stem stands at the note's start, its handle a circle around its top.
+    const auto handle = tokens_.integer("metric.pianoRoll.velocityHandle");
+    const auto stem = tokens_.integer("metric.pianoRoll.velocityStem");
+    const auto lane = velocityArea();
+    const auto column = lane.withX(note.getX() - handle - margin).withWidth(stem + (handle + margin) * 2);
+    return {note, column};
 }
 
 void PianoRollPanel::revealNotes()
@@ -1125,6 +1163,7 @@ void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
 
     drag.gesture = bus_.beginGesture(label);
     drag_ = drag;
+    drag_->painted = dragArea();
 
     repaint();
 }
@@ -1152,8 +1191,10 @@ void PianoRollPanel::mouseDrag(const juce::MouseEvent& event)
 
     if (band_.has_value())
     {
+        // The band as it was and as it is, with its outline: not the grid.
+        const auto before = *band_;
         band_ = juce::Rectangle<int>{bandStart_, event.getPosition()}.getIntersection(gridArea());
-        repaint();
+        repaint(before.getUnion(*band_).expanded(tokens_.integer("stroke.hairline")));
         return;
     }
 

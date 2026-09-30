@@ -98,6 +98,7 @@ PatternPreview PatternPreviews::build(const domain::Pattern& pattern)
 std::size_t PatternPreviews::refresh(const domain::ProjectState& state)
 {
     std::size_t built = 0;
+    rebuilt_.clear();
     std::vector<Entry> kept;
     kept.reserve(state.patterns().size());
 
@@ -115,6 +116,7 @@ std::size_t PatternPreviews::refresh(const domain::ProjectState& state)
         }
 
         kept.push_back(Entry{pattern.id, print, build(pattern)});
+        rebuilt_.push_back(pattern.id);
         ++built;
     }
 
