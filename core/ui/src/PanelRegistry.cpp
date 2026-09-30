@@ -37,6 +37,8 @@ PanelRegistry PanelRegistry::withBuiltinPanels()
                  [](const PanelContext& context) { return std::make_unique<BrowserPanel>(context); });
     registry.add("playlist",
                  [](const PanelContext& context) { return std::make_unique<PlaylistPanel>(context); });
+    registry.add("canvas",
+                 [](const PanelContext& context) { return std::make_unique<PlaylistPanel>(context, true); });
     registry.add("plugin_chain",
                  [](const PanelContext& context) { return std::make_unique<PluginChainPanel>(context); });
     registry.add("copilot",

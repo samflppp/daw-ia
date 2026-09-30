@@ -2,6 +2,7 @@
 
 #include "daw/ui/FrameTicker.h"
 #include "daw/ui/PanelRegistry.h"
+#include "daw/ui/model/CanvasBands.h"
 #include "daw/ui/model/Motion.h"
 #include "daw/ui/model/PatternPreviews.h"
 #include "daw/ui/model/PromptReader.h"
@@ -11,6 +12,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -72,6 +74,15 @@ namespace daw::ui
 // Alt + drag over several lines draws a zone of generation (S17): one prompt,
 // a part per line in the role the line's name or content says, heard before it
 // is written and written as one history entry. Described in PlaylistZone.cpp.
+//
+// The canvas (S18) is this panel built with `canvas`: the same lines, the same
+// blocks, the same gestures, and a zoom that goes on into the notes. Each line
+// unfolds into one band per track its blocks play (CanvasBands); as the zoom
+// grows, the grid of each band fades in and the notes of a block take their
+// colour, and past the threshold they can be grabbed where they are drawn,
+// with the piano roll's gestures. Editing a note edits the pattern: every other
+// block of the same pattern is lit while the hand is on one. Described in
+// PlaylistCanvas.cpp.
 class PlaylistPanel final : public juce::Component,
                             public juce::DragAndDropTarget,
                             public juce::FileDragAndDropTarget,
@@ -79,7 +90,7 @@ class PlaylistPanel final : public juce::Component,
                             private juce::ScrollBar::Listener
 {
 public:
-    explicit PlaylistPanel(const PanelContext& context);
+    explicit PlaylistPanel(const PanelContext& context, bool canvas = false);
     ~PlaylistPanel() override;
 
     void paint(juce::Graphics& g) override;
@@ -89,6 +100,8 @@ public:
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
     void mouseDoubleClick(const juce::MouseEvent& event) override;
+    void mouseMove(const juce::MouseEvent& event) override;
+    void mouseExit(const juce::MouseEvent& event) override;
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
     bool keyPressed(const juce::KeyPress& key) override;
 
@@ -168,6 +181,36 @@ public:
     // verification with the images the display showed meanwhile.
     [[nodiscard]] std::size_t playheadMoves() const noexcept { return playheadMoves_; }
 
+    // --- the canvas (PlaylistCanvas.cpp), read by the verification
+    [[nodiscard]] bool isCanvas() const noexcept { return canvas_; }
+
+    // Whether the notes can be grabbed at this zoom.
+    [[nodiscard]] bool notesGrabbable() const;
+
+    // Where a note of a block is drawn; where a click lands on a beat of the
+    // pattern and a pitch, in the band of a track, in a block. Nothing when
+    // the block, the band or the note is not on the canvas.
+    [[nodiscard]] std::optional<juce::Rectangle<int>> noteBoundsIn(domain::PlacementId placement,
+                                                                   domain::NoteId note) const;
+    [[nodiscard]] std::optional<juce::Point<int>>
+    notePointIn(domain::PlacementId placement, domain::TrackId track, double beats, int pitch) const;
+
+    // The pattern under the hand, whose other blocks are lit.
+    [[nodiscard]] domain::PatternId litPattern() const noexcept { return hoveredPattern_; }
+
+    // A double-click on a block: the view frames it at the scale of notes.
+    // Escape: the whole song again.
+    void frameBlock(domain::PlacementId placement);
+    void showWholeSong();
+
+    // The wheel's zoom, around a point, on both axes on the canvas.
+    // Glides on the fluid pace when asked; the verification asks for none.
+    void zoomAround(juce::Point<int> anchor, double factor, bool glides = false);
+
+    // How long the last repaint of the whole panel took, in milliseconds.
+    [[nodiscard]] double lastPaintMs() const noexcept { return lastPaintMs_; }
+    [[nodiscard]] std::size_t bandBuilds() const noexcept { return bands_.builds(); }
+
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
@@ -206,6 +249,14 @@ private:
     [[nodiscard]] juce::Rectangle<int> rulerArea() const;
     [[nodiscard]] juce::Rectangle<int> gridArea() const;
 
+    // The widest a beat may be drawn: the playlist's, or the canvas's, which
+    // goes on to the piano roll's.
+    [[nodiscard]] double widestBeatWidth() const;
+
+    // On the canvas, the lane and the height within it that stay under a
+    // row of the screen while the zoom changes.
+    void keepRowUnder(int lane, double within, int y);
+
     // How long the timeline is: the arrangement and four bars of room after
     // it, never fewer than sixteen bars. Read at paint time, so the timeline
     // grows as the song does.
@@ -217,6 +268,13 @@ private:
     [[nodiscard]] double viewBeats() const; // how many beats the grid shows
     [[nodiscard]] int lanesHeight() const;
     [[nodiscard]] int firstLanePixel() const;
+
+    // Where a lane starts and how tall it is, in pixels from the top of the
+    // first lane: a playlist line is as tall as the next, a canvas line as
+    // tall as its bands. laneTop(laneCount()) is the height of them all.
+    [[nodiscard]] int laneTop(int lane) const;
+    [[nodiscard]] int laneHeightOf(int lane) const;
+    [[nodiscard]] int laneAtContentY(int y) const; // may be past the last lane
 
     // Moves the view, clamped to the timeline, and the scroll bars with it.
     void setView(double firstBeat, std::optional<double> zoom);
@@ -375,6 +433,60 @@ private:
     void toggleZoneListening();
     void listenZoneAgain();
     void stopZoneListening();
+    // --- the canvas (PlaylistCanvas.cpp)
+    struct BandArea
+    {
+        CanvasBand band;
+        juce::Rectangle<int> area; // across the whole grid
+        double row{1.0};
+    };
+
+    // What is under a point of a block, at the scale of notes: the block, the
+    // band, the note if one is there, and whether the point is on the note's
+    // right edge or on an edge of the band.
+    struct NoteSpot
+    {
+        domain::PlacementId placement{};
+        domain::PatternId pattern{};
+        domain::ClipId clip{};
+        int lane{0};
+        double blockStart{0.0};
+        double patternLength{0.0};
+        double beats{0.0}; // in the pattern
+        BandArea band;
+        std::optional<domain::Note> note;
+        bool grip{false};
+        int edge{0}; // 1: the band's top, -1: its bottom
+    };
+
+    [[nodiscard]] canvas::Scale canvasScale() const;
+    [[nodiscard]] double canvasRow() const;
+    [[nodiscard]] int canvasChrome() const;
+    [[nodiscard]] const std::vector<int>& laneEdges() const;
+    [[nodiscard]] int computedLaneHeight(int lane, const Lane& entry) const;
+    [[nodiscard]] std::vector<CanvasBand> bandsOfLane(int lane) const;
+    [[nodiscard]] std::vector<BandArea> bandAreas(int lane) const;
+    [[nodiscard]] std::optional<NoteSpot> spotAt(juce::Point<int> point) const;
+    [[nodiscard]] int pitchAt(const BandArea& band, int y) const;
+    [[nodiscard]] juce::Rectangle<int>
+    noteRect(const BandArea& band, double blockStart, double patternLength, const domain::Note& note) const;
+    [[nodiscard]] bool isPickedNote(domain::NoteId note) const;
+    void paintCanvasBlock(juce::Graphics& g,
+                          const domain::Placement& placement,
+                          const domain::Pattern& pattern,
+                          juce::Rectangle<int> block,
+                          int lane,
+                          juce::Rectangle<int> grid) const;
+    void paintBandNames(juce::Graphics& g, int lane, juce::Rectangle<int> name) const;
+    void contentChanged();
+    void catchUp();
+    bool canvasMouseDown(const juce::MouseEvent& event);
+    bool canvasMouseDrag(const juce::MouseEvent& event);
+    bool canvasMouseUp();
+    bool canvasDoubleClick(juce::Point<int> point);
+    bool canvasKey(const juce::KeyPress& key);
+    void hover(std::optional<NoteSpot> spot);
+
     void placeBar();
     void removeSelection();
     void copySelection();
@@ -477,6 +589,9 @@ private:
         Glide width;
         double anchorBeats{0.0};
         int anchorX{0};
+        int anchorLane{-1}; // the canvas keeps the row under the pointer too
+        double anchorWithin{0.0};
+        int anchorY{0};
     };
     std::optional<Glide> pageTurn_;
     std::optional<ZoomGlide> zoomGlide_;
@@ -514,6 +629,54 @@ private:
     PromptReader::Reading lastReading_;
     juce::String promptedText_;
     bool listeningHere_{false};
+
+    // --- the canvas
+    bool canvas_{false};
+    CanvasBands bands_;
+
+    // Rows added by hand to a band, by line and track: the screen's.
+    std::map<std::pair<std::string, std::string>, CanvasExtension> extensions_;
+
+    // The top of each lane, recomputed when the content or the zoom changed.
+    mutable std::vector<int> edges_;
+    mutable double edgesWidth_{-1.0};
+    mutable std::uint64_t edgesVersion_{0};
+    std::uint64_t version_{1};
+
+    // A note being moved or stretched, in one gesture. The bands of its line
+    // hold still under the hand: a range that grew as the note reached its
+    // edge would slide the rows away from the pointer.
+    struct NoteDrag
+    {
+        domain::ClipId clip{};
+        domain::NoteId note{};
+        domain::PlacementId placement{};
+        int lane{0};
+        domain::TrackId track{};
+        double grabOffset{0.0};
+        double patternLength{0.0};
+        bool resize{false};
+        domain::GestureId gesture{};
+    };
+    std::optional<NoteDrag> noteDrag_;
+    std::optional<std::pair<domain::LaneId, std::vector<CanvasBand>>> frozen_;
+
+    // An edge of a band being dragged: rows added or taken back.
+    struct EdgeDrag
+    {
+        std::pair<std::string, std::string> key;
+        bool top{false};
+        int grabY{0};
+        CanvasExtension start;
+        double row{1.0};
+    };
+    std::optional<EdgeDrag> edgeDrag_;
+
+    std::vector<std::pair<domain::ClipId, domain::NoteId>> pickedNotes_;
+    domain::PatternId hoveredPattern_{};
+    domain::PlacementId hoveredPlacement_{};
+    domain::NoteId hoveredNote_{};
+    double lastPaintMs_{0.0};
 
     mutable Content content_;
     mutable std::size_t contentBuilds_{0};

@@ -32,14 +32,10 @@ std::optional<PlaylistPanel::Zone> PlaylistPanel::zoneBetween(juce::Point<int> f
         return std::nullopt;
 
     const auto grid = gridArea();
-    const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
     const auto laneAt = [&](int y)
     {
         const auto raw =
-            laneHeight > 0
-                ? (std::clamp(y, grid.getY(), grid.getBottom() - 1) - grid.getY() + firstLanePixel()) /
-                      laneHeight
-                : 0;
+            laneAtContentY(std::clamp(y, grid.getY(), grid.getBottom() - 1) - grid.getY() + firstLanePixel());
         return std::clamp(raw, 0, freeLaneCount() - 1);
     };
 
@@ -59,9 +55,8 @@ std::optional<PlaylistPanel::Zone> PlaylistPanel::zoneBetween(juce::Point<int> f
 juce::Rectangle<int> PlaylistPanel::zoneArea(const Zone& zone) const
 {
     const auto grid = gridArea();
-    const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
-    const auto top = grid.getY() + zone.firstLane * laneHeight - firstLanePixel();
-    const auto bottom = grid.getY() + (zone.lastLane + 1) * laneHeight - firstLanePixel();
+    const auto top = grid.getY() + laneTop(zone.firstLane) - firstLanePixel();
+    const auto bottom = grid.getY() + laneTop(zone.lastLane + 1) - firstLanePixel();
     const auto left = xForBeat(zone.fromBeats);
     return {left, top, std::max(1, xForBeat(zone.toBeats) - left), bottom - top};
 }
@@ -96,7 +91,6 @@ void PlaylistPanel::paintZone(juce::Graphics& g, juce::Rectangle<int> grid) cons
     if (zoneProposal_.has_value())
     {
         const auto radius = tokens_.number("radius.sm");
-        const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
         for (const auto& part : zoneProposal_->parts())
         {
             const auto lane = state_.laneIndex(part.lane);
@@ -106,10 +100,9 @@ void PlaylistPanel::paintZone(juce::Graphics& g, juce::Rectangle<int> grid) cons
             const auto right = xForBeat(part.songBeats + part.toBeats);
             const auto block =
                 juce::Rectangle<int>{left,
-                                     grid.getY() + static_cast<int>(lane.value()) * laneHeight -
-                                         firstLanePixel(),
+                                     grid.getY() + laneTop(static_cast<int>(lane.value())) - firstLanePixel(),
                                      std::max(1, right - left),
-                                     laneHeight}
+                                     laneHeightOf(static_cast<int>(lane.value()))}
                     .withTrimmedTop(tokens_.integer("metric.playlist.blockInset"))
                     .withTrimmedBottom(tokens_.integer("metric.playlist.blockInset"));
 

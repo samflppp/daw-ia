@@ -64,7 +64,7 @@ constexpr const char* samplePrefix = "sample:";
 
 } // namespace
 
-PlaylistPanel::PlaylistPanel(const PanelContext& context)
+PlaylistPanel::PlaylistPanel(const PanelContext& context, bool canvas)
     : tokens_(context.tokens)
     , lookAndFeel_(context.lookAndFeel)
     , bus_(context.bus)
@@ -76,6 +76,7 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context)
     , reader_(context.prompts)
     , listening_(context.listening)
     , bar_(context.tokens, context.lookAndFeel)
+    , canvas_(canvas)
 {
     titled_ = context.titled;
 
@@ -105,6 +106,8 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context)
     selection_.addChangeListener(this);
     samples_.addChangeListener(this);
     static_cast<void>(previews_.refresh(state_));
+    if (canvas_)
+        static_cast<void>(bands_.refresh(state_));
     tempoLaneShown_ = tempoLaneHeight() > 0;
 }
 
@@ -154,8 +157,13 @@ void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     {
         handledRevision_ = project_.revision();
         static_cast<void>(previews_.refresh(state_));
+        if (canvas_)
+            contentChanged();
     }
-    auto reshaped = false;
+
+    // On the canvas a note can make its line taller or shorter, and every
+    // line under it moves: the whole panel is repainted.
+    auto reshaped = canvas_ && source == &project_;
 
     // A slider asked to see its automation line: its lane comes into view.
     if (source == &selection_ && selection_.automationRequests() != automationRequests_)
@@ -417,11 +425,17 @@ double PlaylistPanel::fitBeatWidth() const
     return std::max(floor, width / timelineBeats());
 }
 
+double PlaylistPanel::widestBeatWidth() const
+{
+    return std::max(fitBeatWidth(),
+                    static_cast<double>(tokens_.integer(canvas_ ? "metric.canvas.beatWidthMax"
+                                                                : "metric.playlist.beatWidthMax")));
+}
+
 double PlaylistPanel::beatWidth() const
 {
     const auto fit = fitBeatWidth();
-    const auto widest = std::max(fit, static_cast<double>(tokens_.integer("metric.playlist.beatWidthMax")));
-    return std::clamp(zoom_.value_or(fit), fit, widest);
+    return std::clamp(zoom_.value_or(fit), fit, widestBeatWidth());
 }
 
 double PlaylistPanel::viewBeats() const
@@ -448,7 +462,46 @@ int PlaylistPanel::xForBeat(double beats) const
 
 int PlaylistPanel::lanesHeight() const
 {
-    return laneCount() * tokens_.integer("metric.playlist.laneHeight");
+    return laneTop(laneCount());
+}
+
+int PlaylistPanel::laneTop(int lane) const
+{
+    if (!canvas_)
+        return lane * tokens_.integer("metric.playlist.laneHeight");
+
+    const auto& edges = laneEdges();
+    if (lane < 0)
+        return 0;
+    if (static_cast<std::size_t>(lane) < edges.size())
+        return edges[static_cast<std::size_t>(lane)];
+    return edges.back() +
+           (lane - static_cast<int>(edges.size()) + 1) * tokens_.integer("metric.playlist.laneHeight");
+}
+
+int PlaylistPanel::laneHeightOf(int lane) const
+{
+    if (!canvas_)
+        return tokens_.integer("metric.playlist.laneHeight");
+    return laneTop(lane + 1) - laneTop(lane);
+}
+
+int PlaylistPanel::laneAtContentY(int y) const
+{
+    const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
+    if (y < 0)
+        return -1;
+    if (!canvas_)
+        return laneHeight > 0 ? y / laneHeight : 0;
+
+    // The last edge at or above y: its lane. Past the last lane, as many
+    // playlist lines as fit, the way the playlist counts.
+    const auto& edges = laneEdges();
+    const auto after = std::upper_bound(edges.begin(), edges.end(), y);
+    const auto lane = static_cast<int>(after - edges.begin()) - 1;
+    if (after != edges.end())
+        return lane;
+    return lane + (laneHeight > 0 ? (y - edges.back()) / laneHeight : 0);
 }
 
 int PlaylistPanel::firstLanePixel() const
@@ -458,19 +511,17 @@ int PlaylistPanel::firstLanePixel() const
 
 juce::Point<int> PlaylistPanel::pointFor(int lane, double beats) const
 {
-    const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
-    return {xForBeat(beats), gridArea().getY() + lane * laneHeight + laneHeight / 2 - firstLanePixel()};
+    return {xForBeat(beats), gridArea().getY() + laneTop(lane) + laneHeightOf(lane) / 2 - firstLanePixel()};
 }
 
 int PlaylistPanel::laneAtY(int y) const
 {
     const auto grid = gridArea();
-    const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
-    if (y < grid.getY() || y >= grid.getBottom() || laneHeight <= 0)
+    if (y < grid.getY() || y >= grid.getBottom())
         return -1;
 
-    const auto lane = (y - grid.getY() + firstLanePixel()) / laneHeight;
-    return lane < laneCount() ? lane : -1;
+    const auto lane = laneAtContentY(y - grid.getY() + firstLanePixel());
+    return lane >= 0 && lane < laneCount() ? lane : -1;
 }
 
 void PlaylistPanel::setView(double first, std::optional<double> zoom)
@@ -536,34 +587,7 @@ void PlaylistPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::Mo
     // Over the ruler the wheel zooms, as in FL; elsewhere Ctrl makes it zoom.
     if (rulerArea().contains(event.getPosition()) || event.mods.isCtrlDown() || event.mods.isCommandDown())
     {
-        // Around the pointer: the beat under it stays under it.
-        const auto x = std::clamp(event.getPosition().getX(), grid.getX(), grid.getRight());
-        const auto anchor = beatAtX(x);
-        const auto width = beatWidth() * std::pow(zoomPerWheelUnit, static_cast<double>(wheel.deltaY));
-        const auto widest =
-            std::max(fitBeatWidth(), static_cast<double>(tokens_.integer("metric.playlist.beatWidthMax")));
-        pageTurn_.reset();
-
-        // On the fluid pace the zoom glides to where the notches say, from
-        // where it is; another notch aims further from the same place.
-        if (FrameTicker::animates())
-        {
-            const auto aimed = zoomGlide_.has_value() ? zoomGlide_->width.to : beatWidth();
-            const auto target =
-                std::clamp(aimed * std::pow(zoomPerWheelUnit, static_cast<double>(wheel.deltaY)),
-                           fitBeatWidth(),
-                           widest);
-            zoomGlide_ = ZoomGlide{Glide{beatWidth(),
-                                         target,
-                                         FrameTicker::nowMs(),
-                                         static_cast<double>(tokens_.integer("motion.duration.zoom"))},
-                                   anchor,
-                                   x};
-            return;
-        }
-
-        const auto clamped = std::clamp(width, fitBeatWidth(), widest);
-        setView(anchor - static_cast<double>(x - grid.getX()) / clamped, clamped);
+        zoomAround(event.getPosition(), std::pow(zoomPerWheelUnit, static_cast<double>(wheel.deltaY)), true);
         return;
     }
 
@@ -583,6 +607,52 @@ void PlaylistPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::Mo
     const auto laneHeight = static_cast<double>(tokens_.integer("metric.playlist.laneHeight"));
     setFirstLanePixel(firstLanePixel() - static_cast<int>(std::lround(static_cast<double>(wheel.deltaY) *
                                                                       lanesPerWheelUnit * laneHeight)));
+}
+
+void PlaylistPanel::zoomAround(juce::Point<int> anchorPoint, double factor, bool glides)
+{
+    // Around the pointer: the beat under it stays under it, and on the
+    // canvas, where the lines grow with the zoom, the row under it too.
+    const auto grid = gridArea();
+    const auto x = std::clamp(anchorPoint.getX(), grid.getX(), grid.getRight());
+    const auto y = std::clamp(anchorPoint.getY(), grid.getY(), grid.getBottom());
+    const auto anchor = beatAtX(x);
+
+    const auto contentY = y - grid.getY() + firstLanePixel();
+    const auto lane = laneAtContentY(contentY);
+    const auto height = std::max(1, laneHeightOf(lane));
+    const auto within = static_cast<double>(contentY - laneTop(lane)) / static_cast<double>(height);
+    pageTurn_.reset();
+
+    // On the fluid pace the zoom glides to where the notches say, from
+    // where it is; another notch aims further from the same place.
+    if (glides && FrameTicker::animates())
+    {
+        const auto aimed = zoomGlide_.has_value() ? zoomGlide_->width.to : beatWidth();
+        const auto target = std::clamp(aimed * factor, fitBeatWidth(), widestBeatWidth());
+        zoomGlide_ = ZoomGlide{Glide{beatWidth(),
+                                     target,
+                                     FrameTicker::nowMs(),
+                                     static_cast<double>(tokens_.integer("motion.duration.zoom"))},
+                               anchor,
+                               x,
+                               lane,
+                               within,
+                               y};
+        return;
+    }
+
+    const auto clamped = std::clamp(beatWidth() * factor, fitBeatWidth(), widestBeatWidth());
+    setView(anchor - static_cast<double>(x - grid.getX()) / clamped, clamped);
+    keepRowUnder(lane, within, y);
+}
+
+void PlaylistPanel::keepRowUnder(int lane, double within, int y)
+{
+    if (!canvas_ || lane < 0)
+        return;
+    const auto top = laneTop(lane) + static_cast<int>(std::lround(within * laneHeightOf(lane)));
+    setFirstLanePixel(top - (y - gridArea().getY()));
 }
 
 void PlaylistPanel::followPlayhead()
@@ -632,6 +702,7 @@ void PlaylistPanel::glide()
         setView(zoomGlide_->anchorBeats -
                     static_cast<double>(zoomGlide_->anchorX - gridArea().getX()) / width,
                 width);
+        keepRowUnder(zoomGlide_->anchorLane, zoomGlide_->anchorWithin, zoomGlide_->anchorY);
         if (zoomGlide_->width.done(now))
             zoomGlide_.reset();
     }
@@ -732,12 +803,11 @@ juce::Rectangle<int> PlaylistPanel::blockBounds(const Block& block, double offse
     const auto lane = std::clamp(block.lane + laneOffset, 0, freeLaneCount());
 
     const auto grid = gridArea();
-    const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
     const auto left = xForBeat(std::max(0.0, block.start + offsetBeats));
     const auto right = xForBeat(std::max(0.0, block.start + offsetBeats) + block.length);
 
     return juce::Rectangle<int>{
-        left, grid.getY() + lane * laneHeight - firstLanePixel(), std::max(1, right - left), laneHeight}
+        left, grid.getY() + laneTop(lane) - firstLanePixel(), std::max(1, right - left), laneHeightOf(lane)}
         .withTrimmedTop(tokens_.integer("metric.playlist.blockInset"))
         .withTrimmedBottom(tokens_.integer("metric.playlist.blockInset"));
 }
@@ -763,6 +833,7 @@ bool PlaylistPanel::isSelected(const Item& item) const
 
 void PlaylistPanel::paint(juce::Graphics& g)
 {
+    const auto started = juce::Time::getMillisecondCounterHiRes();
     g.fillAll(tokens_.colour("color.surface.sunken"));
 
     auto header = getLocalBounds().removeFromTop(tokens_.integer("metric.panel.headerHeight"));
@@ -775,7 +846,7 @@ void PlaylistPanel::paint(juce::Graphics& g)
     g.setColour(tokens_.colour("color.text.tertiary"));
     g.setFont(lookAndFeel_.typography().caps("font.size.micro"));
     if (!titled_)
-        g.drawText("PLAYLIST", header, juce::Justification::centredLeft, false);
+        g.drawText(canvas_ ? "TOILE" : "PLAYLIST", header, juce::Justification::centredLeft, false);
 
     // Nothing but the line that makes a line: nothing to arrange yet.
     if (state_.lanes().empty() && laneCount() == 1)
@@ -799,6 +870,11 @@ void PlaylistPanel::paint(juce::Graphics& g)
         g.setColour(tokens_.colour("color.accent.primary"));
         g.drawRect(*band_, tokens_.integer("stroke.hairline"));
     }
+
+    // Only a repaint of the whole panel says what drawing the song costs; a
+    // playhead column says nothing.
+    if (g.getClipBounds().getWidth() >= getWidth() / 2)
+        lastPaintMs_ = juce::Time::getMillisecondCounterHiRes() - started;
 }
 
 void PlaylistPanel::paintEmpty(juce::Graphics& g) const
@@ -854,7 +930,6 @@ void PlaylistPanel::paintLanes(juce::Graphics& g,
                                juce::Rectangle<int> grid,
                                juce::Rectangle<int> headers) const
 {
-    const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
     const auto hairline = tokens_.integer("stroke.hairline");
     const auto* shown = patternEditing::current(state_, selection_);
 
@@ -880,13 +955,15 @@ void PlaylistPanel::paintLanes(juce::Graphics& g,
     const auto clip = g.getClipBounds();
     for (int lane = 0; lane < static_cast<int>(all.size()); ++lane)
     {
-        const auto y = grid.getY() + lane * laneHeight - firstLanePixel();
+        const auto y = grid.getY() + laneTop(lane) - firstLanePixel();
+        const auto laneHeight = laneHeightOf(lane);
         if (y + laneHeight <= std::max(grid.getY(), clip.getY()))
             continue;
         if (y >= std::min(grid.getBottom(), clip.getBottom()))
             break;
 
         auto name = headers.withY(y).withHeight(laneHeight);
+        auto title = name;
         const auto& label = shownContent.laneLabels[static_cast<std::size_t>(lane)];
         const auto& entry = all[static_cast<std::size_t>(lane)];
 
@@ -914,10 +991,17 @@ void PlaylistPanel::paintLanes(juce::Graphics& g,
         g.fillRect(grid.getX(), y + laneHeight - hairline, grid.getWidth(), hairline);
         g.fillRect(name.getX(), name.getBottom() - hairline, name.getWidth(), hairline);
 
+        // On the canvas, the name sits over its band names.
+        if (canvas_ && entry.kind == Lane::Kind::line && !bandsOfLane(lane).empty())
+        {
+            title = name.removeFromTop(canvasChrome());
+            paintBandNames(g, lane, headers.withY(y).withHeight(laneHeight));
+        }
+
         g.setColour(tokens_.colour(lane < freeLaneCount() ? "color.text.primary" : "color.text.secondary"));
         g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
         g.drawText(
-            label, name.reduced(tokens_.integer("space.sm"), 0), juce::Justification::centredLeft, true);
+            label, title.reduced(tokens_.integer("space.sm"), 0), juce::Justification::centredLeft, true);
     }
 
     g.restoreState();
@@ -972,6 +1056,16 @@ void PlaylistPanel::paintBlocks(juce::Graphics& g, juce::Rectangle<int> grid) co
                     if (const auto peaks = samples_.waveform(clip->sample); peaks != nullptr)
                         paintWaveform(g, *peaks, block, content, grid);
                 }
+            }
+            else if (canvas_ && !moving)
+            {
+                // On the canvas the block is its bands, drawn at every scale;
+                // a block being moved keeps its S11 picture until it lands.
+                const auto* placement = state_.findPlacement(domain::PlacementId::parse(item.id).value());
+                const auto* pattern =
+                    placement != nullptr ? state_.findPattern(placement->patternId) : nullptr;
+                if (pattern != nullptr)
+                    paintCanvasBlock(g, *placement, *pattern, block, entry.lane, grid);
             }
             else if (const auto* preview = previews_.find(entry.pattern); preview != nullptr)
             {
@@ -1525,6 +1619,9 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
     if (tempoMouseDown(event) || automationMouseDown(event))
         return;
 
+    if (canvasMouseDown(event))
+        return;
+
     const auto lane = laneAtY(point.getY());
 
     if (headerArea().contains(point))
@@ -1636,7 +1733,7 @@ void PlaylistPanel::mouseDrag(const juce::MouseEvent& event)
         return;
     }
 
-    if (tempoMouseDrag(event) || automationMouseDrag(event))
+    if (tempoMouseDrag(event) || automationMouseDrag(event) || canvasMouseDrag(event))
         return;
 
     if (band_.has_value())
@@ -1661,9 +1758,8 @@ void PlaylistPanel::mouseDrag(const juce::MouseEvent& event)
         // Within the lines: the fresh one and the automation lanes are not
         // places a line can go.
         const auto grid = gridArea();
-        const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
         const auto y = event.getPosition().getY();
-        const auto raw = laneHeight > 0 ? (y - grid.getY() + firstLanePixel()) / laneHeight : 0;
+        const auto raw = laneAtContentY(y - grid.getY() + firstLanePixel());
         const auto target = std::clamp(y < grid.getY() ? 0 : raw, 0, std::max(0, freeLaneCount() - 1));
         const auto current = state_.laneIndex(laneDrag_->id);
         if (current && static_cast<int>(current.value()) != target)
@@ -1734,7 +1830,7 @@ void PlaylistPanel::mouseUp(const juce::MouseEvent& event)
         return;
     }
 
-    if (tempoMouseUp() || automationMouseUp())
+    if (tempoMouseUp() || automationMouseUp() || canvasMouseUp())
         return;
 
     if (zoneStart_.has_value())
@@ -1776,7 +1872,8 @@ void PlaylistPanel::mouseUp(const juce::MouseEvent& event)
 
 void PlaylistPanel::mouseDoubleClick(const juce::MouseEvent& event)
 {
-    if (tempoDoubleClick(event.getPosition()) || automationDoubleClick(event.getPosition()))
+    if (tempoDoubleClick(event.getPosition()) || automationDoubleClick(event.getPosition()) ||
+        canvasDoubleClick(event.getPosition()))
         return;
 
     if (!headerArea().contains(event.getPosition()))
@@ -1791,7 +1888,7 @@ bool PlaylistPanel::keyPressed(const juce::KeyPress& key)
 {
     const auto ctrl = juce::ModifierKeys::ctrlModifier;
 
-    if (zoneKey(key))
+    if (zoneKey(key) || canvasKey(key))
         return true;
 
     if (key == juce::KeyPress{'c', ctrl, 0})

@@ -9,6 +9,7 @@
     "tracks",
     "browser",
     "playlist",
+    "canvas",
     "channel_rack",
     "piano_roll",
     "plugin_chain",
@@ -39,6 +40,16 @@
         "y": 0,
         "width": 0.48,
         "height": 0.55
+      },
+      {
+        "panel": "canvas",
+        "title": "Toile",
+        "shortcut": "F4",
+        "open": false,
+        "x": 0.05,
+        "y": 0.05,
+        "width": 0.85,
+        "height": 0.85
       },
       {
         "panel": "channel_rack",

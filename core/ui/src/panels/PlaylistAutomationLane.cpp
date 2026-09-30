@@ -40,8 +40,7 @@ constexpr juce::uint32 wheelRestMs = 500;
 juce::Rectangle<int> PlaylistPanel::laneArea(int lane) const
 {
     const auto grid = gridArea();
-    const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
-    return {grid.getX(), grid.getY() + lane * laneHeight - firstLanePixel(), grid.getWidth(), laneHeight};
+    return {grid.getX(), grid.getY() + laneTop(lane) - firstLanePixel(), grid.getWidth(), laneHeightOf(lane)};
 }
 
 const domain::AutomationLine* PlaylistPanel::automationLineIn(int lane) const
@@ -195,8 +194,8 @@ void PlaylistPanel::revealAutomation(domain::AutomationLineId line)
     shownAutomation_ = line;
     if (const auto lane = laneOfAutomation(line); lane.has_value())
     {
-        const auto laneHeight = tokens_.integer("metric.playlist.laneHeight");
-        const auto top = *lane * laneHeight;
+        const auto laneHeight = laneHeightOf(*lane);
+        const auto top = laneTop(*lane);
         const auto visible = gridArea().getHeight();
         if (top < firstLanePixel() || top + laneHeight > firstLanePixel() + visible)
             setFirstLanePixel(top - std::max(0, visible - laneHeight) / 2);
