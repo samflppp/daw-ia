@@ -2,7 +2,9 @@
 """Static checks for the three hygiene rules on core/ C++ sources.
 
 Rule 1: no hard-coded visual values. Colours, sizes and font sizes come from
-        core/ui/tokens/tokens.json through daw::ui::Tokens.
+        core/ui/tokens/tokens.json through daw::ui::Tokens, and so do the
+        durations and rates of what moves on screen (motion.*, S18 bis): a
+        literal handed to a timer, a fade or an animation is refused.
 Rule 2: a panel never knows where it is. It arranges the children it owns,
         from token metrics, and that is all: reading its parent's geometry or
         the screen's is refused everywhere but in a layout host (files named
@@ -36,6 +38,10 @@ VISUAL_PATTERNS = [
     (re.compile(r"\b(reduced|expanded|withTrimmed\w+|removeFrom\w+)\s*\(\s*\d"), "spacing literal"),
     (re.compile(r"\b(fillRoundedRectangle|drawRoundedRectangle)\s*\([^;]*,\s*\d+(\.\d+)?f?\s*\)"),
      "radius literal"),
+    # Motion: how long a movement lasts, how often the screen is redrawn.
+    (re.compile(r"\b(startTimer|startTimerHz|withDurationMs|setDurationMs)\s*\(\s*\d"), "duration literal"),
+    (re.compile(r"\b(fadeIn|fadeOut)\s*\([^,;]+,\s*\d"), "duration literal"),
+    (re.compile(r"\banimateComponent\s*\((?:[^,;]+,){3}\s*\d"), "duration literal"),
 ]
 
 # Rule 2, first half: placing a component is for a layout host, or for a panel
