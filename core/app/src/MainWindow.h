@@ -24,6 +24,15 @@ public:
 
     void closeButtonPressed() override;
 
+    // With its own title bar, the window still has a system caption and system
+    // buttons (S18 bis): Windows asks what is under the pointer, the
+    // component under it answers — the title bar says caption or which
+    // button — and the system moves the window, snaps it to the edges and
+    // maximises it on a double-click. A setBounds per mouse move, as the
+    // ComponentDragger did, is what made the window drag behind the hand.
+    [[nodiscard]] WindowControlKind findControlAtPoint(juce::Point<float> point) const override;
+    [[nodiscard]] int getDesktopWindowStyleFlags() const override;
+
     // Restoring from the taskbar was reported as coming back to a white, frozen
     // window. It could not be reproduced here in nine cycles, with and without
     // a plugin window open, so this is not a fix for a diagnosed cause: it is
@@ -33,6 +42,8 @@ public:
     void minimisationStateChanged(bool isNowMinimised) override;
 
 private:
+    bool ownTitleBar_{false};
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainWindow)
 };
 

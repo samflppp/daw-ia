@@ -20,6 +20,7 @@ target_sources(daw_app PRIVATE
     src/LevelMonitor.cpp
     src/TransportSync.cpp
     src/PlaybackProbe.cpp
+    src/NativeWindow.cpp
     src/Verification.cpp
     src/VerificationAutomation.cpp
     src/VerificationFluidity.cpp

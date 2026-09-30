@@ -17,10 +17,13 @@ namespace daw::ui
 // bar: the File menu, the project's name, the workspace switch, and the three
 // window buttons.
 //
-// It is a layout host: it moves the window it sits in, which is asking where it
-// is, and nothing else in the interface may. It does nothing itself. Every
-// button calls one of the actions the application hands it, so the band knows
-// neither the project on disk nor how a window is minimised.
+// It does not move the window: Windows does (S18 bis). The band tells the system
+// which of its parts is a caption and which are the three window buttons, the
+// way a native title bar would, and the system drags, snaps to the edges, opens
+// the layouts of Windows 11 over the maximise button, and maximises on a
+// double-click. The band itself does nothing else. Every button calls one of
+// the actions the application hands it, so the band knows neither the project
+// on disk nor how a window is minimised.
 class TitleBarView final : public juce::Component
 {
 public:
@@ -42,10 +45,6 @@ public:
         std::function<void()> minimise;
         std::function<void()> toggleMaximise;
         std::function<void()> close;
-
-        // A maximised window is not dragged: it fills the screen, and moving it
-        // would leave it maximised somewhere else.
-        std::function<bool()> maximised;
     };
 
     TitleBarView(const Tokens& tokens,
@@ -84,9 +83,11 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
-    void mouseDown(const juce::MouseEvent& event) override;
-    void mouseDrag(const juce::MouseEvent& event) override;
-    void mouseDoubleClick(const juce::MouseEvent& event) override;
+    // What is under a point of the band, for the system: a window button, a
+    // control of the band (the File menu, the workspace switch), or the
+    // caption, which is everything else. Asked by the main window, which is
+    // the component the system asks.
+    [[nodiscard]] WindowControlKind findControlAtPoint(juce::Point<float> point) const override;
 
 private:
     void showFileMenu();
@@ -105,9 +106,6 @@ private:
     juce::String projectName_;
     juce::String status_;
     juce::Rectangle<int> textArea_;
-
-    juce::ComponentDragger dragger_;
-    bool dragging_{false};
 
     class StatusFade;
     std::unique_ptr<StatusFade> fade_;

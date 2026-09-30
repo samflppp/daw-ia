@@ -236,31 +236,26 @@ void TitleBarView::resized()
     textArea_ = inner;
 }
 
-// The band is the window's handle, as a system title bar would be: pressed and
-// dragged anywhere a button is not, it moves the window; double-clicked, it
-// maximises it or gives it back its size.
-void TitleBarView::mouseDown(const juce::MouseEvent& event)
+// Only rectangles are compared here: asking a component whether it contains a
+// point may ask the system, which is asking this.
+auto TitleBarView::findControlAtPoint(juce::Point<float> point) const -> WindowControlKind
 {
-    dragging_ = !(actions_.maximised && actions_.maximised());
-    if (!dragging_)
-        return;
+    if (minimise_.getBounds().toFloat().contains(point))
+        return WindowControlKind::minimise;
+    if (maximise_.getBounds().toFloat().contains(point))
+        return WindowControlKind::maximise;
+    if (close_.getBounds().toFloat().contains(point))
+        return WindowControlKind::close;
 
-    if (auto* window = getTopLevelComponent(); window != nullptr)
-        dragger_.startDraggingComponent(window, event.getEventRelativeTo(window));
-}
+    if (file_.getBounds().toFloat().contains(point))
+        return WindowControlKind::client;
+    for (const auto& button : workspaceButtons_)
+    {
+        if (button->getBounds().toFloat().contains(point))
+            return WindowControlKind::client;
+    }
 
-void TitleBarView::mouseDrag(const juce::MouseEvent& event)
-{
-    if (!dragging_)
-        return;
-
-    if (auto* window = getTopLevelComponent(); window != nullptr)
-        dragger_.dragComponent(window, event.getEventRelativeTo(window), nullptr);
-}
-
-void TitleBarView::mouseDoubleClick(const juce::MouseEvent&)
-{
-    call(actions_.toggleMaximise);
+    return WindowControlKind::caption;
 }
 
 } // namespace daw::ui

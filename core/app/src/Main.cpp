@@ -395,7 +395,6 @@ private:
             if (window_ != nullptr)
                 window_->setFullScreen(!window_->isFullScreen());
         };
-        actions.maximised = [this] { return window_ != nullptr && window_->isFullScreen(); };
         actions.close = [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); };
 
         auto titleBar = std::make_unique<ui::TitleBarView>(

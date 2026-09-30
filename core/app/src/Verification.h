@@ -258,7 +258,6 @@ private:
     [[nodiscard]] engine::StripLevel levelOf(const std::string& strip) const;
     [[nodiscard]] static engine::StripLevel levelIn(const std::vector<engine::StripLevel>& levels,
                                                     const std::string& strip);
-    void dragWindow(juce::Point<int> by);
     void add(std::string title,
              std::function<void()> act,
              std::function<bool()> ready = {},

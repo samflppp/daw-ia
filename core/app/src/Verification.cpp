@@ -1,5 +1,6 @@
 #include "Verification.h"
 
+#include "NativeWindow.h"
 #include "daw/domain/commands/MixCommands.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TempoCommands.h"
@@ -1465,58 +1466,6 @@ void Verification::buildLegacy()
         });
 }
 
-// A hand on the title bar: the pointer moves across the screen, and each event
-// is expressed where the bar is at that moment, since the bar moves with the
-// window it drags. A fixed point in the bar's coordinates would not be a hand.
-void Verification::dragWindow(juce::Point<int> by)
-{
-    auto source = juce::Desktop::getInstance().getMainMouseSource();
-    const auto now = juce::Time::getCurrentTime();
-    const auto held = juce::ModifierKeys{juce::ModifierKeys::leftButtonModifier};
-
-    const auto grip = juce::Point<int>{titleBar_.getWidth() / 2, titleBar_.getHeight() / 2};
-    const auto onScreen = titleBar_.localPointToGlobal(grip);
-
-    // JUCE moves a window after the real pointer, not after the event it is
-    // handed: an event queued behind a move would carry a stale position. So
-    // the real pointer is moved, and put back where it was afterwards.
-    const auto pointerWas = juce::Desktop::getMousePosition();
-
-    const auto event = [&](juce::Point<int> screen, int clicks)
-    {
-        source.setScreenPosition(screen.toFloat());
-        const auto local = titleBar_.getLocalPoint(nullptr, screen).toFloat();
-        return juce::MouseEvent{source,
-                                local,
-                                held,
-                                juce::MouseInputSource::defaultPressure,
-                                0.0f,
-                                0.0f,
-                                0.0f,
-                                0.0f,
-                                &titleBar_,
-                                &titleBar_,
-                                now,
-                                grip.toFloat(),
-                                now,
-                                clicks,
-                                clicks == 0};
-    };
-
-    titleBar_.mouseDown(event(onScreen, 1));
-
-    const auto steps = std::max(std::abs(by.x), std::abs(by.y));
-    for (int index = 1; index <= steps; ++index)
-    {
-        const auto offset =
-            (by.toFloat() * (static_cast<float>(index) / static_cast<float>(steps))).roundToInt();
-        titleBar_.mouseDrag(event(onScreen + offset, 0));
-    }
-
-    titleBar_.mouseUp(event(onScreen + by, 0));
-    juce::Desktop::setMousePosition(pointerWas);
-}
-
 // The File menu and the window, past the dialogs: Windows' file dialog is not
 // something a script can fill, so each step hands the function behind it the
 // folder a person would have picked. The run ends on a real "Enregistrer
@@ -1546,29 +1495,80 @@ void Verification::buildFile()
                   "le dossier existant n'a pas été touché");
         });
 
-    add("glisser la barre déplace la fenêtre",
+    // S18 bis: the window is moved by Windows, not by the bar. What the bar
+    // does is answer the system's question — what is under this point — and
+    // the question is asked here the way Windows asks it.
+    add("la barre de titre répond à Windows comme une barre de titre",
         [this]
         {
-            const auto before = window_.getPosition();
-            dragWindow({60, 40});
-            check(window_.getPosition() == before + juce::Point<int>{60, 40},
-                  "de 60 px à droite et 40 px vers le bas, comme la souris");
-            dragWindow({-60, -40});
-            check(window_.getPosition() == before, "et revient à sa place");
+            auto* peer = window_.getPeer();
+            auto* file = button(titleBar_, "Fichier");
+            auto* minimise = button(titleBar_, juce::String::fromUTF8("\xe2\x80\x93"));
+            auto* maximise = button(titleBar_, juce::String::fromUTF8("\xe2\x96\xa1"));
+            auto* close = button(titleBar_, juce::String::fromUTF8("\xc3\x97"));
+            if (peer == nullptr || file == nullptr || minimise == nullptr || maximise == nullptr ||
+                close == nullptr)
+            {
+                check(false, "la fenêtre ou un bouton de la barre manque");
+                return;
+            }
+
+            const auto at = [peer](juce::Component& where, juce::Point<int> local)
+            { return native::hitTest(*peer, where.localPointToGlobal(local)); };
+            if (at(titleBar_, {}) == "unsupported")
+            {
+                note("hors Windows : rien à demander au système");
+                return;
+            }
+
+            // Just right of the File button: the gap before the name, which is
+            // caption as the name is.
+            const auto gap = juce::Point<int>{file->getRight() + tokens_.integer("space.sm"),
+                                              file->getBounds().getCentreY()};
+            const auto said = [](const juce::String& kind) { return " (" + kind.toStdString() + ")"; };
+
+            check(at(titleBar_, gap) == "caption", "à côté du nom : la légende" + said(at(titleBar_, gap)));
+            const auto centre = [](juce::Component& c) { return c.getLocalBounds().getCentre(); };
+            check(at(*minimise, centre(*minimise)) == "minimise",
+                  "le bouton réduire" + said(at(*minimise, centre(*minimise))));
+            check(at(*maximise, centre(*maximise)) == "maximise",
+                  "le bouton agrandir" + said(at(*maximise, centre(*maximise))));
+            check(at(*close, centre(*close)) == "close",
+                  "le bouton fermer" + said(at(*close, centre(*close))));
+            check(at(*file, centre(*file)) == "client",
+                  "le menu Fichier reste un bouton" + said(at(*file, centre(*file))));
+            check(at(view_, centre(view_)) == "client",
+                  "l'espace de travail reste à l'application" + said(at(view_, centre(view_))));
         });
 
-    add("agrandie, la fenêtre ne se glisse pas",
+    add("un double-clic sur la légende agrandit, un second rend la taille",
         [this]
         {
-            doubleClick(titleBar_, titleBar_.getLocalBounds().getCentre());
-            check(window_.isFullScreen(), "agrandie");
+            auto* peer = window_.getPeer();
+            auto* file = button(titleBar_, "Fichier");
+            if (peer == nullptr || file == nullptr)
+            {
+                check(false, "la fenêtre ou le bouton Fichier manque");
+                return;
+            }
+
+            const auto gap = [this, file]
+            {
+                return titleBar_.localPointToGlobal(juce::Point<int>{
+                    file->getRight() + tokens_.integer("space.sm"), file->getBounds().getCentreY()});
+            };
             savedBounds_ = window_.getBounds();
 
-            dragWindow({60, 40});
-            check(window_.getBounds() == savedBounds_, "elle reste à sa place, plein écran");
+            if (!native::doubleClickCaption(*peer, gap()))
+            {
+                note("hors Windows : rien à demander au système");
+                return;
+            }
+            check(window_.isFullScreen(), "agrandie");
 
-            doubleClick(titleBar_, titleBar_.getLocalBounds().getCentre());
-            check(!window_.isFullScreen(), "le double-clic lui rend sa taille");
+            static_cast<void>(native::doubleClickCaption(*peer, gap()));
+            check(!window_.isFullScreen(), "le second double-clic lui rend sa taille");
+            check(window_.getBounds() == savedBounds_, "et sa place");
         });
 
     add("Enregistrer sous, la suite",
