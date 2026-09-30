@@ -147,3 +147,16 @@ Notés en mesurant, non construits :
 - **La réaction des panneaux à une commande,** ~3 ms par image de glissé de note : le piano-roll reconstruit son
   choix de canal à chaque changement, même quand les canaux n'ont pas changé.
 - **Mesurer le déplacement natif de la fenêtre principale** (traces ETW de Windows), au lieu de le juger à l'œil.
+
+## La toile, après la S18
+
+Notés en construisant la toile, non construits :
+
+- **Rendre un bloc unique** depuis la toile (« éditer seulement ici ») : cloner le pattern et reposer le bloc
+  sur le clone. C'est un verbe de domaine de plus ; la règle de la S18 demande une raison de démonstration.
+- **Ajouter une piste à un pattern depuis la toile,** par une bande vide sous les autres. Aujourd'hui c'est
+  le channel rack qui ajoute la rangée.
+- **Le mode pattern dans la toile :** le pattern en cours seul, comme un bloc à l'origine, pour ce qui n'est
+  pas encore posé.
+- **Vélocités, copier-coller de notes, quantifier, transposer, la génération dans une bande :** ce que la
+  toile doit savoir faire avant que le piano-roll disparaisse.

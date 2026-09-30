@@ -58,6 +58,8 @@ public:
         reopen,
         legacy,
         file,
+        canvas,
+        canvasLoad,
         fluidity
     };
 
@@ -148,6 +150,8 @@ private:
     void buildReopen();
     void buildLegacy();
     void buildFile();
+    void buildCanvas();
+    void buildCanvasLoad();
 
     // S18 bis (VerificationFluidity.cpp): repaints timed on a filled project,
     // the playlist, the piano roll and the mixer whole, and sixty images of an
@@ -227,6 +231,17 @@ private:
     // names say, each on its line and its track; heard before being written;
     // Tab is one entry, and one Ctrl+Z takes the three away.
     void addZoneSteps();
+
+    // S18: the canvas (VerificationCanvas.cpp). F4, a block framed at the
+    // scale of notes, a note written and moved in a band, the other block of
+    // the pattern lit and showing it; then the repaint of a loaded project
+    // at three scales and during a pan.
+    void addCanvasSteps();
+
+    // S18: the canvas on a loaded project, its repaint measured at three
+    // scales and during a pan. Its own run (--verify-canvas-charge): laying
+    // a thousand clips in the engine takes minutes in a debug build.
+    void addCanvasLoadSteps();
 
     // A render of the Edit as it plays, kept whole in memory, and its level
     // window by window between two beats of the song: the RMS of each

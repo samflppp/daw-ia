@@ -109,6 +109,12 @@ void Verification::start()
     case Run::file:
         buildFile();
         break;
+    case Run::canvas:
+        buildCanvas();
+        break;
+    case Run::canvasLoad:
+        buildCanvasLoad();
+        break;
     case Run::fluidity:
         buildFluidity();
         break;
@@ -1319,6 +1325,7 @@ void Verification::buildList()
     addFormSteps();
     addLearningSteps();
     addZoneSteps();
+    addCanvasSteps();
 
     // --- the title bar -----------------------------------------------------------
 
@@ -1455,6 +1462,18 @@ void Verification::buildReopen()
             const auto heard = listen("11-rouvert", 90.0);
             check(heard.onsets.size() > 0, "le morceau rouvert sonne");
         });
+}
+
+// --verify-canvas: the canvas alone, on whatever project is open.
+void Verification::buildCanvas()
+{
+    addCanvasSteps();
+}
+
+// --verify-canvas-charge: the canvas on a loaded project, measured.
+void Verification::buildCanvasLoad()
+{
+    addCanvasLoadSteps();
 }
 
 void Verification::buildLegacy()

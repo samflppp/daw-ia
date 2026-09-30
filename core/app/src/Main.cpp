@@ -212,6 +212,10 @@ public:
                 run = Verification::Run::legacy;
             else if (tokens[index] == "--verify-file")
                 run = Verification::Run::file;
+            else if (tokens[index] == "--verify-canvas")
+                run = Verification::Run::canvas;
+            else if (tokens[index] == "--verify-canvas-charge")
+                run = Verification::Run::canvasLoad;
             else if (tokens[index] == "--verify-fluidite")
                 run = Verification::Run::fluidity;
             else if (tokens[index] != "--verify")
