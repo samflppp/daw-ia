@@ -297,6 +297,7 @@ private:
     // A short burst and silence, as a WAV file: a drum hit an onset detector
     // cannot miss.
     void doubleClick(juce::Component& target, juce::Point<int> at);
+    void doubleClickCaption();
 
     static void writeHit(const juce::File& file, double seconds);
     void key(const juce::KeyPress& press);

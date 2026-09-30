@@ -1362,8 +1362,10 @@ void Verification::buildList()
     add("double-clic sur la barre : agrandir, puis rendre sa taille",
         [this]
         {
+            // On the caption, as Windows delivers it (S18 bis): the bar no
+            // longer handles the double-click, the system does.
             const auto before = window_.getBounds();
-            doubleClick(titleBar_, titleBar_.getLocalBounds().getCentre());
+            doubleClickCaption();
             check(window_.isFullScreen(), "la fenêtre est agrandie");
             savedBounds_ = before;
         });
@@ -1371,7 +1373,7 @@ void Verification::buildList()
     add("le second double-clic rend la taille d'avant",
         [this]
         {
-            doubleClick(titleBar_, titleBar_.getLocalBounds().getCentre());
+            doubleClickCaption();
             check(!window_.isFullScreen(), "elle ne l'est plus");
             check(window_.getBounds() == savedBounds_, "et elle a repris sa place");
         });
@@ -1465,6 +1467,25 @@ void Verification::buildLegacy()
             check(heard.onsets == std::vector<int>({32, 36, 40, 44, 48, 52, 56, 60}),
                   "une attaque sur chaque temps de 8 à 15 : là où les clips commençaient");
         });
+}
+
+// A double-click on the title bar's caption, just right of the File button,
+// delivered as Windows delivers it. Outside Windows, the window is maximised
+// and restored the way the system would.
+void Verification::doubleClickCaption()
+{
+    auto* peer = window_.getPeer();
+    auto* file = button(titleBar_, "Fichier");
+    if (peer == nullptr || file == nullptr)
+    {
+        check(false, "la fenêtre ou le bouton Fichier manque");
+        return;
+    }
+
+    const auto gap = titleBar_.localPointToGlobal(
+        juce::Point<int>{file->getRight() + tokens_.integer("space.sm"), file->getBounds().getCentreY()});
+    if (!native::doubleClickCaption(*peer, gap))
+        window_.setFullScreen(!window_.isFullScreen());
 }
 
 // The File menu and the window, past the dialogs: Windows' file dialog is not
