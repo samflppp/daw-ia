@@ -85,6 +85,34 @@ PageWindow::~PageWindow()
     setLookAndFeel(nullptr);
 }
 
+void PageWindow::appear()
+{
+    if (!FrameTicker::animates())
+        return;
+
+    // Transparent while it fades: an opaque window would hide what is under
+    // it from the repaint, and what is under it shows through.
+    setOpaque(false);
+    setAlpha(0.0f);
+    fade_ =
+        Glide{0.0, 1.0, FrameTicker::nowMs(), static_cast<double>(tokens_.integer("motion.duration.panel"))};
+}
+
+void PageWindow::frame()
+{
+    if (!fade_.has_value())
+        return;
+
+    const auto now = FrameTicker::nowMs();
+    setAlpha(static_cast<float>(fade_->at(now)));
+    if (fade_->done(now))
+    {
+        fade_.reset();
+        setAlpha(1.0f);
+        setOpaque(true);
+    }
+}
+
 void PageWindow::setActive(bool active)
 {
     if (active_ == active)

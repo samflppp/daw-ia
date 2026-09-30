@@ -245,6 +245,11 @@ void Verification::buildFluidity()
 
         // The machine's display setting before the run touched it.
         bool wasLight{false};
+
+        // The zoom and the fade, at once and after.
+        int barBefore{0};
+        int barAtOnce{0};
+        float alphaAtOnce{-1.0f};
     };
     auto measures = std::make_shared<Measures>();
 
@@ -609,6 +614,62 @@ void Verification::buildFluidity()
                  " déplacements de la tête de lecture (" + rate(moves) + " par seconde)");
             check(images > 0 && static_cast<double>(moves) >= 0.9 * static_cast<double>(images),
                   "un déplacement par image, à 10 % près");
+        });
+
+    // The fluid mode's movements, let go for this step: the zoom reaches where
+    // the wheel aimed it over a few images, not at once; a page opened by the
+    // hand fades in.
+    add(
+        "fluide : le zoom glisse, une fenêtre ouverte apparaît en fondu",
+        [this, measures]
+        {
+            ui::FrameTicker::holdStill(false);
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+            static_cast<void>(view_.showPage("playlist", true));
+            static_cast<void>(view_.showPage("tracks", false));
+
+            const auto bar = [this, playlist]
+            { return playlist->pointFor(0, state_.beatsPerBar()).x - playlist->pointFor(0, 0.0).x; };
+            measures->barBefore = bar();
+            wheel(*playlist, playlist->getLocalBounds().getCentre(), 1.0f, false, true);
+            measures->barAtOnce = bar();
+
+            static_cast<void>(view_.showPage("tracks", true));
+            auto* tracks = panel("tracks");
+            auto* page = tracks != nullptr ? tracks->findParentComponentOfClass<ui::PageWindow>() : nullptr;
+            measures->alphaAtOnce = page != nullptr ? page->getAlpha() : -1.0f;
+            measures->playedFromMs = juce::Time::getMillisecondCounterHiRes();
+        },
+        [measures] { return juce::Time::getMillisecondCounterHiRes() - measures->playedFromMs > 500.0; },
+        2000.0);
+
+    add("fluide : ce que le zoom et le fondu sont devenus",
+        [this, measures]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            auto* tracks = panel("tracks");
+            auto* page = tracks != nullptr ? tracks->findParentComponentOfClass<ui::PageWindow>() : nullptr;
+            const auto barAfter = playlist != nullptr ? playlist->pointFor(0, state_.beatsPerBar()).x -
+                                                            playlist->pointFor(0, 0.0).x
+                                                      : 0;
+
+            note("largeur d'une mesure : " + std::to_string(measures->barBefore) + " px avant, " +
+                 std::to_string(measures->barAtOnce) + " px au cran, " + std::to_string(barAfter) +
+                 " px une demi-seconde après");
+            check(measures->barAtOnce < barAfter && barAfter > measures->barBefore,
+                  "le zoom n'est pas atteint au cran, il l'est ensuite");
+            check(measures->alphaAtOnce >= 0.0f && measures->alphaAtOnce < 0.5f,
+                  "la fenêtre ouverte commence transparente : " +
+                      juce::String(measures->alphaAtOnce, 2).toStdString());
+            check(page != nullptr && page->getAlpha() == 1.0f && page->isOpaque(),
+                  "puis opaque, et marquée opaque de nouveau");
+
+            if (playlist != nullptr)
+                wheel(*playlist, playlist->getLocalBounds().getCentre(), -1.0f, false, true);
+            static_cast<void>(view_.showPage("tracks", false));
+            ui::FrameTicker::holdStill(true);
         });
 
     // Fichier > Affichage > Léger, through the menu's own item: the software

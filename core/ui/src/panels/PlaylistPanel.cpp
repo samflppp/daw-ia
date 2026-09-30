@@ -516,6 +516,10 @@ void PlaylistPanel::updateScrollBars()
 
 void PlaylistPanel::scrollBarMoved(juce::ScrollBar* bar, double newRangeStart)
 {
+    // The hand takes the view: what was gliding stops where it is.
+    pageTurn_.reset();
+    zoomGlide_.reset();
+
     if (bar == &horizontal_)
         setView(newRangeStart, zoom_);
     else if (bar == &vertical_)
@@ -538,10 +542,34 @@ void PlaylistPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::Mo
         const auto width = beatWidth() * std::pow(zoomPerWheelUnit, static_cast<double>(wheel.deltaY));
         const auto widest =
             std::max(fitBeatWidth(), static_cast<double>(tokens_.integer("metric.playlist.beatWidthMax")));
+        pageTurn_.reset();
+
+        // On the fluid pace the zoom glides to where the notches say, from
+        // where it is; another notch aims further from the same place.
+        if (FrameTicker::animates())
+        {
+            const auto aimed = zoomGlide_.has_value() ? zoomGlide_->width.to : beatWidth();
+            const auto target =
+                std::clamp(aimed * std::pow(zoomPerWheelUnit, static_cast<double>(wheel.deltaY)),
+                           fitBeatWidth(),
+                           widest);
+            zoomGlide_ = ZoomGlide{Glide{beatWidth(),
+                                         target,
+                                         FrameTicker::nowMs(),
+                                         static_cast<double>(tokens_.integer("motion.duration.zoom"))},
+                                   anchor,
+                                   x};
+            return;
+        }
+
         const auto clamped = std::clamp(width, fitBeatWidth(), widest);
         setView(anchor - static_cast<double>(x - grid.getX()) / clamped, clamped);
         return;
     }
+
+    // Scrolling takes the view from any glide.
+    pageTurn_.reset();
+    zoomGlide_.reset();
 
     // Sideways: a trackpad's own horizontal swipe, or Shift and the wheel.
     const auto sideways =
@@ -572,8 +600,41 @@ void PlaylistPanel::followPlayhead()
         return;
 
     // A page turn, the way FL turns it: the playhead goes back to the left
-    // edge, on a bar line.
-    setView(std::floor(beats / barBeats()) * barBeats(), zoom_);
+    // edge, on a bar line. On the fluid pace the view slides there, slowing
+    // as it arrives, while the playhead goes on where it really is.
+    const auto page = std::floor(beats / barBeats()) * barBeats();
+    if (FrameTicker::animates())
+    {
+        if (!pageTurn_.has_value())
+            pageTurn_ = Glide{first,
+                              page,
+                              FrameTicker::nowMs(),
+                              static_cast<double>(tokens_.integer("motion.duration.page"))};
+        return;
+    }
+    setView(page, zoom_);
+}
+
+void PlaylistPanel::glide()
+{
+    const auto now = FrameTicker::nowMs();
+    if (pageTurn_.has_value())
+    {
+        setView(pageTurn_->at(now), zoom_);
+        if (pageTurn_->done(now))
+            pageTurn_.reset();
+    }
+
+    // The zoom, around the beat under the pointer when the wheel turned.
+    if (zoomGlide_.has_value())
+    {
+        const auto width = zoomGlide_->width.at(now);
+        setView(zoomGlide_->anchorBeats -
+                    static_cast<double>(zoomGlide_->anchorX - gridArea().getX()) / width,
+                width);
+        if (zoomGlide_->width.done(now))
+            zoomGlide_.reset();
+    }
 }
 
 double PlaylistPanel::snap(double beats, bool fine) const
@@ -1018,6 +1079,7 @@ void PlaylistPanel::frame()
 {
     closeTempoWheel(true);
     closeAutomationWheel(true);
+    glide();
     followPlayhead();
 
     // Only the two columns the playhead leaves and reaches are repainted.
@@ -1426,6 +1488,8 @@ void PlaylistPanel::showLaneMenu(int lane)
 void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
 {
     grabKeyboardFocus();
+    pageTurn_.reset();
+    zoomGlide_.reset();
 
     const auto point = event.getPosition();
     const auto& mods = event.mods;

@@ -40,6 +40,15 @@ public:
     static void setPace(Pace pace);
     [[nodiscard]] static Pace pace() noexcept;
 
+    // Whether what moves may glide and fade: on the fluid pace only, and not
+    // while a scripted verification holds the screen still — it checks a
+    // zoom the moment the wheel turns, as a state and not as a movement.
+    [[nodiscard]] static bool animates() noexcept;
+    static void holdStill(bool still) noexcept;
+
+    // Now, on the clock every glide is timed with.
+    [[nodiscard]] static double nowMs() noexcept;
+
 private:
     void timerCallback() override;
     void follow(Pace pace);

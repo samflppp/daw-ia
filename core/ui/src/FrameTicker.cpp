@@ -54,6 +54,30 @@ FrameTicker::Pace FrameTicker::pace() noexcept
     return currentPace();
 }
 
+namespace
+{
+bool& heldStill()
+{
+    static auto still = false;
+    return still;
+}
+} // namespace
+
+bool FrameTicker::animates() noexcept
+{
+    return currentPace() == Pace::fluid && !heldStill();
+}
+
+void FrameTicker::holdStill(bool still) noexcept
+{
+    heldStill() = still;
+}
+
+double FrameTicker::nowMs() noexcept
+{
+    return juce::Time::getMillisecondCounterHiRes();
+}
+
 void FrameTicker::follow(Pace pace)
 {
     if (pace == Pace::fluid)

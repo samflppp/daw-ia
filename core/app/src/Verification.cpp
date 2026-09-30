@@ -10,6 +10,7 @@
 #include "daw/engine/Export.h"
 #include "daw/engine/MeterTap.h"
 #include "daw/engine/Rendering.h"
+#include "daw/ui/FrameTicker.h"
 #include "daw/ui/panels/BrowserPanel.h"
 #include "daw/ui/panels/ChannelRackPanel.h"
 #include "daw/ui/panels/MixerPanel.h"
@@ -74,6 +75,7 @@ Verification::Verification(Wiring wiring)
 
 Verification::~Verification()
 {
+    ui::FrameTicker::holdStill(false);
     levels_.removeChangeListener(this);
     stopTimer();
 }
@@ -87,6 +89,11 @@ void Verification::changeListenerCallback(juce::ChangeBroadcaster* source)
 void Verification::start()
 {
     static_cast<void>(folder_.createDirectory());
+
+    // A step checks a zoom the moment the wheel turns: the screen is held
+    // still, the glides and fades of the fluid mode wait (S18 bis). The
+    // fluidity run lets them go for the step that proves them.
+    ui::FrameTicker::holdStill(true);
 
     switch (run_)
     {

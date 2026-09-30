@@ -359,6 +359,17 @@ PianoRollPanel::RowOpening PianoRollPanel::openRow() const
 
 void PianoRollPanel::frame()
 {
+    if (zoomGlide_.has_value())
+    {
+        const auto now = FrameTicker::nowMs();
+        const auto width = zoomGlide_->width.at(now);
+        setView(zoomGlide_->anchorBeats -
+                    static_cast<double>(zoomGlide_->anchorX - gridArea().getX()) / width,
+                width);
+        if (zoomGlide_->width.done(now))
+            zoomGlide_.reset();
+    }
+
     // Only the playhead moves on its own, so only its column is repainted. A
     // full repaint at every image would redraw a grid that has not changed
     // since the project was opened.
@@ -1033,6 +1044,7 @@ void PianoRollPanel::removeNote(domain::NoteId noteId)
 void PianoRollPanel::mouseDown(const juce::MouseEvent& event)
 {
     grabKeyboardFocus();
+    zoomGlide_.reset();
 
     // The middle button drags the view, wherever it is pressed: the hand
     // moves the paper, not the notes.
@@ -1364,6 +1376,25 @@ void PianoRollPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::M
         const auto anchor = beatAtX(x);
         const auto widest =
             std::max(fitBeatWidth(), static_cast<double>(tokens_.integer("metric.pianoRoll.beatWidthMax")));
+
+        // On the fluid pace the zoom glides to where the notches aim it, as
+        // in the playlist (S18 bis).
+        if (FrameTicker::animates())
+        {
+            const auto aimed = zoomGlide_.has_value() ? zoomGlide_->width.to : beatWidth();
+            const auto target =
+                std::clamp(aimed * std::pow(zoomPerWheelUnit, static_cast<double>(wheel.deltaY)),
+                           fitBeatWidth(),
+                           widest);
+            zoomGlide_ = ZoomGlide{Glide{beatWidth(),
+                                         target,
+                                         FrameTicker::nowMs(),
+                                         static_cast<double>(tokens_.integer("motion.duration.zoom"))},
+                                   anchor,
+                                   x};
+            return;
+        }
+
         const auto width =
             std::clamp(beatWidth() * std::pow(zoomPerWheelUnit, static_cast<double>(wheel.deltaY)),
                        fitBeatWidth(),
@@ -1372,6 +1403,7 @@ void PianoRollPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::M
         return;
     }
 
+    zoomGlide_.reset();
     const auto sideways =
         wheel.deltaX != 0.0f ? wheel.deltaX : (event.mods.isShiftDown() ? wheel.deltaY : 0.0f);
     if (sideways != 0.0f)

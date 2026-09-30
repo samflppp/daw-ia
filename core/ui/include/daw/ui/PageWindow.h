@@ -1,12 +1,15 @@
 #pragma once
 
 #include "daw/ui/DawLookAndFeel.h"
+#include "daw/ui/FrameTicker.h"
 #include "daw/ui/Tokens.h"
+#include "daw/ui/model/Motion.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace daw::ui
 {
@@ -44,6 +47,11 @@ public:
     std::function<void()> onMoved;
 
     void setActive(bool active);
+
+    // Opened by the hand (F5, a tab): on the fluid pace the window fades in,
+    // transparent to opaque (motion.duration.panel). Closing is immediate: a
+    // window still fading out would still take clicks (S18 bis).
+    void appear();
     [[nodiscard]] bool isActive() const noexcept { return active_; }
 
     [[nodiscard]] juce::Component& panel() noexcept { return *panel_; }
@@ -98,6 +106,12 @@ private:
 
     bool active_{false};
     bool dragging_{false};
+
+    void frame();
+    std::optional<Glide> fade_;
+
+    // Last, so the first to go.
+    FrameTicker frames_{*this, [this] { frame(); }};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PageWindow)
 };

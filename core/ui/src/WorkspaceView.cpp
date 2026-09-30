@@ -271,8 +271,11 @@ void WorkspaceView::placePage(PageSlot& slot)
 
 void WorkspaceView::setOpen(PageSlot& slot, bool open)
 {
+    const auto appearing = open && !slot.window->isVisible() && isShowing();
     slot.open = open;
     slot.window->setVisible(open);
+    if (appearing)
+        slot.window->appear();
     slot.tab->setToggleState(open, juce::dontSendNotification);
 
     if (open)

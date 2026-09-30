@@ -4,6 +4,7 @@
 #include "daw/ui/FrameTicker.h"
 #include "daw/ui/PanelRegistry.h"
 #include "daw/ui/model/GhostProposal.h"
+#include "daw/ui/model/Motion.h"
 #include "daw/ui/model/PromptReader.h"
 #include "daw/ui/model/TransformProposal.h"
 #include "daw/ui/panels/GenerationPanel.h"
@@ -388,6 +389,15 @@ private:
     [[nodiscard]] std::pair<juce::Rectangle<int>, juce::Rectangle<int>> dragArea() const;
 
     std::optional<Drag> drag_;
+
+    // The zoom gliding towards where the wheel aimed it (S18 bis).
+    struct ZoomGlide
+    {
+        Glide width;
+        double anchorBeats{0.0};
+        int anchorX{0};
+    };
+    std::optional<ZoomGlide> zoomGlide_;
 
     juce::ComboBox channelChooser_;
 

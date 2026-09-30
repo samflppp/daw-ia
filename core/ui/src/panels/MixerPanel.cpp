@@ -6,6 +6,7 @@
 #include "daw/domain/copilot/MixingReadiness.h"
 #include "daw/ui/AutomatableSlider.h"
 #include "daw/ui/model/AutomationEditing.h"
+#include "daw/ui/model/Motion.h"
 
 #include <algorithm>
 #include <cmath>
@@ -53,10 +54,43 @@ public:
     {
     }
 
+    // A reading. On the light pace, shown as it is. On the fluid one, a level
+    // above the one shown takes it up at once, a level under it lets it fall
+    // at its rate, image by image (advance).
     void show(const StripMeter& meter)
     {
-        meter_ = meter;
-        repaint();
+        read_ = meter;
+        if (!FrameTicker::animates())
+        {
+            meter_ = meter;
+            repaint();
+            return;
+        }
+        advance(FrameTicker::nowMs());
+    }
+
+    // One image of the fall; repaints only when what is drawn moved.
+    void advance(double nowMs)
+    {
+        if (!FrameTicker::animates())
+            return;
+
+        const auto rate = tokens_.number("motion.meter.fallDbPerSecond");
+        const auto hold = static_cast<double>(tokens_.integer("motion.duration.peakHold"));
+        auto shown = read_;
+        shown.rmsLeftDb = rmsLeft_.advance(read_.rmsLeftDb, nowMs, rate, 0.0, meterFloorDb);
+        shown.rmsRightDb = rmsRight_.advance(read_.rmsRightDb, nowMs, rate, 0.0, meterFloorDb);
+        shown.peakLeftDb = peakLeft_.advance(read_.peakLeftDb, nowMs, rate, hold, meterFloorDb);
+        shown.peakRightDb = peakRight_.advance(read_.peakRightDb, nowMs, rate, hold, meterFloorDb);
+
+        const auto moved = [](float a, float b) { return std::abs(a - b) > 0.05f; };
+        if (moved(shown.rmsLeftDb, meter_.rmsLeftDb) || moved(shown.rmsRightDb, meter_.rmsRightDb) ||
+            moved(shown.peakLeftDb, meter_.peakLeftDb) || moved(shown.peakRightDb, meter_.peakRightDb) ||
+            shown.over != meter_.over)
+        {
+            meter_ = shown;
+            repaint();
+        }
     }
 
     std::function<void()> onClick;
@@ -102,7 +136,12 @@ private:
     }
 
     const Tokens& tokens_;
-    StripMeter meter_{};
+    StripMeter meter_{}; // as drawn
+    StripMeter read_{};  // as last read
+    FallingLevel rmsLeft_;
+    FallingLevel rmsRight_;
+    FallingLevel peakLeft_;
+    FallingLevel peakRight_;
 };
 
 // --- a strip -------------------------------------------------------------------
@@ -209,6 +248,7 @@ public:
     [[nodiscard]] domain::TrackId id() const noexcept { return id_; }
 
     void showMeter(const StripMeter& meter) { meter_.show(meter); }
+    void advanceMeter(double nowMs) { meter_.advance(nowMs); }
 
     void mouseDown(const juce::MouseEvent& event) override
     {
@@ -629,10 +669,19 @@ void MixerPanel::frame()
     // movement and not a series of jumps. Stopped with no line to follow,
     // every strip already shows the project: follow() finds nothing to move
     // and repaints nothing.
+    //
+    // And the meters fall, on the fluid pace, between two readings.
+    const auto now = FrameTicker::nowMs();
     for (auto& strip : strips_)
+    {
         strip->follow();
+        strip->advanceMeter(now);
+    }
     if (master_ != nullptr)
+    {
         master_->follow();
+        master_->advanceMeter(now);
+    }
 }
 
 void MixerPanel::rebuild()

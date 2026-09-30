@@ -2,6 +2,7 @@
 
 #include "daw/ui/FrameTicker.h"
 #include "daw/ui/PanelRegistry.h"
+#include "daw/ui/model/Motion.h"
 #include "daw/ui/model/PatternPreviews.h"
 #include "daw/ui/model/PromptReader.h"
 #include "daw/ui/model/ZoneProposal.h"
@@ -468,6 +469,18 @@ private:
 
     std::optional<int> paintedPlayheadX_;
     std::size_t playheadMoves_{0};
+
+    // What glides on the fluid pace (S18 bis): the page turning under the
+    // playhead, and the zoom towards where the wheel aimed it.
+    struct ZoomGlide
+    {
+        Glide width;
+        double anchorBeats{0.0};
+        int anchorX{0};
+    };
+    std::optional<Glide> pageTurn_;
+    std::optional<ZoomGlide> zoomGlide_;
+    void glide();
 
     // Built when the project changes, read when painting.
     PatternPreviews previews_;
