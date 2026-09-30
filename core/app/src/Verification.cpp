@@ -67,6 +67,7 @@ Verification::Verification(Wiring wiring)
     , saveAsTo_(std::move(wiring.saveAsTo))
     , lastRefusal_(std::move(wiring.lastRefusal))
     , probe_(wiring.probe)
+    , project_(wiring.project)
 {
     exporter_ = wiring.exporter;
 }

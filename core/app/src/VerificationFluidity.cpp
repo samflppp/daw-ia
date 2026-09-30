@@ -3,6 +3,7 @@
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/ui/PageWindow.h"
+#include "daw/ui/panels/PianoRollPanel.h"
 #include "daw/ui/panels/PlaylistPanel.h"
 
 #include <algorithm>
@@ -35,6 +36,9 @@ constexpr int samples = 60;
 // pixels each, the pace of a hand.
 constexpr int moveFrames = 60;
 constexpr int moveStepPx = 5;
+
+// A drag of a block, a note or a band: twenty images, there and back.
+constexpr int dragFrames = 20;
 
 // The target of S18 bis: a whole repaint of the playlist fits in one image at
 // 120 Hz.
@@ -109,6 +113,74 @@ paintMs(juce::Component& component, juce::Rectangle<int> area, const juce::Image
     std::vector<double> ms;
     for (int index = 0; index < samples; ++index)
         ms.push_back(paintMs(component, component.getLocalBounds(), type));
+    return timingOf(std::move(ms));
+}
+
+// A drag, image by image, each image being the move of the hand and the
+// repaint of what it invalidated. The window is on the software renderer for
+// the time of the measure: its peer paints the invalidated region when asked,
+// where Direct2D waits for the next vertical blank. The project's change
+// message, if the move sent one, is handed over within the image, as the
+// message loop would hand it over before the next move.
+[[nodiscard]] Timing dragTiming(juce::Component& target,
+                                juce::Point<int> from,
+                                juce::Point<int> step,
+                                juce::ModifierKeys held,
+                                ui::ProjectObserver* project)
+{
+    auto* peer = target.getPeer();
+    if (peer == nullptr)
+        return {};
+
+    const auto engine = peer->getCurrentRenderingEngine();
+    peer->setCurrentRenderingEngine(
+        std::max(0, peer->getAvailableRenderingEngines().indexOf("Software Renderer")));
+
+    auto source = juce::Desktop::getInstance().getMainMouseSource();
+    const auto now = juce::Time::getCurrentTime();
+    const auto event = [&](juce::Point<int> at, juce::ModifierKeys mods, bool dragged)
+    {
+        return juce::MouseEvent{source,
+                                at.toFloat(),
+                                mods,
+                                juce::MouseInputSource::defaultPressure,
+                                0.0f,
+                                0.0f,
+                                0.0f,
+                                0.0f,
+                                &target,
+                                &target,
+                                now,
+                                from.toFloat(),
+                                now,
+                                1,
+                                dragged};
+    };
+    const auto settle = [&]
+    {
+        if (project != nullptr)
+            project->dispatchPendingMessages();
+        peer->performAnyPendingRepaintsNow();
+    };
+
+    settle();
+    target.mouseDown(event(from, held, false));
+    settle();
+
+    std::vector<double> ms;
+    auto at = from;
+    for (int frame = 0; frame < dragFrames; ++frame)
+    {
+        at += frame < dragFrames / 2 ? step : -step;
+        const auto started = juce::Time::getMillisecondCounterHiRes();
+        target.mouseDrag(event(at, held, true));
+        settle();
+        ms.push_back(juce::Time::getMillisecondCounterHiRes() - started);
+    }
+
+    target.mouseUp(event(at, held.withoutMouseButtons(), true));
+    settle();
+    peer->setCurrentRenderingEngine(engine);
     return timingOf(std::move(ms));
 }
 
@@ -360,6 +432,86 @@ void Verification::buildFluidity()
             const auto timing = timingOf(std::move(direct2d));
             note("Direct2D, déplacement et repeint par image : " + describe(timing));
             measures->rows.emplace_back("déplacement de fenêtre interne, par image (Direct2D)", timing);
+        });
+
+    add("glisser un bloc, une note, une bande : chaque image, et ce qu'elle repeint",
+        [this, measures]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            const auto* pattern = state_.findPattern(measures->opened);
+            const auto* clip =
+                pattern != nullptr ? pattern->findClipForTrack(measures->openedTrack) : nullptr;
+            if (playlist == nullptr || roll == nullptr || clip == nullptr || clip->notes.empty())
+            {
+                check(false, "la playlist, le piano-roll ou les notes manquent");
+                return;
+            }
+
+            // The playlist in front, then the piano roll: each is dragged
+            // where the hand would see it.
+            static_cast<void>(view_.showPage("playlist", true));
+            const auto left = juce::ModifierKeys{juce::ModifierKeys::leftButtonModifier};
+            const auto bar = playlist->pointFor(0, state_.beatsPerBar()) - playlist->pointFor(0, 0.0);
+            const auto lane = playlist->pointFor(1, 0.0) - playlist->pointFor(0, 0.0);
+
+            const auto depthBefore = depth();
+            const auto block =
+                dragTiming(*playlist, playlistBeat(0, 0.5), juce::Point<int>{bar.x, 0}, left, project_);
+            // Past the song, where no block is: Ctrl there draws a band.
+            const auto band = dragTiming(*playlist,
+                                         playlistBeat(2, patternBeats * layingsPerPattern + 2.0),
+                                         juce::Point<int>{bar.x / 2, lane.y / 2},
+                                         left.withFlags(juce::ModifierKeys::ctrlModifier),
+                                         project_);
+
+            static_cast<void>(view_.showPage("piano_roll", true));
+            // The notes of the pattern are short: at the width that fits the
+            // pattern, a note is narrower than its resizing grip, and grabbing
+            // it would stretch it. The hand zooms in first, on the ruler.
+            for (int notch = 0; notch < 4; ++notch)
+                wheel(*roll, roll->ruler().getCentre(), 1.0f);
+
+            // A note in the middle of what the piano roll shows. The notes
+            // follow each other, one at a time: the key above a note, at its
+            // start, is empty, and a band starts there.
+            const auto middle = roll->getLocalBounds().reduced(roll->getWidth() / 4, roll->getHeight() / 4);
+            const auto shown =
+                std::find_if(clip->notes.begin(),
+                             clip->notes.end(),
+                             [roll, middle](const domain::Note& candidate)
+                             { return middle.contains(roll->noteBounds(candidate).getCentre()); });
+            if (shown == clip->notes.end())
+            {
+                check(false, "aucune note au milieu du piano-roll");
+                return;
+            }
+            const auto grabbed = *shown;
+            const auto key = tokens_.integer("metric.pianoRoll.keyHeight");
+            const auto noteDrag = dragTiming(
+                *roll, roll->pointFor(grabbed.startBeats + 0.01, grabbed.pitch), {0, -key}, left, project_);
+            const auto noteBand = dragTiming(*roll,
+                                             roll->pointFor(grabbed.startBeats + 0.01, grabbed.pitch + 1),
+                                             juce::Point<int>{key, key / 2},
+                                             left.withFlags(juce::ModifierKeys::ctrlModifier),
+                                             project_);
+
+            for (int notch = 0; notch < 4; ++notch)
+                wheel(*roll, roll->ruler().getCentre(), -1.0f);
+
+            note("bloc de la playlist : " + describe(block));
+            note("bande de la playlist : " + describe(band));
+            note("note du piano-roll : " + describe(noteDrag));
+            note("bande du piano-roll : " + describe(noteBand));
+            measures->rows.emplace_back("glisser un bloc, par image (logiciel)", block);
+            measures->rows.emplace_back("bande de sélection de la playlist, par image (logiciel)", band);
+            measures->rows.emplace_back("glisser une note, par image (logiciel)", noteDrag);
+            measures->rows.emplace_back("bande de sélection du piano-roll, par image (logiciel)", noteBand);
+
+            // There and back: the block where it was, the note at its pitch;
+            // the note's drag is one entry, the block's none.
+            check(depth() == depthBefore + 1, "le glissé de la note est une entrée, celui du bloc aucune");
+            static_cast<void>(bus_.undo());
         });
 
     add("les pages comme elles étaient",

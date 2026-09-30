@@ -256,7 +256,8 @@ public:
                 [this](const juce::File& target) { return saveAs(target); },
                 [this] { return lastRefusal_; },
                 exporter_.get(),
-                probe_.get()});
+                probe_.get(),
+                &projectObserver_});
 
             if (exporter_ != nullptr)
                 exporter_->writeInto(juce::File{tokens[index + 1].unquoted()}.getChildFile("export"));

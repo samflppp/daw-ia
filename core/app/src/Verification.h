@@ -11,6 +11,7 @@
 #include "daw/ui/WorkspaceView.h"
 #include "daw/ui/model/CopilotHost.h"
 #include "daw/ui/model/History.h"
+#include "daw/ui/model/ProjectObserver.h"
 #include "daw/ui/model/SampleHost.h"
 #include "daw/ui/model/Selection.h"
 #include "daw/ui/model/TransportClock.h"
@@ -100,6 +101,11 @@ public:
         // its state is written next to every failed check, and every refusal
         // the bus made during a step is written in that step.
         const PlaybackProbe* probe{nullptr};
+
+        // What the panels hear when the project changes. The fluidity run
+        // hands its pending message over within an image, the way the
+        // message loop would between two moves of the hand.
+        ui::ProjectObserver* project{nullptr};
     };
 
     explicit Verification(Wiring wiring);
@@ -383,6 +389,7 @@ private:
     std::function<bool(const juce::File&)> saveAsTo_;
     std::function<juce::String()> lastRefusal_;
     const PlaybackProbe* probe_{nullptr};
+    ui::ProjectObserver* project_{nullptr};
 
     // S14.
     domain::TrackId leadTrack_{};
