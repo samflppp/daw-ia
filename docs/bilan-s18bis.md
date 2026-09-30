@@ -1,8 +1,8 @@
 # Bilan de S18 bis — DAW IA
 
 **Période :** semaine 18 bis, chantier 0 bis de la S18, avant la toile. Rédigé le 30 septembre 2026.
-**Dépôt :** `samflppp/daw-ia`, branche `main`. 12 commits de `25cce40` à `9836d1c`, plus ce bilan. Pas encore
-poussés : voir « Reste à faire ».
+**Dépôt :** `samflppp/daw-ia`, branche `main`, poussée. 12 commits de `25cce40` à `9836d1c`, ce bilan (`ceab598`,
+CI verte, Clang compris), puis les animations validées : `d3eadb0`, `798fe5f`.
 **Volume :** 53 fichiers, +2 160 lignes, −290 (hors ce bilan et `IDEES.md`).
 **Tests :** 362 cas de domaine (+3, `TokenTableTests`), un cas élargi (`PreviewTests`). Aucune commande de domaine
 ajoutée, `ProjectState`, journal et projection intacts.
@@ -16,8 +16,7 @@ ajoutée, `ProjectState`, journal et projection intacts.
   Windows 11 comprises.
 - **La tête de lecture avance à chaque image de l'écran.** Il y avait deux causes d'à-coups, pas une.
 - **Fluide / Léger** dans Fichier > Affichage, appliqué sans redémarrer.
-- **Tombé :** les animations du mode fluide ne sont pas codées. C'est la méthode, pas le temps : leur liste est
-  en §9, à valider.
+- **Les animations du mode fluide,** exposées puis validées (« Go »), sont codées (§9).
 
 ## 1. Le diagnostic, confirmé ou corrigé par la mesure
 
@@ -91,7 +90,6 @@ projet, et le repeint réel de la région salie (moteur logiciel, dont le peer p
 
 ## 4. Ce qui est tombé
 
-- **Les animations du mode fluide.** Par méthode : la liste est exposée en §9 et attend ton accord.
 - **Le glissé d'un point d'automation n'est pas mesuré.** Le code limite son repeint à sa ligne ; la mesure demande
   une ligne d'automation à l'écran dans le projet de mesure, pas faite.
 - **144 Hz n'est pas mesuré** : cette machine a un écran 60 Hz. Le mécanisme ne dépend pas de la fréquence (une image
@@ -180,10 +178,13 @@ Sur `main`, en Release de préférence (le Debug est lent partout).
    pattern doit suivre la note sans que le reste clignote.
 4. **La lecture.** SONG, lecture, playlist zoomée (Ctrl + molette) : la tête de lecture doit glisser, sans à-coups.
    Si tu as un écran 144 Hz, mets la fenêtre dessus : c'est là qu'il faut regarder.
-5. **La bascule.** Fichier > Affichage > Léger : l'interface doit rester juste, sans redémarrer ; la tête de
-   lecture avance plus sèchement (30 images par seconde). Ferme, rouvre : toujours léger. Repasse en Fluide.
+5. **Les animations.** Zoom à la molette sur la règle : il glisse. Lecture en SONG, zoomé : la page suivante
+   arrive en glissant. F10 en lecture : les vumètres retombent en douceur, la crête tient un instant. F9 : la
+   fenêtre des pistes apparaît en fondu.
+6. **La bascule.** Fichier > Affichage > Léger : l'interface doit rester juste, sans redémarrer ; la tête de
+   lecture avance plus sèchement (30 images par seconde), rien ne glisse ni ne fond. Ferme, rouvre : toujours léger. Repasse en Fluide.
 
-## 9. Les animations du mode fluide, à valider avant d'être codées
+## 9. Les animations du mode fluide : exposées, validées, codées
 
 Toutes coupées en léger. Chaque durée est un token `motion.*`, la règle d'hygiène les voit.
 
@@ -194,14 +195,27 @@ Toutes coupées en léger. Chaque durée est un token `motion.*`, la règle d'hy
 | 3 | Les vumètres qui retombent (mixer, liste des pistes) | Montée instantanée, descente à vitesse fixe ; la crête tient un instant puis retombe au même rythme. Les valeurs arrivent toujours à 30 Hz : la descente est interpolée à chaque image. | `motion.meter.fallDbPerSecond` : 24 ; `motion.duration.peakHold` : 800 ms |
 | 4 | Les fenêtres internes en fondu | À l'ouverture seulement (F5–F10, onglets), de transparente à opaque. La fermeture reste immédiate : une fenêtre qui s'attarde reçoit encore des clics. Les fenêtres de plugin, natives, n'en ont pas. | `motion.duration.panel` : 200 ms (existe) |
 
-Rien d'autre : pas de survol animé, pas de transition d'espace de travail, pas de fondu de la barre d'état. Dis-moi
-ce que tu gardes, ce que tu changes, et les durées.
+Rien d'autre : pas de survol animé, pas de transition d'espace de travail, pas de fondu de la barre d'état.
+
+**Codées telles quelles** (`d3eadb0`, `798fe5f`). Les courbes sont un modèle pur (`Glide`, `FallingLevel`), testé et
+cassé une fois (courbe rendue linéaire, maintien ignoré, chute doublée : rouges). `--verify-fluidite` relâche
+l'écran pour une étape : la largeur d'une mesure n'a pas bougé au cran de molette (24 px) et a doublé une
+demi-seconde après (48 px) ; la fenêtre ouverte commence transparente et finit opaque. Cassée une fois : rouge.
+
+**Écart :** toutes les vérifications tiennent l'écran immobile (`FrameTicker::holdStill`), parce qu'elles
+contrôlent un zoom au cran même, comme un état. Leur `--verify` complet reste identique à la référence (510 / 38).
+
+**Une mesure que je n'ai pas pu refaire proprement.** Après les animations, « un déplacement de la tête de lecture
+par image » est tombé au rouge : 90 à 98 « images » par seconde comptées sur un écran à 60 Hz, 49 déplacements. Le
+code d'avant les animations, remesuré au même moment, donne la même chose (92 et 49) : c'est l'environnement qui
+avait changé. Ton instance Debug tournait à plein (4 254 s de processeur, carte son partagée) ; et JUCE compte un
+retour de `WaitForVBlank`, qui revient en avance sous charge, pas une image réelle. Le seuil n'est pas relâché :
+refais `--verify-fluidite` avec DAW IA fermé par ailleurs.
 
 ## 10. Reste à faire
 
-- **Pousser.** Les 12 commits et ce bilan sont locaux ; `main` était déjà en avance d'un commit (`bc5fe4e`) sur
-  `origin`. J'attends ton accord pour pousser, et la CI (Clang sous Linux) dira ce que je n'ai pas pu compiler ici.
-- Ta validation des animations (§9), puis leur code.
+- `--verify-fluidite` refait avec aucune autre instance de DAW IA ouverte (§9, la tête de lecture).
+- Regarder les quatre animations à l'œil, surtout la page qui tourne et la chute des vumètres, et régler les tokens.
 - Tes essais à la main (§8), surtout le 144 Hz.
 - Rebaser `wip/toile-s18` sur `main` avant de reprendre la toile.
 - Le mixer entier reste le repeint le plus lourd (~7 ms en D2D) : à regarder s'il gêne à l'œil.
