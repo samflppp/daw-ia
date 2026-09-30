@@ -134,3 +134,16 @@ construits :
   nappe »), sans renommer la ligne.
 - **« Ranger le projet » par le copilote seul,** en une requête : il a les outils (lane.*,
   placement.move avec laneId) et voit les lignes nommées.
+
+## La fluidité, après la S18 bis
+
+Notés en mesurant, non construits :
+
+- **Les vumètres à la cadence de l'écran.** Les panneaux le sont ; `LevelMonitor` lit encore les prises du moteur à
+  30 Hz. Le lire à chaque image coûterait une lecture des prises par image et par tranche.
+- **Le mixer entier en un repeint moins cher.** C'est le plus lourd (~7 ms en Direct2D) : chaque tranche redessine
+  ses combos, ses curseurs et son texte. Une tranche mise en image, repeinte seulement quand elle change, est la
+  piste à mesurer d'abord.
+- **La réaction des panneaux à une commande,** ~3 ms par image de glissé de note : le piano-roll reconstruit son
+  choix de canal à chaque changement, même quand les canaux n'ont pas changé.
+- **Mesurer le déplacement natif de la fenêtre principale** (traces ETW de Windows), au lieu de le juger à l'œil.
