@@ -26,6 +26,14 @@ public:
 
     [[nodiscard]] virtual double positionBeats() const = 0;
     [[nodiscard]] virtual bool isPlaying() const = 0;
+
+    // Where to draw the playhead at this image (S18 bis). The engine moves its
+    // position once per audio block, some twenty milliseconds, and a display
+    // shows an image every seven to seventeen: read as it is, the playhead
+    // stands still on one image in two and jumps on the next. An
+    // implementation may carry it forward between two blocks. Drawing only:
+    // what an edit lands on is positionBeats().
+    [[nodiscard]] virtual double displayBeats() const { return positionBeats(); }
 };
 
 } // namespace daw::ui

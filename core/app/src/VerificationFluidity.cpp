@@ -2,6 +2,7 @@
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
+#include "daw/domain/commands/TransportCommands.h"
 #include "daw/ui/PageWindow.h"
 #include "daw/ui/panels/PianoRollPanel.h"
 #include "daw/ui/panels/PlaylistPanel.h"
@@ -231,6 +232,14 @@ void Verification::buildFluidity()
         // Which pages were open before: the machine remembers them, and a
         // measure must leave the person's screen as it found it.
         std::vector<std::pair<const char*, bool>> pagesBefore;
+
+        // The images the display showed while the song played, and the
+        // playhead's moves meanwhile.
+        std::unique_ptr<juce::VBlankAttachment> vblank;
+        std::size_t images{0};
+        std::size_t movesAtStart{0};
+        std::size_t imagesAtStart{0};
+        double playedFromMs{0.0};
     };
     auto measures = std::make_shared<Measures>();
 
@@ -534,6 +543,67 @@ void Verification::buildFluidity()
             // the note's drag is one entry, the block's none.
             check(depth() == depthBefore + 1, "le glissé de la note est une entrée, celui du bloc aucune");
             static_cast<void>(bus_.undo());
+        });
+
+    // The playhead, zoomed in so it crosses pixels faster than the display
+    // shows images: it should move once per image, whatever the display.
+    add(
+        "la lecture, deux secondes, la playlist zoomée",
+        [this, measures]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+
+            static_cast<void>(view_.showPage("playlist", true));
+            for (int notch = 0; notch < 4; ++notch)
+                wheel(*playlist, playlist->getLocalBounds().getCentre(), 1.0f, false, true);
+
+            press("SONG");
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportPlay>()));
+
+            measures->vblank =
+                std::make_unique<juce::VBlankAttachment>(&shell_, [measures] { ++measures->images; });
+            measures->playedFromMs = 0.0;
+        },
+        [this, measures]
+        {
+            // Counted from the moment the engine plays: before it, the
+            // playhead has nowhere to go.
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (measures->playedFromMs == 0.0)
+            {
+                if (playlist == nullptr || !clock_.isPlaying())
+                    return false;
+                measures->movesAtStart = playlist->playheadMoves();
+                measures->imagesAtStart = measures->images;
+                measures->playedFromMs = juce::Time::getMillisecondCounterHiRes();
+            }
+            return juce::Time::getMillisecondCounterHiRes() - measures->playedFromMs > 2000.0;
+        },
+        4000.0);
+
+    add("la tête de lecture avance à chaque image de l'écran",
+        [this, measures]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            const auto seconds = (juce::Time::getMillisecondCounterHiRes() - measures->playedFromMs) / 1000.0;
+            const auto images = measures->images - measures->imagesAtStart;
+            const auto moves = playlist != nullptr ? playlist->playheadMoves() - measures->movesAtStart : 0;
+            measures->vblank.reset();
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportStop>()));
+
+            if (playlist != nullptr)
+                for (int notch = 0; notch < 4; ++notch)
+                    wheel(*playlist, playlist->getLocalBounds().getCentre(), -1.0f, false, true);
+
+            const auto rate = [seconds](std::size_t count)
+            { return juce::String(static_cast<double>(count) / std::max(seconds, 1e-3), 1).toStdString(); };
+            note("en " + juce::String(seconds, 2).toStdString() + " s : " + std::to_string(images) +
+                 " images de l'écran (" + rate(images) + " par seconde), " + std::to_string(moves) +
+                 " déplacements de la tête de lecture (" + rate(moves) + " par seconde)");
+            check(images > 0 && static_cast<double>(moves) >= 0.9 * static_cast<double>(images),
+                  "un déplacement par image, à 10 % près");
         });
 
     add("les pages comme elles étaient",

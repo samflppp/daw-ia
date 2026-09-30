@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daw/ui/FrameTicker.h"
 #include "daw/ui/PanelRegistry.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -26,8 +27,8 @@ namespace daw::ui
 // so a copilot that switches mode lights the right button with no code here.
 //
 // The playhead is the exception, and a deliberate one. It does not come from
-// the project: it comes from the clock, sixty times a second, because that is
-// where it actually is.
+// the project: it comes from the clock, at every image of the screen, because
+// that is where it actually is.
 //
 // The pattern being edited is chosen here, next to PAT, the way FL keeps it
 // in its toolbar: the chooser and "+ Pattern". Since S13 the rack only brings
@@ -42,10 +43,7 @@ namespace daw::ui
 // A turn of the wheel is one history entry, however many notches it counted.
 // The tempo shown is the project's — the point at the origin — even where the
 // tempo is automated further on; the caption says when it is.
-class TransportPanel final : public juce::Component,
-                             private juce::ChangeListener,
-                             private juce::Timer,
-                             private juce::AsyncUpdater
+class TransportPanel final : public juce::Component, private juce::ChangeListener, private juce::AsyncUpdater
 {
 public:
     // What a transport button draws. Glyphs would have been cheaper and wrong:
@@ -82,7 +80,7 @@ public:
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
-    void timerCallback() override;
+    void frame();
     void handleAsyncUpdate() override;
 
     // Pattern mode plays the pattern the chooser shows, and nothing else.
@@ -143,6 +141,10 @@ private:
 
     std::optional<domain::GestureId> wheelGesture_;
     juce::uint32 lastWheelMs_{0};
+
+    // Last, so the first to go: no image is asked of a panel being taken
+    // apart. One call per image of the screen (S18 bis).
+    FrameTicker frames_{*this, [this] { frame(); }};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TransportPanel)
 };

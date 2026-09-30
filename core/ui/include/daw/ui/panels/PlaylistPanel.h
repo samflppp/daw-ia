@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daw/ui/FrameTicker.h"
 #include "daw/ui/PanelRegistry.h"
 #include "daw/ui/model/PatternPreviews.h"
 #include "daw/ui/model/PromptReader.h"
@@ -74,8 +75,7 @@ class PlaylistPanel final : public juce::Component,
                             public juce::DragAndDropTarget,
                             public juce::FileDragAndDropTarget,
                             private juce::ChangeListener,
-                            private juce::ScrollBar::Listener,
-                            private juce::Timer
+                            private juce::ScrollBar::Listener
 {
 public:
     explicit PlaylistPanel(const PanelContext& context);
@@ -163,10 +163,14 @@ public:
     // the verification, which proves a scroll builds nothing.
     [[nodiscard]] std::size_t contentBuilds() const noexcept { return contentBuilds_; }
 
+    // How many times the playhead was moved on screen: compared by the
+    // verification with the images the display showed meanwhile.
+    [[nodiscard]] std::size_t playheadMoves() const noexcept { return playheadMoves_; }
+
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override;
-    void timerCallback() override;
+    void frame();
 
     // --- lanes
     //
@@ -463,6 +467,7 @@ private:
     std::vector<Copied> clipboard_;
 
     std::optional<int> paintedPlayheadX_;
+    std::size_t playheadMoves_{0};
 
     // Built when the project changes, read when painting.
     PatternPreviews previews_;
@@ -503,6 +508,10 @@ private:
     // The project's revision at the last change heard: what changed since is
     // what the next one has to repaint.
     std::uint64_t handledRevision_{0};
+
+    // Last, so the first to go: no image is asked of a panel being taken
+    // apart. One call per image of the screen (S18 bis).
+    FrameTicker frames_{*this, [this] { frame(); }};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PlaylistPanel)
 };

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daw/ui/FrameTicker.h"
 #include "daw/ui/PanelRegistry.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -17,7 +18,7 @@ namespace daw::ui
 // state holds, and moving it sends a command instead of writing a value
 // anywhere. That is what makes a track created by MCP, by a replay or by a
 // copilot appear here without a line of code for each case.
-class TrackListPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
+class TrackListPanel final : public juce::Component, private juce::ChangeListener
 {
 public:
     explicit TrackListPanel(const PanelContext& context);
@@ -30,7 +31,7 @@ private:
     class Row;
 
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
-    void timerCallback() override;
+    void frame();
     void rebuild();
     void addTrack();
 
@@ -49,6 +50,10 @@ private:
 
     // True in a page window, whose title bar names the panel already.
     bool titled_{false};
+
+    // Last, so the first to go: no image is asked of a panel being taken
+    // apart. One call per image of the screen (S18 bis).
+    FrameTicker frames_{*this, [this] { frame(); }};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TrackListPanel)
 };

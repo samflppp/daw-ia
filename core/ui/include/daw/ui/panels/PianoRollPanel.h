@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daw/domain/generation/Constraints.h"
+#include "daw/ui/FrameTicker.h"
 #include "daw/ui/PanelRegistry.h"
 #include "daw/ui/model/GhostProposal.h"
 #include "daw/ui/model/PromptReader.h"
@@ -57,7 +58,7 @@ namespace daw::ui
 // drops them. Écouter (Ctrl+Space) loops the grey notes through the track's
 // instrument, written nowhere (ListeningHost). Until Tab nothing is written:
 // the proposal is a GhostProposal held by this panel.
-class PianoRollPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
+class PianoRollPanel final : public juce::Component, private juce::ChangeListener
 {
 public:
     // One sixteenth. The grid the beatmaker workspace draws is the grid it
@@ -142,7 +143,7 @@ public:
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
-    void timerCallback() override;
+    void frame();
 
     // The row being edited: what the selected track plays in the current
     // pattern. Null when no track is selected, when the project holds no
@@ -392,6 +393,10 @@ private:
 
     // True in a page window, whose title bar names the panel already.
     bool titled_{false};
+
+    // Last, so the first to go: no image is asked of a panel being taken
+    // apart. One call per image of the screen (S18 bis).
+    FrameTicker frames_{*this, [this] { frame(); }};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PianoRollPanel)
 };

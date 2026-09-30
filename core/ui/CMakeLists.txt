@@ -76,6 +76,7 @@ add_library(daw::ui ALIAS daw_ui)
 
 target_sources(daw_ui INTERFACE
     src/Tokens.cpp
+    src/FrameTicker.cpp
     src/Typography.cpp
     src/DawLookAndFeel.cpp
     src/GalleryView.cpp

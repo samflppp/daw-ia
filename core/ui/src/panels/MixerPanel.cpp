@@ -567,15 +567,10 @@ MixerPanel::MixerPanel(const PanelContext& context)
     project_.addChangeListener(this);
     levels_.addChangeListener(this);
     rebuild();
-
-    // Thirty times a second, like the meters: fast enough for a fade to read
-    // as a movement, not a series of jumps.
-    startTimerHz(30);
 }
 
 MixerPanel::~MixerPanel()
 {
-    stopTimer();
     levels_.removeChangeListener(this);
     project_.removeChangeListener(this);
     setLookAndFeel(nullptr);
@@ -628,10 +623,12 @@ void MixerPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
         rebuild();
 }
 
-void MixerPanel::timerCallback()
+void MixerPanel::frame()
 {
-    // Stopped with no line to follow, every strip already shows the project:
-    // follow() finds nothing to move and repaints nothing.
+    // A fader following its line moves once per image, so a fade reads as a
+    // movement and not a series of jumps. Stopped with no line to follow,
+    // every strip already shows the project: follow() finds nothing to move
+    // and repaints nothing.
     for (auto& strip : strips_)
         strip->follow();
     if (master_ != nullptr)

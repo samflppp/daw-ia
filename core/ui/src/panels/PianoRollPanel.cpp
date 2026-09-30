@@ -15,8 +15,6 @@ namespace daw::ui
 namespace
 {
 
-constexpr int playheadRefreshMs = 33;
-
 constexpr int semitonesPerOctave = 12;
 
 constexpr double gridStepBeats = PianoRollPanel::gridStepBeats;
@@ -134,7 +132,6 @@ PianoRollPanel::PianoRollPanel(const PanelContext& context)
 
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
-    startTimer(playheadRefreshMs);
 
     // Pattern mode plays the pattern on screen from the first frame, without
     // waiting for the user to pick one they have already got.
@@ -145,7 +142,6 @@ PianoRollPanel::~PianoRollPanel()
 {
     stopListening();
     reader_.cancel();
-    stopTimer();
     selection_.removeChangeListener(this);
     project_.removeChangeListener(this);
     setLookAndFeel(nullptr);
@@ -361,11 +357,11 @@ PianoRollPanel::RowOpening PianoRollPanel::openRow() const
     return opening;
 }
 
-void PianoRollPanel::timerCallback()
+void PianoRollPanel::frame()
 {
     // Only the playhead moves on its own, so only its column is repainted. A
-    // full repaint thirty times a second would redraw a grid that has not
-    // changed since the project was opened.
+    // full repaint at every image would redraw a grid that has not changed
+    // since the project was opened.
     //
     // Two columns, not one: the one the playhead is moving to, and the one it
     // is leaving. Repainting only the first is what left a white line behind
@@ -927,9 +923,8 @@ std::optional<int> PianoRollPanel::playheadX() const
     // the playhead means anything here. One playhead on one grid, whichever
     // laying is sounding.
     const auto* shown = pattern();
-    const auto local = shown != nullptr
-                           ? patternEditing::localBeats(state_, shown->id, clock_.positionBeats())
-                           : std::nullopt;
+    const auto local = shown != nullptr ? patternEditing::localBeats(state_, shown->id, clock_.displayBeats())
+                                        : std::nullopt;
     if (!local)
         return {};
 

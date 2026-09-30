@@ -19,8 +19,6 @@ namespace daw::ui
 namespace
 {
 
-constexpr int playheadRefreshMs = 33;
-
 // Sixteen bars on screen at least, and four bars of room after the last
 // laying, so there is always somewhere to click the next one.
 constexpr double minimumVisibleBeats = 64.0;
@@ -108,14 +106,12 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context)
     samples_.addChangeListener(this);
     static_cast<void>(previews_.refresh(state_));
     tempoLaneShown_ = tempoLaneHeight() > 0;
-    startTimer(playheadRefreshMs);
 }
 
 PlaylistPanel::~PlaylistPanel()
 {
     stopZoneListening();
     reader_.cancel();
-    stopTimer();
     horizontal_.removeListener(this);
     vertical_.removeListener(this);
     samples_.removeChangeListener(this);
@@ -999,7 +995,7 @@ std::optional<int> PlaylistPanel::playheadX() const
     if (state_.transport().mode != domain::PlayMode::song)
         return {};
 
-    const auto beats = clock_.positionBeats();
+    const auto beats = clock_.displayBeats();
     if (beats < firstBeat() || beats > firstBeat() + viewBeats())
         return {};
 
@@ -1018,7 +1014,7 @@ void PlaylistPanel::paintPlayhead(juce::Graphics& g) const
     g.fillRect(*x, ruler.getY(), tokens_.integer("stroke.playhead"), grid.getBottom() - ruler.getY());
 }
 
-void PlaylistPanel::timerCallback()
+void PlaylistPanel::frame()
 {
     closeTempoWheel(true);
     closeAutomationWheel(true);
@@ -1039,6 +1035,7 @@ void PlaylistPanel::timerCallback()
         repaint(*wanted - 1, top, width, height);
 
     paintedPlayheadX_ = wanted;
+    ++playheadMoves_;
 }
 
 // --- editing ----------------------------------------------------------------

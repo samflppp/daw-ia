@@ -13,10 +13,6 @@ namespace daw::ui
 namespace
 {
 
-// Thirty frames a second for a readout nobody reads faster than that. Sixty
-// would cost twice the repaints to move digits the eye cannot follow.
-constexpr int readoutRefreshMs = 33;
-
 constexpr int sixteenthsPerBeat = 4;
 
 // How long the wheel rests before its turn is over, and the next notch opens
@@ -243,12 +239,10 @@ TransportPanel::TransportPanel(const PanelContext& context)
     selection_.addChangeListener(this);
     refresh();
     rebuildPatternChooser();
-    startTimer(readoutRefreshMs);
 }
 
 TransportPanel::~TransportPanel()
 {
-    stopTimer();
     cancelPendingUpdate();
     selection_.removeChangeListener(this);
     project_.removeChangeListener(this);
@@ -316,7 +310,7 @@ void TransportPanel::createPattern()
     selection_.selectPattern(created.patternId);
 }
 
-void TransportPanel::timerCallback()
+void TransportPanel::frame()
 {
     if (wheelGesture_.has_value() && juce::Time::getMillisecondCounter() - lastWheelMs_ > wheelRestMs)
         closeWheelGesture();
@@ -327,7 +321,11 @@ void TransportPanel::timerCallback()
 
     lastPosition_ = position;
     play_->setToggleState(clock_.isPlaying(), juce::dontSendNotification);
-    repaint();
+
+    // The position, and the tempo an automated tempo moves with it: the
+    // buttons and the signature around them are not repainted at each image.
+    repaint(readoutArea(0));
+    repaint(readoutArea(1));
 }
 
 void TransportPanel::refresh()
@@ -357,7 +355,7 @@ juce::String TransportPanel::positionText() const
     // The beat is a quarter note whatever the signature, so a bar of 6/8
     // counts three of them, and one of 7/8 three and a half: its last beat is
     // an eighth long.
-    const auto beats = std::max(0.0, clock_.positionBeats());
+    const auto beats = std::max(0.0, clock_.displayBeats());
     const auto barBeats = state_.beatsPerBar();
 
     const auto barIndex = std::floor(beats / barBeats + 1e-9);

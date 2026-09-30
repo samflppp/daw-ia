@@ -476,14 +476,10 @@ TrackListPanel::TrackListPanel(const PanelContext& context)
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
     rebuild();
-
-    // Thirty times a second, like the mixer: a fade reads as a movement.
-    startTimerHz(30);
 }
 
 TrackListPanel::~TrackListPanel()
 {
-    stopTimer();
     selection_.removeChangeListener(this);
     project_.removeChangeListener(this);
     setLookAndFeel(nullptr);
@@ -538,8 +534,9 @@ void TrackListPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     rebuild();
 }
 
-void TrackListPanel::timerCallback()
+void TrackListPanel::frame()
 {
+    // Once per image, like the mixer: a fade reads as a movement.
     for (auto* row : rows_)
         row->follow();
 }

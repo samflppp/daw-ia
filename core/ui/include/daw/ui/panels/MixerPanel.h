@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daw/ui/FrameTicker.h"
 #include "daw/ui/PanelRegistry.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -26,7 +27,7 @@ namespace daw::ui
 //
 // "Mixer par l'IA" calls no model. It runs the check of MixingReadiness against
 // what the copilot can reach, and says what is still missing.
-class MixerPanel final : public juce::Component, private juce::ChangeListener, private juce::Timer
+class MixerPanel final : public juce::Component, private juce::ChangeListener
 {
 public:
     explicit MixerPanel(const PanelContext& context);
@@ -49,7 +50,7 @@ private:
     class Content;
 
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
-    void timerCallback() override;
+    void frame();
     void rebuild();
     void refresh();
     void runReadiness();
@@ -74,6 +75,10 @@ private:
     juce::TextEditor report_;
 
     std::vector<domain::TrackId> shownIds_;
+
+    // Last, so the first to go: no image is asked of a panel being taken
+    // apart. One call per image of the screen (S18 bis).
+    FrameTicker frames_{*this, [this] { frame(); }};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerPanel)
 };
