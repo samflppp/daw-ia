@@ -40,6 +40,17 @@ constexpr int moveStepPx = 5;
 // 120 Hz.
 constexpr double targetMs = 8.0;
 
+// Every page of the beatmaker workspace.
+constexpr const char* pageIds[] = {"browser",
+                                   "playlist",
+                                   "channel_rack",
+                                   "piano_roll",
+                                   "plugin_chain",
+                                   "mixer",
+                                   "tracks",
+                                   "history",
+                                   "copilot"};
+
 struct Timing
 {
     double median{0.0};
@@ -124,6 +135,10 @@ void Verification::buildFluidity()
         domain::TrackId openedTrack{};
         domain::ClipId openedClip{};
         std::vector<std::pair<std::string, Timing>> rows;
+
+        // Which pages were open before: the machine remembers them, and a
+        // measure must leave the person's screen as it found it.
+        std::vector<std::pair<const char*, bool>> pagesBefore;
     };
     auto measures = std::make_shared<Measures>();
 
@@ -196,6 +211,9 @@ void Verification::buildFluidity()
             // so it is in front.
             selection_.selectPattern(measures->opened);
             selection_.selectClip(measures->openedTrack, measures->openedClip);
+
+            for (const auto* id : pageIds)
+                measures->pagesBefore.emplace_back(id, panel(id) != nullptr && panel(id)->isShowing());
 
             for (const auto* id : {"browser", "channel_rack", "history", "copilot", "plugin_chain", "tracks"})
                 static_cast<void>(view_.showPage(id, false));
@@ -285,8 +303,8 @@ void Verification::buildFluidity()
                 return;
             }
 
-            // A hand on the window's title, as dragWindow holds the main bar:
-            // the real pointer moves, since JUCE drags after it.
+            // A hand on the window's title: the real pointer moves, since JUCE
+            // drags after it.
             auto source = juce::Desktop::getInstance().getMainMouseSource();
             const auto pointerWas = juce::Desktop::getMousePosition();
             const auto now = juce::Time::getCurrentTime();
@@ -342,6 +360,16 @@ void Verification::buildFluidity()
             const auto timing = timingOf(std::move(direct2d));
             note("Direct2D, déplacement et repeint par image : " + describe(timing));
             measures->rows.emplace_back("déplacement de fenêtre interne, par image (Direct2D)", timing);
+        });
+
+    add("les pages comme elles étaient",
+        [this, measures]
+        {
+            for (const auto& [id, open] : measures->pagesBefore)
+                static_cast<void>(view_.showPage(id, open));
+            for (const auto& [id, open] : measures->pagesBefore)
+                check(panel(id) == nullptr || panel(id)->isShowing() == open,
+                      std::string{"la page "} + id + (open ? " rouverte" : " refermée"));
         });
 
     add("les chiffres",
