@@ -42,6 +42,11 @@ public:
         std::function<void()> toggleProjectLearning;
         std::function<void()> forgetLearning;
 
+        // Fichier > Affichage: fluid or light, a setting of this machine and
+        // never of the project (S18 bis).
+        std::function<bool()> lightDisplay;
+        std::function<void(bool light)> setLightDisplay;
+
         std::function<void()> minimise;
         std::function<void()> toggleMaximise;
         std::function<void()> close;
@@ -78,6 +83,8 @@ public:
         learnItem,
         projectLearnItem,
         forgetItem,
+        fluidDisplayItem,
+        lightDisplayItem,
     };
 
     void paint(juce::Graphics& g) override;

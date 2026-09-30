@@ -1,5 +1,7 @@
 #include "PluginWindow.h"
 
+#include "DisplayMode.h"
+
 namespace daw::app
 {
 namespace
@@ -53,6 +55,10 @@ PluginWindow::PluginWindow(tracktion::Plugin& plugin, const ui::Tokens& tokens)
     // desktop, and its height is what decides whether the title bar ends up
     // above the top of the screen.
     setVisible(true);
+
+    // Léger on this machine: the plugin's window draws in software too.
+    if (auto* peer = getPeer(); peer != nullptr)
+        display::applyTo(*peer);
     placeOnScreen();
 }
 

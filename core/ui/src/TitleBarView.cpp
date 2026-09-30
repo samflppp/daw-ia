@@ -143,6 +143,14 @@ void TitleBarView::showFileMenu()
     menu.addSeparator();
     menu.addSubMenu(juce::String::fromUTF8("Génération"), generation);
 
+    // How the screen moves, on this machine: in step with the display, or
+    // lighter, for graphics that struggle.
+    const auto light = ask(actions_.lightDisplay);
+    juce::PopupMenu display;
+    display.addItem(fluidDisplayItem, juce::String::fromUTF8("Fluide"), true, !light);
+    display.addItem(lightDisplayItem, juce::String::fromUTF8("Léger (PC modeste)"), true, light);
+    menu.addSubMenu(juce::String::fromUTF8("Affichage"), display);
+
     juce::Component::SafePointer<TitleBarView> self{this};
     menu.showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(&file_),
                        [self](int chosen)
@@ -179,6 +187,11 @@ void TitleBarView::runMenuItem(int item)
         break;
     case forgetItem:
         call(actions_.forgetLearning);
+        break;
+    case fluidDisplayItem:
+    case lightDisplayItem:
+        if (actions_.setLightDisplay)
+            actions_.setLightDisplay(item == lightDisplayItem);
         break;
     default:
         break;

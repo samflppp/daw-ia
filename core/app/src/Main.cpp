@@ -1,5 +1,6 @@
 #include "AppShellView.h"
 #include "CopilotBridge.h"
+#include "DisplayMode.h"
 #include "EditClock.h"
 #include "LevelMonitor.h"
 #include "Listening.h"
@@ -183,6 +184,9 @@ public:
         const auto ownTitleBar = !commandLine.contains("--gallery");
         window_ = std::make_unique<MainWindow>(
             getApplicationName(), ui::Tokens::builtIn(), makeShell(commandLine), ownTitleBar);
+
+        // Fluide or léger, as this machine was left: before the first frame.
+        display::apply(display::isLight(layoutSettings_.get()));
         startTimer(autosaveIntervalMs);
 
         // --no-copilot exists for the runs where a child process would be in
@@ -386,6 +390,8 @@ private:
                 learning_->setProjectExcluded(!learning_->projectExcluded());
         };
         actions.forgetLearning = [this] { confirmForgetLearning(); };
+        actions.lightDisplay = [this] { return display::isLight(layoutSettings_.get()); };
+        actions.setLightDisplay = [this](bool light) { setLightDisplay(light); };
         actions.minimise = [this]
         {
             if (window_ != nullptr)
@@ -475,6 +481,18 @@ private:
     {
         if (learning_ != nullptr)
             learning_->saved(state_);
+    }
+
+    // Fichier > Affichage: kept with this machine's settings, applied at once.
+    void setLightDisplay(bool light)
+    {
+        display::setLight(layoutSettings_.get(), light);
+        if (layoutSettings_ != nullptr)
+            static_cast<void>(layoutSettings_->saveIfNeeded());
+        display::apply(light);
+        if (titleBar_ != nullptr)
+            titleBar_->setStatus(juce::String::fromUTF8(light ? "affichage léger" : "affichage fluide"),
+                                 false);
     }
 
     // "Oublier ce qui a été appris...": asked first, since it cannot be undone.

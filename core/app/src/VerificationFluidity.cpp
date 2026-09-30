@@ -1,8 +1,10 @@
+#include "DisplayMode.h"
 #include "Verification.h"
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
+#include "daw/ui/FrameTicker.h"
 #include "daw/ui/PageWindow.h"
 #include "daw/ui/panels/PianoRollPanel.h"
 #include "daw/ui/panels/PlaylistPanel.h"
@@ -240,6 +242,9 @@ void Verification::buildFluidity()
         std::size_t movesAtStart{0};
         std::size_t imagesAtStart{0};
         double playedFromMs{0.0};
+
+        // The machine's display setting before the run touched it.
+        bool wasLight{false};
     };
     auto measures = std::make_shared<Measures>();
 
@@ -604,6 +609,69 @@ void Verification::buildFluidity()
                  " déplacements de la tête de lecture (" + rate(moves) + " par seconde)");
             check(images > 0 && static_cast<double>(moves) >= 0.9 * static_cast<double>(images),
                   "un déplacement par image, à 10 % près");
+        });
+
+    // Fichier > Affichage > Léger, through the menu's own item: the software
+    // renderer, thirty images a second, applied without a restart. Then the
+    // machine's setting as it was.
+    add(
+        "Affichage > Léger : moteur logiciel, et la lecture",
+        [this, measures]
+        {
+            measures->wasLight = ui::FrameTicker::pace() == ui::FrameTicker::Pace::light;
+            titleBar_.runMenuItem(ui::TitleBarView::lightDisplayItem);
+
+            auto* peer = window_.getPeer();
+            check(ui::FrameTicker::pace() == ui::FrameTicker::Pace::light, "le rythme léger est pris");
+            check(peer != nullptr && display::rendererOf(*peer) != "Direct2D",
+                  "la fenêtre dessine avec : " +
+                      (peer != nullptr ? display::rendererOf(*peer).toStdString() : ""));
+
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (playlist == nullptr)
+                return;
+            for (int notch = 0; notch < 4; ++notch)
+                wheel(*playlist, playlist->getLocalBounds().getCentre(), 1.0f, false, true);
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportPlay>()));
+            measures->playedFromMs = 0.0;
+        },
+        [this, measures]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            if (measures->playedFromMs == 0.0)
+            {
+                if (playlist == nullptr || !clock_.isPlaying())
+                    return false;
+                measures->movesAtStart = playlist->playheadMoves();
+                measures->playedFromMs = juce::Time::getMillisecondCounterHiRes();
+            }
+            return juce::Time::getMillisecondCounterHiRes() - measures->playedFromMs > 2000.0;
+        },
+        4000.0);
+
+    add("Affichage > Léger : trente images par seconde ; puis le réglage d'avant",
+        [this, measures]
+        {
+            auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
+            const auto seconds = (juce::Time::getMillisecondCounterHiRes() - measures->playedFromMs) / 1000.0;
+            const auto moves = playlist != nullptr ? playlist->playheadMoves() - measures->movesAtStart : 0;
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportStop>()));
+            if (playlist != nullptr)
+                for (int notch = 0; notch < 4; ++notch)
+                    wheel(*playlist, playlist->getLocalBounds().getCentre(), -1.0f, false, true);
+
+            const auto wanted = static_cast<double>(tokens_.integer("motion.light.framesPerSecond"));
+            const auto rate = static_cast<double>(moves) / std::max(seconds, 1e-3);
+            check(rate > wanted * 0.8 && rate < wanted * 1.2,
+                  "déplacements de la tête de lecture par seconde : " + juce::String(rate, 1).toStdString());
+
+            titleBar_.runMenuItem(measures->wasLight ? ui::TitleBarView::lightDisplayItem
+                                                     : ui::TitleBarView::fluidDisplayItem);
+            auto* peer = window_.getPeer();
+            if (!measures->wasLight)
+                check(ui::FrameTicker::pace() == ui::FrameTicker::Pace::fluid && peer != nullptr &&
+                          display::rendererOf(*peer) == "Direct2D",
+                      "Fluide de nouveau, Direct2D de nouveau");
         });
 
     add("les pages comme elles étaient",
