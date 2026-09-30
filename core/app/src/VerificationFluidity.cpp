@@ -122,11 +122,17 @@ paintMs(juce::Component& component, juce::Rectangle<int> area, const juce::Image
 // where Direct2D waits for the next vertical blank. The project's change
 // message, if the move sent one, is handed over within the image, as the
 // message loop would hand it over before the next move.
-[[nodiscard]] Timing dragTiming(juce::Component& target,
-                                juce::Point<int> from,
-                                juce::Point<int> step,
-                                juce::ModifierKeys held,
-                                ui::ProjectObserver* project)
+struct DragTiming
+{
+    Timing frame;
+    Timing paint; // the part spent in the peer's repaint
+};
+
+[[nodiscard]] DragTiming dragTiming(juce::Component& target,
+                                    juce::Point<int> from,
+                                    juce::Point<int> step,
+                                    juce::ModifierKeys held,
+                                    ui::ProjectObserver* project)
 {
     auto* peer = target.getPeer();
     if (peer == nullptr)
@@ -156,11 +162,14 @@ paintMs(juce::Component& component, juce::Rectangle<int> area, const juce::Image
                                 1,
                                 dragged};
     };
+    double painting = 0.0;
     const auto settle = [&]
     {
         if (project != nullptr)
             project->dispatchPendingMessages();
+        const auto started = juce::Time::getMillisecondCounterHiRes();
         peer->performAnyPendingRepaintsNow();
+        painting = juce::Time::getMillisecondCounterHiRes() - started;
     };
 
     settle();
@@ -168,6 +177,7 @@ paintMs(juce::Component& component, juce::Rectangle<int> area, const juce::Image
     settle();
 
     std::vector<double> ms;
+    std::vector<double> paints;
     auto at = from;
     for (int frame = 0; frame < dragFrames; ++frame)
     {
@@ -176,13 +186,16 @@ paintMs(juce::Component& component, juce::Rectangle<int> area, const juce::Image
         target.mouseDrag(event(at, held, true));
         settle();
         ms.push_back(juce::Time::getMillisecondCounterHiRes() - started);
+        paints.push_back(painting);
     }
 
     target.mouseUp(event(at, held.withoutMouseButtons(), true));
     settle();
     peer->setCurrentRenderingEngine(engine);
-    return timingOf(std::move(ms));
+    return {timingOf(std::move(ms)), timingOf(std::move(paints))};
 }
+
+[[nodiscard]] std::string describe(const DragTiming& timing);
 
 [[nodiscard]] std::string describe(const Timing& timing)
 {
@@ -190,6 +203,13 @@ paintMs(juce::Component& component, juce::Rectangle<int> area, const juce::Image
            juce::String(timing.p95, 2).toStdString() + " ms, pire " +
            juce::String(timing.worst, 2).toStdString() + " ms (" + std::to_string(timing.count) +
            " repeints)";
+}
+
+std::string describe(const DragTiming& timing)
+{
+    return describe(timing.frame) + " ; dont repeint : médiane " +
+           juce::String(timing.paint.median, 2).toStdString() + " ms, 95e centile " +
+           juce::String(timing.paint.p95, 2).toStdString() + " ms";
 }
 
 } // namespace
@@ -503,10 +523,12 @@ void Verification::buildFluidity()
             note("bande de la playlist : " + describe(band));
             note("note du piano-roll : " + describe(noteDrag));
             note("bande du piano-roll : " + describe(noteBand));
-            measures->rows.emplace_back("glisser un bloc, par image (logiciel)", block);
-            measures->rows.emplace_back("bande de sélection de la playlist, par image (logiciel)", band);
-            measures->rows.emplace_back("glisser une note, par image (logiciel)", noteDrag);
-            measures->rows.emplace_back("bande de sélection du piano-roll, par image (logiciel)", noteBand);
+            measures->rows.emplace_back("glisser un bloc, par image (logiciel)", block.frame);
+            measures->rows.emplace_back("bande de sélection de la playlist, par image (logiciel)",
+                                        band.frame);
+            measures->rows.emplace_back("glisser une note, par image (logiciel)", noteDrag.frame);
+            measures->rows.emplace_back("bande de sélection du piano-roll, par image (logiciel)",
+                                        noteBand.frame);
 
             // There and back: the block where it was, the note at its pitch;
             // the note's drag is one entry, the block's none.
