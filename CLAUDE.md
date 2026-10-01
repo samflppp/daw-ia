@@ -74,7 +74,7 @@ Mécanismes :
 
 ## 5. Où trouver quoi
 
-- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S17 au 29/09/2026), un par semaine, plus
+- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S18 au 01/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
   `docs/bilan-s7bis.md`. Chaque bilan documente les écarts à l'acquis, les tests cassés une fois, et le
   reste à faire.
 - **Roadmap non engagée** : `IDEES.md` — couche décision du copilote, couche générative, recherche de
@@ -100,7 +100,8 @@ Mécanismes :
 | Bug intermittent de la lecture, instrumenté | S12 | ne s'est pas présenté depuis S13, pas fermé |
 | Écoute de la zone multi-pistes (accords/basse/mélodie ensemble, à l'oreille) | S17 | pas encore faite, décrite comme le test le plus important de la semaine |
 | « Ranger le projet » comme geste explicite | S17 (§6) | demandé en cours de semaine, pas engagé |
-| Lecteur local ne prononce pas « fa# mineur » en toutes lettres (seulement « F#m ») | S17 | noté dans `IDEES.md`, pas dans le périmètre du moteur de lecture |
 | Fine-tune sur un corpus personnel du fondateur | tranché S15 | écarté définitivement — un générateur enfermé dans le style d'un seul producteur ne sert que lui |
 | Stratégie complète du moteur génératif au-delà de S15 | ouvert depuis S14 | partiellement tranchée (S15) ; le reste (empiler les couches, Markov vs neuronal) reste à trancher |
+| L'application qui ne quitte pas à la fermeture (fenêtre partie, processus vivant) | S18 | vu une fois, non diagnostiqué |
+| La toile ne remplace pas encore le piano-roll (vélocités, copier-coller, génération dans une bande, mode pattern) | S18 | noté dans `IDEES.md` |
 | Support Ubuntu en cible produit | reporté S1/S5 | scripts gardés pour la CI seulement |
