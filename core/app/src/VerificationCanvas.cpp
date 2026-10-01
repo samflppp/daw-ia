@@ -5,6 +5,7 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/serialization/Json.h"
+#include "daw/ui/panels/PianoRollPanel.h"
 #include "daw/ui/panels/PlaylistPanel.h"
 
 #include <algorithm>
@@ -85,6 +86,25 @@ void Verification::addCanvasSteps()
         std::string before;
     };
     auto laid = std::make_shared<Laid>();
+
+    // A row of a band may be under the bottom of a small page: the wheel
+    // brings it up, as a hand would, before it is aimed at.
+    const auto inSight = [this](ui::PlaylistPanel& view,
+                                domain::PlacementId placement,
+                                domain::TrackId track,
+                                double beats,
+                                int pitch)
+    {
+        auto at = view.notePointIn(placement, track, beats, pitch);
+        for (int notch = 0; notch < 60 && at.has_value() && !view.timelineArea().contains(*at); ++notch)
+        {
+            wheel(view,
+                  view.timelineArea().getCentre(),
+                  at->getY() >= view.timelineArea().getBottom() ? -0.1f : 0.1f);
+            at = view.notePointIn(placement, track, beats, pitch);
+        }
+        return at;
+    };
 
     add("S18 : F4 ouvre la toile ; dézoomée, elle montre les blocs et aucune note ne s'attrape",
         [this, canvas, laid]
@@ -192,7 +212,7 @@ void Verification::addCanvasSteps()
     add("S18 : un clic dans la bande Lead écrit une note dans le pattern ; l'autre bloc du pattern s'allume "
         "et "
         "la montre",
-        [this, canvas, laid]
+        [this, canvas, laid, inSight]
         {
             auto* view = canvas();
             if (view == nullptr || laid->placements.size() < 2)
@@ -200,8 +220,10 @@ void Verification::addCanvasSteps()
             laid->depth = depth();
             laid->before = domain::json::write(state_.toValue());
 
-            const auto at = view->notePointIn(laid->placements.front(), laid->tracks[2], 0.5, 73);
+            const auto at = inSight(*view, laid->placements.front(), laid->tracks[2], 0.5, 73);
             check(at.has_value(), "la bande Lead a une rangée pour do#5");
+            check(at.has_value() && view->timelineArea().contains(*at),
+                  "la rangée est à l'écran avant d'être visée");
             if (!at.has_value())
                 return;
 
@@ -214,7 +236,7 @@ void Verification::addCanvasSteps()
 
     add("S18 : la note est dans le pattern, et l'autre bloc du pattern la montre ; les deux blocs à l'écran, "
         "le second allumé",
-        [this, canvas, laid]
+        [this, canvas, laid, inSight]
         {
             auto* view = canvas();
             if (view == nullptr || laid->placements.size() < 2)
@@ -241,7 +263,7 @@ void Verification::addCanvasSteps()
             view->frameBlock(laid->placements.front());
             view->zoomAround(view->timelineArea().getPosition(), 0.4);
             check(view->notesGrabbable(), "les deux blocs à l'écran, les notes s'attrapent encore");
-            if (const auto at = view->notePointIn(laid->placements.front(), laid->tracks[2], 0.5, 73);
+            if (const auto at = inSight(*view, laid->placements.front(), laid->tracks[2], 0.5, 73);
                 at.has_value())
                 hoverAt(*view, *at);
             check(view->litPattern() == laid->pattern, "le pattern sous la main est allumé");
@@ -250,12 +272,12 @@ void Verification::addCanvasSteps()
         });
 
     add("S18 : glisser la note de deux demi-tons et d'une double-croche : une entrée ; Ctrl+Z à l'octet",
-        [this, canvas, laid]
+        [this, canvas, laid, inSight]
         {
             auto* view = canvas();
             if (view == nullptr || laid->written.isNil())
                 return;
-            const auto from = view->notePointIn(laid->placements.front(), laid->tracks[2], 0.5, 73);
+            const auto from = inSight(*view, laid->placements.front(), laid->tracks[2], 0.5, 73);
             const auto to = view->notePointIn(laid->placements.front(), laid->tracks[2], 0.75, 75);
             check(from.has_value() && to.has_value(), "départ et arrivée dans la bande");
             if (!from.has_value() || !to.has_value())
@@ -286,6 +308,73 @@ void Verification::addCanvasSteps()
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(domain::json::write(state_.toValue()) == laid->before, "deux Ctrl+Z : le projet à l'octet");
+        });
+
+    // S18, the grammar: the same keys and wheel in the piano roll.
+    auto widthBefore = std::make_shared<double>(0.0);
+    add("S18 : F dans le piano-roll cadre les notes du pattern ; Maj+F montre le pattern entier",
+        [this, laid]
+        {
+            selection_.selectPattern(laid->pattern);
+            selection_.selectTrack(laid->tracks[2]);
+            if (panel("piano_roll") == nullptr || !panel("piano_roll")->isShowing())
+                key(juce::KeyPress{juce::KeyPress::F7Key});
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            check(roll != nullptr && roll->isShowing(), "F7 ouvre le piano-roll sur le Lead");
+            if (roll == nullptr)
+                return;
+
+            static_cast<void>(roll->keyPressed(juce::KeyPress{'f', 0, 'f'}));
+            const auto* pattern = state_.findPattern(laid->pattern);
+            const auto* row = pattern != nullptr ? pattern->findClipForTrack(laid->tracks[2]) : nullptr;
+            auto inSight = row != nullptr && !row->notes.empty();
+            if (row != nullptr)
+            {
+                for (const auto& note : row->notes)
+                {
+                    const auto bounds = roll->noteBounds(note);
+                    inSight = inSight && bounds.getY() >= roll->ruler().getBottom() &&
+                              bounds.getBottom() <= roll->velocityLane().getY() &&
+                              bounds.getX() >= roll->ruler().getX() &&
+                              bounds.getRight() <= roll->ruler().getRight();
+                }
+            }
+            check(inSight, "F : toutes les notes du Lead à l'écran, dans la grille");
+            snapshot("s18-piano-roll-cadre");
+
+            static_cast<void>(roll->keyPressed(juce::KeyPress{'F', juce::ModifierKeys::shiftModifier, 'F'}));
+            check(roll->firstBeat() == 0.0, "Maj+F : le pattern depuis son début");
+        });
+
+    add(
+        "S18 : Ctrl + molette zoome dans le piano-roll, comme dans la toile",
+        [this, widthBefore]
+        {
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            if (roll == nullptr)
+                return;
+            *widthBefore = roll->beatWidth();
+            const auto ruler = roll->ruler();
+            wheel(*roll,
+                  {ruler.getCentreX(), roll->velocityLane().getY() - ruler.getHeight()},
+                  0.5f,
+                  false,
+                  true);
+        },
+        [this, widthBefore]
+        {
+            // On the fluid pace the zoom glides: polled until it has grown.
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            return roll != nullptr && roll->beatWidth() > *widthBefore + 1.0;
+        });
+
+    add("S18 : le zoom a grandi ; F7 referme le piano-roll",
+        [this, widthBefore]
+        {
+            auto* roll = dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll"));
+            check(roll != nullptr && roll->beatWidth() > *widthBefore + 1.0,
+                  "Ctrl + molette dans la grille : le temps zoome, les hauteurs ne défilent pas");
+            key(juce::KeyPress{juce::KeyPress::F7Key});
         });
 }
 
