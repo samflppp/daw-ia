@@ -691,7 +691,9 @@ void Verification::buildList()
             // session left behind.
             for (const auto* id : {"playlist", "channel_rack", "history", "copilot"})
                 static_cast<void>(view_.showPage(id, true));
-            for (const auto* id : {"piano_roll", "plugin_chain", "tracks"})
+            // The canvas (S18) shares the playlist's place: closed here, the
+            // steps before S18 see the playlist they were written for.
+            for (const auto* id : {"piano_roll", "plugin_chain", "tracks", "canvas"})
                 static_cast<void>(view_.showPage(id, false));
 
             check(panel("transport") != nullptr && panel("transport")->isShowing(),
