@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daw/ui/FrameTicker.h"
+#include "daw/ui/MiddleDragScroll.h"
 #include "daw/ui/PanelRegistry.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -44,6 +45,7 @@ private:
     const TransportClock& clock_;
 
     juce::Viewport viewport_;
+    MiddleDragScroll middleDrag_{viewport_};
     std::unique_ptr<juce::Component> rowHolder_;
     std::vector<Row*> rows_;
     juce::TextButton add_{"+  Nouvelle piste"};

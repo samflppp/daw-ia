@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daw/ui/FrameTicker.h"
+#include "daw/ui/MiddleDragScroll.h"
 #include "daw/ui/PanelRegistry.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -69,6 +70,7 @@ private:
     juce::TextButton addBus_;
     juce::TextButton readiness_;
     juce::Viewport viewport_;
+    MiddleDragScroll middleDrag_{viewport_};
     std::unique_ptr<Content> content_;
     std::vector<std::unique_ptr<Strip>> strips_;
     std::unique_ptr<Strip> master_;

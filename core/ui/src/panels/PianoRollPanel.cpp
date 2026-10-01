@@ -1369,7 +1369,9 @@ void PianoRollPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::M
         return;
     }
 
-    if (rulerArea().contains(event.getPosition()))
+    // Over the ruler the wheel zooms, as in FL; elsewhere Ctrl makes it zoom,
+    // as in the playlist and the canvas (S18): one grammar everywhere.
+    if (rulerArea().contains(event.getPosition()) || event.mods.isCtrlDown() || event.mods.isCommandDown())
     {
         // Around the pointer: the beat under it stays under it.
         const auto x = std::clamp(event.getPosition().getX(), grid.getX(), grid.getRight());

@@ -522,7 +522,7 @@ private:
     juce::TextButton solo_;
     juce::ComboBox output_;
     juce::ComboBox send_;
-    juce::Slider sendLevel_;
+    AutomatableSlider sendLevel_;
     Meter meter_;
     juce::StringArray inserts_;
     juce::Rectangle<int> insertsArea_;

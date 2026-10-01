@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daw/ui/MiddleDragScroll.h"
 #include "daw/ui/PanelRegistry.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -59,6 +60,7 @@ private:
     juce::TextEditor search_;
     std::unique_ptr<ResultList> resultModel_;
     juce::ListBox resultList_;
+    MiddleDragScroll middleDrag_{*resultList_.getViewport()};
     std::vector<juce::File> results_;
     std::vector<juce::String> resultFolders_;
     std::shared_ptr<const std::vector<SearchEntry>> searched_;

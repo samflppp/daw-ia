@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daw/ui/MiddleDragScroll.h"
 #include "daw/ui/PanelRegistry.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -49,6 +50,7 @@ private:
     PluginHost& plugins_;
 
     juce::Viewport viewport_;
+    MiddleDragScroll middleDrag_{viewport_};
     std::unique_ptr<juce::Component> slotHolder_;
     std::vector<Slot*> slots_;
     juce::TextButton add_{"+  Plugin"};
