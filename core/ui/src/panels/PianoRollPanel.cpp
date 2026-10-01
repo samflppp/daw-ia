@@ -6,6 +6,7 @@
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/ui/model/PatternEditing.h"
+#include "daw/ui/model/ViewFraming.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1454,6 +1455,34 @@ bool PianoRollPanel::keyPressed(const juce::KeyPress& key)
     if (key == juce::KeyPress{'b', ctrl, 0})
     {
         pasteNotes(true);
+        return true;
+    }
+
+    // F frames the picked notes, or all of them; Shift+F shows the whole
+    // pattern (S18), as in the playlist and the canvas.
+    if (key.getKeyCode() == 'F' || key.getKeyCode() == 'f')
+    {
+        if (key.getModifiers().isShiftDown())
+        {
+            setView(0.0, std::nullopt);
+            revealNotes();
+        }
+        else if (const auto* edited = clip(); edited != nullptr)
+        {
+            if (const auto span = framing::notes(edited->notes, picked_); span.has_value())
+            {
+                const auto pixels = gridArea().getWidth();
+                const auto width = framing::beatWidthFor(
+                    *span,
+                    pixels,
+                    fitBeatWidth(),
+                    std::max(fitBeatWidth(),
+                             static_cast<double>(tokens_.integer("metric.pianoRoll.beatWidthMax"))));
+                setView(framing::firstBeatFor(*span, width, pixels), width);
+                topPitch_ = framing::topPitchFor(*span, rowsVisible());
+            }
+        }
+        repaint();
         return true;
     }
 

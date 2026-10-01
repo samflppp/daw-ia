@@ -31,7 +31,9 @@ namespace daw::ui
 //
 // It shows one row of one pattern: the horizontal axis is the pattern's length,
 // not the timeline. The whole pattern fits the width until the wheel over the
-// ruler zooms in; the middle button held down drags the view on both axes.
+// ruler, or Ctrl + wheel anywhere, zooms in; the middle button held down drags
+// the view on both axes. F frames the picked notes, or all of them; Shift+F
+// shows the whole pattern (S18).
 // Neither is an edit, and neither leaves a history entry. Which pattern is on screen is not chosen here — the
 // transport chooses it, this panel follows, and both read the same Selection.
 // Two choosers for one choice would be the second truth the S7bis review

@@ -39,6 +39,7 @@ add_executable(daw_domain_tests
     AutomationTests.cpp
     AutomationEditingTests.cpp
     CanvasTests.cpp
+    ViewFramingTests.cpp
     SampleSearchTests.cpp
     CopilotRequestTests.cpp
     FormTests.cpp

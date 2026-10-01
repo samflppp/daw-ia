@@ -55,6 +55,8 @@ namespace daw::ui
 //   Shift + wheel              scrolls the timeline (a trackpad's sideways
 //                              swipe does too)
 //   Ctrl + wheel               zooms the timeline around the pointer
+//   F, Shift+F                 frames the selected blocks; shows the song
+//   middle button + drag       drags the view on both axes
 //   the two scroll bars        what they always do
 // At rest the whole song fits the width, as it did before there was a zoom —
 // but never narrower than a readable bar: past that, the timeline scrolls.
@@ -500,6 +502,7 @@ private:
     bool canvasMouseUp();
     bool canvasDoubleClick(juce::Point<int> point);
     bool canvasKey(const juce::KeyPress& key);
+    bool frameKey(const juce::KeyPress& key); // F, Shift+F: in both modes
     void hover(std::optional<NoteSpot> spot);
 
     void placeBar();

@@ -18,6 +18,7 @@ add_library(daw_ui_workspace STATIC
     src/history/HistoryLog.cpp
     src/model/AutomationEditing.cpp
     src/model/CanvasBands.cpp
+    src/model/ViewFraming.cpp
     src/model/CopilotRequest.cpp
     src/model/GhostProposal.cpp
     src/model/LaneEditing.cpp

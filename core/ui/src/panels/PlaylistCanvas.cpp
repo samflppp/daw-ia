@@ -14,7 +14,10 @@
 //   Ctrl + click                 picks a note, or takes it out of the picking
 //   Delete                       removes the picked notes
 //   drag the edge of a band      adds rows above or below, for this screen
-//   double-click the name strip  frames the block; Escape shows the song
+//   double-click the name strip  frames the block
+//   F                            frames the selected blocks, else the block
+//                                under the hand; Shift+F shows the song
+//   Escape                       lets go of the picked notes
 // The name strip keeps the block's own gestures: move it, select it, remove it.
 //
 // A note belongs to the pattern, not to the block: while the hand is on a
@@ -26,6 +29,7 @@
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/NoteCommands.h"
 #include "daw/ui/model/PatternEditing.h"
+#include "daw/ui/model/ViewFraming.h"
 #include "daw/ui/panels/PlaylistPanel.h"
 
 #include <algorithm>
@@ -889,21 +893,65 @@ bool PlaylistPanel::canvasKey(const juce::KeyPress& key)
         return true;
     }
 
-    if (key == juce::KeyPress{juce::KeyPress::escapeKey})
+    // Escape lets go of the picked notes, and only that: the whole song is
+    // Shift+F, as everywhere (S18).
+    if (key == juce::KeyPress{juce::KeyPress::escapeKey} && !pickedNotes_.empty())
     {
-        if (!pickedNotes_.empty())
+        pickedNotes_.clear();
+        repaint();
+        return true;
+    }
+    return false;
+}
+
+bool PlaylistPanel::frameKey(const juce::KeyPress& key)
+{
+    if (key.getKeyCode() != 'F' && key.getKeyCode() != 'f')
+        return false;
+
+    if (key.getModifiers().isShiftDown())
+    {
+        showWholeSong();
+        return true;
+    }
+
+    // The selected blocks, their lines from the first.
+    if (!selected_.empty())
+    {
+        auto from = 0.0;
+        auto to = 0.0;
+        auto lane = laneCount();
+        auto first = true;
+        for (const auto& item : selected_)
         {
-            pickedNotes_.clear();
-            repaint();
-            return true;
+            const auto start = startOf(item);
+            if (!start.has_value())
+                continue;
+            from = first ? *start : std::min(from, *start);
+            to = first ? *start + lengthOf(item) : std::max(to, *start + lengthOf(item));
+            lane = std::min(lane, std::max(0, laneOf(item)));
+            first = false;
         }
-        if (zoom_.has_value() || firstLanePixel() != 0)
+        if (!first)
         {
-            showWholeSong();
+            const auto pixels = gridArea().getWidth();
+            const framing::Span span{from, to, 60, 60};
+            const auto width = framing::beatWidthFor(span, pixels, fitBeatWidth(), widestBeatWidth());
+            setView(framing::firstBeatFor(span, width, pixels), width);
+            setFirstLanePixel(laneTop(lane));
             return true;
         }
     }
-    return false;
+
+    // On the canvas, the block under the hand.
+    if (canvas_ && !hoveredPlacement_.isNil())
+    {
+        frameBlock(hoveredPlacement_);
+        return true;
+    }
+
+    showWholeSong();
+    return true;
 }
 
 // --- the view ------------------------------------------------------------------

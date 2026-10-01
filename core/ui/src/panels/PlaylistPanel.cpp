@@ -1888,7 +1888,7 @@ bool PlaylistPanel::keyPressed(const juce::KeyPress& key)
 {
     const auto ctrl = juce::ModifierKeys::ctrlModifier;
 
-    if (zoneKey(key) || canvasKey(key))
+    if (zoneKey(key) || canvasKey(key) || frameKey(key))
         return true;
 
     if (key == juce::KeyPress{'c', ctrl, 0})
