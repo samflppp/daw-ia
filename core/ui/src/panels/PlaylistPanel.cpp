@@ -1674,12 +1674,14 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
                 selected_.erase(std::remove(selected_.begin(), selected_.end(), *hit), selected_.end());
             else
                 selected_.push_back(*hit);
+            pickedNotes_.clear();
             repaint();
             return;
         }
 
         if (!isSelected(*hit))
             selected_ = {*hit};
+        pickedNotes_.clear();
 
         if (mods.isRightButtonDown())
         {
@@ -1704,10 +1706,20 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
 
     if (mods.isCtrlDown())
     {
+        // At the scale of notes the band catches notes; above, blocks. The
+        // two selections never live together.
+        bandPicksNotes_ = canvas_ && notesGrabbable();
         bandStart_ = point;
         band_ = juce::Rectangle<int>{point, point};
-        if (!mods.isShiftDown())
+        if (bandPicksNotes_)
             selected_.clear();
+        else
+            pickedNotes_.clear();
+        if (!mods.isShiftDown())
+        {
+            selected_.clear();
+            pickedNotes_.clear();
+        }
         repaint();
         return;
     }
@@ -1850,6 +1862,14 @@ void PlaylistPanel::mouseUp(const juce::MouseEvent& event)
     {
         const auto area = *band_;
         band_.reset();
+
+        if (bandPicksNotes_)
+        {
+            selected_.clear();
+            pickNotesIn(area);
+            repaint();
+            return;
+        }
 
         for (const auto& block : content().blocks)
         {

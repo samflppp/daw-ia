@@ -12,6 +12,10 @@
 //   drag its right edge          stretches it
 //   right-click a note           removes it
 //   Ctrl + click                 picks a note, or takes it out of the picking
+//   Ctrl + drag                  a band that picks every note it touches, across
+//                                blocks and lines (Shift keeps the picking); above
+//                                the threshold the band picks blocks, as in the
+//                                playlist, and which it is is decided when it starts
 //   Delete                       removes the picked notes
 //   drag the edge of a band      adds rows above or below, for this screen
 //   double-click the name strip  frames the block
@@ -201,8 +205,8 @@ void PlaylistPanel::contentChanged()
     };
     pickedNotes_.erase(std::remove_if(pickedNotes_.begin(),
                                       pickedNotes_.end(),
-                                      [&](const auto& picked)
-                                      { return !exists(picked.first, picked.second); }),
+                                      [&](const PickedNote& picked)
+                                      { return !exists(picked.clip, picked.note); }),
                        pickedNotes_.end());
 
     if (!hoveredPlacement_.isNil() && state_.findPlacement(hoveredPlacement_) == nullptr)
@@ -248,7 +252,7 @@ bool PlaylistPanel::isPickedNote(domain::NoteId note) const
 {
     return std::any_of(pickedNotes_.begin(),
                        pickedNotes_.end(),
-                       [note](const auto& picked) { return picked.second == note; });
+                       [note](const PickedNote& picked) { return picked.note == note; });
 }
 
 std::optional<PlaylistPanel::NoteSpot> PlaylistPanel::spotAt(juce::Point<int> point) const
@@ -437,8 +441,19 @@ void PlaylistPanel::paintCanvasBlock(juce::Graphics& g,
                     const auto pointed = note.id == hoveredNote_ && placement.id == hoveredPlacement_;
                     if (!picked && !pointed)
                         continue;
-                    g.setColour(tokens_.colour(picked ? "color.note.selected" : "color.accent.live"));
-                    g.drawRect(noteRect(area, placement.startBeats, pattern.lengthBeats, note), hairline);
+                    const auto rect = noteRect(area, placement.startBeats, pattern.lengthBeats, note);
+                    // Picked: filled, as the piano roll fills them; an
+                    // outline alone is lost on a lit block.
+                    if (picked)
+                    {
+                        g.setColour(tokens_.colour("color.note.selected"));
+                        g.fillRect(rect);
+                    }
+                    if (pointed)
+                    {
+                        g.setColour(tokens_.colour("color.accent.live"));
+                        g.drawRect(rect, hairline);
+                    }
                 }
             }
             g.restoreState();
@@ -708,19 +723,30 @@ bool PlaylistPanel::canvasMouseDown(const juce::MouseEvent& event)
             if (isPickedNote(id))
                 pickedNotes_.erase(std::remove_if(pickedNotes_.begin(),
                                                   pickedNotes_.end(),
-                                                  [id](const auto& picked) { return picked.second == id; }),
+                                                  [id](const PickedNote& picked)
+                                                  { return picked.note == id; }),
                                    pickedNotes_.end());
             else
-                pickedNotes_.emplace_back(spot->clip, id);
+                pickedNotes_.push_back({spot->placement, spot->clip, id});
             repaint();
+            return true;
         }
+
+        // Ctrl on the grid of a block, where no note is: a band that
+        // catches notes, across blocks and lines (S19).
+        bandPicksNotes_ = true;
+        bandStart_ = event.getPosition();
+        band_ = juce::Rectangle<int>{bandStart_, bandStart_};
+        if (!event.mods.isShiftDown())
+            pickedNotes_.clear();
+        repaint();
         return true;
     }
 
     if (spot->note.has_value())
     {
         if (!isPickedNote(spot->note->id))
-            pickedNotes_ = {{spot->clip, spot->note->id}};
+            pickedNotes_ = {{spot->placement, spot->clip, spot->note->id}};
 
         NoteDrag drag{};
         drag.clip = spot->clip;
@@ -755,9 +781,42 @@ bool PlaylistPanel::canvasMouseDown(const juce::MouseEvent& event)
         std::floor(spot->beats / stepBeats) * stepBeats, 0.0, std::max(0.0, spot->patternLength - stepBeats));
     note.lengthBeats = stepBeats;
     if (bus_.execute(std::make_unique<domain::AddNote>(spot->clip, note)).ok())
-        pickedNotes_ = {{spot->clip, note.id}};
+        pickedNotes_ = {{spot->placement, spot->clip, note.id}};
     repaint();
     return true;
+}
+
+void PlaylistPanel::pickNotesIn(juce::Rectangle<int> area)
+{
+    // Every note drawn in the band, in every block it crosses. A note of a
+    // pattern laid twice is one note: caught through the first block that
+    // shows it, and lit in both.
+    for (const auto& block : content().blocks)
+    {
+        if (block.clip.has_value() || !blockBounds(block, 0.0, 0).intersects(area))
+            continue;
+        const auto placementId = domain::PlacementId::parse(block.item.id);
+        const auto* placement = placementId ? state_.findPlacement(placementId.value()) : nullptr;
+        const auto* pattern = placement != nullptr ? state_.findPattern(placement->patternId) : nullptr;
+        if (pattern == nullptr)
+            continue;
+
+        for (const auto& bandArea : bandAreas(block.lane))
+        {
+            if (!bandArea.area.intersects(area))
+                continue;
+            const auto* clip = pattern->findClipForTrack(bandArea.band.track);
+            if (clip == nullptr)
+                continue;
+            for (const auto& note : clip->notes)
+            {
+                if (isPickedNote(note.id) ||
+                    !noteRect(bandArea, placement->startBeats, pattern->lengthBeats, note).intersects(area))
+                    continue;
+                pickedNotes_.push_back({placement->id, clip->id, note.id});
+            }
+        }
+    }
 }
 
 bool PlaylistPanel::canvasMouseDrag(const juce::MouseEvent& event)
@@ -884,8 +943,8 @@ bool PlaylistPanel::canvasKey(const juce::KeyPress& key)
                                   key == juce::KeyPress{juce::KeyPress::backspaceKey}))
     {
         std::vector<std::unique_ptr<domain::Command>> commands;
-        for (const auto& [clip, note] : pickedNotes_)
-            commands.push_back(std::make_unique<domain::RemoveNote>(clip, note));
+        for (const auto& picked : pickedNotes_)
+            commands.push_back(std::make_unique<domain::RemoveNote>(picked.clip, picked.note));
         domain::GroupOptions group{};
         group.label = pickedNotes_.size() == 1 ? "retirer une note" : "retirer des notes";
         if (bus_.executeGroup(std::move(commands), group).ok())

@@ -200,6 +200,18 @@ public:
     // The pattern under the hand, whose other blocks are lit.
     [[nodiscard]] domain::PatternId litPattern() const noexcept { return hoveredPattern_; }
 
+    // The notes picked on the canvas, in the order they were picked: by a
+    // click, Ctrl + click, or a Ctrl + drag band at the scale of notes (S19).
+    // A note is picked once, through the block it was caught in, and lit in
+    // every block of its pattern.
+    struct PickedNote
+    {
+        domain::PlacementId placement{};
+        domain::ClipId clip{};
+        domain::NoteId note{};
+    };
+    [[nodiscard]] const std::vector<PickedNote>& pickedNotes() const noexcept { return pickedNotes_; }
+
     // A double-click on a block: the view frames it at the scale of notes.
     // Escape: the whole song again.
     void frameBlock(domain::PlacementId placement);
@@ -690,7 +702,13 @@ private:
     };
     std::optional<EdgeDrag> edgeDrag_;
 
-    std::vector<std::pair<domain::ClipId, domain::NoteId>> pickedNotes_;
+    std::vector<PickedNote> pickedNotes_;
+
+    // What the Ctrl + drag band catches, decided when it starts: notes at
+    // the scale of notes, blocks above. A zoom during the drag does not
+    // change it.
+    bool bandPicksNotes_{false};
+    void pickNotesIn(juce::Rectangle<int> area);
     domain::PatternId hoveredPattern_{};
     domain::PlacementId hoveredPlacement_{};
     domain::NoteId hoveredNote_{};

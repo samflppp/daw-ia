@@ -65,6 +65,10 @@ void Verification::addCanvasSteps()
         domain::NoteId written{};
         std::size_t depth{0};
         std::string before;
+
+        // S19: a second pattern between the two blocks, on the same line.
+        domain::PatternId other{};
+        domain::PlacementId otherPlacement{};
     };
     auto laid = std::make_shared<Laid>();
 
@@ -289,6 +293,141 @@ void Verification::addCanvasSteps()
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(domain::json::write(state_.toValue()) == laid->before, "deux Ctrl+Z : le projet à l'octet");
+        });
+
+    // S19: the selection of notes on the canvas.
+    add("S19 : un second pattern, Lead seul, posé entre les deux blocs sur la même ligne",
+        [this, laid]
+        {
+            if (laid->placements.size() < 2)
+                return;
+            const auto* first = state_.findPlacement(laid->placements.front());
+            if (first == nullptr)
+                return;
+
+            std::vector<std::unique_ptr<domain::Command>> commands;
+            laid->other = domain::PatternId::generate();
+            commands.push_back(std::make_unique<domain::CreatePattern>(laid->other, "Toile B", 4.0));
+            const auto row = domain::ClipId::generate();
+            commands.push_back(std::make_unique<domain::AddPatternTrack>(laid->other, row, laid->tracks[2]));
+            for (int step = 0; step < 4; ++step)
+            {
+                domain::Note made{};
+                made.id = domain::NoteId::generate();
+                made.pitch = step % 2 == 0 ? 74 : 76;
+                made.startBeats = step * 1.0;
+                made.lengthBeats = 0.5;
+                commands.push_back(std::make_unique<domain::AddNote>(row, made));
+            }
+            laid->otherPlacement = domain::PlacementId::generate();
+            commands.push_back(std::make_unique<domain::PlacePattern>(
+                laid->otherPlacement, laid->other, first->startBeats + 4.0, first->laneId));
+            domain::GroupOptions group{};
+            group.label = "toile : un second pattern";
+            check(bus_.executeGroup(std::move(commands), group).ok(),
+                  "Toile B est posé entre les deux blocs");
+        });
+
+    add("S19 : Ctrl + glisser à l'échelle des notes, d'un bloc à l'autre à travers Toile B",
+        [this, canvas, laid, inSight]
+        {
+            auto* view = canvas();
+            if (view == nullptr || laid->otherPlacement.isNil())
+                return;
+
+            // The three blocks in sight, at the scale of notes.
+            view->frameBlock(laid->placements.front());
+            view->zoomAround(view->timelineArea().getPosition(), 36.0 / std::max(1.0, view->beatWidth()));
+            check(view->notesGrabbable(), "36 px par temps : les notes s'attrapent");
+
+            // From an empty row of the Lead band, early in the first block,
+            // to an empty row early in the last one: the ré of beat 1 is in
+            // both, one note seen twice.
+            const auto from = inSight(*view, laid->placements.front(), laid->tracks[2], 0.9, 79);
+            const auto to = view->notePointIn(laid->placements.back(), laid->tracks[2], 1.25, 71);
+            check(from.has_value() && to.has_value() && view->timelineArea().contains(*from) &&
+                      view->timelineArea().contains(*to),
+                  "les deux coins de la bande sont à l'écran, dans la bande Lead");
+            if (!from.has_value() || !to.has_value())
+                return;
+            drag(*view, *from, *to, true);
+        });
+
+    add("S19 : la bande a pris huit notes : les quatre du premier pattern, une fois chacune, et les quatre "
+        "de "
+        "Toile B ; aucun bloc",
+        [this, canvas, laid]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            const auto& picked = view->pickedNotes();
+
+            const auto* pattern = state_.findPattern(laid->pattern);
+            const auto* lead = pattern != nullptr ? pattern->findClipForTrack(laid->tracks[2]) : nullptr;
+            const auto* other = state_.findPattern(laid->other);
+            const auto* otherLead = other != nullptr ? other->findClipForTrack(laid->tracks[2]) : nullptr;
+            if (lead == nullptr || otherLead == nullptr)
+            {
+                check(false, "les deux rangées Lead existent");
+                return;
+            }
+
+            const auto pickedOne = [&picked](domain::NoteId id)
+            {
+                return std::count_if(picked.begin(),
+                                     picked.end(),
+                                     [id](const ui::PlaylistPanel::PickedNote& one)
+                                     { return one.note == id; });
+            };
+            std::vector<int> pitches;
+            for (const auto& note : lead->notes)
+                if (pickedOne(note.id) == 1)
+                    pitches.push_back(note.pitch);
+            std::sort(pitches.begin(), pitches.end());
+            check(pitches == std::vector<int>{72, 74, 76, 78},
+                  "du premier pattern : do, ré, mi, fa#, une fois chacune ; le ré, dans les deux blocs, "
+                  "une seule fois");
+            auto allOther = true;
+            for (const auto& note : otherLead->notes)
+                allOther = allOther && pickedOne(note.id) == 1;
+            check(allOther, "les quatre notes de Toile B");
+            check(picked.size() == 8, "huit notes en tout : " + std::to_string(picked.size()));
+            check(view->selected().empty(), "aucun bloc choisi : notes et blocs ne vivent pas ensemble");
+            snapshot("s19-toile-bande-de-notes");
+        });
+
+    add("S19 : au-dessus du seuil, la même bande prend des blocs, et lâche les notes",
+        [this, canvas, laid]
+        {
+            auto* view = canvas();
+            if (view == nullptr || laid->placements.size() < 2)
+                return;
+            const auto* first = state_.findPlacement(laid->placements.front());
+            if (first == nullptr)
+                return;
+            const auto lane = state_.laneIndex(first->laneId);
+            if (!lane)
+                return;
+
+            view->showWholeSong();
+            check(!view->notesGrabbable(), "dézoomée, les notes ne s'attrapent pas");
+            const auto from = view->pointFor(static_cast<int>(lane.value()), first->startBeats - 1.0);
+            const auto to = view->pointFor(static_cast<int>(lane.value()), first->startBeats + 11.5);
+            drag(*view, from, to.translated(0, 2), true);
+        });
+
+    add("S19 : trois blocs choisis, aucune note",
+        [this, canvas]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            check(view->selected().size() == 3,
+                  "les trois blocs de la ligne : " + std::to_string(view->selected().size()));
+            check(view->pickedNotes().empty(), "les notes sont lâchées");
+            snapshot("s19-toile-bande-de-blocs");
+            key(juce::KeyPress{juce::KeyPress::escapeKey});
         });
 
     // S18, the grammar: the same keys and wheel in the piano roll.
