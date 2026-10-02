@@ -50,8 +50,8 @@ std::pair<std::size_t, std::size_t> CanvasNotes::within(double fromBeats, double
 std::uint64_t CanvasBands::fingerprint(const domain::Clip& clip) noexcept
 {
     // What is drawn: where each note starts, how long it lasts, how high it
-    // is, and which note it is, since a picked note is drawn apart. Velocity
-    // is not drawn.
+    // is, how loud (S19: the colour and the velocity strip), and which note
+    // it is, since a picked note is drawn apart.
     auto hash = fnvOffset;
     mix(hash, static_cast<std::uint64_t>(clip.notes.size()));
     for (const auto& note : clip.notes)
@@ -59,6 +59,7 @@ std::uint64_t CanvasBands::fingerprint(const domain::Clip& clip) noexcept
         mix(hash, static_cast<std::uint64_t>(note.pitch));
         mix(hash, note.startBeats);
         mix(hash, note.lengthBeats);
+        mix(hash, static_cast<std::uint64_t>(note.velocity));
         mix(hash, std::hash<std::string>{}(note.id.toString()));
     }
     return hash;

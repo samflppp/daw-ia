@@ -1,5 +1,6 @@
 #include "TestSupport.h"
 #include "daw/domain/commands/AddNote.h"
+#include "daw/domain/commands/NoteEditCommands.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
@@ -144,6 +145,19 @@ TEST_CASE("the rows are sorted once, and again only when their notes change")
     song.add(song.bassRow, 40, 0.0);
     CHECK(bands.refresh(song.state) == 1);
     CHECK(bands.builds() == 5);
+}
+
+TEST_CASE("a row is read again when a velocity changes: the canvas draws it (S19)")
+{
+    Song song;
+    song.add(song.leadRow, 72, 0.0);
+    CanvasBands bands;
+    static_cast<void>(bands.refresh(song.state));
+    const auto note = bands.notes(song.beat, song.lead)->notes.front();
+
+    REQUIRE(song.bus.execute(std::make_unique<SetNoteVelocity>(song.leadRow, note.id, 30)).ok());
+    CHECK(bands.refresh(song.state) == 1);
+    CHECK(bands.notes(song.beat, song.lead)->notes.front().velocity == 30);
 }
 
 TEST_CASE("only the notes that can cross the window are visited")
