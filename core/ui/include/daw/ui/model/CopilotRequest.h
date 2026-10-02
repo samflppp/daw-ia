@@ -25,7 +25,9 @@ namespace daw::ui::copilot
 // has moved at all.
 //
 // pattern.generate is turned here into the note.remove and note.add the
-// generator's proposal would write on Tab (GhostProposal::accept). What
+// generator's proposal would write on Tab (GhostProposal::accept). An
+// audio.remove or a track.remove that leaves its track's line empty is
+// followed by the lane.remove the screen would add (laneEditing, S19). What
 // reaches the bus is only commands of the registry.
 struct Refusal
 {

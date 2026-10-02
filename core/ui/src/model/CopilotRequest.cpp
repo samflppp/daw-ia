@@ -1,14 +1,50 @@
 #include "daw/ui/model/CopilotRequest.h"
 
+#include "daw/domain/commands/LaneCommands.h"
+#include "daw/domain/commands/SampleCommands.h"
+#include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/copilot/Tools.h"
 #include "daw/domain/generation/Constraints.h"
 #include "daw/ui/model/GhostProposal.h"
+#include "daw/ui/model/LaneEditing.h"
 
 #include <algorithm>
 #include <utility>
 
 namespace daw::ui::copilot
 {
+namespace
+{
+
+// The lines the screen takes away with a removal (S18): the track line left
+// empty by its last audio clip, or by its track. The copilot's audio.remove
+// and track.remove leave the same project as the screen's, in the same
+// history entry; what the commands themselves do does not change.
+std::vector<std::unique_ptr<domain::Command>> linesLeftBy(const domain::ProjectState& before,
+                                                          const domain::Command& command)
+{
+    std::vector<domain::LaneId> lines;
+    const auto payload = command.payload();
+    if (command.type() == domain::RemoveAudio::commandType)
+    {
+        if (const auto text = payload.stringAt("clipId"); text)
+            if (const auto clipId = domain::AudioClipId::parse(text.value()); clipId)
+                lines = laneEditing::linesLeftEmpty(before, {clipId.value()}, {});
+    }
+    else if (command.type() == domain::RemoveTrack::commandType)
+    {
+        if (const auto text = payload.stringAt("trackId"); text)
+            if (const auto trackId = domain::TrackId::parse(text.value()); trackId)
+                lines = laneEditing::linesLeftEmpty(before, {}, {}, trackId.value());
+    }
+
+    std::vector<std::unique_ptr<domain::Command>> removals;
+    for (const auto laneId : lines)
+        removals.push_back(std::make_unique<domain::RemoveLane>(laneId));
+    return removals;
+}
+
+} // namespace
 
 domain::Result<std::vector<std::unique_ptr<domain::Command>>>
 generateCommands(const domain::ProjectState& state,
@@ -108,7 +144,10 @@ Expansion expand(const domain::ProjectState& state,
                 refuse(index, created.error());
                 return out;
             }
+            auto lines = linesLeftBy(copy, *created.value());
             commands.push_back(std::move(created).value());
+            for (auto& line : lines)
+                commands.push_back(std::move(line));
         }
 
         for (const auto& command : commands)

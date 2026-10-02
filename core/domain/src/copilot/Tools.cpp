@@ -233,9 +233,11 @@ std::vector<Tool> builtinTools()
               number("Volume initial en décibels.", ProjectState::minVolumeDb, ProjectState::maxVolumeDb)}},
             {"trackId", "name", "volumeDb"})));
 
-    tools.push_back(make("track.remove",
-                         "Retire une piste, avec ses plugins et ce qu'elle joue dans chaque pattern.",
-                         schema({{"trackId", trackId}}, {"trackId"})));
+    tools.push_back(
+        make("track.remove",
+             "Retire une piste, avec ses plugins et ce qu'elle joue dans chaque pattern. Sa ligne "
+             "de playlist part avec elle si elle reste vide et sans nom.",
+             schema({{"trackId", trackId}}, {"trackId"})));
 
     tools.push_back(
         make("track.rename",
@@ -454,7 +456,8 @@ std::vector<Tool> builtinTools()
 
     tools.push_back(make(
         "audio.remove",
-        "Retire un clip audio de la timeline.",
+        "Retire un clip audio de la timeline. Si c'était le dernier de la ligne de sa piste, et que "
+        "personne ne l'a nommée, la ligne part avec : ne pas la retirer soi-même.",
         schema({{"clipId", identifier("Identifiant du clip audio, tel que l'état le nomme.")}}, {"clipId"})));
 
     // --- clips and notes

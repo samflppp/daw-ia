@@ -1,10 +1,13 @@
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/command/CommandRegistry.h"
+#include "daw/domain/commands/SampleCommands.h"
+#include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/copilot/Tools.h"
 #include "daw/domain/generation/Harmony.h"
 #include "daw/domain/generation/StyleModel.h"
 #include "daw/domain/serialization/Json.h"
 #include "daw/ui/model/CopilotRequest.h"
+#include "daw/ui/model/LaneEditing.h"
 
 #include <cmath>
 #include <map>
@@ -169,4 +172,94 @@ TEST_CASE("the generation tool is offered to the model beside the commands")
     REQUIRE(required != nullptr);
     CHECK(required->size() == 1);
     CHECK(tool.schema.find("properties")->find("form") != nullptr);
+}
+
+namespace
+{
+
+// A track with two audio clips on its own line, as a person leaves it.
+struct TwoLoops
+{
+    TwoLoops()
+    {
+        CommandBus bus{state, registry};
+        REQUIRE(bus.execute(std::make_unique<AddTrack>(track, "Boucle")).ok());
+        SampleRef sample{};
+        sample.blob.digest = std::string(BlobRef::digestLength, 'b');
+        sample.blob.byteCount = 88200;
+        sample.name = "Loop 01.wav";
+        sample.format = "wav";
+        sample.seconds = 1.0;
+        REQUIRE(bus.execute(std::make_unique<PlaceAudio>(first, track, sample, 0.0)).ok());
+        REQUIRE(bus.execute(std::make_unique<PlaceAudio>(second, track, sample, 4.0)).ok());
+    }
+
+    // The request as the copilot sends it, applied as one copilot entry.
+    void applyAsCopilot(ProjectState& target, const std::vector<CommandQueue::Step>& steps) const
+    {
+        const auto expansion = request::expand(target, registry, steps, StyleModel::fallback());
+        REQUIRE(expansion.ok());
+        CommandBus bus{target, registry};
+        std::vector<std::unique_ptr<Command>> commands;
+        for (const auto& step : expansion.steps)
+        {
+            auto created = registry.create(step.type, step.payload);
+            REQUIRE(created.ok());
+            commands.push_back(std::move(created).value());
+        }
+        GroupOptions group{};
+        group.label = "retire la boucle";
+        group.origin.actor = Actor::copilot;
+        const auto outcome = bus.executeGroup(std::move(commands), group);
+        REQUIRE_MESSAGE(outcome.ok(), (outcome.ok() ? std::string{} : outcome.error().message));
+    }
+
+    [[nodiscard]] static CommandQueue::Step removeAudio(AudioClipId clipId)
+    {
+        return {"audio.remove", Value::object({{"clipId", Value{clipId.toString()}}})};
+    }
+
+    ProjectState state;
+    CommandRegistry registry{CommandRegistry::withBuiltinCommands()};
+    TrackId track{TrackId::generate()};
+    AudioClipId first{AudioClipId::generate()};
+    AudioClipId second{AudioClipId::generate()};
+};
+
+} // namespace
+
+TEST_CASE("the copilot's audio.remove leaves the project the screen's Suppr leaves")
+{
+    TwoLoops fixture;
+    const auto own = ProjectState::laneOfTrack(fixture.track);
+    REQUIRE(fixture.state.findLane(own) != nullptr);
+
+    SUBCASE("one clip of two: the line stays, for both")
+    {
+        auto byCopilot = fixture.state;
+        fixture.applyAsCopilot(byCopilot, {TwoLoops::removeAudio(fixture.first)});
+        CHECK(byCopilot.findLane(own) != nullptr);
+    }
+
+    SUBCASE("the last one: the same project, line gone, by either path")
+    {
+        auto byCopilot = fixture.state;
+        fixture.applyAsCopilot(byCopilot,
+                               {TwoLoops::removeAudio(fixture.first), TwoLoops::removeAudio(fixture.second)});
+
+        auto byScreen = fixture.state;
+        CommandBus screenBus{byScreen, fixture.registry};
+        REQUIRE(daw::ui::laneEditing::removeBlocks(screenBus, byScreen, {fixture.first, fixture.second}, {}));
+
+        CHECK(byCopilot.findLane(own) == nullptr);
+        CHECK(json::write(byCopilot.toValue()) == json::write(byScreen.toValue()));
+    }
+
+    SUBCASE("track.remove takes its empty line too")
+    {
+        auto byCopilot = fixture.state;
+        fixture.applyAsCopilot(
+            byCopilot, {{"track.remove", Value::object({{"trackId", Value{fixture.track.toString()}}})}});
+        CHECK(byCopilot.findLane(own) == nullptr);
+    }
 }
