@@ -43,4 +43,64 @@ float FallingLevel::advance(
     return db;
 }
 
+double DrawnPlayhead::advance(double engineSeconds, double nowMs) noexcept
+{
+    if (!started)
+    {
+        started = true;
+        moving = false;
+        seen = drawn = engineSeconds;
+        seenAtMs = lastMs = nowMs;
+        return drawn;
+    }
+
+    const auto elapsed = std::clamp((nowMs - lastMs) / 1000.0, 0.0, blockSeconds);
+    lastMs = nowMs;
+
+    if (engineSeconds != seen)
+    {
+        const auto wentBack = engineSeconds < seen;
+        seen = engineSeconds;
+        seenAtMs = nowMs;
+
+        // The first block that moves: from here on, the playhead runs.
+        if (!moving)
+        {
+            moving = true;
+            drawn = std::max(drawn, engineSeconds);
+            return drawn;
+        }
+
+        if (wentBack && drawn - engineSeconds > blockSeconds)
+        {
+            drawn = engineSeconds;
+            return drawn;
+        }
+    }
+
+    if (!moving)
+        return drawn;
+
+    const auto estimate = seen + std::min((nowMs - seenAtMs) / 1000.0, blockSeconds);
+    const auto predicted = drawn + elapsed;
+    const auto error = estimate - predicted;
+
+    // The engine ahead by more than a block is a jump forward: follow it.
+    if (error > blockSeconds)
+    {
+        drawn = estimate;
+        return drawn;
+    }
+
+    const auto pulled = predicted + error * std::min(1.0, elapsed * 1000.0 / pullMs);
+    drawn = std::max(drawn, std::min(pulled, seen + blockSeconds));
+    return drawn;
+}
+
+void DrawnPlayhead::stop() noexcept
+{
+    started = false;
+    moving = false;
+}
+
 } // namespace daw::ui
