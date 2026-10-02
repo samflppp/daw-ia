@@ -420,7 +420,13 @@ void Verification::addCanvasSteps()
             if (!lane)
                 return;
 
-            view->showWholeSong();
+            // The first block framed, then 12 px a beat around its end: under
+            // the threshold, the empty bar before it and the three blocks in
+            // sight. (On a long project the whole song is not.)
+            view->frameBlock(laid->placements.front());
+            const auto end = view->pointFor(static_cast<int>(lane.value()), first->startBeats + 4.0);
+            view->zoomAround({end.getX(), view->timelineArea().getCentreY()},
+                             12.0 / std::max(1.0, view->beatWidth()));
             check(!view->notesGrabbable(), "dézoomée, les notes ne s'attrapent pas");
 
             // On a long project the line may be under the bottom: the wheel
