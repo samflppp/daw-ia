@@ -203,6 +203,7 @@ public:
     // with a band for every channel of the rack. Read by the verification.
     [[nodiscard]] bool showsPattern() const { return patternMode(); }
     [[nodiscard]] domain::PlacementId patternBlock() const noexcept { return patternBlock_; }
+    [[nodiscard]] int lanesShown() const { return freeLaneCount(); }
 
     // The pattern under the hand, whose other blocks are lit.
     [[nodiscard]] domain::PatternId litPattern() const noexcept { return hoveredPattern_; }

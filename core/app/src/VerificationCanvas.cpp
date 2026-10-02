@@ -1075,6 +1075,10 @@ void Verification::addCanvasLoadSteps()
             const auto started = juce::Time::getMillisecondCounterHiRes();
             check(bus_.executeGroup(std::move(commands), group).ok(), "le projet chargé est posé");
             note("projet chargé posé en " + ms(juce::Time::getMillisecondCounterHiRes() - started));
+
+            // The beatmaker opens on PAT, where the canvas shows one pattern
+            // (S19): the song is what is measured.
+            press("SONG");
         },
         {},
         120000.0);
@@ -1086,6 +1090,8 @@ void Verification::addCanvasLoadSteps()
             auto* view = canvas();
             if (view == nullptr)
                 return;
+            check(!view->showsPattern() && view->lanesShown() >= 32,
+                  "la toile montre le morceau : 32 lignes");
 
             // Each scale timed twice: in Direct2D, the window's renderer, and
             // in software, the light mode's and the S18 figure's. S19: the
