@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -70,6 +71,8 @@ void Verification::addCanvasSteps()
         domain::PatternId other{};
         domain::PlacementId otherPlacement{};
         std::string beforePaste;
+        domain::NoteId offGrid{};
+        std::map<std::string, int> pitches; // of the picked notes, by identifier
     };
     auto laid = std::make_shared<Laid>();
 
@@ -413,8 +416,23 @@ void Verification::addCanvasSteps()
 
             view->showWholeSong();
             check(!view->notesGrabbable(), "dézoomée, les notes ne s'attrapent pas");
-            const auto from = view->pointFor(static_cast<int>(lane.value()), first->startBeats - 1.0);
-            const auto to = view->pointFor(static_cast<int>(lane.value()), first->startBeats + 11.5);
+
+            // On a long project the line may be under the bottom: the wheel
+            // brings it up, as a hand would.
+            const auto laneIndex = static_cast<int>(lane.value());
+            for (int notch = 0; notch < 60; ++notch)
+            {
+                const auto at = view->pointFor(laneIndex, first->startBeats);
+                if (view->timelineArea().contains(at.translated(0, 4)))
+                    break;
+                wheel(*view,
+                      view->timelineArea().getCentre(),
+                      at.getY() >= view->timelineArea().getBottom() - 4 ? -0.1f : 0.1f);
+            }
+            const auto from = view->pointFor(laneIndex, first->startBeats - 1.0);
+            const auto to = view->pointFor(laneIndex, first->startBeats + 11.5);
+            check(view->timelineArea().contains(from.translated(0, 2)),
+                  "la ligne est à l'écran avant la bande");
             drag(*view, from, to.translated(0, 2), true);
         });
 
@@ -564,6 +582,245 @@ void Verification::addCanvasSteps()
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(domain::json::write(state_.toValue()) == laid->beforePaste, "Ctrl+Z : le projet à l'octet");
             static_cast<void>(view->keyPressed(juce::KeyPress{juce::KeyPress::escapeKey}));
+        });
+
+    // S19: quantise and transpose the picked notes, across two patterns.
+    const auto pickedPitches = [this](const ui::PlaylistPanel& view)
+    {
+        std::map<std::string, int> found;
+        for (const auto& one : view.pickedNotes())
+            for (const auto& pattern : state_.patterns())
+                for (const auto& row : pattern.clips)
+                    for (const auto& n : row.notes)
+                        if (n.id == one.note)
+                            found[n.id.toString()] = n.pitch;
+        return found;
+    };
+
+    add("S19 : une note hors de la grille dans Toile B",
+        [this, canvas, laid, leadOf]
+        {
+            auto* view = canvas();
+            const auto* lead = leadOf(laid->other, laid->tracks[2]);
+            if (view == nullptr || lead == nullptr)
+                return;
+            domain::Note off{};
+            off.id = domain::NoteId::generate();
+            off.pitch = 81;
+            off.startBeats = 0.6;
+            off.lengthBeats = 0.25;
+            laid->offGrid = off.id;
+            check(bus_.execute(std::make_unique<domain::AddNote>(lead->id, off)).ok(),
+                  "un la5 au temps 1,6 de Toile B, hors de la double-croche");
+        });
+
+    // A step of its own: the canvas hears the note before the band is aimed.
+    add("S19 : la bande prend les Lead du premier bloc et de Toile B",
+        [this, canvas, laid, inSight]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            view->frameBlock(laid->placements.front());
+            view->zoomAround(view->timelineArea().getPosition(), 36.0 / std::max(1.0, view->beatWidth()));
+            const auto from = inSight(*view, laid->placements.front(), laid->tracks[2], 0.1, 83);
+            const auto to = view->notePointIn(laid->otherPlacement, laid->tracks[2], 3.7, 71);
+            if (!from.has_value() || !to.has_value())
+            {
+                check(false, "la bande va du premier bloc à Toile B");
+                return;
+            }
+            drag(*view, *from, *to, true);
+        });
+
+    add("S19 : flèche haut : les neuf notes montent d'un demi-ton, une entrée",
+        [this, canvas, laid, pickedPitches]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            laid->pitches = pickedPitches(*view);
+            check(laid->pitches.size() == 9, "neuf notes choisies : " + std::to_string(laid->pitches.size()));
+            laid->beforePaste = domain::json::write(state_.toValue());
+            laid->depth = depth();
+
+            static_cast<void>(view->keyPressed(juce::KeyPress{juce::KeyPress::upKey}));
+            const auto now = pickedPitches(*view);
+            auto allUp = now.size() == laid->pitches.size();
+            for (const auto& [id, pitch] : laid->pitches)
+                allUp = allUp && now.count(id) == 1 && now.at(id) == pitch + 1;
+            check(allUp, "chaque note un demi-ton plus haut, dans les deux patterns");
+            check(depth() == laid->depth + 1, "une entrée d'historique");
+        });
+
+    add("S19 : Ctrl+Q : la note hors de la grille revient à la double-croche, les autres ne bougent pas",
+        [this, canvas, laid]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            static_cast<void>(view->keyPressed(juce::KeyPress{'q', juce::ModifierKeys::ctrlModifier, 0}));
+            double start = -1.0;
+            for (const auto& pattern : state_.patterns())
+                for (const auto& row : pattern.clips)
+                    for (const auto& n : row.notes)
+                        if (n.id == laid->offGrid)
+                            start = n.startBeats;
+            check(std::abs(start - 0.5) < 1e-9, "le la#5 est au temps 1,5 : " + std::to_string(start));
+            check(depth() == laid->depth + 2, "une entrée d'historique");
+            snapshot("s19-toile-transpose-quantifie");
+        });
+
+    add("S19 : Ctrl+flèche haut, trois octaves passent ; la quatrième sortirait du clavier : refusée en "
+        "entier",
+        [this, canvas, laid, pickedPitches]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            const auto ctrlUp = juce::KeyPress{juce::KeyPress::upKey, juce::ModifierKeys::ctrlModifier, 0};
+            for (int octave = 0; octave < 3; ++octave)
+                static_cast<void>(view->keyPressed(ctrlUp));
+            check(depth() == laid->depth + 5, "trois octaves, trois entrées");
+            const auto before = pickedPitches(*view);
+            static_cast<void>(view->keyPressed(ctrlUp));
+            check(depth() == laid->depth + 5, "la quatrième : aucune entrée");
+            check(pickedPitches(*view) == before,
+                  "et aucune note n'a bougé, pas même celles qui auraient pu");
+
+            for (int entry = 0; entry < 5; ++entry)
+                key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == laid->beforePaste,
+                  "cinq Ctrl+Z : le projet à l'octet");
+            static_cast<void>(view->keyPressed(juce::KeyPress{juce::KeyPress::escapeKey}));
+        });
+
+    // S19: the velocity strip, under the band of the chosen track.
+    add("S19 : le Lead choisi dans le rack : la bande de vélocité s'ouvre sous lui",
+        [this, canvas, laid]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            selection_.selectTrack(laid->tracks[2]);
+        });
+
+    add("S19 : le trait sur la bande de vélocité, de gauche à droite, de bas en haut",
+        [this, canvas, laid]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            view->frameBlock(laid->placements.front());
+
+            // The Lead is the last band: its strip may be under the bottom.
+            auto strip = view->velocityStripIn(laid->placements.front());
+            for (int notch = 0; notch < 60 && strip.has_value() &&
+                                !view->timelineArea().contains(strip->withHeight(strip->getHeight() - 1));
+                 ++notch)
+            {
+                wheel(*view, view->timelineArea().getCentre(), -0.1f);
+                strip = view->velocityStripIn(laid->placements.front());
+            }
+            check(strip.has_value() && !strip->isEmpty(), "une bande de vélocité sous le Lead, dans le bloc");
+            if (!strip.has_value() || strip->isEmpty())
+                return;
+            check(strip->getHeight() == tokens_.integer("metric.canvas.velocityStrip"),
+                  "haute de " + std::to_string(strip->getHeight()) + " px");
+            laid->beforePaste = domain::json::write(state_.toValue());
+            laid->depth = depth();
+            drag(*view,
+                 {strip->getX() + 2, strip->getBottom() - 2},
+                 {strip->getRight() - 2, strip->getY() + 2});
+        });
+
+    add("S19 : un crescendo sur les quatre notes du Lead, une entrée, et les tiges dessinées à leur hauteur",
+        [this, canvas, laid, leadOf]
+        {
+            auto* view = canvas();
+            const auto* lead = leadOf(laid->pattern, laid->tracks[2]);
+            if (view == nullptr || lead == nullptr)
+                return;
+            auto notes = lead->notes;
+            std::sort(notes.begin(),
+                      notes.end(),
+                      [](const domain::Note& a, const domain::Note& b)
+                      { return a.startBeats < b.startBeats; });
+            std::string list;
+            auto rising = notes.size() == 4;
+            for (std::size_t index = 0; index < notes.size(); ++index)
+            {
+                list += std::to_string(notes[index].velocity) + " ";
+                if (index > 0)
+                    rising = rising && notes[index].velocity > notes[index - 1].velocity;
+            }
+            // The last stem is three quarters along the stroke, which ends
+            // at the top: loud, not the loudest.
+            check(rising && notes.front().velocity < 50 && notes.back().velocity > 90,
+                  "les vélocités montent, de doux à fort : " + list);
+            check(depth() == laid->depth + 1, "une entrée d'historique");
+
+            // At the render: the stem of the loudest note reaches near the
+            // top of the strip, the softest stays near the bottom.
+            const auto strip = view->velocityStripIn(laid->placements.front());
+            const auto loud = view->noteBoundsIn(laid->placements.front(), notes.back().id);
+            const auto soft = view->noteBoundsIn(laid->placements.front(), notes.front().id);
+            if (strip.has_value() && loud.has_value() && soft.has_value())
+            {
+                const auto image = view->createComponentSnapshot(*strip, false, 1.0f);
+                const auto sunken = tokens_.colour("color.surface.sunken");
+                const auto stemAt = [&](int x, int y)
+                {
+                    const auto pixel = image.getPixelAt(x - strip->getX() + 1, y - strip->getY());
+                    return std::abs(pixel.getRed() - sunken.getRed()) +
+                               std::abs(pixel.getGreen() - sunken.getGreen()) +
+                               std::abs(pixel.getBlue() - sunken.getBlue()) >
+                           60;
+                };
+                const auto high = strip->getY() + strip->getHeight() / 4;
+                check(stemAt(loud->getX(), high), "au rendu, la tige forte monte dans le haut de la bande");
+                check(!stemAt(soft->getX(), high), "au rendu, la tige douce reste en bas");
+            }
+            snapshot("s19-toile-velocites");
+        });
+
+    add(
+        "S19 : Alt + molette sur une note : sa vélocité, deux crans, une entrée ; Ctrl+Z à l'octet",
+        [this, canvas, laid, leadOf]
+        {
+            auto* view = canvas();
+            const auto* lead = leadOf(laid->pattern, laid->tracks[2]);
+            if (view == nullptr || lead == nullptr || lead->notes.empty())
+                return;
+            const auto target = lead->notes.front();
+            const auto bounds = view->noteBoundsIn(laid->placements.front(), target.id);
+            check(bounds.has_value() && view->timelineArea().contains(bounds->getCentre()),
+                  "la note est à l'écran");
+            if (!bounds.has_value())
+                return;
+            wheel(*view, bounds->getCentre(), 1.0f, false, false, true);
+            wheel(*view, bounds->getCentre(), 1.0f, false, false, true);
+            const auto* after = leadOf(laid->pattern, laid->tracks[2]);
+            auto velocity = -1;
+            for (const auto& note : after->notes)
+                if (note.id == target.id)
+                    velocity = note.velocity;
+            const auto step = tokens_.integer("metric.canvas.velocityWheelStep");
+            check(velocity == std::min(127, target.velocity + 2 * step),
+                  "deux crans : " + std::to_string(target.velocity) + " vers " + std::to_string(velocity));
+            check(depth() == laid->depth + 2, "les deux crans font une seule entrée");
+        },
+        // The wheel at rest closes its gesture.
+        [this] { return !bus_.openGesture().has_value(); },
+        3000.0);
+
+    add("S19 : deux Ctrl+Z : le projet à l'octet",
+        [this, laid]
+        {
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == laid->beforePaste,
+                  "deux Ctrl+Z : le projet à l'octet");
         });
 
     // S18, the grammar: the same keys and wheel in the piano roll.

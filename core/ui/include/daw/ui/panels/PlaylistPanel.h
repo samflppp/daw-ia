@@ -12,6 +12,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -211,6 +212,10 @@ public:
         domain::NoteId note{};
     };
     [[nodiscard]] const std::vector<PickedNote>& pickedNotes() const noexcept { return pickedNotes_; }
+
+    // The velocity strip under the band of the chosen track, in a block: where
+    // the verification draws a stroke. Nothing when it is not on screen.
+    [[nodiscard]] std::optional<juce::Rectangle<int>> velocityStripIn(domain::PlacementId placement) const;
 
     // A double-click on a block: the view frames it at the scale of notes.
     // Escape: the whole song again.
@@ -454,6 +459,10 @@ private:
         CanvasBand band;
         juce::Rectangle<int> area; // across the whole grid
         double row{1.0};
+
+        // The velocity strip under the band of the chosen track, at the
+        // scale of notes (S19); empty for every other band.
+        juce::Rectangle<int> velocity;
     };
 
     // What is under a point of a block, at the scale of notes: the block, the
@@ -480,6 +489,7 @@ private:
     [[nodiscard]] const std::vector<int>& laneEdges() const;
     [[nodiscard]] int computedLaneHeight(int lane, const Lane& entry) const;
     [[nodiscard]] std::vector<CanvasBand> bandsOfLane(int lane) const;
+    [[nodiscard]] int velocityStripOf(const std::vector<CanvasBand>& bands) const;
     [[nodiscard]] std::vector<BandArea> bandAreas(int lane) const;
     [[nodiscard]] std::optional<NoteSpot> spotAt(juce::Point<int> point) const;
     [[nodiscard]] int pitchAt(const BandArea& band, int y) const;
@@ -719,9 +729,45 @@ private:
 
     // Where the hand was last seen over the panel: where Ctrl+V pastes.
     juce::Point<int> pointer_;
+
+    // The velocity strip (PlaylistCanvas.cpp, S19): a stroke drawn over the
+    // stems of one block, sent as one group when the hand lets go; and the
+    // gesture of Alt + wheel on a note.
+    struct VelocityStroke
+    {
+        domain::PlacementId placement{};
+        domain::PatternId pattern{};
+        domain::ClipId clip{};
+        domain::TrackId track{};
+        int lane{0};
+        juce::Point<int> last;
+        std::vector<std::pair<domain::NoteId, int>> values;
+    };
+    std::optional<VelocityStroke> velocityStroke_;
+    domain::TrackId stripTrack_{};
+    std::optional<domain::GestureId> velocityWheelGesture_;
+    juce::uint32 lastVelocityWheelMs_{0};
+    [[nodiscard]] int yForVelocity(juce::Rectangle<int> strip, int velocity) const;
+    [[nodiscard]] int velocityAtY(juce::Rectangle<int> strip, int y) const;
+    [[nodiscard]] bool velocityEditable(domain::ClipId clip, domain::NoteId note) const;
+    void paintVelocityStrip(juce::Graphics& g,
+                            const domain::Placement& placement,
+                            const domain::Pattern& pattern,
+                            const BandArea& area,
+                            juce::Rectangle<int> clip,
+                            bool stroke) const;
+    bool velocityMouseDown(const juce::MouseEvent& event);
+    void strokeVelocity(juce::Point<int> to);
+    void commitVelocityStroke();
+    bool velocityWheel(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel);
+    void closeVelocityWheel(bool onlyWhenRested = false);
     void copyPickedNotes();
     bool pasteNotesUnderHand();
     void duplicatePickedNotes();
+    void editPickedNotes(
+        const std::string& verb,
+        const std::function<std::unique_ptr<domain::Command>(domain::ClipId, std::vector<domain::NoteId>)>&
+            make);
     void pickPasted(domain::PlacementId placement,
                     domain::PatternId pattern,
                     const std::vector<domain::NoteId>& notes);

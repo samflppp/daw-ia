@@ -167,6 +167,15 @@ void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     auto reshaped = canvas_ && source == &project_;
 
     // A slider asked to see its automation line: its lane comes into view.
+    // The chosen track carries the velocity strip: the lines change height.
+    if (canvas_ && source == &selection_ && selection_.track() != stripTrack_)
+    {
+        stripTrack_ = selection_.track();
+        ++version_;
+        updateScrollBars();
+        reshaped = true;
+    }
+
     if (source == &selection_ && selection_.automationRequests() != automationRequests_)
     {
         automationRequests_ = selection_.automationRequests();
@@ -580,7 +589,7 @@ void PlaylistPanel::scrollBarMoved(juce::ScrollBar* bar, double newRangeStart)
 
 void PlaylistPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
 {
-    if (tempoWheel(event, wheel) || automationWheel(event, wheel))
+    if (tempoWheel(event, wheel) || automationWheel(event, wheel) || velocityWheel(event, wheel))
         return;
 
     const auto grid = gridArea();
@@ -1174,6 +1183,7 @@ void PlaylistPanel::frame()
 {
     closeTempoWheel(true);
     closeAutomationWheel(true);
+    closeVelocityWheel(true);
     glide();
     followPlayhead();
 

@@ -25,6 +25,15 @@
 //                                history entry says how many
 //   Ctrl+B                       duplicates them right after themselves, in their
 //                                pattern, lengthened to the bar (one pattern only)
+//   in the velocity strip        under the band of the channel chosen in the rack
+//                                (or by touching a note), at the scale of notes
+//                                only: a click sets the stems under it, a drag
+//                                draws a line over them, sent as one entry on
+//                                release; two picked notes or more: only those
+//   Alt + wheel on a note        its velocity, finely; one entry per gesture
+//   Ctrl+Q                       quantises the picked notes to the sixteenth
+//   Up, Down                     transposes them a semitone; with Ctrl, an octave.
+//                                A note pushed off the keyboard refuses it all
 //   drag the edge of a band      adds rows above or below, for this screen
 //   double-click the name strip  frames the block
 //   F                            frames the selected blocks, else the block
@@ -40,6 +49,7 @@
 
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/NoteCommands.h"
+#include "daw/domain/commands/NoteEditCommands.h"
 #include "daw/ui/model/NoteClipboard.h"
 #include "daw/ui/model/PatternEditing.h"
 #include "daw/ui/model/ViewFraming.h"
@@ -62,6 +72,9 @@ constexpr int defaultVelocity = 100;
 
 // A framed block leaves this much of the width free on its left.
 constexpr double frameMargin = 0.05;
+
+// Alt + wheel on a note: the gesture ends when the wheel has rested this long.
+constexpr juce::uint32 velocityWheelRestMs = 600;
 
 // A block drawn once and laid many times: up to four megapixels an image, a
 // few hundred images kept. Past that, the block is drawn where it lies.
@@ -143,7 +156,21 @@ int PlaylistPanel::computedLaneHeight(int lane, const Lane& entry) const
     const auto bands = bandsOfLane(lane);
     if (bands.empty())
         return base;
-    return canvas::lineHeight(canvas::rowCount(bands), canvasRow(), canvasChrome(), base);
+    return canvas::lineHeight(
+        canvas::rowCount(bands), canvasRow(), canvasChrome() + velocityStripOf(bands), base);
+}
+
+// The strip opens under the band of the chosen track, at the scale of notes:
+// one at a time on a line, so it costs its height once (S19).
+int PlaylistPanel::velocityStripOf(const std::vector<CanvasBand>& bands) const
+{
+    if (!notesGrabbable() || selection_.track().isNil())
+        return 0;
+    const auto chosen =
+        std::any_of(bands.begin(),
+                    bands.end(),
+                    [this](const CanvasBand& band) { return band.track == selection_.track(); });
+    return chosen ? tokens_.integer("metric.canvas.velocityStrip") : 0;
 }
 
 std::vector<CanvasBand> PlaylistPanel::bandsOfLane(int lane) const
@@ -171,7 +198,8 @@ std::vector<PlaylistPanel::BandArea> PlaylistPanel::bandAreas(int lane) const
         return {};
 
     const auto grid = gridArea();
-    const auto chrome = canvasChrome();
+    const auto strip = velocityStripOf(bands);
+    const auto chrome = canvasChrome() + strip;
     const auto height = laneHeightOf(lane);
     const auto row = canvas::fittedRow(canvas::rowCount(bands), canvasRow(), chrome, height);
 
@@ -185,8 +213,14 @@ std::vector<PlaylistPanel::BandArea> PlaylistPanel::bandAreas(int lane) const
         const auto next = y + static_cast<double>(band.rows()) * row;
         const auto top = static_cast<int>(std::lround(y));
         const auto bottom = static_cast<int>(std::lround(next));
-        areas.push_back(BandArea{band, {grid.getX(), top, grid.getWidth(), std::max(1, bottom - top)}, row});
+        areas.push_back(
+            BandArea{band, {grid.getX(), top, grid.getWidth(), std::max(1, bottom - top)}, row, {}});
         y = next;
+        if (strip > 0 && band.track == selection_.track())
+        {
+            areas.back().velocity = {grid.getX(), bottom, grid.getWidth(), strip};
+            y += static_cast<double>(strip);
+        }
     }
     return areas;
 }
@@ -436,6 +470,17 @@ void PlaylistPanel::paintCanvasBlock(juce::Graphics& g,
                 g.restoreState();
             }
 
+            // A stroke being drawn: the stems as the hand puts them, over the
+            // picture, in every block of the pattern.
+            if (velocityStroke_.has_value() && velocityStroke_->pattern == pattern.id)
+            {
+                for (const auto& area : areas)
+                {
+                    if (!area.velocity.isEmpty())
+                        paintVelocityStrip(g, placement, pattern, area, content, true);
+                }
+            }
+
             // What the hand picked or points at, over the picture.
             g.saveState();
             g.reduceClipRegion(content);
@@ -614,8 +659,16 @@ void PlaylistPanel::renderCanvasBlock(juce::Graphics& g,
             if (note.pitch < area.band.low || note.pitch > area.band.high ||
                 note.startBeats >= pattern.lengthBeats)
                 continue;
+            // Softer notes are paler, as in the piano roll.
+            const auto amount =
+                static_cast<float>(note.velocity - domain::Note::lowestVelocity) /
+                static_cast<float>(domain::Note::highestVelocity - domain::Note::lowestVelocity);
+            g.setColour(noteColour.withMultipliedAlpha(0.45f + 0.55f * amount));
             g.fillRect(noteRect(area, placement.startBeats, pattern.lengthBeats, note));
         }
+
+        if (!area.velocity.isEmpty())
+            paintVelocityStrip(g, placement, pattern, area, content, false);
     }
 }
 
@@ -694,6 +747,9 @@ bool PlaylistPanel::canvasMouseDown(const juce::MouseEvent& event)
         return false;
 
     catchUp();
+    closeVelocityWheel();
+    if (velocityMouseDown(event))
+        return true;
     const auto spot = spotAt(event.getPosition());
     if (!spot.has_value())
         return false;
@@ -831,6 +887,12 @@ void PlaylistPanel::pickNotesIn(juce::Rectangle<int> area)
 
 bool PlaylistPanel::canvasMouseDrag(const juce::MouseEvent& event)
 {
+    if (velocityStroke_.has_value())
+    {
+        strokeVelocity(event.getPosition());
+        return true;
+    }
+
     if (edgeDrag_.has_value())
     {
         const auto rows =
@@ -906,6 +968,12 @@ bool PlaylistPanel::canvasMouseDrag(const juce::MouseEvent& event)
 
 bool PlaylistPanel::canvasMouseUp()
 {
+    if (velocityStroke_.has_value())
+    {
+        commitVelocityStroke();
+        return true;
+    }
+
     if (edgeDrag_.has_value())
     {
         edgeDrag_.reset();
@@ -977,6 +1045,29 @@ bool PlaylistPanel::canvasKey(const juce::KeyPress& key)
         pasteNotesUnderHand())
         return true;
 
+    if (!pickedNotes_.empty() && key == juce::KeyPress{'q', ctrl, 0})
+    {
+        editPickedNotes(
+            "quantifier",
+            [](domain::ClipId clip, std::vector<domain::NoteId> notes) -> std::unique_ptr<domain::Command>
+            { return std::make_unique<domain::QuantizeNotes>(clip, std::move(notes), stepBeats); });
+        return true;
+    }
+
+    // A semitone, an octave with Ctrl: FL's arrows.
+    const auto up = key.getKeyCode() == juce::KeyPress::upKey;
+    if (!pickedNotes_.empty() && (up || key.getKeyCode() == juce::KeyPress::downKey) &&
+        !key.getModifiers().isShiftDown() && !key.getModifiers().isAltDown())
+    {
+        const auto semitones = (up ? 1 : -1) * (key.getModifiers().isCtrlDown() ? 12 : 1);
+        editPickedNotes(
+            "transposer",
+            [semitones](domain::ClipId clip,
+                        std::vector<domain::NoteId> notes) -> std::unique_ptr<domain::Command>
+            { return std::make_unique<domain::TransposeNotes>(clip, std::move(notes), semitones); });
+        return true;
+    }
+
     // Escape lets go of the picked notes, and only that: the whole song is
     // Shift+F, as everywhere (S18).
     if (key == juce::KeyPress{juce::KeyPress::escapeKey} && !pickedNotes_.empty())
@@ -986,6 +1077,293 @@ bool PlaylistPanel::canvasKey(const juce::KeyPress& key)
         return true;
     }
     return false;
+}
+
+// --- velocities ------------------------------------------------------------------
+
+int PlaylistPanel::yForVelocity(juce::Rectangle<int> strip, int velocity) const
+{
+    const auto handle = tokens_.integer("metric.pianoRoll.velocityHandle");
+    const auto lane = strip.withTrimmedTop(handle * 2).withTrimmedBottom(handle);
+    const auto amount = static_cast<double>(velocity - domain::Note::lowestVelocity) /
+                        static_cast<double>(domain::Note::highestVelocity - domain::Note::lowestVelocity);
+    return lane.getBottom() - static_cast<int>(std::lround(amount * lane.getHeight()));
+}
+
+int PlaylistPanel::velocityAtY(juce::Rectangle<int> strip, int y) const
+{
+    const auto handle = tokens_.integer("metric.pianoRoll.velocityHandle");
+    const auto lane = strip.withTrimmedTop(handle * 2).withTrimmedBottom(handle);
+    const auto amount = static_cast<double>(lane.getBottom() - y) / std::max(1, lane.getHeight());
+    const auto range = domain::Note::highestVelocity - domain::Note::lowestVelocity;
+    return std::clamp(domain::Note::lowestVelocity + static_cast<int>(std::lround(amount * range)),
+                      domain::Note::lowestVelocity,
+                      domain::Note::highestVelocity);
+}
+
+// As in the piano roll: with two picked notes or more in the row, only those.
+bool PlaylistPanel::velocityEditable(domain::ClipId clip, domain::NoteId note) const
+{
+    const auto inRow = std::count_if(
+        pickedNotes_.begin(), pickedNotes_.end(), [clip](const PickedNote& one) { return one.clip == clip; });
+    return inRow < 2 || isPickedNote(note);
+}
+
+void PlaylistPanel::paintVelocityStrip(juce::Graphics& g,
+                                       const domain::Placement& placement,
+                                       const domain::Pattern& pattern,
+                                       const BandArea& area,
+                                       juce::Rectangle<int> clip,
+                                       bool stroke) const
+{
+    const auto strip = area.velocity.getIntersection(clip);
+    if (strip.isEmpty())
+        return;
+    const auto hairline = tokens_.integer("stroke.hairline");
+
+    g.saveState();
+    g.reduceClipRegion(strip);
+    g.setColour(tokens_.colour("color.surface.sunken"));
+    g.fillRect(strip);
+    // The guide at 100, the velocity a written note gets.
+    g.setColour(tokens_.colour("color.grid.beat"));
+    g.fillRect(strip.getX(), yForVelocity(area.velocity, 100), strip.getWidth(), hairline);
+
+    const auto* row = pattern.findClipForTrack(area.band.track);
+    if (row != nullptr)
+    {
+        const auto stem = tokens_.integer("metric.pianoRoll.velocityStem");
+        const auto radius = tokens_.number("metric.pianoRoll.velocityHandle");
+        for (const auto& note : row->notes)
+        {
+            if (note.startBeats >= pattern.lengthBeats)
+                continue;
+            auto velocity = note.velocity;
+            if (stroke && velocityStroke_.has_value())
+            {
+                for (const auto& [id, value] : velocityStroke_->values)
+                    if (id == note.id)
+                        velocity = value;
+            }
+            const auto x = xForBeat(placement.startBeats + note.startBeats);
+            const auto top = yForVelocity(area.velocity, velocity);
+            g.setColour(tokens_.colour(!velocityEditable(row->id, note.id) ? "color.note.fillSoft"
+                                       : isPickedNote(note.id)             ? "color.note.selected"
+                                                                           : "color.note.fill"));
+            g.fillRect(x, top, stem, area.velocity.getBottom() - top);
+            g.fillEllipse(juce::Rectangle<float>{radius * 2.0f, radius * 2.0f}.withCentre(juce::Point<float>{
+                static_cast<float>(x) + static_cast<float>(stem) / 2.0f, static_cast<float>(top)}));
+        }
+    }
+    g.setColour(tokens_.colour("color.border.hairline"));
+    g.fillRect(strip.getX(), area.velocity.getBottom() - hairline, strip.getWidth(), hairline);
+    g.restoreState();
+}
+
+std::optional<juce::Rectangle<int>> PlaylistPanel::velocityStripIn(domain::PlacementId placementId) const
+{
+    const auto* placement = state_.findPlacement(placementId);
+    if (placement == nullptr)
+        return std::nullopt;
+    const auto lane = state_.laneIndex(placement->laneId);
+    if (!lane)
+        return std::nullopt;
+    for (const auto& area : bandAreas(static_cast<int>(lane.value())))
+    {
+        if (area.velocity.isEmpty())
+            continue;
+        const auto* pattern = state_.findPattern(placement->patternId);
+        if (pattern == nullptr)
+            return std::nullopt;
+        const auto left = xForBeat(placement->startBeats);
+        const auto right = xForBeat(placement->startBeats + pattern->lengthBeats);
+        const auto grid = gridArea();
+        return area.velocity.withLeft(std::max(left, grid.getX()))
+            .withRight(std::min(right, grid.getRight()));
+    }
+    return std::nullopt;
+}
+
+bool PlaylistPanel::velocityMouseDown(const juce::MouseEvent& event)
+{
+    if (!notesGrabbable() || event.mods.isRightButtonDown() || event.mods.isCtrlDown())
+        return false;
+    const auto point = event.getPosition();
+    const auto lane = laneAtY(point.getY());
+    if (lane < 0 || lane >= freeLaneCount())
+        return false;
+
+    for (const auto& area : bandAreas(lane))
+    {
+        if (area.velocity.isEmpty() || !area.velocity.contains(point))
+            continue;
+        const auto hit = itemAt(point);
+        if (!hit.has_value() || hit->audio)
+            return true;
+        const auto* placement = state_.findPlacement(domain::PlacementId::parse(hit->id).value());
+        const auto* pattern = placement != nullptr ? state_.findPattern(placement->patternId) : nullptr;
+        const auto* row = pattern != nullptr ? pattern->findClipForTrack(area.band.track) : nullptr;
+        if (row == nullptr)
+            return true;
+
+        VelocityStroke stroke{};
+        stroke.placement = placement->id;
+        stroke.pattern = pattern->id;
+        stroke.clip = row->id;
+        stroke.track = area.band.track;
+        stroke.lane = lane;
+        stroke.last = point;
+        velocityStroke_ = stroke;
+        strokeVelocity(point);
+        return true;
+    }
+    return false;
+}
+
+// A stem is crossed when the line from the last point to this one passes
+// over it, give or take its head: a click next to a stem still reaches it.
+void PlaylistPanel::strokeVelocity(juce::Point<int> to)
+{
+    auto& stroke = *velocityStroke_;
+    const auto* placement = state_.findPlacement(stroke.placement);
+    const auto* pattern = state_.findPattern(stroke.pattern);
+    const auto* row = pattern != nullptr ? pattern->findClipForTrack(stroke.track) : nullptr;
+    if (placement == nullptr || row == nullptr)
+        return;
+
+    BandArea area{};
+    for (const auto& candidate : bandAreas(stroke.lane))
+        if (!candidate.velocity.isEmpty())
+            area = candidate;
+    if (area.velocity.isEmpty())
+        return;
+
+    const auto from = stroke.last;
+    const auto reach = tokens_.integer("metric.pianoRoll.velocityHandle") * 2;
+    const auto left = std::min(from.getX(), to.getX()) - reach;
+    const auto right = std::max(from.getX(), to.getX()) + reach;
+    for (const auto& note : row->notes)
+    {
+        if (!velocityEditable(row->id, note.id) || note.startBeats >= pattern->lengthBeats)
+            continue;
+        const auto x = xForBeat(placement->startBeats + note.startBeats);
+        if (x < left || x > right)
+            continue;
+        const auto span = to.getX() - from.getX();
+        const auto along =
+            span == 0 ? 1.0 : std::clamp(static_cast<double>(x - from.getX()) / span, 0.0, 1.0);
+        const auto y = static_cast<int>(std::lround(from.getY() + along * (to.getY() - from.getY())));
+        const auto velocity = velocityAtY(area.velocity, y);
+        const auto found = std::find_if(stroke.values.begin(),
+                                        stroke.values.end(),
+                                        [&note](const auto& entry) { return entry.first == note.id; });
+        if (found != stroke.values.end())
+            found->second = velocity;
+        else
+            stroke.values.emplace_back(note.id, velocity);
+    }
+    stroke.last = to;
+    repaint();
+}
+
+void PlaylistPanel::commitVelocityStroke()
+{
+    const auto stroke = std::move(*velocityStroke_);
+    velocityStroke_.reset();
+
+    const auto* pattern = state_.findPattern(stroke.pattern);
+    const auto* row = pattern != nullptr ? pattern->findClipForTrack(stroke.track) : nullptr;
+    if (row == nullptr)
+        return;
+
+    std::vector<std::unique_ptr<domain::Command>> commands;
+    for (const auto& [id, velocity] : stroke.values)
+    {
+        const auto found = std::find_if(row->notes.begin(),
+                                        row->notes.end(),
+                                        [id = id](const domain::Note& note) { return note.id == id; });
+        if (found != row->notes.end() && found->velocity != velocity)
+            commands.push_back(std::make_unique<domain::SetNoteVelocity>(row->id, id, velocity));
+    }
+    if (!commands.empty())
+    {
+        domain::GroupOptions group{};
+        group.label = commands.size() > 1 ? "vélocités" : "vélocité";
+        static_cast<void>(bus_.executeGroup(std::move(commands), group));
+    }
+    repaint();
+}
+
+// Alt + wheel on a note: its velocity, a few steps a notch, one entry per
+// gesture (the grammar of S18: Alt + wheel tunes what is under the hand).
+bool PlaylistPanel::velocityWheel(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
+{
+    if (!canvas_ || !event.mods.isAltDown() || event.mods.isCtrlDown() || wheel.deltaY == 0.0f)
+        return false;
+    catchUp();
+    const auto spot = spotAt(event.getPosition());
+    if (!spot.has_value() || !spot->note.has_value())
+        return false;
+
+    const auto step = tokens_.integer("metric.canvas.velocityWheelStep");
+    const auto velocity = std::clamp(spot->note->velocity + (wheel.deltaY > 0.0f ? step : -step),
+                                     domain::Note::lowestVelocity,
+                                     domain::Note::highestVelocity);
+    if (velocity == spot->note->velocity)
+        return true;
+
+    lastVelocityWheelMs_ = juce::Time::getMillisecondCounter();
+    if (!velocityWheelGesture_.has_value() || bus_.openGesture() != velocityWheelGesture_)
+        velocityWheelGesture_ = bus_.beginGesture("vélocité à la molette");
+    domain::ExecuteOptions options;
+    options.gesture = velocityWheelGesture_;
+    static_cast<void>(bus_.execute(
+        std::make_unique<domain::SetNoteVelocity>(spot->clip, spot->note->id, velocity), options));
+    return true;
+}
+
+void PlaylistPanel::closeVelocityWheel(bool onlyWhenRested)
+{
+    if (!velocityWheelGesture_.has_value())
+        return;
+    if (onlyWhenRested && juce::Time::getMillisecondCounter() - lastVelocityWheelMs_ <= velocityWheelRestMs)
+        return;
+    if (bus_.openGesture() == velocityWheelGesture_)
+        static_cast<void>(bus_.endGesture(*velocityWheelGesture_));
+    velocityWheelGesture_.reset();
+}
+
+// --- quantise, transpose -----------------------------------------------------------
+
+// One command per row the picked notes are in, the rows of several patterns
+// together: one history entry. A row the command refuses — a note pushed past
+// the keyboard — refuses the whole group, and nothing moves.
+void PlaylistPanel::editPickedNotes(
+    const std::string& verb,
+    const std::function<std::unique_ptr<domain::Command>(domain::ClipId, std::vector<domain::NoteId>)>& make)
+{
+    std::vector<std::pair<domain::ClipId, std::vector<domain::NoteId>>> rows;
+    for (const auto& one : pickedNotes_)
+    {
+        auto row =
+            std::find_if(rows.begin(), rows.end(), [&one](const auto& r) { return r.first == one.clip; });
+        if (row == rows.end())
+        {
+            rows.emplace_back(one.clip, std::vector<domain::NoteId>{});
+            row = std::prev(rows.end());
+        }
+        row->second.push_back(one.note);
+    }
+
+    std::vector<std::unique_ptr<domain::Command>> commands;
+    for (auto& [clip, notes] : rows)
+        commands.push_back(make(clip, std::move(notes)));
+
+    domain::GroupOptions group{};
+    group.label =
+        verb + " " + std::to_string(pickedNotes_.size()) + (pickedNotes_.size() == 1 ? " note" : " notes");
+    static_cast<void>(bus_.executeGroup(std::move(commands), group));
+    repaint();
 }
 
 // --- copy, paste -----------------------------------------------------------------
