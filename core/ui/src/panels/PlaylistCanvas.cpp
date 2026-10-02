@@ -235,8 +235,10 @@ int PlaylistPanel::computedLaneHeight(int lane, const Lane& entry) const
     const auto bands = bandsOfLane(lane);
     if (bands.empty())
         return base;
-    return canvas::lineHeight(
-        canvas::rowCount(bands), canvasRow(), canvasChrome() + velocityStripOf(bands), base);
+    return canvas::lineHeight(canvas::rowCount(bands),
+                              canvasRow(),
+                              canvasChrome() + velocityStripOf(bands) + addBandOf(lane, bands),
+                              base);
 }
 
 // The strip opens under the band of the chosen track, at the scale of notes:
@@ -307,7 +309,7 @@ std::vector<PlaylistPanel::BandArea> PlaylistPanel::bandAreas(int lane) const
 
     const auto grid = gridArea();
     const auto strip = velocityStripOf(bands);
-    const auto chrome = canvasChrome() + strip;
+    const auto chrome = canvasChrome() + strip + addBandOf(lane, bands);
     const auto height = laneHeightOf(lane);
     const auto row = canvas::fittedRow(canvas::rowCount(bands), canvasRow(), chrome, height);
 
@@ -435,11 +437,9 @@ std::optional<PlaylistPanel::NoteSpot> PlaylistPanel::spotAt(juce::Point<int> po
         if (point.getY() < area.area.getY() || point.getY() >= area.area.getBottom())
             continue;
 
-        // A track the pattern has no row for: in song mode, nothing of this
-        // block to edit here; in pattern mode, writing there opens the row.
+        // A track the pattern has no row for: writing there opens the row
+        // (S19; in S18 the rack had to add it first).
         const auto* clip = pattern->findClipForTrack(area.band.track);
-        if (clip == nullptr && !patternMode())
-            return std::nullopt;
 
         NoteSpot spot{};
         spot.placement = placement->id;
@@ -588,6 +588,8 @@ void PlaylistPanel::paintCanvasBlock(juce::Graphics& g,
                         paintVelocityStrip(g, placement, pattern, area, content, true);
                 }
             }
+
+            paintAddBand(g, lane, block, content);
 
             // The zone of a generation, and its grey notes.
             paintBandGeneration(g, placement, pattern, areas, content);
@@ -859,6 +861,8 @@ bool PlaylistPanel::canvasMouseDown(const juce::MouseEvent& event)
 
     catchUp();
     closeVelocityWheel();
+    if (addBandMouseDown(event))
+        return true;
     if (bandRangeMouseDown(event) || velocityMouseDown(event))
         return true;
     const auto spot = spotAt(event.getPosition());
@@ -956,7 +960,7 @@ bool PlaylistPanel::canvasMouseDown(const juce::MouseEvent& event)
     note.startBeats = std::clamp(
         std::floor(spot->beats / stepBeats) * stepBeats, 0.0, std::max(0.0, spot->patternLength - stepBeats));
     note.lengthBeats = stepBeats;
-    // A channel the pattern has no row for (pattern mode): the row is
+    // A channel the pattern has no row for: the row is
     // opened and the note written, one entry, as the rack's first step does.
     if (spot->clip.isNil())
     {
@@ -1206,6 +1210,119 @@ bool PlaylistPanel::canvasKey(const juce::KeyPress& key)
         return true;
     }
     return false;
+}
+
+// --- a track added to a pattern ------------------------------------------------------
+
+std::vector<domain::TrackId> PlaylistPanel::channelsMissingFrom(const std::vector<CanvasBand>& bands) const
+{
+    std::vector<domain::TrackId> missing;
+    for (const auto& track : state_.tracks())
+    {
+        if (std::none_of(bands.begin(),
+                         bands.end(),
+                         [&track](const CanvasBand& band) { return band.track == track.id; }))
+            missing.push_back(track.id);
+    }
+    return missing;
+}
+
+int PlaylistPanel::addBandOf(int lane, const std::vector<CanvasBand>& bands) const
+{
+    if (!notesGrabbable() || patternMode() || lane < 0 || lane >= freeLaneCount() || bands.empty() ||
+        channelsMissingFrom(bands).empty())
+        return 0;
+    return tokens_.integer("metric.canvas.addBand");
+}
+
+juce::Rectangle<int> PlaylistPanel::addBandArea(int lane) const
+{
+    const auto bands = bandsOfLane(lane);
+    const auto height = addBandOf(lane, bands);
+    const auto areas = bandAreas(lane);
+    if (height == 0 || areas.empty())
+        return {};
+    auto bottom = 0;
+    for (const auto& area : areas)
+        bottom = std::max(
+            {bottom, area.area.getBottom(), area.velocity.isEmpty() ? 0 : area.velocity.getBottom()});
+    const auto grid = gridArea();
+    return {grid.getX(), bottom, grid.getWidth(), height};
+}
+
+std::optional<juce::Rectangle<int>> PlaylistPanel::addBandIn(domain::PlacementId placementId) const
+{
+    const auto placement = shownPlacement(placementId);
+    if (!placement.has_value())
+        return std::nullopt;
+    const auto lane = shownLaneIndex(placement->laneId);
+    const auto* pattern = state_.findPattern(placement->patternId);
+    if (!lane || pattern == nullptr)
+        return std::nullopt;
+    const auto area = addBandArea(*lane);
+    if (area.isEmpty())
+        return std::nullopt;
+    return area.withLeft(xForBeat(placement->startBeats))
+        .withRight(xForBeat(placement->startBeats + pattern->lengthBeats));
+}
+
+bool PlaylistPanel::addBandMouseDown(const juce::MouseEvent& event)
+{
+    const auto point = event.getPosition();
+    const auto lane = laneAtY(point.getY());
+    if (lane < 0 || lane >= freeLaneCount() || !addBandArea(lane).contains(point))
+        return false;
+    const auto hit = itemAt(point);
+    if (!hit.has_value() || hit->audio)
+        return true;
+    const auto placement = shownPlacement(domain::PlacementId::parse(hit->id).value());
+    if (!placement.has_value())
+        return true;
+
+    const auto missing = channelsMissingFrom(bandsOfLane(lane));
+    juce::PopupMenu menu;
+    menu.addSectionHeader(juce::String::fromUTF8(u8"Ajouter au pattern"));
+    for (std::size_t index = 0; index < missing.size(); ++index)
+    {
+        const auto* track = state_.findTrack(missing[index]);
+        menu.addItem(static_cast<int>(index) + 1,
+                     juce::String::fromUTF8(track != nullptr ? track->name.c_str() : "?"));
+    }
+
+    juce::Component::SafePointer<PlaylistPanel> safe{this};
+    const auto patternId = placement->patternId;
+    menu.showMenuAsync(juce::PopupMenu::Options{}.withMousePosition(),
+                       [safe, missing, patternId](int chosen)
+                       {
+                           if (safe == nullptr || chosen < 1 || chosen > static_cast<int>(missing.size()))
+                               return;
+                           auto row = patternEditing::rowFor(
+                               safe->state_, patternId, missing[static_cast<std::size_t>(chosen - 1)]);
+                           if (row.opening.empty())
+                               return;
+                           domain::GroupOptions group{};
+                           group.label = "ajouter une piste au pattern";
+                           static_cast<void>(safe->bus_.executeGroup(std::move(row.opening), group));
+                       });
+    return true;
+}
+
+void PlaylistPanel::paintAddBand(juce::Graphics& g,
+                                 int lane,
+                                 juce::Rectangle<int> block,
+                                 juce::Rectangle<int> content) const
+{
+    const auto area = addBandArea(lane).getIntersection(block).getIntersection(content);
+    if (area.isEmpty())
+        return;
+    g.setColour(tokens_.colour("color.surface.raised"));
+    g.fillRect(area);
+    g.setColour(tokens_.colour("color.text.tertiary"));
+    g.setFont(lookAndFeel_.typography().sans("font.size.micro", "font.weight.regular"));
+    g.drawText(juce::String::fromUTF8(u8"+ piste"),
+               area.reduced(tokens_.integer("space.xs"), 0),
+               juce::Justification::centredLeft,
+               false);
 }
 
 // --- velocities ------------------------------------------------------------------

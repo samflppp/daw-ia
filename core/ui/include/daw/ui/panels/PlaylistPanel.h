@@ -207,6 +207,9 @@ public:
     [[nodiscard]] domain::PlacementId patternBlock() const noexcept { return patternBlock_; }
     [[nodiscard]] int lanesShown() const { return freeLaneCount(); }
 
+    // The « + piste » band of a line, where the verification clicks.
+    [[nodiscard]] std::optional<juce::Rectangle<int>> addBandIn(domain::PlacementId placement) const;
+
     // The generation in a band, read by the verification: the grey notes
     // shown, and the zone they are for.
     [[nodiscard]] std::size_t ghostCount() const
@@ -520,6 +523,18 @@ private:
     [[nodiscard]] int computedLaneHeight(int lane, const Lane& entry) const;
     [[nodiscard]] std::vector<CanvasBand> bandsOfLane(int lane) const;
     [[nodiscard]] int velocityStripOf(const std::vector<CanvasBand>& bands) const;
+
+    // Under the bands of a line, in song mode and at the scale of notes, one
+    // more, thin: « + piste », when a channel of the rack plays in no pattern
+    // of the line. A click in a block there offers those channels; the one
+    // chosen gets a row in that block's pattern (S19).
+    [[nodiscard]] std::vector<domain::TrackId>
+    channelsMissingFrom(const std::vector<CanvasBand>& bands) const;
+    [[nodiscard]] int addBandOf(int lane, const std::vector<CanvasBand>& bands) const;
+    [[nodiscard]] juce::Rectangle<int> addBandArea(int lane) const;
+    bool addBandMouseDown(const juce::MouseEvent& event);
+    void
+    paintAddBand(juce::Graphics& g, int lane, juce::Rectangle<int> block, juce::Rectangle<int> content) const;
     [[nodiscard]] std::vector<BandArea> bandAreas(int lane) const;
     [[nodiscard]] std::optional<NoteSpot> spotAt(juce::Point<int> point) const;
     [[nodiscard]] int pitchAt(const BandArea& band, int y) const;

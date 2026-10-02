@@ -75,6 +75,8 @@ void Verification::addCanvasSteps()
         domain::NoteId offGrid{};
         double songFirstBeat{0.0};
         domain::PatternId fresh{};
+        domain::TrackId pad{};
+        std::size_t padDepth{0};
         std::vector<domain::generation::GhostNote> firstGhosts;
         std::map<std::string, int> pitches; // of the picked notes, by identifier
     };
@@ -1070,6 +1072,108 @@ void Verification::addCanvasSteps()
         {
             selection_.selectPattern(laid->pattern);
             press("SONG");
+        });
+
+    // S19: a track added to a pattern from the canvas, in song mode.
+    add("S19 : un canal « Pad toile » au rack, joué dans aucun pattern",
+        [this, laid]
+        {
+            laid->padDepth = depth();
+            laid->pad = domain::TrackId::generate();
+            check(bus_.execute(std::make_unique<domain::AddTrack>(laid->pad, "Pad toile", 0.0)).ok(),
+                  "le canal est ajouté");
+        });
+
+    // A menu closes itself when the application is not in front: it is opened
+    // and answered in the same step, as the rack's.
+    add(
+        "S19 : sous les bandes du premier bloc, « + piste », dessinée dans le bloc seul ; un clic, et « Pad "
+        "toile » "
+        "au menu des canaux absents",
+        [this, canvas, laid]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            view->frameBlock(laid->placements.front());
+            auto area = view->addBandIn(laid->placements.front());
+            for (int notch = 0;
+                 notch < 400 && area.has_value() && !view->timelineArea().contains(area->getCentre());
+                 ++notch)
+            {
+                wheel(*view,
+                      view->timelineArea().getCentre(),
+                      area->getCentreY() >= view->timelineArea().getBottom() ? -0.1f : 0.1f);
+                area = view->addBandIn(laid->placements.front());
+            }
+            check(area.has_value() && view->timelineArea().contains(area->getCentre()),
+                  "la bande « + piste » est à l'écran");
+            if (!area.has_value())
+                return;
+
+            // At the render: the band is painted inside the block, not on the
+            // empty bar before it.
+            const auto image = view->createComponentSnapshot(view->getLocalBounds(), false, 1.0f);
+            const auto inside = juce::Point<int>{area->getRight() - 2, area->getCentreY()};
+            const auto before = juce::Point<int>{area->getX() - 4, area->getCentreY()};
+            check(view->timelineArea().contains(before), "la mesure vide avant le bloc est à l'écran");
+            check(image.getPixelAt(inside.getX(), inside.getY()) !=
+                      image.getPixelAt(before.getX(), before.getY()),
+                  "au rendu, la bande est dessinée dans le bloc : " +
+                      image.getPixelAt(inside.getX(), inside.getY()).toDisplayString(false).toStdString() +
+                      " contre " +
+                      image.getPixelAt(before.getX(), before.getY()).toDisplayString(false).toStdString());
+            snapshot("s19-toile-plus-piste");
+
+            laid->before = domain::json::write(state_.toValue());
+            laid->depth = depth();
+            click(*view, inside);
+
+            // Every channel of the rack but the three of the line, in the
+            // rack's order: the one just added comes last.
+            chooseMenuItem(static_cast<int>(state_.tracks().size() - laid->tracks.size()));
+        },
+        [this, laid, leadOf] { return leadOf(laid->pattern, laid->pad) != nullptr; });
+
+    add("S19 : le pattern a une rangée Pad, vide, une entrée ; Toile B n'a rien reçu ; Ctrl+Z à l'octet",
+        [this, laid, leadOf]
+        {
+            const auto* row = leadOf(laid->pattern, laid->pad);
+            check(row != nullptr && row->notes.empty(), "une rangée Pad, vide, dans le premier pattern");
+            check(leadOf(laid->other, laid->pad) == nullptr, "Toile B n'a pas de rangée Pad");
+            check(depth() == laid->depth + 1, "une entrée d'historique");
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == laid->before, "Ctrl+Z : le projet à l'octet");
+        });
+
+    add("S19 : en SONG, un clic dans la bande Kick de Toile B, qui n'a pas de Kick : la rangée s'ouvre",
+        [this, canvas, laid, inSight]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            view->frameBlock(laid->otherPlacement);
+            const auto at = inSight(*view, laid->otherPlacement, laid->tracks[0], 1.0, 36);
+            check(at.has_value() && view->timelineArea().contains(*at), "la bande Kick passe sur Toile B");
+            if (!at.has_value())
+                return;
+            laid->before = domain::json::write(state_.toValue());
+            laid->depth = depth();
+            click(*view, *at);
+        });
+
+    add("S19 : Toile B a une rangée Kick et sa note, une entrée ; Ctrl+Z à l'octet ; le canal Pad retiré",
+        [this, laid, leadOf]
+        {
+            const auto* row = leadOf(laid->other, laid->tracks[0]);
+            check(row != nullptr && row->notes.size() == 1 && row->notes.front().pitch == 36 &&
+                      std::abs(row->notes.front().startBeats - 1.0) < 1e-9,
+                  "une rangée Kick dans Toile B, un do2 au temps 2");
+            check(depth() == laid->depth + 1, "une entrée d'historique");
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == laid->before, "Ctrl+Z : le projet à l'octet");
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(state_.findTrack(laid->pad) == nullptr && depth() == laid->padDepth, "le canal Pad retiré");
         });
 
     // S18, the grammar: the same keys and wheel in the piano roll.
