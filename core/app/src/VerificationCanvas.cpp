@@ -1,4 +1,5 @@
 #include "Verification.h"
+#include "VerificationTiming.h"
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/LaneCommands.h"
 #include "daw/domain/commands/PatternCommands.h"
@@ -41,26 +42,6 @@ void hoverAt(juce::Component& target, juce::Point<int> at)
                                  0,
                                  false};
     target.mouseMove(event);
-}
-
-// The median of the times a full paint of the panel takes, drawn into an
-// image the size of the panel: what the screen would cost, without the
-// screen's own vsync in the number.
-double medianPaintMs(juce::Component& panel, int times, const std::function<void(int)>& between = {})
-{
-    juce::Image image{juce::Image::ARGB, std::max(1, panel.getWidth()), std::max(1, panel.getHeight()), true};
-    std::vector<double> spent;
-    for (int time = 0; time < times; ++time)
-    {
-        if (between)
-            between(time);
-        juce::Graphics g{image};
-        const auto started = juce::Time::getMillisecondCounterHiRes();
-        panel.paintEntireComponent(g, false);
-        spent.push_back(juce::Time::getMillisecondCounterHiRes() - started);
-    }
-    std::sort(spent.begin(), spent.end());
-    return spent[spent.size() / 2];
 }
 
 std::string ms(double value)
@@ -458,60 +439,81 @@ void Verification::addCanvasLoadSteps()
             if (view == nullptr)
                 return;
 
+            // Each scale timed twice: in Direct2D, the window's renderer, and
+            // in software, the light mode's and the S18 figure's. S19: the
+            // target is 8 ms at the 95th percentile in Direct2D, everywhere.
+            struct Row
+            {
+                std::string name;
+                timing::Timing direct2d;
+                timing::Timing software;
+            };
+            std::vector<Row> rows;
+            const auto both = [&rows, view](std::string name, const std::function<void(int)>& between = {})
+            {
+                rows.push_back({std::move(name),
+                                timing::measure(*view, juce::NativeImageType{}, 5, 60, between),
+                                timing::measure(*view, juce::SoftwareImageType{}, 5, 60, between)});
+            };
+
             view->showWholeSong();
-            const auto overview = medianPaintMs(*view, 20);
+            both("vue d'ensemble");
             const auto grid = view->timelineArea();
             const auto centre = grid.getCentre();
 
             // The scale where the grid shows, then the scale of notes.
             view->zoomAround(centre, 24.0 / std::max(1.0, view->beatWidth()));
-            const auto approach = medianPaintMs(*view, 20);
+            both("approche (24 px par temps)");
             view->zoomAround(centre, 48.0 / std::max(1.0, view->beatWidth()));
             check(view->notesGrabbable(), "à 48 px par temps, les notes s'attrapent");
-            const auto notes = medianPaintMs(*view, 20);
+            both("notes (48 px par temps)");
 
-            // Twenty frames of a pan at the scale of notes: the cache is not
-            // touched by a move of the view.
+            // Frames of a pan at the scale of notes, there and back: the
+            // cache is not touched by a move of the view.
             const auto builds = view->bandBuilds();
             const auto images = view->imageBuilds();
-            const auto panned =
-                medianPaintMs(*view,
-                              20,
-                              [view, grid](int frame)
-                              {
-                                  juce::ignoreUnused(frame);
-                                  view->zoomAround(grid.getCentre(), 1.0);
-                                  view->mouseWheelMove(
-                                      juce::MouseEvent{juce::Desktop::getInstance().getMainMouseSource(),
-                                                       grid.getCentre().toFloat(),
-                                                       juce::ModifierKeys{juce::ModifierKeys::shiftModifier},
-                                                       juce::MouseInputSource::defaultPressure,
-                                                       0.0f,
-                                                       0.0f,
-                                                       0.0f,
-                                                       0.0f,
-                                                       view,
-                                                       view,
-                                                       juce::Time::getCurrentTime(),
-                                                       grid.getCentre().toFloat(),
-                                                       juce::Time::getCurrentTime(),
-                                                       0,
-                                                       false},
-                                      juce::MouseWheelDetails{0.0f, -0.05f, false, false, false});
-                              });
-            check(view->bandBuilds() == builds, "vingt images de déplacement : aucune rangée recalculée");
-            check(view->imageBuilds() == images,
-                  "vingt images de déplacement : aucune image de bloc redessinée");
+            both("une image de déplacement",
+                 [view, grid](int frame)
+                 {
+                     const auto delta = (frame / 10) % 2 == 0 ? -0.05f : 0.05f;
+                     view->zoomAround(grid.getCentre(), 1.0);
+                     view->mouseWheelMove(
+                         juce::MouseEvent{juce::Desktop::getInstance().getMainMouseSource(),
+                                          grid.getCentre().toFloat(),
+                                          juce::ModifierKeys{juce::ModifierKeys::shiftModifier},
+                                          juce::MouseInputSource::defaultPressure,
+                                          0.0f,
+                                          0.0f,
+                                          0.0f,
+                                          0.0f,
+                                          view,
+                                          view,
+                                          juce::Time::getCurrentTime(),
+                                          grid.getCentre().toFloat(),
+                                          juce::Time::getCurrentTime(),
+                                          0,
+                                          false},
+                         juce::MouseWheelDetails{0.0f, delta, false, false, false});
+                 });
+            check(view->bandBuilds() == builds, "le déplacement : aucune rangée recalculée");
+            check(view->imageBuilds() == images, "le déplacement : aucune image de bloc redessinée");
 
             // The playlist of S11 on the same song, for the scale of blocks.
-            auto playlistMs = 0.0;
             if (auto* playlist = panel("playlist"); playlist != nullptr && playlist->getWidth() > 0)
-                playlistMs = medianPaintMs(*playlist, 20);
+                note("la playlist, vue d'ensemble, Direct2D : " +
+                     timing::describe(timing::measure(*playlist, juce::NativeImageType{}, 5, 60)));
 
-            note("repeint, médiane de 20 : vue d'ensemble " + ms(overview) + ", approche " + ms(approach) +
-                 ", notes " + ms(notes) + ", déplacement " + ms(panned) +
-                 " ; la playlist, vue d'ensemble : " + ms(playlistMs) + " (" +
-                 std::to_string(view->getWidth()) + "×" + std::to_string(view->getHeight()) + ")");
+            note("page de " + std::to_string(view->getWidth()) + "×" + std::to_string(view->getHeight()) +
+                 " px, échelle " +
+                 juce::String(juce::Component::getApproximateScaleFactorForComponent(view), 2).toStdString());
+            for (const auto& row : rows)
+            {
+                note(row.name + ", Direct2D : " + timing::describe(row.direct2d));
+                note(row.name + ", logiciel : " + timing::describe(row.software));
+                check(row.direct2d.p95 < 8.0,
+                      row.name + " sous 8 ms au 95e centile en Direct2D : " +
+                          juce::String(row.direct2d.p95, 2).toStdString() + " ms");
+            }
             snapshot("s18-toile-projet-charge");
 
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});

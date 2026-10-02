@@ -1,5 +1,6 @@
 #include "DisplayMode.h"
 #include "Verification.h"
+#include "VerificationTiming.h"
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
@@ -58,65 +59,18 @@ constexpr const char* pageIds[] = {"browser",
                                    "history",
                                    "copilot"};
 
-struct Timing
-{
-    double median{0.0};
-    double p95{0.0};
-    double worst{0.0};
-    int count{0};
-};
+using timing::describe;
+using timing::paintMs;
+using timing::Timing;
 
 [[nodiscard]] Timing timingOf(std::vector<double> ms)
 {
-    Timing timing{};
-    if (ms.empty())
-        return timing;
-
-    std::sort(ms.begin(), ms.end());
-    const auto n = ms.size();
-    timing.count = static_cast<int>(n);
-    timing.median = ms[n / 2];
-    timing.p95 = ms[std::min(n - 1, static_cast<std::size_t>(std::ceil(0.95 * static_cast<double>(n))) - 1)];
-    timing.worst = ms.back();
-    return timing;
-}
-
-// One real repaint of a component and everything in it, the way its window's
-// peer paints it: at the display's scale, clipped to `area`, into an image of
-// the renderer asked for. NativeImageType is Direct2D on Windows in JUCE 8,
-// the window's own renderer; SoftwareImageType is the one the light mode would
-// use. What is timed is the painting up to the context being flushed, not the
-// allocation of the image.
-[[nodiscard]] double
-paintMs(juce::Component& component, juce::Rectangle<int> area, const juce::ImageType& type)
-{
-    const auto scale = juce::Component::getApproximateScaleFactorForComponent(&component);
-    juce::Image image{juce::Image::ARGB,
-                      std::max(1, juce::roundToInt(static_cast<float>(area.getWidth()) * scale)),
-                      std::max(1, juce::roundToInt(static_cast<float>(area.getHeight()) * scale)),
-                      false,
-                      type};
-
-    const auto started = juce::Time::getMillisecondCounterHiRes();
-    {
-        juce::Graphics g{image};
-        g.addTransform(juce::AffineTransform::scale(scale));
-        g.setOrigin(-area.getPosition());
-        g.reduceClipRegion(area);
-        component.paintEntireComponent(g, true);
-    }
-    return juce::Time::getMillisecondCounterHiRes() - started;
+    return timing::of(std::move(ms));
 }
 
 [[nodiscard]] Timing measure(juce::Component& component, const juce::ImageType& type)
 {
-    for (int index = 0; index < warmUps; ++index)
-        static_cast<void>(paintMs(component, component.getLocalBounds(), type));
-
-    std::vector<double> ms;
-    for (int index = 0; index < samples; ++index)
-        ms.push_back(paintMs(component, component.getLocalBounds(), type));
-    return timingOf(std::move(ms));
+    return timing::measure(component, type, warmUps, samples);
 }
 
 // A drag, image by image, each image being the move of the hand and the
@@ -198,17 +152,7 @@ struct DragTiming
     return {timingOf(std::move(ms)), timingOf(std::move(paints))};
 }
 
-[[nodiscard]] std::string describe(const DragTiming& timing);
-
-[[nodiscard]] std::string describe(const Timing& timing)
-{
-    return "médiane " + juce::String(timing.median, 2).toStdString() + " ms, 95e centile " +
-           juce::String(timing.p95, 2).toStdString() + " ms, pire " +
-           juce::String(timing.worst, 2).toStdString() + " ms (" + std::to_string(timing.count) +
-           " repeints)";
-}
-
-std::string describe(const DragTiming& timing)
+[[nodiscard]] std::string describe(const DragTiming& timing)
 {
     return describe(timing.frame) + " ; dont repeint : médiane " +
            juce::String(timing.paint.median, 2).toStdString() + " ms, 95e centile " +

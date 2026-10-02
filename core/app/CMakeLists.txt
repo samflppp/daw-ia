@@ -31,6 +31,7 @@ target_sources(daw_app PRIVATE
     src/VerificationZone.cpp
     src/VerificationCanvas.cpp
     src/VerificationLearning.cpp
+    src/VerificationTiming.cpp
     src/SampleLibrary.cpp
     src/SamplePreview.cpp
     src/SongExporter.cpp
