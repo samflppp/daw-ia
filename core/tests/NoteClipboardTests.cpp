@@ -85,6 +85,49 @@ TEST_CASE("Copied notes are values: they paste into another pattern, one entry, 
     CHECK(rack.state.findPattern(rack.second)->findClipForTrack(rack.kick) == nullptr);
 }
 
+TEST_CASE("Notes picked in two blocks keep the gap the ear heard, and go each to its own track")
+{
+    // A kick late in a block at beat 16, a hat early in the next one at 20:
+    // a beat and a half apart in the song, though 3.5 and 0.0 in their
+    // patterns.
+    Rack rack;
+    Note late{};
+    late.id = NoteId::generate();
+    late.pitch = 36;
+    late.startBeats = 3.5;
+    late.lengthBeats = 0.25;
+    Note early = late;
+    early.id = NoteId::generate();
+    early.pitch = 42;
+    early.startBeats = 0.0;
+
+    const auto copied = copyFromBlocks({{20.0, rack.hat, early}, {16.0, rack.kick, late}});
+    REQUIRE(copied.rows.size() == 2);
+    CHECK(copied.originBeats == 3.5); // where the earliest note sits in its pattern
+
+    const auto& hats = copied.rows[0];
+    const auto& kicks = copied.rows[1];
+    CHECK(hats.track == rack.hat);
+    CHECK(kicks.track == rack.kick);
+    CHECK(kicks.notes.front().startBeats == 0.0);
+    CHECK(hats.notes.front().startBeats == doctest::Approx(0.5));
+
+    // Pasted at beat 1 of the second pattern: each row on its own track,
+    // the gap kept, a row opened for the hat.
+    auto plan = planPaste(rack.state, rack.second, copied, {}, 1.0, false);
+    CHECK(plan.pasted.size() == 2);
+    rack.run(std::move(plan));
+    const auto* pattern = rack.state.findPattern(rack.second);
+    REQUIRE(pattern != nullptr);
+    const auto* kickRow = pattern->findClipForTrack(rack.kick);
+    const auto* hatRow = pattern->findClipForTrack(rack.hat);
+    REQUIRE(kickRow != nullptr);
+    REQUIRE(hatRow != nullptr);
+    CHECK(kickRow->notes.front().startBeats == 1.0);
+    CHECK(hatRow->notes.front().startBeats == doctest::Approx(1.5));
+    CHECK(hatRow->notes.front().pitch == 42);
+}
+
 TEST_CASE("Pasting on notes already there doubles nothing")
 {
     Rack rack;

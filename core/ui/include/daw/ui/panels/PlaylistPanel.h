@@ -709,6 +709,22 @@ private:
     // change it.
     bool bandPicksNotes_{false};
     void pickNotesIn(juce::Rectangle<int> area);
+
+    // Ctrl+C, Ctrl+V, Ctrl+B on picked notes (S19). The notes go to the
+    // application's clipboard, the piano roll's: copied here, they paste
+    // there, and back. What Ctrl+V pastes on the canvas is what was copied
+    // last on it, notes or blocks.
+    Clipboard& notesClipboard_;
+    bool lastCopyWasNotes_{false};
+
+    // Where the hand was last seen over the panel: where Ctrl+V pastes.
+    juce::Point<int> pointer_;
+    void copyPickedNotes();
+    bool pasteNotesUnderHand();
+    void duplicatePickedNotes();
+    void pickPasted(domain::PlacementId placement,
+                    domain::PatternId pattern,
+                    const std::vector<domain::NoteId>& notes);
     domain::PatternId hoveredPattern_{};
     domain::PlacementId hoveredPlacement_{};
     domain::NoteId hoveredNote_{};

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 
 namespace daw::ui
 {
@@ -57,6 +58,40 @@ copyNotes(const domain::Pattern& pattern, domain::TrackId track, const std::vect
     copied.originBeats = origin;
 
     copied.rows.push_back(std::move(copiedRow));
+    measureSpan(copied);
+    return copied;
+}
+
+CopiedNotes copyFromBlocks(const std::vector<PickedInBlock>& picked)
+{
+    CopiedNotes copied;
+    if (picked.empty())
+        return copied;
+
+    auto earliest = picked.front();
+    for (const auto& one : picked)
+    {
+        if (one.blockStart + one.note.startBeats < earliest.blockStart + earliest.note.startBeats)
+            earliest = one;
+    }
+    const auto origin = earliest.blockStart + earliest.note.startBeats;
+
+    for (const auto& one : picked)
+    {
+        auto row = std::find_if(copied.rows.begin(),
+                                copied.rows.end(),
+                                [&one](const CopiedRow& candidate) { return candidate.track == one.track; });
+        if (row == copied.rows.end())
+        {
+            copied.rows.push_back(CopiedRow{one.track, {}});
+            row = std::prev(copied.rows.end());
+        }
+        auto note = one.note;
+        note.startBeats = one.blockStart + one.note.startBeats - origin;
+        row->notes.push_back(note);
+    }
+
+    copied.originBeats = earliest.note.startBeats;
     measureSpan(copied);
     return copied;
 }

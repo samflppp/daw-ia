@@ -82,6 +82,22 @@ struct PastePlan
                                   double atBeats,
                                   bool lengthen);
 
+// The canvas (S19): notes picked in blocks laid anywhere on the song, of one
+// pattern or several. Each comes with the beat its block starts on and the
+// track of its row. The copy keeps the gaps the ear heard between them, in
+// song time: a note picked late in one block and one early in the next stay
+// that far apart. Rows by track, in the order the tracks are first met.
+struct PickedInBlock
+{
+    double blockStart{0.0};
+    domain::TrackId track{};
+    domain::Note note;
+};
+
+// The origin is the earliest picked note, in song time; originBeats is
+// where that note sits in its own pattern.
+[[nodiscard]] CopiedNotes copyFromBlocks(const std::vector<PickedInBlock>& picked);
+
 // Where Ctrl+B puts the copy: right after the copied span, rounded up to the
 // bar — barBeats long, from the project's signature — from the origin of the
 // copy.

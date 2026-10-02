@@ -77,6 +77,7 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context, bool canvas)
     , listening_(context.listening)
     , bar_(context.tokens, context.lookAndFeel)
     , canvas_(canvas)
+    , notesClipboard_(context.clipboard)
 {
     titled_ = context.titled;
 
@@ -1581,6 +1582,7 @@ void PlaylistPanel::showLaneMenu(int lane)
 
 void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
 {
+    pointer_ = event.getPosition();
     grabKeyboardFocus();
     pageTurn_.reset();
     zoomGlide_.reset();
@@ -1737,6 +1739,7 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
 
 void PlaylistPanel::mouseDrag(const juce::MouseEvent& event)
 {
+    pointer_ = event.getPosition();
     if (pan_.has_value())
     {
         const auto delta = event.getPosition() - pan_->start;
@@ -1913,6 +1916,8 @@ bool PlaylistPanel::keyPressed(const juce::KeyPress& key)
 
     if (key == juce::KeyPress{'c', ctrl, 0})
     {
+        if (!selected_.empty())
+            lastCopyWasNotes_ = false;
         copySelection();
         return true;
     }

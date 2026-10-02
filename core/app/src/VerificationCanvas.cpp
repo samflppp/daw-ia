@@ -69,6 +69,7 @@ void Verification::addCanvasSteps()
         // S19: a second pattern between the two blocks, on the same line.
         domain::PatternId other{};
         domain::PlacementId otherPlacement{};
+        std::string beforePaste;
     };
     auto laid = std::make_shared<Laid>();
 
@@ -427,7 +428,142 @@ void Verification::addCanvasSteps()
                   "les trois blocs de la ligne : " + std::to_string(view->selected().size()));
             check(view->pickedNotes().empty(), "les notes sont lâchées");
             snapshot("s19-toile-bande-de-blocs");
-            key(juce::KeyPress{juce::KeyPress::escapeKey});
+            static_cast<void>(view->keyPressed(juce::KeyPress{juce::KeyPress::escapeKey}));
+        });
+
+    // S19: copy, paste, duplicate, on the canvas.
+    const auto leadOf = [this](domain::PatternId patternId, domain::TrackId track) -> const domain::Clip*
+    {
+        const auto* pattern = state_.findPattern(patternId);
+        return pattern != nullptr ? pattern->findClipForTrack(track) : nullptr;
+    };
+
+    add("S19 : la bande prend les quatre notes Lead du premier bloc ; Ctrl+C",
+        [this, canvas, laid, inSight]
+        {
+            auto* view = canvas();
+            if (view == nullptr || laid->otherPlacement.isNil())
+                return;
+            view->frameBlock(laid->placements.front());
+            view->zoomAround(view->timelineArea().getPosition(), 36.0 / std::max(1.0, view->beatWidth()));
+            const auto from = inSight(*view, laid->placements.front(), laid->tracks[2], 0.1, 79);
+            const auto to = view->notePointIn(laid->placements.front(), laid->tracks[2], 3.7, 71);
+            if (!from.has_value() || !to.has_value())
+            {
+                check(false, "la bande Lead du premier bloc est à l'écran");
+                return;
+            }
+            drag(*view, *from, *to, true);
+        });
+
+    add("S19 : Ctrl+V la main sur Toile B, au temps 3 : deux notes collées, deux hors du pattern, une entrée",
+        [this, canvas, laid]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            check(view->pickedNotes().size() == 4,
+                  "quatre notes choisies dans le premier bloc : " +
+                      std::to_string(view->pickedNotes().size()));
+            static_cast<void>(view->keyPressed(juce::KeyPress{'c', juce::ModifierKeys::ctrlModifier, 0}));
+
+            const auto aim = view->notePointIn(laid->otherPlacement, laid->tracks[2], 2.1, 79);
+            if (!aim.has_value() || !view->timelineArea().contains(*aim))
+            {
+                check(false, "Toile B est à l'écran sous la main");
+                return;
+            }
+            laid->beforePaste = domain::json::write(state_.toValue());
+            laid->depth = depth();
+            hoverAt(*view, *aim);
+            static_cast<void>(view->keyPressed(juce::KeyPress{'v', juce::ModifierKeys::ctrlModifier, 0}));
+        });
+
+    add("S19 : les notes collées sont dans Toile B, au bon temps, et dessinées choisies",
+        [this, canvas, laid, leadOf]
+        {
+            auto* view = canvas();
+            const auto* lead = leadOf(laid->other, laid->tracks[2]);
+            if (view == nullptr || lead == nullptr)
+                return;
+            check(depth() == laid->depth + 1, "une entrée d'historique");
+            check(lead->notes.size() == 6,
+                  "Toile B a six notes Lead : " + std::to_string(lead->notes.size()));
+            const auto has = [lead](int pitch, double beats)
+            {
+                return std::any_of(lead->notes.begin(),
+                                   lead->notes.end(),
+                                   [&](const domain::Note& note) {
+                                       return note.pitch == pitch && std::abs(note.startBeats - beats) < 1e-9;
+                                   });
+            };
+            check(has(72, 2.0) && has(74, 3.0), "do au temps 3, ré au temps 4 : l'écart d'origine gardé");
+            const auto label = history_.cursor() > 0
+                                   ? std::string{history_.entries()[history_.cursor() - 1].label()}
+                                   : std::string{};
+            check(label.find("2 hors du pattern") != std::string::npos,
+                  "l'historique dit les deux notes laissées hors du pattern : « " + label + " »");
+
+            // At the render: the pasted do, painted where the canvas says it
+            // is, in the colour of picked notes.
+            const auto& picked = view->pickedNotes();
+            check(picked.size() == 2, "les deux notes collées sont les notes choisies");
+            for (const auto& one : picked)
+            {
+                const auto bounds = view->noteBoundsIn(laid->otherPlacement, one.note);
+                if (!bounds.has_value())
+                {
+                    check(false, "la note collée est à l'écran");
+                    continue;
+                }
+                const auto image = view->createComponentSnapshot(*bounds, false, 1.0f);
+                const auto centre = image.getPixelAt(image.getWidth() / 2, image.getHeight() / 2);
+                const auto wanted = tokens_.colour("color.note.selected");
+                check(std::abs(centre.getRed() - wanted.getRed()) < 8 &&
+                          std::abs(centre.getGreen() - wanted.getGreen()) < 8 &&
+                          std::abs(centre.getBlue() - wanted.getBlue()) < 8,
+                      "au rendu, la note collée est peinte choisie : " +
+                          centre.toDisplayString(false).toStdString());
+            }
+            snapshot("s19-toile-collage");
+
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == laid->beforePaste, "Ctrl+Z : le projet à l'octet");
+        });
+
+    add("S19 : Ctrl+B sur les quatre notes Lead d'un bloc : le pattern s'allonge d'une mesure, une entrée",
+        [this, canvas, laid, inSight]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            const auto from = inSight(*view, laid->placements.front(), laid->tracks[2], 0.1, 79);
+            const auto to = view->notePointIn(laid->placements.front(), laid->tracks[2], 3.7, 71);
+            if (!from.has_value() || !to.has_value())
+                return;
+            laid->beforePaste = domain::json::write(state_.toValue());
+            laid->depth = depth();
+            drag(*view, *from, *to, true);
+        });
+
+    add("S19 : le premier pattern dure deux mesures, ses huit notes Lead ; Ctrl+Z à l'octet",
+        [this, canvas, laid, leadOf]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            check(view->pickedNotes().size() == 4,
+                  "quatre notes choisies : " + std::to_string(view->pickedNotes().size()));
+            static_cast<void>(view->keyPressed(juce::KeyPress{'b', juce::ModifierKeys::ctrlModifier, 0}));
+            const auto* pattern = state_.findPattern(laid->pattern);
+            const auto* lead = leadOf(laid->pattern, laid->tracks[2]);
+            check(pattern != nullptr && pattern->lengthBeats == 8.0, "le pattern dure deux mesures");
+            check(lead != nullptr && lead->notes.size() == 8, "huit notes Lead");
+            check(depth() == laid->depth + 1, "une entrée d'historique");
+            snapshot("s19-toile-duplique");
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == laid->beforePaste, "Ctrl+Z : le projet à l'octet");
+            static_cast<void>(view->keyPressed(juce::KeyPress{juce::KeyPress::escapeKey}));
         });
 
     // S18, the grammar: the same keys and wheel in the piano roll.

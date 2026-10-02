@@ -17,6 +17,14 @@
 //                                the threshold the band picks blocks, as in the
 //                                playlist, and which it is is decided when it starts
 //   Delete                       removes the picked notes
+//   Ctrl+C                       copies the picked notes, by value, the gaps
+//                                between them kept in song time (S19)
+//   Ctrl+V                       pastes them in the block under the hand, at the
+//                                sixteenth under the hand, each row on its track;
+//                                what falls past the pattern is left out, and the
+//                                history entry says how many
+//   Ctrl+B                       duplicates them right after themselves, in their
+//                                pattern, lengthened to the bar (one pattern only)
 //   drag the edge of a band      adds rows above or below, for this screen
 //   double-click the name strip  frames the block
 //   F                            frames the selected blocks, else the block
@@ -32,6 +40,7 @@
 
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/NoteCommands.h"
+#include "daw/ui/model/NoteClipboard.h"
 #include "daw/ui/model/PatternEditing.h"
 #include "daw/ui/model/ViewFraming.h"
 #include "daw/ui/panels/PlaylistPanel.h"
@@ -665,6 +674,7 @@ void PlaylistPanel::hover(std::optional<NoteSpot> spot)
 
 void PlaylistPanel::mouseMove(const juce::MouseEvent& event)
 {
+    pointer_ = event.getPosition();
     if (!canvas_ || noteDrag_.has_value() || edgeDrag_.has_value() || pan_.has_value())
         return;
     catchUp();
@@ -952,6 +962,21 @@ bool PlaylistPanel::canvasKey(const juce::KeyPress& key)
         return true;
     }
 
+    const auto ctrl = juce::ModifierKeys::ctrlModifier;
+    if (key == juce::KeyPress{'c', ctrl, 0} && !pickedNotes_.empty())
+    {
+        copyPickedNotes();
+        return true;
+    }
+    if (key == juce::KeyPress{'b', ctrl, 0} && !pickedNotes_.empty())
+    {
+        duplicatePickedNotes();
+        return true;
+    }
+    if (key == juce::KeyPress{'v', ctrl, 0} && (lastCopyWasNotes_ || clipboard_.empty()) &&
+        pasteNotesUnderHand())
+        return true;
+
     // Escape lets go of the picked notes, and only that: the whole song is
     // Shift+F, as everywhere (S18).
     if (key == juce::KeyPress{juce::KeyPress::escapeKey} && !pickedNotes_.empty())
@@ -961,6 +986,133 @@ bool PlaylistPanel::canvasKey(const juce::KeyPress& key)
         return true;
     }
     return false;
+}
+
+// --- copy, paste -----------------------------------------------------------------
+
+void PlaylistPanel::copyPickedNotes()
+{
+    std::vector<PickedInBlock> picked;
+    for (const auto& one : pickedNotes_)
+    {
+        const auto* placement = state_.findPlacement(one.placement);
+        const auto* pattern = placement != nullptr ? state_.findPattern(placement->patternId) : nullptr;
+        if (pattern == nullptr)
+            continue;
+        for (const auto& row : pattern->clips)
+        {
+            if (row.id != one.clip)
+                continue;
+            for (const auto& note : row.notes)
+                if (note.id == one.note)
+                    picked.push_back({placement->startBeats, row.trackId, note});
+        }
+    }
+
+    auto copied = copyFromBlocks(picked);
+    if (copied.rows.empty())
+        return;
+    notesClipboard_.notes = std::move(copied);
+    lastCopyWasNotes_ = true;
+}
+
+// Into the block under the hand, at the sixteenth under the hand: pasting in
+// a block writes into its pattern, and every block of it shows the copy. Each
+// row goes to the track it was copied from, its row opened when the pattern
+// has none. What falls past the pattern's end is left out, and the history
+// says how many.
+bool PlaylistPanel::pasteNotesUnderHand()
+{
+    if (!notesClipboard_.notes.has_value() || !notesGrabbable())
+        return false;
+
+    const auto point = pointer_;
+    const auto hit = gridArea().contains(point) ? itemAt(point) : std::nullopt;
+    if (!hit.has_value() || hit->audio)
+        return false;
+    const auto* placement = state_.findPlacement(domain::PlacementId::parse(hit->id).value());
+    const auto* pattern = placement != nullptr ? state_.findPattern(placement->patternId) : nullptr;
+    if (pattern == nullptr)
+        return false;
+
+    const auto at =
+        std::clamp(std::floor((beatAtX(point.getX()) - placement->startBeats) / stepBeats) * stepBeats,
+                   0.0,
+                   std::max(0.0, pattern->lengthBeats - stepBeats));
+    auto plan = planPaste(state_, pattern->id, *notesClipboard_.notes, {}, at, false);
+    if (plan.commands.empty())
+        return true;
+
+    domain::GroupOptions group{};
+    group.label = "coller " + std::to_string(plan.pasted.size()) + " notes";
+    if (plan.skipped > 0)
+        group.label += " (" + std::to_string(plan.skipped) + " hors du pattern)";
+    const auto pasted = plan.pasted;
+    const auto placementId = placement->id;
+    const auto patternId = pattern->id;
+    if (bus_.executeGroup(std::move(plan.commands), group).ok())
+        pickPasted(placementId, patternId, pasted);
+    return true;
+}
+
+// Right after the copy, in the same pattern, the pattern lengthened to the
+// bar when it has to be: what Ctrl+B does in the piano roll. Notes picked in
+// several patterns have no one "after": nothing is done.
+void PlaylistPanel::duplicatePickedNotes()
+{
+    const auto first = pickedNotes_.front().placement;
+    const auto* placement = state_.findPlacement(first);
+    if (placement == nullptr)
+        return;
+    for (const auto& one : pickedNotes_)
+    {
+        const auto* other = state_.findPlacement(one.placement);
+        if (other == nullptr || other->patternId != placement->patternId)
+            return;
+    }
+
+    // Through one block: the same pattern seen through several is the same
+    // notes.
+    for (auto& one : pickedNotes_)
+        one.placement = first;
+    copyPickedNotes();
+    if (!notesClipboard_.notes.has_value())
+        return;
+
+    const auto& copied = *notesClipboard_.notes;
+    const auto at = duplicateAt(copied, copied.originBeats, state_.beatsPerBar());
+    auto plan = planPaste(state_, placement->patternId, copied, {}, at, true);
+    if (plan.commands.empty())
+        return;
+
+    domain::GroupOptions group{};
+    group.label = "dupliquer " + std::to_string(plan.pasted.size()) + " notes";
+    const auto pasted = plan.pasted;
+    const auto patternId = placement->patternId;
+    if (bus_.executeGroup(std::move(plan.commands), group).ok())
+        pickPasted(first, patternId, pasted);
+}
+
+// The copies become the picked notes: a second Ctrl+B goes on, a Ctrl+Z
+// shows what it takes away.
+void PlaylistPanel::pickPasted(domain::PlacementId placement,
+                               domain::PatternId patternId,
+                               const std::vector<domain::NoteId>& notes)
+{
+    pickedNotes_.clear();
+    selected_.clear();
+    const auto* pattern = state_.findPattern(patternId);
+    if (pattern == nullptr)
+        return;
+    for (const auto& row : pattern->clips)
+    {
+        for (const auto& note : row.notes)
+        {
+            if (std::find(notes.begin(), notes.end(), note.id) != notes.end())
+                pickedNotes_.push_back({placement, row.id, note.id});
+        }
+    }
+    repaint();
 }
 
 bool PlaylistPanel::frameKey(const juce::KeyPress& key)
