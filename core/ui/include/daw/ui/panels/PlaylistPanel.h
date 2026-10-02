@@ -198,6 +198,12 @@ public:
     [[nodiscard]] std::optional<juce::Point<int>>
     notePointIn(domain::PlacementId placement, domain::TrackId track, double beats, int pitch) const;
 
+    // The pattern mode (S19): with the transport on PAT, the canvas shows the
+    // pattern being edited alone, as one block at the origin of one line,
+    // with a band for every channel of the rack. Read by the verification.
+    [[nodiscard]] bool showsPattern() const { return patternMode(); }
+    [[nodiscard]] domain::PlacementId patternBlock() const noexcept { return patternBlock_; }
+
     // The pattern under the hand, whose other blocks are lit.
     [[nodiscard]] domain::PatternId litPattern() const noexcept { return hoveredPattern_; }
 
@@ -378,6 +384,8 @@ private:
         std::vector<Lane> lanes;
         std::vector<juce::String> laneLabels;
         double end{0.0};
+        bool patternMode{false};
+        domain::PatternId pattern{};
     };
     [[nodiscard]] const Content& content() const;
     [[nodiscard]] juce::Rectangle<int>
@@ -726,6 +734,35 @@ private:
     // last on it, notes or blocks.
     Clipboard& notesClipboard_;
     bool lastCopyWasNotes_{false};
+
+    // --- the pattern mode (PlaylistCanvas.cpp, S19)
+    //
+    // What the canvas shows, read through these and never from the
+    // arrangement directly: in song mode, the project's lines and blocks; in
+    // pattern mode, one line and one block that exist only on this screen,
+    // the pattern being edited laid at the origin. Edits still go to the
+    // pattern: the block is how the hand reaches it, not a placement.
+    [[nodiscard]] bool patternMode() const;
+    [[nodiscard]] std::optional<domain::Placement> shownPlacement(domain::PlacementId placement) const;
+    [[nodiscard]] std::optional<int> shownLaneIndex(domain::LaneId lane) const;
+    [[nodiscard]] domain::LaneId lineId(int lane) const;
+    const domain::LaneId patternLine_{domain::LaneId::generate()};
+    const domain::PlacementId patternBlock_{domain::PlacementId::generate()};
+
+    // Each mode keeps its own view: going back to the song finds it where it
+    // was left; a pattern opens framed on itself, at the scale of notes.
+    struct SavedView
+    {
+        bool saved{false};
+        double firstBeat{0.0};
+        std::optional<double> zoom;
+        int lanePixel{0};
+    };
+    SavedView songView_;
+    SavedView patternView_;
+    bool showingPattern_{false};
+    domain::PatternId showingPatternId_{};
+    bool followMode();
 
     // Where the hand was last seen over the panel: where Ctrl+V pastes.
     juce::Point<int> pointer_;

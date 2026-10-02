@@ -166,6 +166,11 @@ void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     // line under it moves: the whole panel is repainted.
     auto reshaped = canvas_ && source == &project_;
 
+    // PAT or SONG, or another pattern on PAT: the canvas changes what it
+    // shows, and each mode finds its own view again.
+    if (canvas_ && followMode())
+        reshaped = true;
+
     // A slider asked to see its automation line: its lane comes into view.
     // The chosen track carries the velocity strip: the lines change height.
     if (canvas_ && source == &selection_ && selection_.track() != stripTrack_)
@@ -251,7 +256,7 @@ void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 
 int PlaylistPanel::freeLaneCount() const
 {
-    return static_cast<int>(state_.lanes().size());
+    return patternMode() ? 1 : static_cast<int>(state_.lanes().size());
 }
 
 const std::vector<PlaylistPanel::Lane>& PlaylistPanel::lanes() const
@@ -261,12 +266,38 @@ const std::vector<PlaylistPanel::Lane>& PlaylistPanel::lanes() const
 
 const PlaylistPanel::Content& PlaylistPanel::content() const
 {
-    if (content_.built && content_.revision == project_.revision())
+    const auto inPattern = patternMode();
+    const auto* shown = inPattern ? patternEditing::current(state_, selection_) : nullptr;
+    const auto shownId = shown != nullptr ? shown->id : domain::PatternId{};
+    if (content_.built && content_.revision == project_.revision() && content_.patternMode == inPattern &&
+        content_.pattern == shownId)
         return content_;
 
     Content fresh;
     fresh.revision = project_.revision();
     fresh.built = true;
+    fresh.patternMode = inPattern;
+    fresh.pattern = shownId;
+
+    // The pattern mode: one line, one block at the origin, nothing else.
+    if (shown != nullptr)
+    {
+        fresh.lanes.push_back(Lane{Lane::Kind::line, patternLine_, {}, {}});
+        fresh.laneLabels.push_back(
+            juce::String::fromUTF8(patternEditing::displayName(state_, *shown).c_str()));
+        Block block{};
+        block.item = Item{false, patternBlock_.toString()};
+        block.start = 0.0;
+        block.length = shown->lengthBeats;
+        block.lane = 0;
+        block.pattern = shown->id;
+        block.label = fresh.laneLabels.back();
+        fresh.blocks.push_back(std::move(block));
+        fresh.end = shown->lengthBeats;
+        content_ = std::move(fresh);
+        ++contentBuilds_;
+        return content_;
+    }
 
     auto& all = fresh.lanes;
     for (const auto& lane : state_.lanes())
@@ -744,8 +775,8 @@ std::optional<double> PlaylistPanel::startOf(const Item& item) const
     }
 
     const auto id = domain::PlacementId::parse(item.id);
-    const auto* placement = id ? state_.findPlacement(id.value()) : nullptr;
-    return placement != nullptr ? std::optional<double>{placement->startBeats} : std::nullopt;
+    const auto placement = id ? shownPlacement(id.value()) : std::nullopt;
+    return placement.has_value() ? std::optional<double>{placement->startBeats} : std::nullopt;
 }
 
 double PlaylistPanel::lengthOf(const Item& item) const
@@ -764,8 +795,8 @@ double PlaylistPanel::lengthOf(const Item& item) const
     }
 
     const auto id = domain::PlacementId::parse(item.id);
-    const auto* placement = id ? state_.findPlacement(id.value()) : nullptr;
-    const auto* pattern = placement != nullptr ? state_.findPattern(placement->patternId) : nullptr;
+    const auto placement = id ? shownPlacement(id.value()) : std::nullopt;
+    const auto* pattern = placement.has_value() ? state_.findPattern(placement->patternId) : nullptr;
     return pattern != nullptr ? pattern->lengthBeats : 0.0;
 }
 
@@ -783,14 +814,14 @@ int PlaylistPanel::laneOf(const Item& item) const
     else
     {
         const auto id = domain::PlacementId::parse(item.id);
-        const auto* placement = id ? state_.findPlacement(id.value()) : nullptr;
-        if (placement == nullptr)
+        const auto placement = id ? shownPlacement(id.value()) : std::nullopt;
+        if (!placement.has_value())
             return -1;
         laneId = placement->laneId;
     }
 
-    const auto index = state_.laneIndex(laneId);
-    return index ? static_cast<int>(index.value()) : -1;
+    const auto index = shownLaneIndex(laneId);
+    return index.value_or(-1);
 }
 
 juce::Rectangle<int> PlaylistPanel::bounds(const Item& item, double offsetBeats, int laneOffset) const
@@ -859,7 +890,7 @@ void PlaylistPanel::paint(juce::Graphics& g)
         g.drawText(canvas_ ? "TOILE" : "PLAYLIST", header, juce::Justification::centredLeft, false);
 
     // Nothing but the line that makes a line: nothing to arrange yet.
-    if (state_.lanes().empty() && laneCount() == 1)
+    if (!patternMode() && state_.lanes().empty() && laneCount() == 1)
     {
         paintEmpty(g);
         return;
@@ -1071,9 +1102,9 @@ void PlaylistPanel::paintBlocks(juce::Graphics& g, juce::Rectangle<int> grid) co
             {
                 // On the canvas the block is its bands, drawn at every scale;
                 // a block being moved keeps its S11 picture until it lands.
-                const auto* placement = state_.findPlacement(domain::PlacementId::parse(item.id).value());
+                const auto placement = shownPlacement(domain::PlacementId::parse(item.id).value());
                 const auto* pattern =
-                    placement != nullptr ? state_.findPattern(placement->patternId) : nullptr;
+                    placement.has_value() ? state_.findPattern(placement->patternId) : nullptr;
                 if (pattern != nullptr)
                     paintCanvasBlock(g, *placement, *pattern, block, entry.lane, grid);
             }
@@ -1157,10 +1188,21 @@ void PlaylistPanel::paintWaveform(juce::Graphics& g,
 
 std::optional<int> PlaylistPanel::playheadX() const
 {
-    if (state_.transport().mode != domain::PlayMode::song)
+    // In pattern mode the canvas shows the pattern at the origin: the
+    // playhead is where the loop is in it.
+    auto beats = clock_.displayBeats();
+    if (patternMode())
+    {
+        const auto* shown = patternEditing::current(state_, selection_);
+        const auto local =
+            shown != nullptr ? patternEditing::localBeats(state_, shown->id, beats) : std::nullopt;
+        if (!local.has_value())
+            return {};
+        beats = *local;
+    }
+    else if (state_.transport().mode != domain::PlayMode::song)
         return {};
 
-    const auto beats = clock_.displayBeats();
     if (beats < firstBeat() || beats > firstBeat() + viewBeats())
         return {};
 
@@ -1634,6 +1676,23 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
     if (canvasMouseDown(event))
         return;
 
+    // The pattern mode has no line or block to move, lay or name: only a
+    // band that picks notes.
+    if (patternMode())
+    {
+        if (mods.isCtrlDown() && gridArea().contains(point))
+        {
+            bandPicksNotes_ = notesGrabbable();
+            bandStart_ = point;
+            band_ = juce::Rectangle<int>{point, point};
+            selected_.clear();
+            if (!mods.isShiftDown())
+                pickedNotes_.clear();
+            repaint();
+        }
+        return;
+    }
+
     const auto lane = laneAtY(point.getY());
 
     if (headerArea().contains(point))
@@ -1923,6 +1982,8 @@ bool PlaylistPanel::keyPressed(const juce::KeyPress& key)
 
     if (zoneKey(key) || canvasKey(key) || frameKey(key))
         return true;
+    if (patternMode())
+        return false;
 
     if (key == juce::KeyPress{'c', ctrl, 0})
     {

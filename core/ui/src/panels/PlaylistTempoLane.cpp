@@ -45,7 +45,9 @@ constexpr double tempoRangeStep = 10.0;
 
 int PlaylistPanel::tempoLaneHeight() const
 {
-    return tempoEditing::isAutomated(state_) ? tokens_.integer("metric.playlist.tempoLaneHeight") : 0;
+    return !patternMode() && tempoEditing::isAutomated(state_)
+               ? tokens_.integer("metric.playlist.tempoLaneHeight")
+               : 0;
 }
 
 juce::Rectangle<int> PlaylistPanel::tempoLaneArea() const

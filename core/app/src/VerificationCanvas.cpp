@@ -72,6 +72,8 @@ void Verification::addCanvasSteps()
         domain::PlacementId otherPlacement{};
         std::string beforePaste;
         domain::NoteId offGrid{};
+        double songFirstBeat{0.0};
+        domain::PatternId fresh{};
         std::map<std::string, int> pitches; // of the picked notes, by identifier
     };
     auto laid = std::make_shared<Laid>();
@@ -821,6 +823,120 @@ void Verification::addCanvasSteps()
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(domain::json::write(state_.toValue()) == laid->beforePaste,
                   "deux Ctrl+Z : le projet à l'octet");
+        });
+
+    // S19: the pattern mode.
+    add("S19 : PAT : la toile montre le pattern en cours seul, à l'origine, à l'échelle des notes",
+        [this, canvas, laid]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            selection_.selectPattern(laid->pattern);
+            // A view of the song far from the origin, to be found again.
+            view->frameBlock(laid->placements.back());
+            laid->songFirstBeat = view->firstBeat();
+            check(laid->songFirstBeat > 4.0, "la vue du morceau est loin de l'origine");
+            press("PAT");
+        });
+
+    add("S19 : une bande par canal du rack, le pattern cadré ; Toile B n'est pas là",
+        [this, canvas, laid]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            check(view->showsPattern(), "la toile est en mode pattern");
+            check(view->notesGrabbable(), "cadré à l'échelle des notes");
+            check(view->firstBeat() <= 0.0 + 1e-9, "le pattern commence à gauche, à l'origine");
+            auto everyBand = true;
+            for (std::size_t index = 0; index < laid->tracks.size(); ++index)
+                everyBand = everyBand && view->notePointIn(view->patternBlock(),
+                                                           laid->tracks[index],
+                                                           0.0,
+                                                           index == 0 ? 36 : (index == 1 ? 34 : 72))
+                                             .has_value();
+            check(everyBand, "Kick, 808, Lead : trois bandes");
+            check(!view->notePointIn(laid->otherPlacement, laid->tracks[2], 0.0, 74).has_value(),
+                  "Toile B, posé sur la même ligne, n'est pas montré");
+
+            // At the render: a kick, and the empty sixteenth after it, in the
+            // kick's band, are not the same colour.
+            const auto onNote = view->notePointIn(view->patternBlock(), laid->tracks[0], 0.0, 36);
+            const auto offNote = view->notePointIn(view->patternBlock(), laid->tracks[0], 0.5, 36);
+            if (onNote.has_value() && offNote.has_value())
+            {
+                const auto image = view->createComponentSnapshot(view->getLocalBounds(), false, 1.0f);
+                const auto a = image.getPixelAt(onNote->getX(), onNote->getY());
+                const auto b = image.getPixelAt(offNote->getX(), offNote->getY());
+                check(std::abs(a.getRed() - b.getRed()) + std::abs(a.getGreen() - b.getGreen()) +
+                              std::abs(a.getBlue() - b.getBlue()) >
+                          60,
+                      "au rendu, le kick se détache de la case vide : " +
+                          a.toDisplayString(false).toStdString() + " contre " +
+                          b.toDisplayString(false).toStdString());
+            }
+            else
+                check(false, "le kick est à l'écran");
+            snapshot("s19-toile-mode-pattern");
+        });
+
+    add("S19 : « + Pattern » : un pattern neuf, vide, s'ouvre dans la toile avec ses trois bandes",
+        [this] { press("+ Pattern"); });
+
+    add("S19 : un clic dans la bande Lead du pattern neuf : la rangée s'ouvre et la note s'écrit, une entrée",
+        [this, canvas, laid]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            const auto* fresh = state_.findPattern(selection_.pattern());
+            check(fresh != nullptr && fresh->id != laid->pattern && fresh->clips.empty(),
+                  "le pattern choisi est neuf et vide");
+            if (fresh == nullptr)
+                return;
+            laid->fresh = fresh->id;
+            check(view->showsPattern(), "la toile le montre");
+            const auto at = view->notePointIn(view->patternBlock(), laid->tracks[2], 0.5, 64);
+            check(at.has_value() && view->timelineArea().contains(*at), "la bande Lead est à l'écran, vide");
+            if (!at.has_value())
+                return;
+            laid->before = domain::json::write(state_.toValue());
+            laid->depth = depth();
+            click(*view, *at);
+        });
+
+    add("S19 : le pattern neuf a une rangée Lead et sa note ; Ctrl+Z le rend vide",
+        [this, laid]
+        {
+            const auto* fresh = state_.findPattern(laid->fresh);
+            const auto* row = fresh != nullptr ? fresh->findClipForTrack(laid->tracks[2]) : nullptr;
+            check(row != nullptr && row->notes.size() == 1 && row->notes.front().pitch == 64 &&
+                      std::abs(row->notes.front().startBeats - 0.5) < 1e-9,
+                  "une rangée Lead, un mi4 au temps 1,5");
+            check(depth() == laid->depth + 1, "une entrée d'historique");
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == laid->before,
+                  "Ctrl+Z : le pattern vide, à l'octet");
+        });
+
+    add("S19 : SONG : la toile retrouve le morceau, et sa vue",
+        [this, laid]
+        {
+            selection_.selectPattern(laid->pattern);
+            press("SONG");
+        });
+
+    add("S19 : le morceau est revenu, à la même place",
+        [this, canvas, laid]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            check(!view->showsPattern(), "la toile montre le morceau");
+            check(std::abs(view->firstBeat() - laid->songFirstBeat) < 1e-6, "la vue d'avant PAT");
+            check(view->notePointIn(laid->otherPlacement, laid->tracks[2], 0.0, 74).has_value(),
+                  "Toile B est de nouveau sur sa ligne");
         });
 
     // S18, the grammar: the same keys and wheel in the piano roll.
