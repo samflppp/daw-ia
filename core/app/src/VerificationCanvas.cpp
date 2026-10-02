@@ -5,6 +5,7 @@
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
+#include "daw/domain/generation/Harmony.h"
 #include "daw/domain/serialization/Json.h"
 #include "daw/ui/panels/PianoRollPanel.h"
 #include "daw/ui/panels/PlaylistPanel.h"
@@ -74,6 +75,7 @@ void Verification::addCanvasSteps()
         domain::NoteId offGrid{};
         double songFirstBeat{0.0};
         domain::PatternId fresh{};
+        std::vector<domain::generation::GhostNote> firstGhosts;
         std::map<std::string, int> pitches; // of the picked notes, by identifier
     };
     auto laid = std::make_shared<Laid>();
@@ -87,7 +89,7 @@ void Verification::addCanvasSteps()
                                 int pitch)
     {
         auto at = view.notePointIn(placement, track, beats, pitch);
-        for (int notch = 0; notch < 60 && at.has_value() && !view.timelineArea().contains(*at); ++notch)
+        for (int notch = 0; notch < 400 && at.has_value() && !view.timelineArea().contains(*at); ++notch)
         {
             wheel(view,
                   view.timelineArea().getCentre(),
@@ -422,7 +424,7 @@ void Verification::addCanvasSteps()
             // On a long project the line may be under the bottom: the wheel
             // brings it up, as a hand would.
             const auto laneIndex = static_cast<int>(lane.value());
-            for (int notch = 0; notch < 60; ++notch)
+            for (int notch = 0; notch < 400; ++notch)
             {
                 const auto at = view->pointFor(laneIndex, first->startBeats);
                 if (view->timelineArea().contains(at.translated(0, 4)))
@@ -841,7 +843,7 @@ void Verification::addCanvasSteps()
         });
 
     add("S19 : une bande par canal du rack, le pattern cadré ; Toile B n'est pas là",
-        [this, canvas, laid]
+        [this, canvas, laid, inSight]
         {
             auto* view = canvas();
             if (view == nullptr)
@@ -862,7 +864,7 @@ void Verification::addCanvasSteps()
 
             // At the render: a kick, and the empty sixteenth after it, in the
             // kick's band, are not the same colour.
-            const auto onNote = view->notePointIn(view->patternBlock(), laid->tracks[0], 0.0, 36);
+            const auto onNote = inSight(*view, view->patternBlock(), laid->tracks[0], 0.0, 36);
             const auto offNote = view->notePointIn(view->patternBlock(), laid->tracks[0], 0.5, 36);
             if (onNote.has_value() && offNote.has_value())
             {
@@ -885,7 +887,7 @@ void Verification::addCanvasSteps()
         [this] { press("+ Pattern"); });
 
     add("S19 : un clic dans la bande Lead du pattern neuf : la rangée s'ouvre et la note s'écrit, une entrée",
-        [this, canvas, laid]
+        [this, canvas, laid, inSight]
         {
             auto* view = canvas();
             if (view == nullptr)
@@ -897,7 +899,7 @@ void Verification::addCanvasSteps()
                 return;
             laid->fresh = fresh->id;
             check(view->showsPattern(), "la toile le montre");
-            const auto at = view->notePointIn(view->patternBlock(), laid->tracks[2], 0.5, 64);
+            const auto at = inSight(*view, view->patternBlock(), laid->tracks[2], 0.5, 64);
             check(at.has_value() && view->timelineArea().contains(*at), "la bande Lead est à l'écran, vide");
             if (!at.has_value())
                 return;
@@ -937,6 +939,137 @@ void Verification::addCanvasSteps()
             check(std::abs(view->firstBeat() - laid->songFirstBeat) < 1e-6, "la vue d'avant PAT");
             check(view->notePointIn(laid->otherPlacement, laid->tracks[2], 0.0, 74).has_value(),
                   "Toile B est de nouveau sur sa ligne");
+        });
+
+    // S19: the generation in a band, in the empty Lead of the new pattern, on
+    // PAT: nothing to rework, so a proposal of its own, with variants; and
+    // Tab opens the row as it writes.
+    add("S19 : PAT sur le pattern neuf",
+        [this, laid]
+        {
+            selection_.selectPattern(laid->fresh);
+            press("PAT");
+        });
+
+    add("S19 : Maj + glisser dans la bande Lead du pattern neuf : une zone de deux temps",
+        [this, canvas, laid, inSight]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            check(view->showsPattern(), "la toile montre le pattern neuf");
+            const auto from = inSight(*view, view->patternBlock(), laid->tracks[2], 0.0, 64);
+            const auto to = view->notePointIn(view->patternBlock(), laid->tracks[2], 1.8, 64);
+            if (!from.has_value() || !to.has_value())
+            {
+                check(false, "la bande Lead est à l'écran");
+                return;
+            }
+            drag(*view, *from, *to, false, false, true);
+        });
+
+    add("S19 : Ctrl+G, « une mélodie en la mineur », Entrée : des notes grises dans la zone, au rendu",
+        [this, canvas, laid, inSight]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            const auto zone = view->bandZone();
+            check(zone.has_value() && zone->first == 0.0 && zone->second == 2.0,
+                  "la zone va du temps 1 au temps 3 du pattern");
+            laid->before = domain::json::write(state_.toValue());
+            laid->depth = depth();
+
+            static_cast<void>(view->keyPressed(juce::KeyPress{'g', juce::ModifierKeys::ctrlModifier, 0}));
+            check(view->generationBar().isShowing(), "la fenêtre s'ouvre sous la toile");
+            check(view->generationBar().getY() >= view->timelineArea().getBottom(),
+                  "sous la grille, jamais sur les notes");
+            view->generationBar().field().setText(juce::String::fromUTF8("une mélodie en la mineur"), false);
+            static_cast<void>(
+                view->generationBar().field().keyPressed(juce::KeyPress{juce::KeyPress::returnKey}));
+
+            const auto ghosts = view->ghostNotes();
+            check(!ghosts.empty(), "des notes proposées : " + std::to_string(ghosts.size()));
+            const domain::generation::Key aMinor{9, domain::generation::Mode::minor};
+            auto inZone = true;
+            auto inKey = true;
+            for (const auto& ghost : ghosts)
+            {
+                inZone = inZone && ghost.startBeats >= -1e-9 && ghost.startBeats < 2.0;
+                inKey = inKey && domain::generation::inScale(ghost.pitch, aMinor);
+            }
+            check(inZone, "toutes dans la zone");
+            check(inKey, "toutes en la mineur");
+            check(domain::json::write(state_.toValue()) == laid->before, "rien n'est écrit avant Tab");
+            laid->firstGhosts = ghosts;
+
+            // At the render: where the first grey note is drawn, the screen
+            // changed from before the prompt.
+            if (!ghosts.empty())
+            {
+                const auto at = inSight(*view,
+                                        view->patternBlock(),
+                                        laid->tracks[2],
+                                        ghosts.front().startBeats,
+                                        ghosts.front().pitch);
+                if (at.has_value() && view->timelineArea().contains(*at))
+                {
+                    // A light grey: not the dark grid, not the lime of a
+                    // written note.
+                    const auto now = view->createComponentSnapshot(view->getLocalBounds(), false, 1.0f);
+                    const auto colour = now.getPixelAt(at->getX(), at->getY());
+                    const auto r = colour.getRed();
+                    const auto gr = colour.getGreen();
+                    const auto b = colour.getBlue();
+                    check(r > 120 && gr > 120 && b > 120 && std::abs(r - gr) < 30 && std::abs(gr - b) < 30,
+                          "au rendu, la note grise est dessinée en gris : " +
+                              colour.toDisplayString(false).toStdString());
+                }
+                else
+                    check(false, "la première note grise est à l'écran");
+            }
+            snapshot("s19-toile-generation");
+        });
+
+    add("S19 : Alt + molette sur la zone : une autre variante, puis la première",
+        [this, canvas, laid, inSight]
+        {
+            auto* view = canvas();
+            if (view == nullptr || laid->firstGhosts.empty())
+                return;
+            const auto at = inSight(*view, view->patternBlock(), laid->tracks[2], 0.5, 64);
+            if (!at.has_value())
+                return;
+            wheel(*view, *at, -1.0f, false, false, true);
+            check(view->ghostNotes() != laid->firstGhosts, "d'autres notes grises");
+            wheel(*view, *at, 1.0f, false, false, true);
+            check(view->ghostNotes() == laid->firstGhosts, "en arrière : la première variante");
+        });
+
+    add("S19 : Tab : la rangée Lead s'ouvre et reçoit les notes, une entrée ; Ctrl+Z à l'octet",
+        [this, canvas, laid, leadOf]
+        {
+            auto* view = canvas();
+            if (view == nullptr)
+                return;
+            const auto ghosts = view->ghostNotes();
+            static_cast<void>(view->keyPressed(juce::KeyPress{juce::KeyPress::tabKey}));
+            check(!view->bandGenerationOpen() && !view->generationBar().isShowing(), "la fenêtre se ferme");
+            check(depth() == laid->depth + 1, "une entrée d'historique");
+            const auto* lead = leadOf(laid->fresh, laid->tracks[2]);
+            check(lead != nullptr && lead->notes.size() == ghosts.size(),
+                  "la rangée Lead du pattern neuf a les notes proposées");
+            check(view->pickedNotes().size() == ghosts.size(), "les notes écrites sont les notes choisies");
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == laid->before, "Ctrl+Z : le projet à l'octet");
+            static_cast<void>(view->keyPressed(juce::KeyPress{juce::KeyPress::escapeKey}));
+        });
+
+    add("S19 : retour sur SONG, le premier pattern choisi",
+        [this, laid]
+        {
+            selection_.selectPattern(laid->pattern);
+            press("SONG");
         });
 
     // S18, the grammar: the same keys and wheel in the piano roll.

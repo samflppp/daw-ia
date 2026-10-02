@@ -157,6 +157,7 @@ void PlaylistPanel::openZonePrompt()
     if (!zone_.has_value())
         return;
 
+    closeBand();
     closeZone();
     bar_.open(juce::String::fromUTF8(u8"par ex. : une boucle trap sombre en F#m"));
     bar_.setVisible(true);

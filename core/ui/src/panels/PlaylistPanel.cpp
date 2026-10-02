@@ -81,11 +81,15 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context, bool canvas)
 {
     titled_ = context.titled;
 
-    bar_.onKey = [this](const juce::KeyPress& key) { return zoneKey(key); };
-    bar_.onVariant = [this](int delta) { showZoneVariant(delta); };
-    bar_.onAccept = [this] { acceptZone(); };
-    bar_.onListen = [this] { toggleZoneListening(); };
-    bar_.onClose = [this] { closeZone(); };
+    // The window serves the zone of the playlist (S17) and the band of the
+    // canvas (S19), one at a time.
+    bar_.onKey = [this](const juce::KeyPress& key)
+    { return bandGen_.has_value() ? bandGenKey(key) : zoneKey(key); };
+    bar_.onVariant = [this](int delta)
+    { bandGen_.has_value() ? showBandVariant(delta) : showZoneVariant(delta); };
+    bar_.onAccept = [this] { bandGen_.has_value() ? acceptBand() : acceptZone(); };
+    bar_.onListen = [this] { bandGen_.has_value() ? toggleBandListening() : toggleZoneListening(); };
+    bar_.onClose = [this] { bandGen_.has_value() ? closeBand() : closeZone(); };
     bar_.onHeightChanged = [this] { resized(); };
     addChildComponent(bar_);
     setLookAndFeel(&lookAndFeel_);
@@ -170,6 +174,10 @@ void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
     // shows, and each mode finds its own view again.
     if (canvas_ && followMode())
         reshaped = true;
+
+    // A proposal in a band follows the project, as the piano roll's did.
+    if (canvas_ && source == &project_)
+        refreshBand();
 
     // A slider asked to see its automation line: its lane comes into view.
     // The chosen track carries the velocity strip: the lines change height.
@@ -620,7 +628,8 @@ void PlaylistPanel::scrollBarMoved(juce::ScrollBar* bar, double newRangeStart)
 
 void PlaylistPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
 {
-    if (tempoWheel(event, wheel) || automationWheel(event, wheel) || velocityWheel(event, wheel))
+    if (tempoWheel(event, wheel) || automationWheel(event, wheel) || bandGenWheel(event, wheel) ||
+        velocityWheel(event, wheel))
         return;
 
     const auto grid = gridArea();
@@ -1980,7 +1989,7 @@ bool PlaylistPanel::keyPressed(const juce::KeyPress& key)
 {
     const auto ctrl = juce::ModifierKeys::ctrlModifier;
 
-    if (zoneKey(key) || canvasKey(key) || frameKey(key))
+    if (bandGenKey(key) || zoneKey(key) || canvasKey(key) || frameKey(key))
         return true;
     if (patternMode())
         return false;

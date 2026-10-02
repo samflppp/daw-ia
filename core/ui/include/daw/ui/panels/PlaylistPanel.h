@@ -3,9 +3,11 @@
 #include "daw/ui/FrameTicker.h"
 #include "daw/ui/PanelRegistry.h"
 #include "daw/ui/model/CanvasBands.h"
+#include "daw/ui/model/GhostProposal.h"
 #include "daw/ui/model/Motion.h"
 #include "daw/ui/model/PatternPreviews.h"
 #include "daw/ui/model/PromptReader.h"
+#include "daw/ui/model/TransformProposal.h"
 #include "daw/ui/model/ZoneProposal.h"
 #include "daw/ui/panels/GenerationPanel.h"
 
@@ -204,6 +206,25 @@ public:
     [[nodiscard]] bool showsPattern() const { return patternMode(); }
     [[nodiscard]] domain::PlacementId patternBlock() const noexcept { return patternBlock_; }
     [[nodiscard]] int lanesShown() const { return freeLaneCount(); }
+
+    // The generation in a band, read by the verification: the grey notes
+    // shown, and the zone they are for.
+    [[nodiscard]] std::size_t ghostCount() const
+    {
+        return bandGen_.has_value() ? bandGen_->ghosts.size() : 0;
+    }
+    [[nodiscard]] bool bandGenerationOpen() const noexcept { return bandGen_.has_value(); }
+    [[nodiscard]] std::vector<domain::generation::GhostNote> ghostNotes() const
+    {
+        return bandGen_.has_value() ? bandGen_->ghosts : std::vector<domain::generation::GhostNote>{};
+    }
+    [[nodiscard]] std::optional<std::pair<double, double>> bandZone() const
+    {
+        const auto target = bandGen_.has_value() ? std::optional<BandTarget>{bandGen_->where} : bandRange_;
+        if (!target.has_value())
+            return std::nullopt;
+        return std::make_pair(target->fromBeats, target->toBeats);
+    }
 
     // The pattern under the hand, whose other blocks are lit.
     [[nodiscard]] domain::PatternId litPattern() const noexcept { return hoveredPattern_; }
@@ -764,6 +785,53 @@ private:
     bool showingPattern_{false};
     domain::PatternId showingPatternId_{};
     bool followMode();
+
+    // --- generation in a band (PlaylistBandGeneration.cpp, S19)
+    struct BandTarget
+    {
+        domain::PlacementId placement{};
+        domain::PatternId pattern{};
+        domain::TrackId track{};
+        double fromBeats{0.0}; // in the pattern
+        double toBeats{0.0};
+    };
+    struct BandGeneration
+    {
+        BandTarget where;
+        std::optional<GhostProposal> proposal;
+        std::optional<TransformProposal> rework;
+        std::vector<domain::generation::GhostNote> ghosts;
+        juce::String prompted;
+        PromptReader::Reading reading;
+        double styleShare{0.0};
+    };
+    std::optional<BandTarget> bandRange_;
+    std::optional<double> rangeAnchor_;
+    std::optional<BandGeneration> bandGen_;
+    [[nodiscard]] std::optional<BandTarget> bandTarget() const;
+    bool bandRangeMouseDown(const juce::MouseEvent& event);
+    bool bandRangeMouseDrag(const juce::MouseEvent& event);
+    bool bandRangeMouseUp();
+    bool bandGenKey(const juce::KeyPress& key);
+    void openBandPrompt();
+    [[nodiscard]] bool bandZoneHasNotes() const;
+    void generateInBand();
+    [[nodiscard]] bool bandProposing() const;
+    void showBandProposal();
+    void showBandVariant(int delta);
+    void setGhosts(std::vector<domain::generation::GhostNote> ghosts);
+    void acceptBand();
+    void closeBand();
+    void refreshBand();
+    bool bandGenWheel(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel);
+    void toggleBandListening();
+    void listenBandAgain();
+    void stopListening();
+    void paintBandGeneration(juce::Graphics& g,
+                             const domain::Placement& placement,
+                             const domain::Pattern& pattern,
+                             const std::vector<BandArea>& areas,
+                             juce::Rectangle<int> content) const;
 
     // Where the hand was last seen over the panel: where Ctrl+V pastes.
     juce::Point<int> pointer_;

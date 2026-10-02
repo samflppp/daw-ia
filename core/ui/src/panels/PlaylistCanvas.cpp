@@ -192,6 +192,8 @@ bool PlaylistPanel::followMode()
     pickedNotes_.clear();
     selected_.clear();
     frozen_.reset();
+    closeBand();
+    bandRange_.reset();
     // A block lit by the hand in the other mode is not on this screen.
     hover(std::nullopt);
     ++version_;
@@ -267,6 +269,28 @@ std::vector<CanvasBand> PlaylistPanel::bandsOfLane(int lane) const
     }
     else
         bands = bands_.of(laneId);
+
+    // A proposal shown in a band: the band reaches its notes.
+    if (bandGen_.has_value() && !bandGen_->ghosts.empty())
+    {
+        const auto& where = bandGen_->where;
+        const auto onThisLine = patternMode() || std::any_of(state_.arrangement().begin(),
+                                                             state_.arrangement().end(),
+                                                             [&](const domain::Placement& placement) {
+                                                                 return placement.laneId == laneId &&
+                                                                        placement.patternId == where.pattern;
+                                                             });
+        for (auto& band : bands)
+        {
+            if (!onThisLine || band.track != where.track)
+                continue;
+            for (const auto& ghost : bandGen_->ghosts)
+            {
+                band.low = std::min(band.low, ghost.pitch);
+                band.high = std::max(band.high, ghost.pitch);
+            }
+        }
+    }
     for (auto& band : bands)
     {
         if (const auto found = extensions_.find(keyOf(laneId, band.track)); found != extensions_.end())
@@ -565,6 +589,9 @@ void PlaylistPanel::paintCanvasBlock(juce::Graphics& g,
                 }
             }
 
+            // The zone of a generation, and its grey notes.
+            paintBandGeneration(g, placement, pattern, areas, content);
+
             // What the hand picked or points at, over the picture.
             g.saveState();
             g.reduceClipRegion(content);
@@ -832,7 +859,7 @@ bool PlaylistPanel::canvasMouseDown(const juce::MouseEvent& event)
 
     catchUp();
     closeVelocityWheel();
-    if (velocityMouseDown(event))
+    if (bandRangeMouseDown(event) || velocityMouseDown(event))
         return true;
     const auto spot = spotAt(event.getPosition());
     if (!spot.has_value())
@@ -985,6 +1012,8 @@ void PlaylistPanel::pickNotesIn(juce::Rectangle<int> area)
 
 bool PlaylistPanel::canvasMouseDrag(const juce::MouseEvent& event)
 {
+    if (bandRangeMouseDrag(event))
+        return true;
     if (velocityStroke_.has_value())
     {
         strokeVelocity(event.getPosition());
@@ -1066,6 +1095,8 @@ bool PlaylistPanel::canvasMouseDrag(const juce::MouseEvent& event)
 
 bool PlaylistPanel::canvasMouseUp()
 {
+    if (bandRangeMouseUp())
+        return true;
     if (velocityStroke_.has_value())
     {
         commitVelocityStroke();
