@@ -242,6 +242,7 @@ void Verification::buildFluidity()
         std::size_t movesAtStart{0};
         std::size_t imagesAtStart{0};
         double playedFromMs{0.0};
+        double beatsAtPlay{0.0};
 
         // The machine's display setting before the run touched it.
         bool wasLight{false};
@@ -570,6 +571,7 @@ void Verification::buildFluidity()
                 wheel(*playlist, playlist->getLocalBounds().getCentre(), 1.0f, false, true);
 
             press("SONG");
+            measures->beatsAtPlay = clock_.positionBeats();
             static_cast<void>(bus_.execute(std::make_unique<domain::TransportPlay>()));
 
             measures->vblank =
@@ -579,11 +581,14 @@ void Verification::buildFluidity()
         [this, measures]
         {
             // Counted from the moment the engine plays: before it, the
-            // playhead has nowhere to go.
+            // playhead has nowhere to go. Playing is not enough: the engine
+            // says it plays ~200 ms before its device gives the first block,
+            // and those images were counted as missed moves until S19.
             auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
             if (measures->playedFromMs == 0.0)
             {
-                if (playlist == nullptr || !clock_.isPlaying())
+                if (playlist == nullptr || !clock_.isPlaying() ||
+                    clock_.positionBeats() == measures->beatsAtPlay)
                     return false;
                 measures->movesAtStart = playlist->playheadMoves();
                 measures->imagesAtStart = measures->images;
@@ -693,6 +698,7 @@ void Verification::buildFluidity()
                 return;
             for (int notch = 0; notch < 4; ++notch)
                 wheel(*playlist, playlist->getLocalBounds().getCentre(), 1.0f, false, true);
+            measures->beatsAtPlay = clock_.positionBeats();
             static_cast<void>(bus_.execute(std::make_unique<domain::TransportPlay>()));
             measures->playedFromMs = 0.0;
         },
@@ -701,7 +707,8 @@ void Verification::buildFluidity()
             auto* playlist = dynamic_cast<ui::PlaylistPanel*>(panel("playlist"));
             if (measures->playedFromMs == 0.0)
             {
-                if (playlist == nullptr || !clock_.isPlaying())
+                if (playlist == nullptr || !clock_.isPlaying() ||
+                    clock_.positionBeats() == measures->beatsAtPlay)
                     return false;
                 measures->movesAtStart = playlist->playheadMoves();
                 measures->playedFromMs = juce::Time::getMillisecondCounterHiRes();
