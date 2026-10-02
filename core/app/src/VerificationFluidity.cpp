@@ -2,6 +2,7 @@
 #include "Verification.h"
 #include "VerificationTiming.h"
 #include "daw/domain/commands/AddNote.h"
+#include "daw/domain/commands/AutomationCommands.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
@@ -29,6 +30,7 @@ constexpr int layingsPerPattern = 5;
 constexpr int openNotes = 200;
 constexpr int otherNotes = 16;
 constexpr double patternBeats = 16.0;
+constexpr int automationPoints = 8;
 
 // Repaints kept per measure, after the ones thrown away: the first paints of
 // a surface fill the glyph and gradient caches, and they are not what a
@@ -175,6 +177,11 @@ void Verification::buildFluidity()
         domain::ClipId openedClip{};
         std::vector<std::pair<std::string, Timing>> rows;
 
+        // A line of automation on the master's volume, and the point the
+        // hand drags (S19: not measured in S18 bis).
+        domain::AutomationLineId line{};
+        domain::AutomationPoint dragged{};
+
         // Which pages were open before: the machine remembers them, and a
         // measure must leave the person's screen as it found it.
         std::vector<std::pair<const char*, bool>> pagesBefore;
@@ -254,6 +261,23 @@ void Verification::buildFluidity()
                 for (int laying = 0; laying < layingsPerPattern; ++laying)
                     commands.push_back(std::make_unique<domain::PlacePattern>(
                         domain::PlacementId::generate(), patternId, patternBeats * laying));
+            }
+
+            // Eight points down the song on the master's volume, the shape
+            // of a fade: the lane shows under the blocks' lines.
+            measures->line = domain::AutomationLineId::generate();
+            commands.push_back(std::make_unique<domain::CreateAutomationLine>(
+                measures->line, domain::AutomationTarget::volumeOf(domain::ProjectState::masterTrackId())));
+            for (int index = 0; index < automationPoints; ++index)
+            {
+                domain::AutomationPoint point{};
+                point.id = domain::AutomationPointId::generate();
+                point.beats = patternBeats * layingsPerPattern * static_cast<double>(index) /
+                              static_cast<double>(automationPoints - 1);
+                point.value = -1.5 * static_cast<double>(index);
+                commands.push_back(std::make_unique<domain::AddAutomationPoint>(measures->line, point));
+                if (index == automationPoints / 2)
+                    measures->dragged = point;
             }
 
             const auto built =
@@ -497,6 +521,31 @@ void Verification::buildFluidity()
             // There and back: the block where it was, the note at its pitch;
             // the note's drag is one entry, the block's none.
             check(depth() == depthBefore + 1, "le glissé de la note est une entrée, celui du bloc aucune");
+            static_cast<void>(bus_.undo());
+
+            // A point of the automation line, dragged up and back by the
+            // hand: what it repaints is its lane (S18 bis E).
+            static_cast<void>(view_.showPage("playlist", true));
+            const auto automationLane = playlist->laneOfAutomation(measures->line);
+            if (!automationLane.has_value())
+            {
+                check(false, "la ligne d'automation a sa bande dans la playlist");
+                return;
+            }
+            static_cast<void>(playlistBeat(*automationLane, measures->dragged.beats));
+            const auto handle = playlist->automationPointFor(
+                measures->line, measures->dragged.beats, measures->dragged.value);
+            if (!handle.has_value())
+            {
+                check(false, "le point d'automation est à l'écran");
+                return;
+            }
+            const auto entriesBefore = depth();
+            const auto pointDrag = dragTiming(*playlist, *handle, {0, -1}, left, project_);
+            note("point d'automation de la playlist : " + describe(pointDrag));
+            measures->rows.emplace_back("glisser un point d'automation, par image (logiciel)",
+                                        pointDrag.frame);
+            check(depth() == entriesBefore + 1, "le glissé du point est une entrée");
             static_cast<void>(bus_.undo());
         });
 
