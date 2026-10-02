@@ -81,6 +81,12 @@ public:
 
     [[nodiscard]] const CanvasNotes* notes(domain::PatternId pattern, domain::TrackId track) const noexcept;
 
+    // The pattern mode (S19): one pattern alone, a band for every channel of
+    // the rack, in its order — those the pattern has no row for too, framed
+    // as a row with no note yet. Writing in one of them opens its row.
+    [[nodiscard]] std::vector<CanvasBand> ofPattern(const domain::ProjectState& state,
+                                                    domain::PatternId pattern) const;
+
     // Every row sorted since this cache was made. Read by the tests and the
     // verification, which prove what was not redone.
     [[nodiscard]] std::size_t builds() const noexcept { return builds_; }

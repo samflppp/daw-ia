@@ -65,6 +65,39 @@ std::uint64_t CanvasBands::fingerprint(const domain::Clip& clip) noexcept
     return hash;
 }
 
+namespace
+{
+
+// A track's band over what it plays: the extremes of its rows, or, with
+// nothing written, the channel's pitch and an octave above it for an
+// instrument.
+CanvasBand bandFor(const domain::Track& track, int lowest, int highest)
+{
+    CanvasBand band{};
+    band.track = track.id;
+    const auto sampler = track.sample.has_value();
+    if (lowest > highest)
+    {
+        band.low = track.channelPitch;
+        band.high = sampler ? track.channelPitch : track.channelPitch + emptyRows - 1;
+    }
+    else if (sampler)
+    {
+        band.low = lowest;
+        band.high = highest;
+    }
+    else
+    {
+        band.low = lowest - canvas::roomSemitones;
+        band.high = highest + canvas::roomSemitones;
+    }
+    band.low = std::clamp(band.low, domain::Note::lowestPitch, domain::Note::highestPitch);
+    band.high = std::clamp(band.high, band.low, domain::Note::highestPitch);
+    return band;
+}
+
+} // namespace
+
 std::size_t CanvasBands::refresh(const domain::ProjectState& state)
 {
     // The rows: kept when their fingerprint did not move, sorted again when
@@ -146,30 +179,7 @@ std::size_t CanvasBands::refresh(const domain::ProjectState& state)
             }
             if (!present)
                 continue;
-
-            CanvasBand band{};
-            band.track = track.id;
-            const auto sampler = track.sample.has_value();
-            if (lowest > highest)
-            {
-                // Nothing written yet: the channel's pitch, and an octave
-                // above it for an instrument.
-                band.low = track.channelPitch;
-                band.high = sampler ? track.channelPitch : track.channelPitch + emptyRows - 1;
-            }
-            else if (sampler)
-            {
-                band.low = lowest;
-                band.high = highest;
-            }
-            else
-            {
-                band.low = lowest - canvas::roomSemitones;
-                band.high = highest + canvas::roomSemitones;
-            }
-            band.low = std::clamp(band.low, domain::Note::lowestPitch, domain::Note::highestPitch);
-            band.high = std::clamp(band.high, band.low, domain::Note::highestPitch);
-            line.bands.push_back(band);
+            line.bands.push_back(bandFor(track, lowest, highest));
         }
         lines_.push_back(std::move(line));
     }
@@ -182,6 +192,20 @@ const std::vector<CanvasBand>& CanvasBands::of(domain::LaneId lane) const noexce
     const auto found =
         std::find_if(lines_.begin(), lines_.end(), [lane](const Line& line) { return line.lane == lane; });
     return found != lines_.end() ? found->bands : none;
+}
+
+std::vector<CanvasBand> CanvasBands::ofPattern(const domain::ProjectState& state,
+                                               domain::PatternId pattern) const
+{
+    std::vector<CanvasBand> bands;
+    for (const auto& track : state.tracks())
+    {
+        const auto* row = notes(pattern, track.id);
+        bands.push_back(row != nullptr
+                            ? bandFor(track, row->lowest, row->highest)
+                            : bandFor(track, domain::Note::highestPitch, domain::Note::lowestPitch));
+    }
+    return bands;
 }
 
 const CanvasNotes* CanvasBands::notes(domain::PatternId pattern, domain::TrackId track) const noexcept

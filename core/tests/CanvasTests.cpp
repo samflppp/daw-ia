@@ -147,6 +147,32 @@ TEST_CASE("the rows are sorted once, and again only when their notes change")
     CHECK(bands.builds() == 5);
 }
 
+TEST_CASE("a pattern alone has a band for every channel of the rack, rows or not (S19)")
+{
+    Song song;
+    song.add(song.leadRow, 72, 0.0);
+    song.add(song.leadRow, 76, 1.0);
+    CanvasBands bands;
+    static_cast<void>(bands.refresh(song.state));
+
+    // Hook has a lead row only; the kick and the 808 get a band all the same,
+    // framed as a row with no note.
+    const auto hook = bands.ofPattern(song.state, song.hook);
+    REQUIRE(hook.size() == 3);
+    CHECK(hook[0].track == song.kick);
+    CHECK(hook[1].track == song.bass);
+    CHECK(hook[2].track == song.lead);
+    CHECK(hook[0].rows() == 1);  // a sampler: its one pitch
+    CHECK(hook[1].rows() == 12); // an instrument: an octave
+    CHECK(hook[2].rows() == 12); // the hook's lead row is empty too
+
+    // Beat's lead is framed on its notes, two semitones either side.
+    const auto beat = bands.ofPattern(song.state, song.beat);
+    REQUIRE(beat.size() == 3);
+    CHECK(beat[2].low == 70);
+    CHECK(beat[2].high == 78);
+}
+
 TEST_CASE("a row is read again when a velocity changes: the canvas draws it (S19)")
 {
     Song song;
