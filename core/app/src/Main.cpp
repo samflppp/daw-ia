@@ -9,6 +9,7 @@
 #include "PluginRack.h"
 #include "PluginWindow.h"
 #include "PromptReading.h"
+#include "QuitWatchdog.h"
 #include "SampleLibrary.h"
 #include "SongExporter.h"
 #include "TransportSync.h"
@@ -297,18 +298,26 @@ public:
             learning_.reset();
         }
 
-        juce::Logger::setCurrentLogger(nullptr);
+        // What a person must not lose is on disk, but for the places of the
+        // pages, written once the window is gone. From here on the process
+        // ends within the deadline, whatever hangs (see QuitWatchdog.h).
+        if (logger_ != nullptr)
+            QuitWatchdog::arm(logger_->getLogFile(), quitDeadlineMs);
 
         // The plugin windows go before the Edit that owns the plugins they
         // draw: an editor outliving its plugin by one line is a crash.
+        QuitWatchdog::step("plugin windows");
         probe_.reset();
         transportSync_.reset();
         rack_.reset();
+        QuitWatchdog::step("main window");
         window_.reset();
 
         // After the window: closing it is the last thing that can move a page.
+        QuitWatchdog::step("settings");
         if (layoutSettings_ != nullptr)
             static_cast<void>(layoutSettings_->saveIfNeeded());
+        QuitWatchdog::step("sample library");
         sampleLibrary_.reset();
         layoutSettings_.reset();
 
@@ -317,6 +326,7 @@ public:
         if (relaunchProject_.has_value())
             relaunch(*relaunchProject_);
 
+        QuitWatchdog::step("look and feel, copilot, clock");
         juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
         lookAndFeel_.reset();
         switch_.reset();
@@ -324,9 +334,23 @@ public:
         clock_.reset();
         bridge_.reset();
         listening_.reset(); // it holds the projector
+        QuitWatchdog::step("projector");
         projector_.reset();
         contentStore_.reset();
+
+        // --quit-stall: a teardown that never comes back, where a real one
+        // would hang, so that the deadline can be seen to hold.
+        if (getCommandLineParameters().contains("--quit-stall"))
+        {
+            QuitWatchdog::step("--quit-stall");
+            juce::Thread::sleep(60000);
+        }
+
+        QuitWatchdog::step("engine");
         engineHost_.reset();
+
+        QuitWatchdog::done();
+        juce::Logger::setCurrentLogger(nullptr);
     }
 
     void systemRequestedQuit() override
@@ -346,6 +370,11 @@ public:
 
 private:
     static constexpr int autosaveIntervalMs = 30000;
+
+    // From the moment the project is saved to the end of the process. A
+    // teardown takes ~250 ms on this machine; closing must end the process
+    // within 3 s of the click, and the save before it is part of those 3 s.
+    static constexpr int quitDeadlineMs = 2000;
 
     // --gallery shows every token and every control instead of the workspace.
     // The three hygiene rules cannot see ugliness; this is the surface that is

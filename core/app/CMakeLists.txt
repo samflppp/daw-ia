@@ -22,6 +22,7 @@ target_sources(daw_app PRIVATE
     src/TransportSync.cpp
     src/PlaybackProbe.cpp
     src/NativeWindow.cpp
+    src/QuitWatchdog.cpp
     src/Verification.cpp
     src/VerificationAutomation.cpp
     src/VerificationFluidity.cpp
