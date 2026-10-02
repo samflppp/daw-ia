@@ -3,6 +3,7 @@
 #include "daw/domain/Result.h"
 #include "daw/domain/Value.h"
 #include "daw/domain/command/HistoryPolicy.h"
+#include "daw/domain/command/Reach.h"
 #include "daw/domain/project/ProjectState.h"
 
 #include <cstdint>
@@ -44,6 +45,9 @@ public:
     [[nodiscard]] virtual Value payload() const = 0;
 
     [[nodiscard]] virtual HistoryPolicy historyPolicy() const noexcept { return HistoryPolicy::undoable; }
+
+    // What it changes, for the screens that redraw only that (see Reach.h).
+    [[nodiscard]] virtual Reach reach() const noexcept { return Reach::anything; }
 
     // Validates first, mutates second: on failure the state is untouched, and
     // the bus records nothing.

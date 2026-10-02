@@ -6,6 +6,7 @@
 #include "daw/domain/command/CommandGroup.h"
 #include "daw/domain/command/HistoryPolicy.h"
 #include "daw/domain/command/Provenance.h"
+#include "daw/domain/command/Reach.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -44,6 +45,11 @@ struct Receipt
     // journal must skip them: a project that replayed a transport.play would
     // start making noise the moment it was reopened.
     HistoryPolicy policy{HistoryPolicy::undoable};
+
+    // What the operation changed, as its commands declare it. For an undo or
+    // a redo, the reach of the whole entry: `notes` only when every command
+    // of it reaches notes alone.
+    Reach reach{Reach::anything};
 
     // The intention, as the journal will store it. Filled for an execution or
     // a coalescing — for a coalescing it is the merged payload, the one that

@@ -152,6 +152,7 @@ Result<Receipt> CommandBus::executeEntry(std::unique_ptr<Command> command,
         receipt.redoDepth = redoStack_.size();
         receipt.origin = origin;
         receipt.policy = HistoryPolicy::transient;
+        receipt.reach = command->reach();
         receipt.payload = command->payload();
 
         notify(&BusObserver::onExecuted, receipt);
@@ -363,6 +364,7 @@ CommandBus::executeGroupEntry(std::vector<GroupCommand> commands, GroupRef group
         receipt.coalesced = false;
         receipt.origin = origin;
         receipt.policy = command.command->historyPolicy();
+        receipt.reach = command.command->reach();
         receipt.payload = command.command->payload();
         receipts.push_back(std::move(receipt));
 
@@ -735,6 +737,7 @@ Receipt CommandBus::receiptFor(const Entry& entry, const Step& step, bool coales
     receipt.undoDepth = undoStack_.size();
     receipt.redoDepth = redoStack_.size();
     receipt.origin = entry.origin;
+    receipt.reach = step.command->reach();
     receipt.payload = step.command->payload();
     return receipt;
 }
@@ -755,6 +758,11 @@ Receipt CommandBus::moveReceiptFor(const Entry& entry, Provenance by) const
     receipt.undoDepth = undoStack_.size();
     receipt.redoDepth = redoStack_.size();
     receipt.origin = std::move(by);
+    receipt.reach = std::all_of(entry.steps.begin(),
+                                entry.steps.end(),
+                                [](const Step& step) { return step.command->reach() == Reach::notes; })
+                        ? Reach::notes
+                        : Reach::anything;
     return receipt;
 }
 

@@ -5,36 +5,36 @@ namespace daw::ui
 
 void ProjectObserver::onExecuted(const domain::Receipt& receipt)
 {
-    changed(receipt.type);
+    changed(receipt.reach);
 }
 
 void ProjectObserver::onCoalesced(const domain::Receipt& receipt)
 {
-    changed(receipt.type);
+    changed(receipt.reach);
 }
 
 void ProjectObserver::onUndone(const domain::Receipt& receipt)
 {
-    changed(receipt.type);
+    changed(receipt.reach);
 }
 
 void ProjectObserver::onRedone(const domain::Receipt& receipt)
 {
-    changed(receipt.type);
+    changed(receipt.reach);
 }
 
 void ProjectObserver::onHistoryTruncated(std::size_t droppedEntries)
 {
     juce::ignoreUnused(droppedEntries);
-    changed({});
+    changed(domain::Reach::anything);
 }
 
-void ProjectObserver::changed(std::string_view type)
+void ProjectObserver::changed(domain::Reach reach)
 {
     ++revision_;
 
-    // The note commands change the notes of a clip and nothing else.
-    if (!type.starts_with("note."))
+    // What the command declares, not what it is called (S19).
+    if (reach != domain::Reach::notes)
         lastBeyondNotes_ = revision_;
 
     sendChangeMessage();
