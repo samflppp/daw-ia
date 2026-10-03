@@ -68,11 +68,13 @@ public:
     void cancel() override;
     [[nodiscard]] const domain::mix::Proposal* proposal() const override;
     [[nodiscard]] const domain::mix::Brief* brief() const override;
+    [[nodiscard]] std::string masterSentence() const override { return masterSentence_; }
     void refuseTrack(domain::TrackId track, bool refused) override;
     [[nodiscard]] bool isRefused(domain::TrackId track) const override;
     void accept() override;
     void reject() override;
     void listen(bool after) override;
+    [[nodiscard]] bool listening() const override { return comparison_ != nullptr && comparison_->playing(); }
     [[nodiscard]] bool listeningAfter() const override;
     [[nodiscard]] domain::mix::Axes axes() const override { return axes_; }
     void setAxes(domain::mix::Axes axes) override;
@@ -86,7 +88,7 @@ public:
     [[nodiscard]] const engine::MixRender::Measured* before() const { return before_.get(); }
     [[nodiscard]] const engine::MixRender::Measured* after() const { return after_.get(); }
     [[nodiscard]] std::optional<double> masterTrimDb() const { return masterTrim_; }
-    [[nodiscard]] std::string masterSentence() const { return masterSentence_; }
+
     [[nodiscard]] double measureSeconds() const { return measureSeconds_; }
     [[nodiscard]] double prepareMs() const { return prepareMs_; }
     [[nodiscard]] bool measureReused() const { return measureReused_; }

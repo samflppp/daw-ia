@@ -1,5 +1,6 @@
 #include "Verification.h"
 
+#include "MixSession.h"
 #include "NativeWindow.h"
 #include "daw/domain/commands/MixCommands.h"
 #include "daw/domain/commands/PatternCommands.h"
@@ -2521,44 +2522,71 @@ void Verification::addMixerSteps()
         [this] { return levelOf(state_.tracks().front().id.toString()).peakDb > -60.0f; },
         3000.0);
 
-    add("« Mixer par l'IA » : aucun modèle appelé, la liste de ce qui manque",
-        [this]
+    auto mixDepth = std::make_shared<std::size_t>(0);
+    add(
+        "« Mixer » : la mesure puis la proposition, à la place des tranches",
+        [this, mixDepth]
         {
             key(juce::KeyPress{juce::KeyPress::spaceKey});
             static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(false, 0.0, 0.0)));
 
             auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer"));
-            auto* ask = mixer != nullptr ? button(*mixer, juce::String::fromUTF8("Mixer par l'IA")) : nullptr;
-            if (ask == nullptr)
+            auto* ask = mixer != nullptr ? button(*mixer, "Mixer") : nullptr;
+            if (ask == nullptr || mix_ == nullptr)
             {
-                check(false, "le bouton « Mixer par l'IA »");
+                check(false, "le bouton « Mixer »");
                 return;
             }
-
             transcriptBefore_ = copilot_.transcript().size();
+            *mixDepth = depth();
             click(*ask, ask->getLocalBounds().getCentre());
-            const auto report = mixer->readinessReport();
-            note("rapport :\n\n```\n" + report.toStdString() + "```");
-            check(copilot_.transcript().size() == transcriptBefore_, "le copilote n'a rien reçu");
-            check(!mixer->strips().empty() && !mixer->strips().back()->isVisible(),
-                  "le rapport prend la place des tranches");
-            check(report.contains("besoins sur"), "un compte des besoins couverts");
-            check(report.contains("mix.measure") && report.contains("plugin.parameters"),
-                  "les manques y sont, nommés : mesure sur un passage, paramètres des effets");
+        },
+        [this]
+        {
+            return mix_ == nullptr || mix_->stage() == ui::MixHost::Stage::ready ||
+                   mix_->stage() == ui::MixHost::Stage::failed;
+        },
+        120000.0);
+
+    add("la proposition : une ligne par tranche touchée, chacune avec sa phrase ; « Refuser » n'écrit rien",
+        [this, mixDepth]
+        {
+            auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer"));
+            if (mixer == nullptr || mix_ == nullptr)
+                return;
+            note("état : " + mix_->status());
+            check(mix_->stage() == ui::MixHost::Stage::ready, "une proposition");
+            check(copilot_.transcript().size() == transcriptBefore_,
+                  "le copilote n'a rien reçu : les règles");
+            check(mixer->proposal().isVisible() && !mixer->strips().empty() &&
+                      !mixer->strips().back()->isVisible(),
+                  "la proposition a pris la place des tranches");
+            auto& shown = mixer->proposal();
+            check(shown.rowCount() > 0, std::to_string(shown.rowCount()) + " tranches touchées");
+            const auto sentences = shown.shownSentences();
+            note("phrases :\n\n```\n" + sentences.toStdString() + "\n```");
+            check(sentences.contains("LUFS") || sentences.contains("dB"), "les phrases citent des mesures");
+            check(depth() == *mixDepth, "rien n'est écrit par la proposition");
+
+            auto* refuse = button(shown, "Refuser");
+            if (refuse != nullptr)
+                click(*refuse, refuse->getLocalBounds().getCentre());
+            check(mix_->stage() == ui::MixHost::Stage::idle, "refusée");
+            check(depth() == *mixDepth, "toujours rien d'écrit");
+        });
+
+    add("les tranches reviennent",
+        [this]
+        {
+            auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer"));
+            check(mixer != nullptr && !mixer->proposal().isVisible() && !mixer->strips().empty() &&
+                      mixer->strips().back()->isVisible(),
+                  "les tranches sont revenues");
         });
 
     add("tout défaire au Ctrl+Z, dans l'ordre inverse",
         [this]
         {
-            // The same button puts the strips back.
-            if (auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer")); mixer != nullptr)
-            {
-                if (auto* ask = button(*mixer, juce::String::fromUTF8("Mixer par l'IA")); ask != nullptr)
-                    click(*ask, ask->getLocalBounds().getCentre());
-                check(!mixer->strips().empty() && mixer->strips().back()->isVisible(),
-                      "le même bouton rend les tranches");
-            }
-
             // The solo toggled twice, then the bus: three entries.
             for (int undo = 0; undo < 3; ++undo)
                 key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});

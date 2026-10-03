@@ -8,6 +8,7 @@
 #include "daw/ui/model/History.h"
 #include "daw/ui/model/LevelSource.h"
 #include "daw/ui/model/ListeningHost.h"
+#include "daw/ui/model/MixHost.h"
 #include "daw/ui/model/NoteClipboard.h"
 #include "daw/ui/model/PluginHost.h"
 #include "daw/ui/model/ProjectObserver.h"
@@ -74,6 +75,9 @@ struct PanelServices
 
     // Hearing a proposal before writing it.
     ListeningHost& listening;
+
+    // The mix by the AI (S20): measured, decided and verified behind it.
+    MixHost& mix;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

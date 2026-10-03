@@ -272,8 +272,8 @@ public:
                 &projectObserver_,
                 mixSession_.get()});
 
-            // The mix is verified by the rules: never a key, never an API.
-            if (run == Verification::Run::mix && mixSession_ != nullptr)
+            // A verification mixes by the rules: never a key, never an API.
+            if (mixSession_ != nullptr)
                 mixSession_->setUseModel(false);
 
             if (exporter_ != nullptr)
@@ -800,7 +800,8 @@ private:
                                          *levels_,
                                          clipboard_,
                                          *promptReader_,
-                                         *listening_};
+                                         *listening_,
+                                         *mixSession_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();

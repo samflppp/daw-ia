@@ -53,6 +53,10 @@ public:
     [[nodiscard]] virtual const domain::mix::Proposal* proposal() const = 0;
     [[nodiscard]] virtual const domain::mix::Brief* brief() const = 0;
 
+    // What the verification did to the master, said: empty when it did not
+    // have to touch it. Refusing the master's strip leaves it out.
+    [[nodiscard]] virtual std::string masterSentence() const = 0;
+
     // A strip whose changes the person refuses: left out at acceptance.
     virtual void refuseTrack(domain::TrackId track, bool refused) = 0;
     [[nodiscard]] virtual bool isRefused(domain::TrackId track) const = 0;
@@ -66,6 +70,7 @@ public:
     // played side by side in step, the louder one turned down by what the
     // measure says separates them. The project is never touched.
     virtual void listen(bool after) = 0;
+    [[nodiscard]] virtual bool listening() const = 0; // either side, playing
     [[nodiscard]] virtual bool listeningAfter() const = 0;
 
     // The axes: moving one decides again, without measuring again.

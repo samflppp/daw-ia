@@ -3,6 +3,7 @@
 #include "daw/ui/FrameTicker.h"
 #include "daw/ui/MiddleDragScroll.h"
 #include "daw/ui/PanelRegistry.h"
+#include "daw/ui/panels/MixProposalView.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -26,8 +27,10 @@ namespace daw::ui
 // released, the slider goes back to the curve. Moving it still writes the
 // project's value, which the line covers as long as it has points.
 //
-// "Mixer par l'IA" calls no model. It runs the check of MixingReadiness against
-// what the copilot can reach, and says what is still missing.
+// « Mixer » runs the mix by the AI (S20) through MixHost: while it measures,
+// decides and verifies, and while its proposal waits for the person, the
+// proposal takes the place of the strips; the same button cancels a run, and
+// keeping or refusing puts the strips back.
 class MixerPanel final : public juce::Component, private juce::ChangeListener
 {
 public:
@@ -37,9 +40,9 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
-    // The last report of the readiness check, as it is shown. Read by the
-    // verification.
-    [[nodiscard]] juce::String readinessReport() const { return report_.getText(); }
+    // The proposal of the mix by the AI, as it is shown: for the verification.
+    [[nodiscard]] const MixProposalView& proposal() const { return *proposal_; }
+    [[nodiscard]] MixProposalView& proposal() { return *proposal_; }
 
     // The strips on screen, channels and buses then the master: for the
     // verification, which clicks their controls.
@@ -54,7 +57,6 @@ private:
     void frame();
     void rebuild();
     void refresh();
-    void runReadiness();
 
     const Tokens& tokens_;
     DawLookAndFeel& lookAndFeel_;
@@ -63,18 +65,19 @@ private:
     ProjectObserver& project_;
     Selection& selection_;
     const TransportClock& clock_;
-    CopilotHost& copilot_;
+    MixHost& mix_;
     LevelSource& levels_;
     bool titled_{false};
 
     juce::TextButton addBus_;
-    juce::TextButton readiness_;
+    juce::TextButton mixButton_;
+    juce::Label mixStatus_;
     juce::Viewport viewport_;
     MiddleDragScroll middleDrag_{viewport_};
     std::unique_ptr<Content> content_;
     std::vector<std::unique_ptr<Strip>> strips_;
     std::unique_ptr<Strip> master_;
-    juce::TextEditor report_;
+    std::unique_ptr<MixProposalView> proposal_;
 
     std::vector<domain::TrackId> shownIds_;
 

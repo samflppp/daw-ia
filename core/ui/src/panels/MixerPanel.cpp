@@ -3,7 +3,6 @@
 #include "daw/domain/commands/MixCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
-#include "daw/domain/copilot/MixingReadiness.h"
 #include "daw/ui/AutomatableSlider.h"
 #include "daw/ui/model/AutomationEditing.h"
 #include "daw/ui/model/Motion.h"
@@ -562,7 +561,7 @@ MixerPanel::MixerPanel(const PanelContext& context)
     , project_(context.project)
     , selection_(context.selection)
     , clock_(context.clock)
-    , copilot_(context.copilot)
+    , mix_(context.mix)
     , levels_(context.levels)
     , titled_(context.titled)
     , content_(std::make_unique<Content>(context.tokens))
@@ -579,30 +578,30 @@ MixerPanel::MixerPanel(const PanelContext& context)
         static_cast<void>(bus_.execute(std::make_unique<domain::AddBus>(domain::TrackId::generate(), name)));
     };
 
-    addAndMakeVisible(readiness_);
-    readiness_.setButtonText(juce::String::fromUTF8("Mixer par l'IA"));
-    // The report takes the place of the strips while it is shown; the same
-    // button puts the strips back.
-    readiness_.onClick = [this]
+    addAndMakeVisible(mixButton_);
+    mixButton_.setButtonText("Mixer");
+    // One button: « Mixer » starts, and while it runs the same place cancels.
+    mixButton_.onClick = [this]
     {
-        if (report_.isVisible())
-        {
-            report_.setVisible(false);
-            resized();
-            return;
-        }
-        runReadiness();
+        const auto stage = mix_.stage();
+        if (stage == MixHost::Stage::measuring || stage == MixHost::Stage::deciding ||
+            stage == MixHost::Stage::verifying)
+            mix_.cancel();
+        else
+            mix_.start();
     };
+    addAndMakeVisible(mixStatus_);
+    mixStatus_.setJustificationType(juce::Justification::centredRight);
+    mixStatus_.setColour(juce::Label::textColourId, tokens_.colour("color.text.tertiary"));
 
     addAndMakeVisible(viewport_);
     viewport_.setViewedComponent(content_.get(), false);
     viewport_.setScrollBarsShown(false, true);
     viewport_.setScrollBarThickness(tokens_.integer("metric.scrollbar.thickness"));
 
-    addChildComponent(report_);
-    report_.setMultiLine(true);
-    report_.setReadOnly(true);
-    report_.setScrollbarsShown(true);
+    proposal_ = std::make_unique<MixProposalView>(mix_, state_, tokens_, lookAndFeel_);
+    addChildComponent(*proposal_);
+    mix_.addChangeListener(this);
 
     project_.addChangeListener(this);
     levels_.addChangeListener(this);
@@ -611,6 +610,7 @@ MixerPanel::MixerPanel(const PanelContext& context)
 
 MixerPanel::~MixerPanel()
 {
+    mix_.removeChangeListener(this);
     levels_.removeChangeListener(this);
     project_.removeChangeListener(this);
     setLookAndFeel(nullptr);
@@ -628,6 +628,19 @@ std::vector<juce::Component*> MixerPanel::strips() const
 
 void MixerPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
+    if (source == &mix_)
+    {
+        const auto stage = mix_.stage();
+        const auto running = stage == MixHost::Stage::measuring || stage == MixHost::Stage::deciding ||
+                             stage == MixHost::Stage::verifying;
+        mixButton_.setButtonText(running ? "Annuler" : "Mixer");
+        mixStatus_.setText(stage == MixHost::Stage::idle ? juce::String::fromUTF8(mix_.status().c_str())
+                                                         : juce::String{},
+                           juce::dontSendNotification);
+        if (proposal_->isVisible() != (stage != MixHost::Stage::idle))
+            resized();
+        return;
+    }
     if (source == &levels_)
     {
         const auto meters = levels_.meters();
@@ -719,26 +732,6 @@ void MixerPanel::refresh()
         master_->refresh();
 }
 
-void MixerPanel::runReadiness()
-{
-    const auto offered = copilot_.capabilities();
-    const auto gaps = domain::copilot::mixingGaps(offered);
-    const auto total = domain::copilot::mixingNeeds().size();
-
-    std::string report =
-        "Aucun modèle appelé : ceci vérifie ce que le copilote peut atteindre pour mixer.\n" +
-        std::to_string(total - gaps.size()) + " besoins sur " + std::to_string(total) +
-        " sont couverts. Ce qui manque encore :\n";
-    for (const auto& gap : gaps)
-        report += "• " + gap.what + " (" + gap.satisfiedBy.front() + ") — " + gap.why + "\n";
-
-    const auto text = juce::String::fromUTF8(report.c_str());
-
-    report_.setText(text, false);
-    report_.setVisible(true);
-    resized();
-}
-
 void MixerPanel::paint(juce::Graphics& g)
 {
     g.fillAll(tokens_.colour("color.surface.sunken"));
@@ -763,15 +756,22 @@ void MixerPanel::resized()
     auto area = getLocalBounds();
     auto header = area.removeFromTop(tokens_.integer("metric.panel.headerHeight"));
     header = header.reduced(tokens_.integer("space.xs"));
-    readiness_.setBounds(header.removeFromRight(tokens_.integer("metric.mixer.headerButtonWidth")));
+    mixButton_.setBounds(header.removeFromRight(tokens_.integer("metric.mixer.headerButtonWidth")));
     header.removeFromRight(tokens_.integer("space.xs"));
     addBus_.setBounds(header.removeFromRight(tokens_.integer("metric.mixer.headerButtonWidth")));
+    header.removeFromRight(tokens_.integer("space.xs"));
+    header.removeFromLeft(tokens_.integer("metric.mixer.headerButtonWidth"));
+    mixStatus_.setBounds(header);
 
-    if (report_.isVisible())
-        report_.setBounds(area);
-    viewport_.setVisible(!report_.isVisible());
+    // A mix running or proposed takes the place of the strips.
+    const auto stage = mix_.stage();
+    const auto proposing = stage != MixHost::Stage::idle;
+    proposal_->setVisible(proposing);
+    if (proposing)
+        proposal_->setBounds(area);
+    viewport_.setVisible(!proposing);
     if (master_ != nullptr)
-        master_->setVisible(!report_.isVisible());
+        master_->setVisible(!proposing);
 
     if (master_ != nullptr)
         master_->setBounds(area.removeFromRight(tokens_.integer("metric.mixer.stripWidth")));
