@@ -146,3 +146,21 @@ Noté le 3 octobre 2026 : en S21, ce critère est remplacé par la marge du kick
 machine. Le tableau ci-dessus reste à remplir à l'oreille, sur les trois morceaux du fondateur.
 
 Le coût réel d'un mixage (bilan S20 §5) n'est pas un essai : il est mesuré par la machine en S21.
+
+## S21 — la carte son, les fenêtres, le mixage par le modèle
+
+### À essayer, dans l'ordre
+
+Sur `main`, Release recompilé. Ta clé dans `DAW_IA_ANTHROPIC_API_KEY`.
+
+1. **Les AirPods qui partent.** Lance la lecture sur tes AirPods, puis range-les dans leur boîte. Le son doit
+   passer sur les haut-parleurs dans la seconde, et « sortie : Haut-parleur… » s'afficher sous la position.
+   Ressors-les : le son doit revenir dedans. Dis-moi si basculer tout seul sur les haut-parleurs te gêne.
+2. **L'avant/après sur les haut-parleurs du portable** : F10, « Mixer », « Avant », « Après ». Ça doit
+   s'entendre.
+3. **Les fenêtres.** Glisse l'historique contre le rack : il doit se coller. Tire le bord qu'ils partagent :
+   les deux bougent. Dis-moi si 10 px de magnétisme est trop ou trop peu.
+4. **Le rack long.** Une vingtaine de canaux : la molette, le clic-molette, F sur le canal choisi.
+5. **L'historique.** Descends-le, fais une action : ce que tu regardais ne doit pas bouger. Remonte en haut :
+   il suit.
+6. **Fermer**, en lecture, copilote ouvert : le processus doit disparaître (gestionnaire des tâches).
