@@ -145,10 +145,31 @@ TEST_CASE("the base mix carves the bass under the kick, with a sentence that cit
     CHECK(carve->sentence.find("63 Hz") != std::string::npos);
     CHECK(carve->sentence.find("100 %") != std::string::npos);
 
+    // In French, with the article each role takes: never « une kick ».
+    int levels = 0;
+    for (const auto& change : proposal.changes)
+    {
+        if (change.kind != Change::Kind::volume)
+            continue;
+        ++levels;
+        MESSAGE(change.sentence);
+        const auto role = brief.find(change.track)->role.role;
+        const std::string expected = role == MixRole::kick     ? "pour un kick"
+                                     : role == MixRole::bass   ? "pour une basse"
+                                     : role == MixRole::hats   ? "pour des charleys"
+                                     : role == MixRole::chords ? "pour des accords"
+                                     : role == MixRole::vocal  ? "pour une voix"
+                                                               : "pour ";
+        CHECK(change.sentence.find(expected) != std::string::npos);
+    }
+    CHECK(levels > 0);
+
     // The chords make room for the voice around 2 kHz.
     const auto* room = find(proposal, session.chords, Change::Kind::equaliser);
     REQUIRE(room != nullptr);
     CHECK(room->parameters.count(std::string{internal::mid2Gain}) == 1);
+    MESSAGE(room->sentence);
+    CHECK(room->sentence.find("pour que la voix passe devant") != std::string::npos);
 
     // The voice, far above the crest it wants, is compressed.
     const auto* squeeze = find(proposal, session.voice, Change::Kind::compressor);

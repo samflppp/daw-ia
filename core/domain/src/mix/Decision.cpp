@@ -352,6 +352,35 @@ std::string roleLabel(MixRole role)
     return "effets";
 }
 
+namespace
+{
+
+// French needs the article the label takes: « un kick », « une basse »,
+// « des accords »; « le kick », « la basse », « les accords ».
+bool plural(MixRole role)
+{
+    return role == MixRole::hats || role == MixRole::percussion || role == MixRole::chords ||
+           role == MixRole::fx;
+}
+
+bool feminine(MixRole role)
+{
+    return role == MixRole::snare || role == MixRole::bass || role == MixRole::melody ||
+           role == MixRole::vocal;
+}
+
+std::string aRole(MixRole role)
+{
+    return (plural(role) ? "des " : feminine(role) ? "une " : "un ") + roleLabel(role);
+}
+
+std::string theRole(MixRole role)
+{
+    return (plural(role) ? "les " : feminine(role) ? "la " : "le ") + roleLabel(role);
+}
+
+} // namespace
+
 RoleGuess guessRole(const ProjectState& state,
                     TrackId track,
                     const StreamMeasure* measure,
@@ -960,8 +989,8 @@ Proposal baseMix(const Brief& brief)
             {
                 Change change{strip.track, Kind::volume, volume, {}, {}, {}};
                 const auto lufs = std::round(m.integratedLufs * 10.0) / 10.0;
-                change.sentence = name + " jouait à " + french(lufs) + " LUFS avant son fader ; pour une " +
-                                  label + " je vise " + french(target) + " LUFS dans le mix : fader " +
+                change.sentence = name + " jouait à " + french(lufs) + " LUFS avant son fader ; pour " +
+                                  aRole(role) + " je vise " + french(target) + " LUFS dans le mix : fader " +
                                   (volume < strip.volumeDb ? "baissé" : "monté") + " de " +
                                   french(std::abs(volume - strip.volumeDb)) + " dB.";
                 change.evidence = {{"lufs", lufs}};
@@ -1057,7 +1086,8 @@ Proposal baseMix(const Brief& brief)
                     name + " et " + (other->name.empty() ? roleLabel(other->role.role) : other->name) +
                     " se recouvrent à " + bandWord(overlap.band) + " " + french(share, 0) +
                     " % du temps : j'ai creusé " + name + " de " + french(std::abs(depth)) + " dB à " +
-                    bandWord(overlap.band) + " pour que " + roleLabel(other->role.role) + " passe devant.";
+                    bandWord(overlap.band) + " pour que " + theRole(other->role.role) +
+                    (plural(other->role.role) ? " passent devant." : " passe devant.");
                 change.evidence = {
                     {"overlap." + std::to_string(overlap.band) + "." + other->track.toString(), share}};
                 change.parameters = eq;
