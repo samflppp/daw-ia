@@ -30,3 +30,6 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Réglages personnels de Claude Code, jamais dans le dépôt.
+.claude/settings.local.json
