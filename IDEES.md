@@ -162,3 +162,25 @@ Notés en construisant la toile, non construits :
   dépasse la bande d'automation. À trouver avant d'y toucher.
 - **La toile chargée sous 8 ms au 95e centile en Direct2D :** 256 blocs donnent 9 à 13 ms au 95e centile selon
   la charge de la machine.
+
+## Le mixer et les effets (noté le 3 octobre 2026, avant la S20)
+
+Demandés par le fondateur, non construits, hors du périmètre de la S20 tant qu'une semaine ne les prend pas :
+
+- **Poser des effets depuis la tranche du mixer.** Aujourd'hui une tranche liste le nom de ses inserts, en
+  lecture seule ; on les ajoute depuis la page de la chaîne de plugins. Il faut un endroit dans chaque tranche
+  pour ajouter, retirer, réordonner et contourner un effet, sans quitter le mixer. Les commandes existent
+  (`plugin.insert`, `plugin.remove`, `plugin.set_bypassed`) : c'est de l'écran, pas du domaine.
+- **La création de bus intelligente.** Le logiciel remarque qu'un même plugin est posé plusieurs fois avec les
+  mêmes réglages (la même réverbération sur six pistes, par exemple) et propose de le remplacer par un bus et
+  des envois. À trancher avant d'y toucher : ce que veut dire « les mêmes réglages » pour un plugin dont l'état
+  est un blob opaque (comparer les digests du magasin de contenu, comparer les paramètres touchés, tolérance) ;
+  un effet d'insertion (compresseur, égaliseur) ne se mutualise pas comme un effet d'envoi (réverbération,
+  délai) ; la proposition passe par l'essai à blanc et un seul groupe d'annulation, comme le reste. Les
+  commandes existent (`bus.add`, `track.set_send`, `plugin.remove`).
+- **Apprendre au DAW les VST externes les plus connus.** Pour une liste de plugins que le fondateur donnera
+  plus tard, le DAW sait ce que fait chaque paramètre (nom, unité, plage utile, rôle), au lieu de voir un
+  plugin opaque. C'est ce qui permettrait au copilote et au mixage par l'IA de régler les plugins de
+  l'utilisateur, que la S20 laisse volontairement de côté. Forme probable : une fiche déclarative par plugin,
+  liée par l'identifiant stable du format (jamais par le nom ni par l'index d'un paramètre), versionnée avec
+  le plugin. Liste des plugins : à fournir.
