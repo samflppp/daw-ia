@@ -293,6 +293,16 @@ private:
                                                        const domain::PluginId& id);
     [[nodiscard]] tracktion::Plugin::Ptr createPluginFor(const domain::PluginInstance& source);
     static void removeUnknownPlugins(tracktion::PluginList& list, const domain::Track& source);
+
+    // An effect of the DAW (S20) is one or two of Tracktion's own: the
+    // equaliser is a high-pass followed by the 4-band equaliser, both marked
+    // with the domain identifier and told apart by their part. Its parameters
+    // are written in the units the domain holds them in.
+    [[nodiscard]] static std::vector<tracktion::Plugin*> partsOf(tracktion::PluginList& list,
+                                                                 const domain::PluginId& id);
+    [[nodiscard]] std::vector<tracktion::Plugin::Ptr> createInternal(const domain::PluginInstance& source);
+    static void applyInternal(const std::vector<tracktion::Plugin*>& parts,
+                              const domain::PluginInstance& source);
     void applyPluginState(tracktion::Plugin& target, const domain::PluginInstance& source);
     static void applyPluginParameters(tracktion::Plugin& target, const domain::PluginInstance& source);
     [[nodiscard]] bool isInstrument(const domain::PluginRef& ref) const;

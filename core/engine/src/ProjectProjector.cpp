@@ -2,6 +2,7 @@
 
 #include "HostedParameters.h"
 #include "daw/domain/commands/TransportCommands.h"
+#include "daw/domain/project/InternalEffects.h"
 #include "daw/engine/MeterTap.h"
 
 #include <algorithm>
@@ -25,6 +26,10 @@ const juce::Identifier domainTrackIdProperty{"dawDomainTrackId"};
 // Removing a plugin in the middle cannot make the projector write a state into
 // the wrong plugin.
 const juce::Identifier domainPluginIdProperty{"dawDomainPluginId"};
+
+// Which of the Tracktion plugins an internal effect is made of: "hp" or "eq"
+// for the equaliser, "comp" for the compressor.
+const juce::Identifier internalPartProperty{"dawInternalPart"};
 
 // And one level further: a clip carries the key of what it lays down, a
 // placement and a row, or the auditioned row in pattern mode. Clips are bound
@@ -678,7 +683,7 @@ tracktion::Plugin* ProjectProjector::findPlugin(tracktion::PluginList& list, con
 
 tracktion::Plugin::Ptr ProjectProjector::createPluginFor(const domain::PluginInstance& source)
 {
-    if (catalogue_ == nullptr)
+    if (catalogue_ == nullptr || source.ref.format == domain::PluginRef::internalFormat)
         return {};
 
     const auto description = catalogue_->find(source.ref);
@@ -787,24 +792,151 @@ void ProjectProjector::reconcilePlugins(tracktion::PluginList& list, const domai
 {
     removeUnknownPlugins(list, source);
 
-    for (std::size_t index = 0; index < source.plugins.size(); ++index)
+    // Where the next instance's first plugin goes: right after the previous
+    // instance's last one. An internal equaliser is two plugins of the list,
+    // so a domain index is not a list index.
+    auto next = offset;
+    for (const auto& instance : source.plugins)
     {
-        const auto& instance = source.plugins[index];
-
-        auto* plugin = findPlugin(list, instance.id);
-        if (plugin == nullptr)
+        const bool internal = instance.ref.format == domain::PluginRef::internalFormat;
+        auto parts = partsOf(list, instance.id);
+        if (parts.empty())
         {
-            auto created = createPluginFor(instance);
-            if (created == nullptr)
-                continue;
+            std::vector<tracktion::Plugin::Ptr> created;
+            if (internal)
+                created = createInternal(instance);
+            else if (auto plugin = createPluginFor(instance); plugin != nullptr)
+                created.push_back(plugin);
 
-            list.insertPlugin(created, offset + static_cast<int>(index), nullptr);
-            plugin = created.get();
+            for (std::size_t part = 0; part < created.size(); ++part)
+            {
+                list.insertPlugin(created[part], next + static_cast<int>(part), nullptr);
+                parts.push_back(created[part].get());
+            }
         }
+        if (parts.empty())
+            continue;
 
-        plugin->setEnabled(!instance.bypassed);
-        applyPluginState(*plugin, instance);
-        applyPluginParameters(*plugin, instance);
+        if (internal)
+        {
+            applyInternal(parts, instance);
+        }
+        else
+        {
+            parts.front()->setEnabled(!instance.bypassed);
+            applyPluginState(*parts.front(), instance);
+            applyPluginParameters(*parts.front(), instance);
+        }
+        next = list.indexOf(parts.back()) + 1;
+    }
+}
+
+std::vector<tracktion::Plugin*> ProjectProjector::partsOf(tracktion::PluginList& list,
+                                                          const domain::PluginId& id)
+{
+    const auto wanted = toJuce(id.toString());
+    std::vector<tracktion::Plugin*> parts;
+    for (auto plugin : list.getPlugins())
+    {
+        if (plugin != nullptr && plugin->state.getProperty(domainPluginIdProperty).toString() == wanted)
+            parts.push_back(plugin);
+    }
+    return parts;
+}
+
+std::vector<tracktion::Plugin::Ptr> ProjectProjector::createInternal(const domain::PluginInstance& source)
+{
+    std::vector<tracktion::Plugin::Ptr> parts;
+    const auto make = [this, &source, &parts](const char* type, const char* part)
+    {
+        auto plugin = edit_.getPluginCache().createNewPlugin(type, {});
+        if (plugin == nullptr)
+            return;
+        plugin->state.setProperty(domainPluginIdProperty, toJuce(source.id.toString()), nullptr);
+        plugin->state.setProperty(internalPartProperty, part, nullptr);
+        parts.push_back(plugin);
+    };
+
+    if (source.ref.identifier == domain::internal::equaliser)
+    {
+        make(tracktion::LowPassPlugin::xmlTypeName, "hp");
+        if (!parts.empty())
+        {
+            if (auto* filter = dynamic_cast<tracktion::LowPassPlugin*>(parts.back().get()); filter != nullptr)
+                filter->mode = "highpass";
+        }
+        make(tracktion::EqualiserPlugin::xmlTypeName, "eq");
+    }
+    else if (source.ref.identifier == domain::internal::compressor)
+    {
+        make(tracktion::CompressorPlugin::xmlTypeName, "comp");
+    }
+    return parts;
+}
+
+void ProjectProjector::applyInternal(const std::vector<tracktion::Plugin*>& parts,
+                                     const domain::PluginInstance& source)
+{
+    using namespace domain::internal;
+    const auto value = [&source](std::string_view id)
+    { return static_cast<float>(domain::internalValue(source, id)); };
+
+    // Notified synchronously, like a hosted parameter: Tracktion writes the
+    // value into the plugin's tree only then, and a render copies that tree.
+    // An unchanged value is not written again.
+    const auto write = [](tracktion::AutomatableParameter* parameter, float wanted)
+    {
+        if (parameter != nullptr && !juce::approximatelyEqual(parameter->getCurrentValue(), wanted))
+            parameter->setParameter(wanted, juce::sendNotificationSync);
+    };
+
+    for (auto* part : parts)
+    {
+        const auto which = part->state.getProperty(internalPartProperty).toString();
+        if (which == "hp")
+        {
+            auto* filter = dynamic_cast<tracktion::LowPassPlugin*>(part);
+            if (filter == nullptr)
+                continue;
+            // Off at its floor: a high-pass at 20 Hz still takes 3 dB there,
+            // and "no high-pass" means nothing taken.
+            filter->setEnabled(!source.bypassed && value(highPassFrequency) > highPassOff);
+            write(filter->frequency.get(), value(highPassFrequency));
+        }
+        else if (which == "eq")
+        {
+            auto* eq = dynamic_cast<tracktion::EqualiserPlugin*>(part);
+            if (eq == nullptr)
+                continue;
+            eq->setEnabled(!source.bypassed);
+            write(eq->loFreq.get(), value(lowFrequency));
+            write(eq->loGain.get(), value(lowGain));
+            write(eq->loQ.get(), value(lowQ));
+            write(eq->midFreq1.get(), value(mid1Frequency));
+            write(eq->midGain1.get(), value(mid1Gain));
+            write(eq->midQ1.get(), value(mid1Q));
+            write(eq->midFreq2.get(), value(mid2Frequency));
+            write(eq->midGain2.get(), value(mid2Gain));
+            write(eq->midQ2.get(), value(mid2Q));
+            write(eq->hiFreq.get(), value(highFrequency));
+            write(eq->hiGain.get(), value(highGain));
+            write(eq->hiQ.get(), value(highQ));
+        }
+        else if (which == "comp")
+        {
+            auto* comp = dynamic_cast<tracktion::CompressorPlugin*>(part);
+            if (comp == nullptr)
+                continue;
+            comp->setEnabled(!source.bypassed);
+            // Tracktion holds the threshold as a gain and the ratio as its
+            // inverse, which cannot go under 0.05 nor over 0.95: 1:1 is
+            // played as 1.05:1, the gentlest it has.
+            write(&comp->thresholdGain.getParameter(), juce::Decibels::decibelsToGain(value(threshold)));
+            write(&comp->ratio.getParameter(), juce::jlimit(0.05f, 0.95f, 1.0f / value(ratio)));
+            write(&comp->attackMs.getParameter(), value(attack));
+            write(&comp->releaseMs.getParameter(), value(release));
+            write(&comp->outputDb.getParameter(), value(makeup));
+        }
     }
 }
 
@@ -1410,7 +1542,23 @@ void ProjectProjector::reconcile()
         if (companion != nullptr)
         {
             if (trackChanged || needsCompanion)
+            {
                 applyMix(*companion, source);
+
+                // The effects of the DAW act on the recordings too (S20): a
+                // voice is a recording, and an equaliser that left it alone
+                // would be a lie on the mixer. Only them: a plugin of the
+                // user's would be a second instance, whose state would drift
+                // from the first.
+                auto effects = source;
+                effects.plugins.erase(
+                    std::remove_if(effects.plugins.begin(),
+                                   effects.plugins.end(),
+                                   [](const domain::PluginInstance& plugin)
+                                   { return plugin.ref.format != domain::PluginRef::internalFormat; }),
+                    effects.plugins.end());
+                reconcilePlugins(companion->pluginList, effects, 0);
+            }
             if (trackChanged || routeChanged || needsCompanion)
                 applyRoute(*companion, source);
             if (playedChanged || retimed || needsCompanion)
