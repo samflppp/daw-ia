@@ -1,5 +1,7 @@
 #include "daw/ui/panels/HistoryPanel.h"
 
+#include "daw/ui/model/ListScroll.h"
+
 #include <algorithm>
 
 namespace daw::ui
@@ -50,6 +52,9 @@ HistoryPanel::HistoryPanel(const PanelContext& context)
     setLookAndFeel(&lookAndFeel_);
     setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
 
+    // F frames the current entry; every other key goes on to the workspace.
+    setWantsKeyboardFocus(true);
+
     addAndMakeVisible(undo_);
     addAndMakeVisible(redo_);
 
@@ -78,6 +83,30 @@ void HistoryPanel::refresh()
 {
     undo_.setEnabled(bus_.canUndo());
     redo_.setEnabled(bus_.canRedo());
+
+    const auto count = history_.entries().size();
+    const auto added = count > entriesSeen_ ? static_cast<int>(count - entriesSeen_) : 0;
+    entriesSeen_ = count;
+    scrollTo(listScroll::afterAdding(scroll_,
+                                     added,
+                                     tokens_.integer("metric.history.rowHeight"),
+                                     contentHeight(),
+                                     listArea().getHeight()));
+    repaint();
+}
+
+int HistoryPanel::contentHeight() const
+{
+    return static_cast<int>(history_.entries().size()) * tokens_.integer("metric.history.rowHeight");
+}
+
+void HistoryPanel::scrollTo(int offset)
+{
+    const auto clamped = listScroll::clamped(offset, contentHeight(), listArea().getHeight());
+    if (clamped == scroll_)
+        return;
+    scroll_ = clamped;
+    hovered_ = -1;
     repaint();
 }
 
@@ -95,7 +124,7 @@ int HistoryPanel::rowAt(juce::Point<int> point) const
     if (!area.contains(point))
         return -1;
 
-    const auto row = (point.getY() - area.getY()) / tokens_.integer("metric.history.rowHeight");
+    const auto row = (point.getY() - area.getY() + scroll_) / tokens_.integer("metric.history.rowHeight");
     return row < static_cast<int>(history_.entries().size()) ? row : -1;
 }
 
@@ -126,11 +155,54 @@ void HistoryPanel::walkTo(std::size_t entryIndex)
 
 void HistoryPanel::mouseDown(const juce::MouseEvent& event)
 {
+    // The middle button drags the list, as it drags every view (S18).
+    middleDragging_ = event.mods.isMiddleButtonDown();
+    if (middleDragging_)
+    {
+        dragFrom_ = scroll_;
+        return;
+    }
+
     const auto row = rowAt(event.getPosition());
     if (row < 0)
         return;
 
     walkTo(entryAtRow(row));
+}
+
+void HistoryPanel::mouseDrag(const juce::MouseEvent& event)
+{
+    if (middleDragging_)
+        scrollTo(dragFrom_ - event.getDistanceFromDragStartY());
+}
+
+void HistoryPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
+{
+    // A list has nothing to zoom: Ctrl and Alt go on to what holds it.
+    if (event.mods.isCtrlDown() || event.mods.isCommandDown() || event.mods.isAltDown() ||
+        wheel.deltaY == 0.0f)
+    {
+        Component::mouseWheelMove(event, wheel);
+        return;
+    }
+    scrollTo(listScroll::wheeled(scroll_,
+                                 static_cast<double>(wheel.deltaY),
+                                 tokens_.integer("metric.history.rowHeight"),
+                                 contentHeight(),
+                                 listArea().getHeight()));
+}
+
+bool HistoryPanel::keyPressed(const juce::KeyPress& key)
+{
+    // F: the entry the project stands on, the one the accent marks.
+    if ((key.getKeyCode() != 'F' && key.getKeyCode() != 'f') || key.getModifiers().isAnyModifierKeyDown() ||
+        history_.cursor() == 0)
+        return false;
+
+    const auto rowHeight = tokens_.integer("metric.history.rowHeight");
+    const auto top = static_cast<int>(history_.entries().size() - history_.cursor()) * rowHeight;
+    scrollTo(listScroll::framed(scroll_, top, top + rowHeight, contentHeight(), listArea().getHeight()));
+    return true;
 }
 
 void HistoryPanel::mouseMove(const juce::MouseEvent& event)
@@ -201,11 +273,16 @@ void HistoryPanel::paint(juce::Graphics& g)
         return;
     }
 
-    auto area = listArea();
+    const auto area = listArea();
     const auto rowHeight = tokens_.integer("metric.history.rowHeight");
-    const auto rows = std::min(static_cast<int>(entries.size()), area.getHeight() / rowHeight);
+    const auto first = scroll_ / rowHeight;
+    const auto last =
+        std::min(static_cast<int>(entries.size()), (scroll_ + area.getHeight()) / rowHeight + 1);
 
-    for (int row = 0; row < rows; ++row)
+    g.saveState();
+    g.reduceClipRegion(area);
+
+    for (int row = first; row < last; ++row)
     {
         const auto index = entryAtRow(row);
         const auto& entry = entries[index];
@@ -213,7 +290,8 @@ void HistoryPanel::paint(juce::Graphics& g)
         // Past the cursor means undone: still there, still redoable, and shown
         // as what it is rather than removed from the list.
         const bool applied = index < history_.cursor();
-        auto line = area.removeFromTop(rowHeight);
+        auto line = juce::Rectangle<int>{
+            area.getX(), area.getY() + row * rowHeight - scroll_, area.getWidth(), rowHeight};
 
         if (row == hovered_)
         {
@@ -274,6 +352,8 @@ void HistoryPanel::paint(juce::Graphics& g)
                    juce::Justification::centredLeft,
                    true);
     }
+
+    g.restoreState();
 }
 
 void HistoryPanel::resized()
@@ -281,6 +361,7 @@ void HistoryPanel::resized()
     auto footer = getLocalBounds().removeFromBottom(tokens_.integer("metric.plugin.slotHeight"));
     undo_.setBounds(footer.removeFromLeft(footer.getWidth() / 2));
     redo_.setBounds(footer);
+    scrollTo(scroll_);
 }
 
 } // namespace daw::ui

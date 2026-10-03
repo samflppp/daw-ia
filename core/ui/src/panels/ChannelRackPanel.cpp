@@ -6,6 +6,7 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/tidy/Roles.h"
 #include "daw/ui/model/LaneEditing.h"
+#include "daw/ui/model/ListScroll.h"
 #include "daw/ui/model/PatternEditing.h"
 
 #include <algorithm>
@@ -44,6 +45,9 @@ ChannelRackPanel::ChannelRackPanel(const PanelContext& context)
 
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
+
+    // F frames the chosen channel; every other key goes on to the workspace.
+    setWantsKeyboardFocus(true);
 }
 
 ChannelRackPanel::~ChannelRackPanel()
@@ -56,6 +60,9 @@ ChannelRackPanel::~ChannelRackPanel()
 void ChannelRackPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
     juce::ignoreUnused(source);
+    // A channel removed at the bottom must not leave the list scrolled past
+    // its end.
+    scrollTo(scroll_);
     repaint();
 }
 
@@ -73,7 +80,21 @@ juce::Rectangle<int> ChannelRackPanel::channelBounds(int row) const
 {
     const auto area = channelArea();
     const auto rowHeight = tokens_.integer("metric.channelRack.rowHeight");
-    return {area.getX(), area.getY() + row * rowHeight, area.getWidth(), rowHeight};
+    return {area.getX(), area.getY() + row * rowHeight - scroll_, area.getWidth(), rowHeight};
+}
+
+int ChannelRackPanel::contentHeight() const
+{
+    return static_cast<int>(state_.tracks().size()) * tokens_.integer("metric.channelRack.rowHeight");
+}
+
+void ChannelRackPanel::scrollTo(int offset)
+{
+    const auto clamped = listScroll::clamped(offset, contentHeight(), channelArea().getHeight());
+    if (clamped == scroll_)
+        return;
+    scroll_ = clamped;
+    repaint();
 }
 
 int ChannelRackPanel::rowAtY(int y) const
@@ -83,7 +104,7 @@ int ChannelRackPanel::rowAtY(int y) const
     if (y < area.getY() || y >= area.getBottom() || rowHeight <= 0)
         return -1;
 
-    const auto row = (y - area.getY()) / rowHeight;
+    const auto row = (y - area.getY() + scroll_) / rowHeight;
     return row < static_cast<int>(state_.tracks().size()) ? row : -1;
 }
 
@@ -151,6 +172,7 @@ void ChannelRackPanel::resized()
     footer.removeFromLeft(tokens_.integer("space.sm"));
     addInstrument_.setBounds(
         footer.removeFromLeft(tokens_.integer("metric.channelRack.channelWidth") * 3 / 4));
+    scrollTo(scroll_);
 }
 
 void ChannelRackPanel::paint(juce::Graphics& g)
@@ -206,6 +228,8 @@ void ChannelRackPanel::paintChannels(juce::Graphics& g, juce::Rectangle<int> are
         const auto row = channelBounds(static_cast<int>(index));
         if (row.getY() >= area.getBottom())
             break;
+        if (row.getBottom() <= area.getY())
+            continue;
 
         g.setColour(tokens_.colour("color.surface.panel"));
         g.fillRect(row);
@@ -258,6 +282,14 @@ void ChannelRackPanel::paintChannels(juce::Graphics& g, juce::Rectangle<int> are
 
 void ChannelRackPanel::mouseDown(const juce::MouseEvent& event)
 {
+    // The middle button drags the list, as it drags every view (S18).
+    middleDragging_ = event.mods.isMiddleButtonDown();
+    if (middleDragging_)
+    {
+        dragFrom_ = scroll_;
+        return;
+    }
+
     const auto row = rowAtY(event.getPosition().getY());
     if (row < 0)
         return;
@@ -280,6 +312,48 @@ void ChannelRackPanel::mouseDown(const juce::MouseEvent& event)
     // Selecting is not an edit and writes no command: the piano roll follows.
     selection_.selectTrack(state_.tracks()[static_cast<std::size_t>(row)].id);
     repaint();
+}
+
+void ChannelRackPanel::mouseDrag(const juce::MouseEvent& event)
+{
+    if (middleDragging_)
+        scrollTo(dragFrom_ - event.getDistanceFromDragStartY());
+}
+
+void ChannelRackPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
+{
+    // Ctrl zooms everywhere else; a list has nothing to zoom, so it lets the
+    // wheel go on to what holds it.
+    if (event.mods.isCtrlDown() || event.mods.isCommandDown() || event.mods.isAltDown() ||
+        wheel.deltaY == 0.0f)
+    {
+        Component::mouseWheelMove(event, wheel);
+        return;
+    }
+    scrollTo(listScroll::wheeled(scroll_,
+                                 static_cast<double>(wheel.deltaY),
+                                 tokens_.integer("metric.channelRack.rowHeight"),
+                                 contentHeight(),
+                                 channelArea().getHeight()));
+}
+
+bool ChannelRackPanel::keyPressed(const juce::KeyPress& key)
+{
+    if ((key.getKeyCode() != 'F' && key.getKeyCode() != 'f') || key.getModifiers().isAnyModifierKeyDown())
+        return false;
+
+    const auto& tracks = state_.tracks();
+    for (std::size_t index = 0; index < tracks.size(); ++index)
+    {
+        if (tracks[index].id != selection_.track())
+            continue;
+        const auto rowHeight = tokens_.integer("metric.channelRack.rowHeight");
+        const auto top = static_cast<int>(index) * rowHeight;
+        scrollTo(
+            listScroll::framed(scroll_, top, top + rowHeight, contentHeight(), channelArea().getHeight()));
+        return true;
+    }
+    return false;
 }
 
 void ChannelRackPanel::mouseDoubleClick(const juce::MouseEvent& event)

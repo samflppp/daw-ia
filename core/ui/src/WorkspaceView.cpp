@@ -160,6 +160,39 @@ void WorkspaceView::buildPages(const WindowedLayout& layout)
 
         window.desktop = [this] { return desktopArea(); };
 
+        // The windows it can land on and be held to: the others open and not
+        // maximised, in the order of the pages, both ways (S21).
+        const auto others = [this, name]
+        {
+            std::vector<PageSlot*> found;
+            for (auto& other : pages_)
+            {
+                if (other.page.panel != name && other.open && !other.maximised && other.window->isVisible())
+                    found.push_back(&other);
+            }
+            return found;
+        };
+        window.neighbours = [others]
+        {
+            std::vector<juce::Rectangle<int>> areas;
+            for (const auto* other : others())
+                areas.push_back(other->window->getBounds());
+            return areas;
+        };
+        window.placeNeighbours = [this, others](const std::vector<juce::Rectangle<int>>& areas)
+        {
+            const auto found = others();
+            for (std::size_t index = 0; index < found.size() && index < areas.size(); ++index)
+            {
+                auto& other = *found[index];
+                if (other.window->getBounds() == areas[index])
+                    continue;
+                other.window->setBounds(areas[index]);
+                other.place = pageFractions(toRect(areas[index]), toRect(desktopArea()));
+                remember(other);
+            }
+        };
+
         window.onClose = [this, name]
         {
             if (auto* found = slotFor(name); found != nullptr)

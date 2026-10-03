@@ -37,6 +37,7 @@ target_sources(daw_app PRIVATE
     src/VerificationMix.cpp
     src/VerificationPlayback.cpp
     src/VerificationTiming.cpp
+    src/VerificationWindows.cpp
     src/SampleLibrary.cpp
     src/SamplePreview.cpp
     src/SongExporter.cpp

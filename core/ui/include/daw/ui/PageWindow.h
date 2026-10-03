@@ -4,12 +4,14 @@
 #include "daw/ui/FrameTicker.h"
 #include "daw/ui/Tokens.h"
 #include "daw/ui/model/Motion.h"
+#include "daw/ui/model/WindowSnap.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace daw::ui
 {
@@ -37,6 +39,12 @@ public:
     // The rectangle the window may occupy. Asked for on every move, so a
     // window cannot be dragged under the bar or off the desktop.
     std::function<juce::Rectangle<int>()> desktop;
+
+    // The other windows open on the desktop, and where they go when an edge
+    // they share with this one is dragged (S21): the same order both ways.
+    // A window dragged lands on their edges; see WindowSnap.h.
+    std::function<std::vector<juce::Rectangle<int>>()> neighbours;
+    std::function<void(const std::vector<juce::Rectangle<int>>&)> placeNeighbours;
 
     std::function<void()> onClose;
     std::function<void()> onMaximise;
@@ -83,10 +91,19 @@ private:
                          bool stretchingBottom,
                          bool stretchingRight) override;
 
+        void resizeStart() override;
         void resizeEnd() override;
 
     private:
         PageWindow& owner_;
+
+        // Read on the first step of a resize: the windows held to the edges
+        // it moves, and where everything was. Every later step starts again
+        // from there, so a neighbour that stopped at its least size does not
+        // drift.
+        std::optional<snap::Box> start_;
+        std::vector<snap::Box> startOthers_;
+        std::vector<snap::Link> links_;
     };
 
     [[nodiscard]] juce::Rectangle<int> titleArea() const;

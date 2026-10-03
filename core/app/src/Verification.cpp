@@ -1518,6 +1518,7 @@ void Verification::buildReopen()
 void Verification::buildCanvas()
 {
     addCanvasSteps();
+    addWindowSteps();
 }
 
 // --verify-canvas-charge: the canvas on a loaded project, measured.

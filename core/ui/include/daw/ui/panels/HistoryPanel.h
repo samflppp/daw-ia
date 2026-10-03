@@ -25,8 +25,16 @@ public:
     void resized() override;
 
     void mouseDown(const juce::MouseEvent& event) override;
+    void mouseDrag(const juce::MouseEvent& event) override;
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
+    void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
+    bool keyPressed(const juce::KeyPress& key) override;
+
+    // How far the list is scrolled, in pixels: what the verification reads.
+    [[nodiscard]] int scrolled() const noexcept { return scroll_; }
+    // How many entries the list has heard of: behind the log until its next message.
+    [[nodiscard]] std::size_t entryCount() const noexcept { return entriesSeen_; }
 
     // Over a line the copilot wrote with a context — the mix by the AI — the
     // sentences of what it did, each with the measure it cites (S20).
@@ -39,6 +47,8 @@ private:
 
     // The list is drawn newest first, so row 0 is the last entry.
     [[nodiscard]] juce::Rectangle<int> listArea() const;
+    [[nodiscard]] int contentHeight() const;
+    void scrollTo(int offset);
     [[nodiscard]] int rowAt(juce::Point<int> point) const;
     [[nodiscard]] std::size_t entryAtRow(int row) const;
 
@@ -54,6 +64,13 @@ private:
     juce::TextButton undo_{"Annuler"};
     juce::TextButton redo_{u8"Rétablir"};
     int hovered_{-1};
+
+    // The list scrolled (S21). Newest on top: at the top it shows what is
+    // added; scrolled down by the hand, it keeps the entries it showed.
+    int scroll_{0};
+    int dragFrom_{0};
+    bool middleDragging_{false};
+    std::size_t entriesSeen_{0};
 
     // True in a page window, whose title bar names the panel already.
     bool titled_{false};

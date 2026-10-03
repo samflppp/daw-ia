@@ -26,6 +26,8 @@ namespace daw::ui
 //   right-click       rename it, or remove it
 //   click a grey name accept the name the channel's preset, sample or notes
 //                     suggest (S17), shown next to a name nobody chose
+// The list scrolls by the grammar of S18 (S21): the wheel, the middle button
+// held, F to bring the chosen channel into view.
 // Each is one command or one group: one Ctrl+Z.
 //
 // The step grid it held until S11 is gone, on purpose: two places to write
@@ -44,7 +46,13 @@ public:
     void resized() override;
 
     void mouseDown(const juce::MouseEvent& event) override;
+    void mouseDrag(const juce::MouseEvent& event) override;
     void mouseDoubleClick(const juce::MouseEvent& event) override;
+    void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
+    bool keyPressed(const juce::KeyPress& key) override;
+
+    // How far the list is scrolled, in pixels: what the verification reads.
+    [[nodiscard]] int scrolled() const noexcept { return scroll_; }
 
     // A sample dropped on a channel makes it a sampler channel on that sample;
     // dropped below the channels, it makes a new one. From the browser or from
@@ -91,6 +99,8 @@ private:
 
     [[nodiscard]] juce::Rectangle<int> channelArea() const;
     [[nodiscard]] int rowAtY(int y) const; // -1 outside any row
+    [[nodiscard]] int contentHeight() const;
+    void scrollTo(int offset);
 
     void paintChannels(juce::Graphics& g, juce::Rectangle<int> area) const;
     void paintEmpty(juce::Graphics& g) const;
@@ -117,6 +127,12 @@ private:
 
     // True in a page window, whose title bar names the panel already.
     bool titled_{false};
+
+    // The list scrolled, and where a middle-button drag started from: a state
+    // of the screen, never of the project.
+    int scroll_{0};
+    int dragFrom_{0};
+    bool middleDragging_{false};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChannelRackPanel)
 };

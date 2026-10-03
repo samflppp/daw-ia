@@ -19,6 +19,8 @@ add_library(daw_ui_workspace STATIC
     src/model/AutomationEditing.cpp
     src/model/CanvasBands.cpp
     src/model/ViewFraming.cpp
+    src/model/WindowSnap.cpp
+    src/model/ListScroll.cpp
     src/model/CopilotRequest.cpp
     src/model/GhostProposal.cpp
     src/model/LaneEditing.cpp

@@ -11,6 +11,16 @@ namespace
 // screen is a window that cannot be moved back or closed.
 constexpr int wholeWindow = 1 << 20;
 
+snap::Box toBox(juce::Rectangle<int> area)
+{
+    return {area.getX(), area.getY(), area.getWidth(), area.getHeight()};
+}
+
+juce::Rectangle<int> toArea(snap::Box box)
+{
+    return {box.x, box.y, box.width, box.height};
+}
+
 } // namespace
 
 void PageWindow::Constrainer::checkBounds(juce::Rectangle<int>& bounds,
@@ -24,6 +34,57 @@ void PageWindow::Constrainer::checkBounds(juce::Rectangle<int>& bounds,
     const auto area = owner_.desktop ? owner_.desktop() : limits;
     ComponentBoundsConstrainer::checkBounds(
         bounds, previous, area, stretchingTop, stretchingLeft, stretchingBottom, stretchingRight);
+
+    // S21: the edges of the desktop and of the other windows hold the hand.
+    std::vector<snap::Box> others;
+    if (owner_.neighbours)
+    {
+        for (const auto& other : owner_.neighbours())
+            others.push_back(toBox(other));
+    }
+    const auto reach = owner_.tokens_.integer("metric.page.snap");
+    const unsigned edges = (stretchingLeft ? snap::left : 0U) | (stretchingTop ? snap::top : 0U) |
+                           (stretchingRight ? snap::right : 0U) | (stretchingBottom ? snap::bottom : 0U);
+
+    if (edges == 0U)
+    {
+        bounds = toArea(snap::moved(toBox(bounds), toBox(area), others, reach));
+        return;
+    }
+
+    if (!start_.has_value())
+    {
+        start_ = toBox(previous);
+        startOthers_ = others;
+        links_ = snap::linked(*start_, edges, startOthers_);
+    }
+
+    auto box = snap::resized(toBox(bounds), edges, toBox(area), startOthers_, reach);
+    if (!links_.empty())
+    {
+        auto followed = snap::follow(*start_,
+                                     box,
+                                     links_,
+                                     startOthers_,
+                                     owner_.tokens_.integer("metric.page.minWidth"),
+                                     owner_.tokens_.integer("metric.page.minHeight"));
+        box = followed.window;
+        if (owner_.placeNeighbours)
+        {
+            std::vector<juce::Rectangle<int>> placed;
+            for (const auto& other : followed.others)
+                placed.push_back(toArea(other));
+            owner_.placeNeighbours(placed);
+        }
+    }
+    bounds = toArea(box);
+}
+
+void PageWindow::Constrainer::resizeStart()
+{
+    start_.reset();
+    startOthers_.clear();
+    links_.clear();
 }
 
 void PageWindow::Constrainer::resizeEnd()

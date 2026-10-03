@@ -197,6 +197,11 @@ private:
     // ends on the count per action.
     void addPlaybackCycles();
 
+    // S21 (VerificationWindows.cpp), at the end of --verify-canvas: a window
+    // dragged lands on an edge, a shared edge moves both windows, the rack
+    // and the history scroll.
+    void addWindowSteps();
+
     // The meters, live and rendered, and the copilot reading them. Part of
     // the list, after the samples: a project with a sampler channel and a
     // clip on a companion track is the one that has something to measure.
@@ -460,6 +465,7 @@ private:
     std::map<std::string, int> silentByAction_;
     bool cycleSilent_{false};
     int reopenedBefore_{0};
+    int historyScrolled_{0};
 
     // S14.
     domain::TrackId leadTrack_{};
