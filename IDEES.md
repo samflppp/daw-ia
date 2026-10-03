@@ -220,3 +220,16 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
   proposée devrait être des patterns et des notes posés sur des repères tirés de la vidéo, pas un fichier
   audio fini ; les bruitages, eux, sont de l'audio par nature (recherche de samples par l'IA, ou génération).
   Dépend d'une piste vidéo dans le DAW, qui n'existe pas.
+- **Un générateur de drum kit automatique** (noté le 3 octobre 2026, demandé par le fondateur). En un geste, le
+  DAW compose un kit complet et cohérent — kick, caisse claire ou clap, charleys fermé et ouvert, percussions,
+  808 — et le range dans le channel rack, un canal par élément. Deux lectures possibles, à trancher :
+  - **assembler** un kit à partir des samples de l'utilisateur, choisis pour aller ensemble (même couleur,
+    pas de recouvrement entre le kick et la 808, 808 accordée à la tonalité du projet). C'est la suite directe
+    de la « recherche par le son » ci-dessus (section « Recherche de samples par l'IA ») et du Bass & Groove
+    Engine du positionnement ; local, sans génération audio ;
+  - **synthétiser** des sons neufs par un modèle. C'est de la génération audio, écartée plus haut pour la
+    musique ; un coup de batterie isolé n'a pas le défaut reproché (rien à éditer dans un kick), mais c'est
+    quand même rouvrir la ligne, et poser la question des droits sur ce que le modèle a appris.
+  Dans les deux cas : pas une liste de kits tout faits, des axes continus (sombre ↔ brillant, sec ↔ ample,
+  propre ↔ saturé) et une direction tirée des références du projet ; le kit s'écoute avant d'être posé, et le
+  poser est un seul groupe d'annulation. Les commandes existent (`track.add`, `track.set_sample`).
