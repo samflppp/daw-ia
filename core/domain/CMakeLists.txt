@@ -41,6 +41,7 @@ add_library(daw_domain STATIC
     src/project/Automation.cpp
     src/project/InternalEffects.cpp
     src/mix/Measurement.cpp
+    src/mix/Decision.cpp
     src/serialization/Json.cpp)
 add_library(daw::domain ALIAS daw_domain)
 
