@@ -72,9 +72,16 @@ de ce qu'elle produit dans le DAW, et tout reste sur sa machine (bilan S15). La 
 fine-tuné sur le corpus perso » du tableau ci-dessous et la « lecture retenue » qui la suit sont
 donc écartées ; le reste de la section (audio écarté, empiler les couches) tient toujours.
 
-Écarté d'emblée : la génération audio (Suno, Udio, Stability). Elle produit du fini, pas de la
+Écarté d'emblée : la génération d'un morceau fini (Suno, Udio, Stability). Elle produit du fini, pas de la
 matière éditable — ni BPM exact, ni grille, ni stems, ni notes déplaçables. Incompatible avec la
 promesse de contrôle chirurgical.
+
+**Reformulé le 3 octobre 2026, validé par le fondateur : l'audio généré est accepté comme matière, jamais
+comme morceau fini.** La ligne d'origine disait « la génération audio », ce qui était trop large : elle visait
+le morceau entier sorti d'une phrase. Accepté : un timbre rendu à partir de notes écrites (instrument IA), un
+coup de batterie, un bruitage, une voix chantée à partir de notes et de paroles. Toujours refusé : un morceau
+entier généré d'une phrase, une boucle audio sans notes ni grille. Le critère : ce que l'IA produit reste à sa
+place sur la grille, remplaçable et supprimable pièce par pièce, et la musique reste des notes dans le projet.
 
 Symbolique open-source : peu de choses utilisables en produit. Magenta à l'abandon ; les
 transformers symboliques (Music Transformer, anticipatory, MMM) sont des travaux de recherche —
@@ -208,7 +215,7 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
     micro du push-to-talk ne passe pas par le moteur.
 - **Des instruments IA** (vu chez ACE Studio, « AI Instruments » : des interprétations d'instruments réalistes,
   sans télécharger de banques de samples). Un instrument dont le son est rendu par un modèle à partir des notes
-  écrites, au lieu d'un synthé ou d'un sampler. **À ne pas confondre avec la génération audio écartée plus haut**
+  écrites, au lieu d'un synthé ou d'un sampler. **Ce n'est pas la génération d'un morceau fini, écartée plus haut**
   (Suno, Udio) : ici les notes restent dans le projet, déplaçables, sur la grille ; seul le timbre vient du
   modèle. À trancher : rendu local ou distant, latence à la lecture (un rendu hors ligne mis en cache par
   pattern, invalidé quand ses notes changent, plutôt qu'une inférence en temps réel), et ce que devient le
@@ -216,7 +223,7 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
 - **Composer sur une vidéo** (vu chez ACE Studio, « Video Composer », https://acestudio.ai/video-composer/ :
   des musiques et des bruitages générés pour coller à une vidéo). Pour les workspaces pub / UGC et musique de
   film : l'IA lit la vidéo (coupes, rythme, durée, ambiance) et propose une musique et des bruitages calés
-  dessus. **Tension avec la génération audio écartée** : pour tenir la promesse de contrôle, la musique
+  dessus. **Dans la règle « matière, jamais morceau fini » (S14, reformulée)** : pour tenir la promesse de contrôle, la musique
   proposée devrait être des patterns et des notes posés sur des repères tirés de la vidéo, pas un fichier
   audio fini ; les bruitages, eux, sont de l'audio par nature (recherche de samples par l'IA, ou génération).
   Dépend d'une piste vidéo dans le DAW, qui n'existe pas.
@@ -233,8 +240,7 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
   son (une coupe, un impact, un mouvement, une ambiance) et pose un bruitage à chaque repère, sur la timeline.
   Chaque bruitage est un clip audio à sa place : déplaçable, remplaçable, supprimable un par un. D'où vient le
   son, à trancher : cherché dans les samples de l'utilisateur (recherche par le son), ou généré — et là c'est
-  de l'audio généré, à accepter comme matière si la règle est reformulée (voir la question ouverte en fin de
-  section). Dépend toujours d'une piste vidéo dans le DAW, qui n'existe pas : c'est elle le premier chantier.
+  de l'audio généré, accepté comme matière depuis la reformulation de la règle de la S14. Dépend toujours d'une piste vidéo dans le DAW, qui n'existe pas : c'est elle le premier chantier.
 - **Un générateur de drum kit automatique** (noté le 3 octobre 2026, demandé par le fondateur). En un geste, le
   DAW compose un kit complet et cohérent — kick, caisse claire ou clap, charleys fermé et ouvert, percussions,
   808 — et le range dans le channel rack, un canal par élément. Deux lectures possibles, à trancher :
@@ -242,15 +248,8 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
     pas de recouvrement entre le kick et la 808, 808 accordée à la tonalité du projet). C'est la suite directe
     de la « recherche par le son » ci-dessus (section « Recherche de samples par l'IA ») et du Bass & Groove
     Engine du positionnement ; local, sans génération audio ;
-  - **synthétiser** des sons neufs par un modèle. C'est de la génération audio, écartée plus haut pour la
-    musique ; un coup de batterie isolé n'a pas le défaut reproché (rien à éditer dans un kick), mais c'est
-    quand même rouvrir la ligne, et poser la question des droits sur ce que le modèle a appris.
+  - **synthétiser** des sons neufs par un modèle. Un coup de batterie isolé est de la matière, acceptée depuis la
+    reformulation de la règle de la S14 ; reste la question des droits sur ce que le modèle a appris.
   Dans les deux cas : pas une liste de kits tout faits, des axes continus (sombre ↔ brillant, sec ↔ ample,
   propre ↔ saturé) et une direction tirée des références du projet ; le kit s'écoute avant d'être posé, et le
   poser est un seul groupe d'annulation. Les commandes existent (`track.add`, `track.set_sample`).
-
-**Question ouverte, posée le 3 octobre 2026 : reformuler la ligne « génération audio écartée » (S14).** Elle
-visait Suno et Udio, un morceau fini sans grille ni notes. Face à ACE Studio, la proposition est : l'audio
-généré est accepté comme matière (un timbre rendu depuis des notes, un coup de batterie, un bruitage, une voix
-depuis notes et paroles), jamais comme morceau fini ni comme boucle sans notes. **Non tranché par le
-fondateur** ; tant que ce n'est pas tranché, la ligne de la S14 tient.

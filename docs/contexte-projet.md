@@ -29,6 +29,15 @@ toute session neuve, lue après `CLAUDE.md`.
   signets, axes continus, extraction depuis une référence utilisateur.
 - Marketing : attirer avec l'IA, convertir avec la qualité de service.
 - Trois workspaces dans un outil unique, sans complexité visible.
+- Face à ACE Studio (noté le 3 octobre 2026) : eux vendent un atelier de voix et
+  de génération qui se branche sur un DAW (pas de plugins tiers, mixer
+  basique) ; DAW IA est le DAW lui-même, piloté par l'IA. On ne les suit pas
+  fonction par fonction. Ce qui distingue : tout ce que l'IA fait reste
+  modifiable, annulable, expliqué, et le cœur tourne en local, sans attente
+  ni crédits.
+- Audio généré : accepté comme matière (timbre depuis des notes, coup de
+  batterie, bruitage, voix depuis notes et paroles), jamais comme morceau
+  fini ni comme boucle sans notes. Détail dans IDEES.md.
 
 ## Stratégie IA
 - Deux couches : copilote (mixage, routing, paramètres via le Command Bus) et
