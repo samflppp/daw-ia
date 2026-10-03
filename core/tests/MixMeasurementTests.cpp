@@ -199,6 +199,23 @@ TEST_CASE("masking: two lows at the same level overlap in their octave, a high d
     CHECK(overlaps({kick, quiet}).empty());
 }
 
+TEST_CASE("gained: a fader moves every level and nothing else, and ends a masking")
+{
+    const auto kick = sineSegments({{8.0, -12.0}}, 55.0);
+    const auto bass = sineSegments({{8.0, -14.0}}, 70.0);
+    const auto faded = gained(bass, -10.0);
+    CHECK(faded.integratedLufs == doctest::Approx(bass.integratedLufs - 10.0).epsilon(0.001));
+    CHECK(faded.truePeakDb == doctest::Approx(bass.truePeakDb - 10.0).epsilon(0.001));
+    CHECK(faded.bandsDb[1] == doctest::Approx(bass.bandsDb[1] - 10.0).epsilon(0.001));
+    CHECK(faded.crestDb == doctest::Approx(bass.crestDb).epsilon(0.001));
+    CHECK(faded.correlation == doctest::Approx(bass.correlation).epsilon(0.001));
+    CHECK(faded.activeShare == doctest::Approx(bass.activeShare).epsilon(0.001));
+
+    // The same two strips: masking at their faders' unity, not 10 dB apart.
+    CHECK_FALSE(overlaps({kick, bass}).empty());
+    CHECK(overlaps({kick, faded}).empty());
+}
+
 TEST_CASE("combine: a track's two roads add their powers, and silence adds nothing")
 {
     std::mt19937 first{11};

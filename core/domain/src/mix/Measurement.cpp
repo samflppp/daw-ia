@@ -551,6 +551,37 @@ StreamMeasure combine(const StreamMeasure& first, const StreamMeasure& second)
     return out;
 }
 
+StreamMeasure gained(const StreamMeasure& measure, double gainDb)
+{
+    const auto amplitude = std::pow(10.0, gainDb / 20.0);
+    const auto power = amplitude * amplitude;
+    const auto shift = [gainDb](double level) { return level <= silenceDb ? level : level + gainDb; };
+    auto out = measure;
+    out.integratedLufs = shift(out.integratedLufs);
+    out.shortTermMaxLufs = shift(out.shortTermMaxLufs);
+    out.momentaryMaxLufs = shift(out.momentaryMaxLufs);
+    out.truePeakDb = shift(out.truePeakDb);
+    out.samplePeakDb = shift(out.samplePeakDb);
+    for (auto& band : out.bandsDb)
+        band = shift(band);
+    for (auto& bands : out.hopBands)
+    {
+        for (auto& band : bands)
+            band = static_cast<float>(shift(band));
+    }
+    for (auto& value : out.hopWeighted)
+        value *= power;
+    for (auto& value : out.hopRaw)
+        value *= power;
+    out.loudestTenMs *= power;
+    out.sumLL *= power;
+    out.sumRR *= power;
+    out.sumLR *= power;
+    out.samplePeak *= amplitude;
+    out.truePeak *= amplitude;
+    return out;
+}
+
 // --- masking ----------------------------------------------------------------
 
 std::vector<Overlap> overlaps(const std::vector<StreamMeasure>& streams)

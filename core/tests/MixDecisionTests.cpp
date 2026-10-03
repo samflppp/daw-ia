@@ -162,6 +162,22 @@ TEST_CASE("the base mix carves the bass under the kick, with a sentence that cit
     CHECK(refused.empty());
 }
 
+TEST_CASE("masking is judged through the faders: a bass faded under the kick is not carved")
+{
+    Session session;
+    REQUIRE_FALSE(session.brief().overlaps.empty());
+    REQUIRE(session.state.setTrackVolume(session.bass, -12.0).ok());
+    const auto brief = session.brief();
+    for (const auto& overlap : brief.overlaps)
+    {
+        const auto first = brief.strips[overlap.first].track;
+        const auto second = brief.strips[overlap.second].track;
+        CHECK_FALSE(((first == session.kick && second == session.bass) ||
+                     (first == session.bass && second == session.kick)));
+    }
+    CHECK(find(baseMix(brief), session.bass, Change::Kind::equaliser) == nullptr);
+}
+
 TEST_CASE("the guards refuse what is out of bounds, and a sentence that cites a false number")
 {
     Session session;

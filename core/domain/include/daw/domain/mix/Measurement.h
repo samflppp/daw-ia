@@ -119,6 +119,13 @@ private:
 // the louder of the two, a bound and not a sum.
 [[nodiscard]] StreamMeasure combine(const StreamMeasure& first, const StreamMeasure& second);
 
+// A stream as heard through a gain: the fader of its strip. Every level moves
+// by `gainDb`; where it plays, its shape — correlation, crest, the balance of
+// the bands — does not change.
+// Masking is between what is heard, not between what the strips send to
+// their faders: a bass faded 10 dB under the kick no longer covers it.
+[[nodiscard]] StreamMeasure gained(const StreamMeasure& measure, double gainDb);
+
 // Two streams that play the same band at the same level at the same time: the
 // ear cannot tell them apart there. A kick and a bass in the 63 Hz octave, a
 // voice and the chords around 2 kHz.

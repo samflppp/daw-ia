@@ -707,7 +707,9 @@ Brief briefOf(const ProjectState& state,
         strip.equaliser = internalParameters(lastInternal(track, internal::equaliser));
         strip.compressor = internalParameters(lastInternal(track, internal::compressor));
         strip.measure = found->second;
-        measures.push_back(found->second);
+        // Masking is between what is heard: each strip through its fader, a
+        // muted one not at all.
+        measures.push_back(gained(found->second, track.muted ? silenceDb : track.volumeDb));
         brief.strips.push_back(std::move(strip));
     }
     brief.overlaps = overlaps(measures);
