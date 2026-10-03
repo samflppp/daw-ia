@@ -758,10 +758,12 @@ Receipt CommandBus::moveReceiptFor(const Entry& entry, Provenance by) const
     receipt.undoDepth = undoStack_.size();
     receipt.redoDepth = redoStack_.size();
     receipt.origin = std::move(by);
+    // A group reaches what all of its commands reach, or anything.
+    const auto first = entry.steps.front().command->reach();
     receipt.reach = std::all_of(entry.steps.begin(),
                                 entry.steps.end(),
-                                [](const Step& step) { return step.command->reach() == Reach::notes; })
-                        ? Reach::notes
+                                [first](const Step& step) { return step.command->reach() == first; })
+                        ? first
                         : Reach::anything;
     return receipt;
 }

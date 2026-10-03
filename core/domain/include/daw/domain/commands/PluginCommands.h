@@ -27,6 +27,7 @@ public:
     [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
 
     [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Reach reach() const noexcept override { return Reach::mix; }
     [[nodiscard]] Value payload() const override;
     [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
     [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
@@ -55,6 +56,7 @@ public:
     [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
 
     [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Reach reach() const noexcept override { return Reach::mix; }
     [[nodiscard]] Value payload() const override;
     [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
     [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
@@ -76,6 +78,7 @@ public:
     [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
 
     [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Reach reach() const noexcept override { return Reach::mix; }
     [[nodiscard]] Value payload() const override;
     [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
     [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
@@ -104,6 +107,7 @@ public:
     [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
 
     [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Reach reach() const noexcept override { return Reach::mix; }
     [[nodiscard]] Value payload() const override;
     [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
     [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
@@ -139,6 +143,7 @@ public:
     [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
 
     [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Reach reach() const noexcept override { return Reach::mix; }
     [[nodiscard]] Value payload() const override;
     [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
     [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
