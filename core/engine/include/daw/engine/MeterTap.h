@@ -41,7 +41,7 @@ struct TapTotals
 // peak and a sum of squares, writes them into a ring allocated with the object,
 // and moves two indices; the reader is a timer on the message thread.
 //
-// It is a projection artefact, like the companion track: never in the domain,
+// It is a projection artefact, like the parts of a track: never in the domain,
 // placed by the projector last in every chain, so what it measures is what the
 // strip sends out — after the plugins, after the fader, after the pan.
 //
@@ -54,8 +54,7 @@ class MeterTapPlugin final : public tracktion::Plugin
 public:
     static const char* xmlTypeName;
 
-    // Which strip the tap measures: a domain TrackId, or masterStrip. A track
-    // and its companion carry the same one, and their numbers are summed.
+    // Which strip the tap measures: a domain TrackId, or masterStrip.
     static const juce::Identifier stripProperty;
     static const juce::String masterStrip;
 

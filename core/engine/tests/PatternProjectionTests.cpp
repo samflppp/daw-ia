@@ -34,7 +34,7 @@ TEST_CASE("A pattern laid eight times becomes eight clips in the Edit")
     EngineHarness harness;
     const auto built = buildPattern(harness);
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.notesTrack();
     REQUIRE(track != nullptr);
 
     // Not laid down yet: written, and silent. A pattern with no placement has
@@ -69,7 +69,7 @@ TEST_CASE("One note added to a pattern reaches its eight placements")
                     .ok());
     }
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.notesTrack();
     REQUIRE(track != nullptr);
 
     // One command, and the eight clips hear it. That is the whole reason
@@ -95,7 +95,7 @@ TEST_CASE("A placement lands where it says, in seconds the tempo decides")
     REQUIRE(harness.bus.execute(std::make_unique<PlacePattern>(PlacementId::generate(), built.patternId, 8.0))
                 .ok());
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.notesTrack();
     REQUIRE(track != nullptr);
 
     const auto clips = tracktion::getClipsOfType<tracktion::MidiClip>(*track);
@@ -116,7 +116,7 @@ TEST_CASE("Changing a pattern's length moves what every placement covers")
     REQUIRE(harness.bus.execute(std::make_unique<PlacePattern>(PlacementId::generate(), built.patternId, 0.0))
                 .ok());
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.notesTrack();
     REQUIRE(track != nullptr);
 
     REQUIRE(harness.bus.execute(std::make_unique<SetPatternLength>(built.patternId, 8.0)).ok());
@@ -137,7 +137,7 @@ TEST_CASE("A legacy clip.create_midi still puts one clip where it always did")
     REQUIRE(harness.bus.execute(harness.createClip(clipId, 8.0, 4.0)).ok());
     REQUIRE(harness.bus.execute(EngineHarness::addNote(clipId, NoteId::generate(), 60)).ok());
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.notesTrack();
     REQUIRE(track != nullptr);
 
     const auto clips = tracktion::getClipsOfType<tracktion::MidiClip>(*track);

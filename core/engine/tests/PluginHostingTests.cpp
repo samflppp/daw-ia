@@ -2,8 +2,11 @@
 #include "HostedParameters.h"
 #include "daw/domain/commands/AutomationCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
+#include "daw/domain/commands/SampleCommands.h"
+#include "daw/domain/project/InternalEffects.h"
 #include "daw/engine/ClapPluginFormat.h"
 #include "daw/engine/ContentStore.h"
+#include "daw/engine/MeterTap.h"
 #include "daw/engine/ParameterBridge.h"
 #include "daw/engine/PluginCatalogue.h"
 
@@ -374,15 +377,16 @@ void hostRealPlugin(const char* variable, const juce::String& formatName)
     REQUIRE(harness.bus.execute(harness.insert(instance)).ok());
     CHECK(harness.projector.missingPlugins().empty());
 
-    // The plugin is really in the chain, and it is the one that was asked for.
-    auto* track = tracktion::getAudioTracks(harness.host.edit()).getFirst();
-    REQUIRE(track != nullptr);
-
+    // The plugin is really in the chain, and it is the one that was asked for:
+    // an instrument plays on the track of the notes, an effect on the strip.
     tracktion::ExternalPlugin* hosted = nullptr;
-    for (auto plugin : track->pluginList.getPlugins())
+    for (auto* track : tracktion::getAudioTracks(harness.host.edit()))
     {
-        if (auto* external = dynamic_cast<tracktion::ExternalPlugin*>(plugin); external != nullptr)
-            hosted = external;
+        for (auto plugin : track->pluginList.getPlugins())
+        {
+            if (auto* external = dynamic_cast<tracktion::ExternalPlugin*>(plugin); external != nullptr)
+                hosted = external;
+        }
     }
     REQUIRE_MESSAGE(hosted != nullptr, "no external plugin in the chain");
     REQUIRE_MESSAGE(hosted->getLoadError().isEmpty(), hosted->getLoadError().toStdString());
@@ -444,19 +448,190 @@ juce::File clapFixture()
 
 tracktion::ExternalPlugin* hostedPluginIn(tracktion::Edit& edit)
 {
-    auto* track = tracktion::getAudioTracks(edit).getFirst();
-    if (track == nullptr)
-        return nullptr;
-
-    for (auto plugin : track->pluginList.getPlugins())
+    // On the strip or on the track of the notes (S21), whichever holds it.
+    for (auto* track : tracktion::getAudioTracks(edit))
     {
-        if (auto* external = dynamic_cast<tracktion::ExternalPlugin*>(plugin); external != nullptr)
-            return external;
+        for (auto plugin : track->pluginList.getPlugins())
+        {
+            if (auto* external = dynamic_cast<tracktion::ExternalPlugin*>(plugin); external != nullptr)
+                return external;
+        }
     }
     return nullptr;
 }
 
 } // namespace
+
+// ---------------------------------------------------------------------------
+// The strip (S21): a track's notes and recordings play into one strip, and the
+// user's plugins after the instrument treat both, once.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+tracktion::AudioTrack* partOf(tracktion::Edit& edit, const TrackId& id, const juce::String& role)
+{
+    return daw::testing::EngineHarness::partOf(edit, id, role);
+}
+
+bool holds(tracktion::AudioTrack& track, const PluginId& id)
+{
+    for (auto* plugin : track.pluginList.getPlugins())
+    {
+        if (plugin != nullptr &&
+            plugin->state.getProperty("dawDomainPluginId").toString() == juce::String(id.toString()))
+            return true;
+    }
+    return false;
+}
+
+// A short burst then silence, as a WAV in the store: a recording whose tail,
+// if any, can only come from what processed it.
+SampleRef burstIn(ContentStore& store)
+{
+    constexpr double rate = 44100.0;
+    constexpr double seconds = 1.0;
+    juce::AudioBuffer<float> buffer{1, static_cast<int>(seconds * rate)};
+    buffer.clear();
+    for (int index = 0; index < static_cast<int>(0.05 * rate); ++index)
+        buffer.setSample(0, index, 0.8f * std::sin(static_cast<float>(index) * 0.2f));
+
+    juce::MemoryBlock bytes;
+    {
+        std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::MemoryOutputStream>(bytes, false);
+        juce::WavAudioFormat wav;
+        auto writer = wav.createWriterFor(
+            stream,
+            juce::AudioFormatWriterOptions{}.withSampleRate(rate).withNumChannels(1).withBitsPerSample(16));
+        REQUIRE(writer != nullptr);
+        REQUIRE(writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples()));
+    }
+    auto blob = store.put(bytes.getData(), bytes.getSize());
+    REQUIRE(blob.ok());
+
+    SampleRef sample{};
+    sample.blob = blob.value();
+    sample.name = "Burst.wav";
+    sample.format = "wav";
+    sample.seconds = seconds;
+    return sample;
+}
+
+// RMS of what the Edit renders between two times, in dBFS.
+double renderedDb(tracktion::Edit& edit, double fromSeconds, double toSeconds)
+{
+    auto rendered = tracktion::test_utilities::renderToAudioBuffer(edit);
+    const auto rate = rendered.sampleRate > 0.0 ? rendered.sampleRate : 44100.0;
+    const auto from = std::clamp(static_cast<int>(fromSeconds * rate), 0, rendered.buffer.getNumSamples());
+    const auto to = std::clamp(static_cast<int>(toSeconds * rate), from, rendered.buffer.getNumSamples());
+    if (to <= from)
+        return -200.0;
+    double sum = 0.0;
+    for (int channel = 0; channel < rendered.buffer.getNumChannels(); ++channel)
+        for (int sample = from; sample < to; ++sample)
+            sum += static_cast<double>(rendered.buffer.getSample(channel, sample)) *
+                   rendered.buffer.getSample(channel, sample);
+    const auto mean = sum / (static_cast<double>(to - from) * rendered.buffer.getNumChannels());
+    return mean > 0.0 ? 10.0 * std::log10(mean) : -200.0;
+}
+
+} // namespace
+
+TEST_CASE("A track plays its notes and its recordings into one strip, where its inserts are")
+{
+    PluginHarness harness;
+
+    // The synth of the repository, then an equaliser of the DAW after it.
+    const auto description = harness.registerPlugin(clapFixture(), daw::engine::ClapPluginFormat::formatName);
+    REQUIRE(description.has_value());
+    PluginInstance synth{};
+    synth.id = PluginId::generate();
+    synth.ref = PluginCatalogue::refFor(*description);
+    REQUIRE(harness.bus.execute(harness.insert(synth, 0)).ok());
+    PluginInstance equaliser{};
+    equaliser.id = PluginId::generate();
+    equaliser.ref = PluginRef{std::string{PluginRef::internalFormat}, std::string{internal::equaliser}, "EQ"};
+    REQUIRE(harness.bus.execute(harness.insert(equaliser, 1)).ok());
+
+    // And a recording.
+    REQUIRE(harness.bus
+                .execute(std::make_unique<PlaceAudio>(
+                    AudioClipId::generate(), harness.trackId, burstIn(harness.store), 0.0))
+                .ok());
+
+    auto& edit = harness.host.edit();
+    auto* strip = partOf(edit, harness.trackId, {});
+    auto* notes = partOf(edit, harness.trackId, "notes");
+    auto* recordings = partOf(edit, harness.trackId, "audio");
+    REQUIRE(strip != nullptr);
+    REQUIRE(notes != nullptr);
+    REQUIRE(recordings != nullptr);
+
+    // Both play into the strip, never to the master.
+    CHECK(notes->getOutput().outputsToDestTrack(*strip));
+    CHECK(recordings->getOutput().outputsToDestTrack(*strip));
+
+    // The instrument plays the notes; the equaliser is the strip's, once.
+    CHECK(holds(*notes, synth.id));
+    CHECK_FALSE(holds(*strip, synth.id));
+    CHECK(holds(*strip, equaliser.id));
+    CHECK_FALSE(holds(*notes, equaliser.id));
+    CHECK_FALSE(holds(*recordings, equaliser.id));
+    CHECK(recordings->pluginList.getPluginsOfType<tracktion::EqualiserPlugin>().isEmpty());
+
+    // The fader and the meter are the strip's only; the parts play at unity.
+    CHECK(strip->pluginList.getPluginsOfType<daw::engine::MeterTapPlugin>().size() == 1);
+    CHECK(notes->pluginList.getPluginsOfType<daw::engine::MeterTapPlugin>().isEmpty());
+    CHECK(recordings->pluginList.getPluginsOfType<daw::engine::MeterTapPlugin>().isEmpty());
+    REQUIRE(harness.bus.execute(std::make_unique<SetTrackVolume>(harness.trackId, -9.0)).ok());
+    CHECK(strip->getVolumePlugin()->getVolumeDb() == doctest::Approx(-9.0f));
+    CHECK(notes->getVolumePlugin()->getVolumeDb() == doctest::Approx(0.0f));
+    CHECK(recordings->getVolumePlugin()->getVolumeDb() == doctest::Approx(0.0f));
+}
+
+TEST_CASE("A real effect of the user's treats a track's recordings, not only its notes")
+{
+    // A reverb is the plainest proof: a burst followed by silence comes out
+    // with a tail only if the effect heard it.
+    //   DAW_TEST_VST3_EFFECT=C:\Program Files\Common Files\VST3\ValhallaDSP\ValhallaSupermassive.vst3
+    const auto file = pluginFromEnvironment("DAW_TEST_VST3_EFFECT");
+    if (file == juce::File{})
+    {
+        MESSAGE("skipped: DAW_TEST_VST3_EFFECT is not set, so no real effect was hosted");
+        return;
+    }
+    REQUIRE_MESSAGE((file.existsAsFile() || file.isDirectory()), "DAW_TEST_VST3_EFFECT does not exist");
+
+    PluginHarness harness;
+    REQUIRE(harness.bus
+                .execute(std::make_unique<PlaceAudio>(
+                    AudioClipId::generate(), harness.trackId, burstIn(harness.store), 0.0))
+                .ok());
+
+    // The burst lasts 50 ms; after it, the recording is silent.
+    const auto dry = renderedDb(harness.host.edit(), 0.2, 0.9);
+
+    const auto description = harness.registerPlugin(file, "VST3");
+    REQUIRE_MESSAGE(description.has_value(), "the effect could not be scanned");
+    PluginInstance effect{};
+    effect.id = PluginId::generate();
+    effect.ref = PluginCatalogue::refFor(*description);
+    REQUIRE(harness.bus.execute(harness.insert(effect)).ok());
+    CHECK(harness.projector.missingPlugins().empty());
+
+    // One instance in the whole Edit, on the strip.
+    int instances = 0;
+    for (auto* track : tracktion::getAudioTracks(harness.host.edit()))
+        instances += holds(*track, effect.id) ? 1 : 0;
+    CHECK(instances == 1);
+    CHECK(holds(*partOf(harness.host.edit(), harness.trackId, {}), effect.id));
+
+    const auto wet = renderedDb(harness.host.edit(), 0.2, 0.9);
+    MESSAGE("after the burst: " << dry << " dBFS dry, " << wet << " dBFS through the effect");
+    CHECK(dry < -90.0);
+    CHECK(wet > dry + 30.0);
+}
 
 TEST_CASE("A CLAP plugin is scanned, and its identity is its own plugin id")
 {
@@ -500,9 +675,8 @@ TEST_CASE("A CLAP instrument on a track turns notes into a signal")
 
     // The synth of the project replaced the fallback: two instruments would
     // play the same notes at once.
-    auto* track = tracktion::getAudioTracks(harness.host.edit()).getFirst();
-    REQUIRE(track != nullptr);
-    CHECK(track->pluginList.getPluginsOfType<tracktion::FourOscPlugin>().isEmpty());
+    for (auto* track : tracktion::getAudioTracks(harness.host.edit()))
+        CHECK(track->pluginList.getPluginsOfType<tracktion::FourOscPlugin>().isEmpty());
 
     harness.playThreeNotes();
 

@@ -66,11 +66,25 @@ struct EngineHarness
         return std::make_unique<SetTrackVolume>(trackId, volumeDb);
     }
 
-    [[nodiscard]] tracktion::AudioTrack* firstAudioTrack()
+    // The Tracktion tracks of a domain track (S21): its strip — inserts,
+    // fader, meter —, and the tracks that play its notes and its recordings
+    // into it.
+    [[nodiscard]] static tracktion::AudioTrack*
+    partOf(tracktion::Edit& edit, const TrackId& id, const juce::String& role)
     {
-        const auto tracks = tracktion::getAudioTracks(host.edit());
-        return tracks.isEmpty() ? nullptr : tracks.getFirst();
+        for (auto* track : tracktion::getAudioTracks(edit))
+        {
+            if (track != nullptr &&
+                track->state.getProperty("dawDomainTrackId").toString() == juce::String(id.toString()) &&
+                track->state.getProperty("dawDomainRole").toString() == role)
+                return track;
+        }
+        return nullptr;
     }
+
+    [[nodiscard]] tracktion::AudioTrack* stripTrack() { return partOf(host.edit(), trackId, {}); }
+    [[nodiscard]] tracktion::AudioTrack* notesTrack() { return partOf(host.edit(), trackId, "notes"); }
+    [[nodiscard]] tracktion::AudioTrack* recordingsTrack() { return partOf(host.edit(), trackId, "audio"); }
 
     ProjectState state;
     CommandRegistry registry;

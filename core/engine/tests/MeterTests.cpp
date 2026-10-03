@@ -128,7 +128,7 @@ TEST_CASE("Every chain ends with one level tap, and the master has one")
     harness.projector.reconcile();
     harness.projector.reconcile();
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.stripTrack();
     REQUIRE(track != nullptr);
 
     const auto taps = track->pluginList.getPluginsOfType<MeterTapPlugin>();

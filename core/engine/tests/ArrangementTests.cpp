@@ -230,7 +230,7 @@ TEST_CASE("Moving one placement repositions one clip and rebuilds nothing")
     EngineHarness harness;
     const auto beat = layBeat(harness, 8);
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.notesTrack();
     REQUIRE(track != nullptr);
 
     std::vector<tracktion::EditItemID> before;
@@ -285,7 +285,7 @@ TEST_CASE("A tempo change moves every clip in seconds and rewrites none")
     CHECK(harness.projector.stats().clipsRewritten == stats.clipsRewritten);
     CHECK(harness.projector.stats().clipsMoved == stats.clipsMoved + 4);
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.notesTrack();
     REQUIRE(track != nullptr);
 
     // Beat 12 at 60 BPM is twelve seconds; at 120 it was six.

@@ -52,11 +52,9 @@ struct StripLevel
 //              stretch. A render is read this way — nobody polls during it —
 //              and so is any "measure this passage" a copilot will ask for.
 //
-// A domain track that plays both an instrument and recordings is two Tracktion
-// tracks, so two taps. Their peaks combine as the larger one and their RMS as a
-// sum of powers: exact when only one of them sounds, which is the common case,
-// and an estimate when both do, since the peak of a sum is not recoverable from
-// the peaks of its parts.
+// Since S21 one tap a strip: the notes and the recordings of a track play into
+// its strip. Two taps of one strip would still combine — peaks as the larger,
+// RMS as a sum of powers —, but the projection no longer places two.
 class LevelMeters final
 {
 public:

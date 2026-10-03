@@ -81,14 +81,20 @@ struct SampleHarness
 
     ~SampleHarness() { static_cast<void>(folder.deleteRecursively()); }
 
+    // The track that plays the notes of the first domain track (S21): where
+    // its sampler is.
     [[nodiscard]] tracktion::AudioTrack* track()
     {
-        const auto tracks = tracktion::getAudioTracks(host.edit());
-        return tracks.isEmpty() ? nullptr : tracks.getFirst();
+        for (auto* each : tracktion::getAudioTracks(host.edit()))
+        {
+            if (each->state.getProperty("dawDomainRole").toString() == "notes")
+                return each;
+        }
+        return nullptr;
     }
 
     // Every audio clip of the Edit, whichever Tracktion track holds it: the
-    // recordings of a domain track live on a companion of its own.
+    // recordings of a domain track live on a track of their own.
     [[nodiscard]] juce::Array<tracktion::WaveAudioClip*> waves()
     {
         juce::Array<tracktion::WaveAudioClip*> found;

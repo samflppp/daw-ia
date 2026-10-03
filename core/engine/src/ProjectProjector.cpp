@@ -41,13 +41,35 @@ const juce::Identifier domainClipKeyProperty{"dawDomainClipKey"};
 // touch it.
 const juce::Identifier domainSampleProperty{"dawDomainSample"};
 
-// A domain track that holds audio clips is two Tracktion tracks: the one that
-// plays its patterns through its instrument, and a companion that plays its
-// recordings. An instrument — the 4OSC fallback, a sampler, a VST — replaces
-// whatever audio reaches it, so a recording on the instrument's own track
-// would be silent. The companion carries the same identifier and this role.
+// A domain track that plays is up to three Tracktion tracks (S21), all with
+// its identifier and told apart by this role:
+//   ""       the strip: no clip, the user's inserts after the instrument, the
+//            effects of the DAW, the fader, the sends, the route, the meter.
+//            It is what the rest of the application finds by identifier.
+//   "notes"  plays the patterns through the instrument (the 4OSC fallback, a
+//            sampler, the user's VST and whatever comes before it), into the
+//            strip;
+//   "audio"  plays the recordings, made with the first one, into the strip.
+// An instrument replaces whatever audio reaches it, so the recordings cannot
+// sit on the notes' track; and a plugin of the user's has a state, so it
+// cannot be put on both. Tracktion sums the two into the strip before its
+// chain, the way it sums the channels of a bus: every insert of the strip
+// treats the notes and the recordings alike, once.
 const juce::Identifier domainRoleProperty{"dawDomainRole"};
-const juce::String audioRole{"audio"};
+
+juce::String roleOf(ProjectProjector::Part part)
+{
+    switch (part)
+    {
+    case ProjectProjector::Part::notes:
+        return "notes";
+    case ProjectProjector::Part::recordings:
+        return "audio";
+    case ProjectProjector::Part::strip:
+        break;
+    }
+    return {};
+}
 
 // A send is bound by the bus it goes to, the way the domain keys it: an
 // AuxSend carries that bus's identifier.
@@ -223,10 +245,10 @@ void ProjectProjector::stopListening()
     }
 }
 
-tracktion::AudioTrack* ProjectProjector::findTrack(const domain::TrackId& id, bool companion) const
+tracktion::AudioTrack* ProjectProjector::findTrack(const domain::TrackId& id, Part part) const
 {
     const auto wanted = toJuce(id.toString());
-    const auto role = companion ? audioRole : juce::String{};
+    const auto role = roleOf(part);
 
     for (auto* track : tracktion::getAudioTracks(edit_))
     {
@@ -237,7 +259,7 @@ tracktion::AudioTrack* ProjectProjector::findTrack(const domain::TrackId& id, bo
     return nullptr;
 }
 
-tracktion::AudioTrack* ProjectProjector::createTrackFor(const domain::TrackId& id, bool companion)
+tracktion::AudioTrack* ProjectProjector::createTrackFor(const domain::TrackId& id, Part part)
 {
     const auto before = tracktion::getAudioTracks(edit_);
     edit_.ensureNumberOfAudioTracks(before.size() + 1);
@@ -247,8 +269,20 @@ tracktion::AudioTrack* ProjectProjector::createTrackFor(const domain::TrackId& i
         if (track != nullptr && !before.contains(track))
         {
             track->state.setProperty(domainTrackIdProperty, toJuce(id.toString()), nullptr);
-            if (companion)
-                track->state.setProperty(domainRoleProperty, audioRole, nullptr);
+            if (part != Part::strip)
+            {
+                track->state.setProperty(domainRoleProperty, roleOf(part), nullptr);
+
+                // A part only plays: unity, centred, at the balance law, so
+                // the strip receives exactly what the notes or the recordings
+                // make. A constant-power centre would take 3 dB off.
+                if (auto* volume = track->getVolumePlugin(); volume != nullptr)
+                {
+                    volume->setPanLaw(busPanLaw);
+                    volume->setVolumeDb(0.0f);
+                    volume->setPan(0.0f);
+                }
+            }
             return track;
         }
     }
@@ -310,7 +344,7 @@ void ProjectProjector::applyRoute(tracktion::AudioTrack& target, const domain::T
     target.setMute(!state_.isAudible(source.id));
 
     // The output: a bus, or the default device, which is the master.
-    auto* destination = source.output.isNil() ? nullptr : findTrack(source.output, false);
+    auto* destination = source.output.isNil() ? nullptr : findTrack(source.output, Part::strip);
     if (destination != nullptr)
     {
         if (!target.getOutput().outputsToDestTrack(*destination))
@@ -399,9 +433,9 @@ void ProjectProjector::ensureAuxReturn(tracktion::AudioTrack& track, int number)
 void ProjectProjector::reconcileBus(const domain::Track& bus,
                                     std::vector<std::pair<domain::TrackId, domain::Value>>& projected)
 {
-    auto* target = findTrack(bus.id, false);
+    auto* target = findTrack(bus.id, Part::strip);
     if (target == nullptr)
-        target = createTrackFor(bus.id, false);
+        target = createTrackFor(bus.id, Part::strip);
     if (target == nullptr)
         return;
 
@@ -651,6 +685,28 @@ void ProjectProjector::ensureSampler(tracktion::AudioTrack& track, const domain:
     sampler->flushPendingUpdates();
 
     track.pluginList.insertPlugin(plugin, 0, nullptr);
+}
+
+std::pair<domain::Track, domain::Track> ProjectProjector::splitAtInstrument(const domain::Track& source) const
+{
+    // Up to the first instrument, and the rest. Without one, everything is
+    // an insert of the strip, after the fallback synth or the sampler.
+    auto played = source;
+    auto inserts = source;
+    const auto instrument =
+        std::find_if(source.plugins.begin(),
+                     source.plugins.end(),
+                     [this](const domain::PluginInstance& plugin) { return isInstrument(plugin.ref); });
+    const auto cut = instrument == source.plugins.end() ? source.plugins.begin() : std::next(instrument);
+    played.plugins.assign(source.plugins.begin(), cut);
+    inserts.plugins.assign(cut, source.plugins.end());
+    return {std::move(played), std::move(inserts)};
+}
+
+void ProjectProjector::playInto(tracktion::AudioTrack& part, tracktion::AudioTrack& strip)
+{
+    if (!part.getOutput().outputsToDestTrack(strip))
+        part.getOutput().setOutputToTrack(&strip);
 }
 
 bool ProjectProjector::isInstrument(const domain::PluginRef& ref) const
@@ -1254,14 +1310,14 @@ void ProjectProjector::reconcileClips(tracktion::AudioTrack& target, domain::Tra
     }
 }
 
-void ProjectProjector::reconcileAudioTrack(tracktion::AudioTrack& companion,
+void ProjectProjector::reconcileAudioTrack(tracktion::AudioTrack& recordings,
                                            domain::TrackId trackId,
                                            bool retimed)
 {
     const auto audio = laidOutAudio(state_, trackId);
 
     std::vector<std::pair<juce::String, tracktion::WaveAudioClip*>> existing;
-    const auto clips = companion.getClips();
+    const auto clips = recordings.getClips();
     for (auto* clip : clips)
     {
         if (clip == nullptr)
@@ -1282,7 +1338,7 @@ void ProjectProjector::reconcileAudioTrack(tracktion::AudioTrack& companion,
         clip->removeFromParent();
     }
 
-    reconcileAudio(companion, audio, existing, retimed);
+    reconcileAudio(recordings, audio, existing, retimed);
 }
 
 void ProjectProjector::reconcileAudio(
@@ -1474,10 +1530,13 @@ void ProjectProjector::reconcile()
 
     for (const auto& source : state_.tracks())
     {
-        auto* target = findTrack(source.id, false);
+        auto* target = findTrack(source.id, Part::strip);
         if (target == nullptr)
-            target = createTrackFor(source.id, false);
-        if (target == nullptr)
+            target = createTrackFor(source.id, Part::strip);
+        auto* notes = findTrack(source.id, Part::notes);
+        if (notes == nullptr)
+            notes = createTrackFor(source.id, Part::notes);
+        if (target == nullptr || notes == nullptr)
             continue;
 
         // The track's own form, and what it plays. The second is not a
@@ -1506,20 +1565,22 @@ void ProjectProjector::reconcile()
         if (trackChanged)
         {
             applyMix(*target, source);
-            ensureInstrument(*target, source);
+            notes->setName(toJuce(source.name));
 
-            // The fallback synth or the sampler, when there is one, stays in
-            // front of the chain: the user's own plugins are placed after it.
-            // Before S20 the sampler was not counted, and an effect on a
-            // sampler channel sat in front of the instrument that replaces
-            // what reaches it: it was never heard.
-            reconcilePlugins(target->pluginList,
-                             source,
-                             target->pluginList.getPluginsOfType<tracktion::FourOscPlugin>().size() +
-                                 target->pluginList.getPluginsOfType<tracktion::SamplerPlugin>().size());
+            // What plays the notes, on their own track: the fallback synth or
+            // the sampler first, then the user's plugins up to their
+            // instrument. What comes after it, on the strip.
+            const auto [played, inserts] = splitAtInstrument(source);
+            ensureInstrument(*notes, played);
+            reconcilePlugins(notes->pluginList,
+                             played,
+                             notes->pluginList.getPluginsOfType<tracktion::FourOscPlugin>().size() +
+                                 notes->pluginList.getPluginsOfType<tracktion::SamplerPlugin>().size());
+            reconcilePlugins(target->pluginList, inserts, 0);
         }
         if (trackChanged || routeChanged)
             applyRoute(*target, source);
+        playInto(*notes, *target);
 
         ensureMeterTap(target->pluginList, toJuce(source.id.toString()), state_.isAudible(source.id));
 
@@ -1530,40 +1591,22 @@ void ProjectProjector::reconcile()
         // a note to a pattern laid eight times rewrites eight sequences and
         // inserts nothing.
         if (playedChanged || retimed)
-            reconcileClips(*target, source.id, retimed);
+            reconcileClips(*notes, source.id, retimed);
 
-        // The recordings, on the companion: made the first time the track has
-        // one, mixed like the track itself, never given an instrument.
-        auto* companion = findTrack(source.id, true);
-        const bool needsCompanion = companion == nullptr && !laidOutAudio(state_, source.id).empty();
-        if (needsCompanion)
-            companion = createTrackFor(source.id, true);
+        // The recordings, on a track of their own: made the first time the
+        // track has one, playing into the strip like the notes.
+        auto* recordings = findTrack(source.id, Part::recordings);
+        const bool needsRecordings = recordings == nullptr && !laidOutAudio(state_, source.id).empty();
+        if (needsRecordings)
+            recordings = createTrackFor(source.id, Part::recordings);
 
-        if (companion != nullptr)
+        if (recordings != nullptr)
         {
-            if (trackChanged || needsCompanion)
-            {
-                applyMix(*companion, source);
-
-                // The effects of the DAW act on the recordings too (S20): a
-                // voice is a recording, and an equaliser that left it alone
-                // would be a lie on the mixer. Only them: a plugin of the
-                // user's would be a second instance, whose state would drift
-                // from the first.
-                auto effects = source;
-                effects.plugins.erase(
-                    std::remove_if(effects.plugins.begin(),
-                                   effects.plugins.end(),
-                                   [](const domain::PluginInstance& plugin)
-                                   { return plugin.ref.format != domain::PluginRef::internalFormat; }),
-                    effects.plugins.end());
-                reconcilePlugins(companion->pluginList, effects, 0);
-            }
-            if (trackChanged || routeChanged || needsCompanion)
-                applyRoute(*companion, source);
-            if (playedChanged || retimed || needsCompanion)
-                reconcileAudioTrack(*companion, source.id, retimed);
-            ensureMeterTap(companion->pluginList, toJuce(source.id.toString()), state_.isAudible(source.id));
+            if (trackChanged || needsRecordings)
+                recordings->setName(toJuce(source.name));
+            playInto(*recordings, *target);
+            if (playedChanged || retimed || needsRecordings)
+                reconcileAudioTrack(*recordings, source.id, retimed);
         }
 
         stillProjected.emplace_back(source.id, snapshot);
@@ -1616,13 +1659,9 @@ ProjectProjector::parametersOf(const domain::AutomationTarget& target)
             return parameters;
         }
 
-        // A channel is two Tracktion tracks, the patterns and the recordings,
-        // mixed as one: both follow the line.
-        for (const auto companion : {false, true})
-        {
-            if (auto* track = findTrack(target.strip, companion); track != nullptr)
-                fromFader(track->getVolumePlugin());
-        }
+        // The fader is the strip's: the notes and the recordings play into it.
+        if (auto* track = findTrack(target.strip, Part::strip); track != nullptr)
+            fromFader(track->getVolumePlugin());
         return parameters;
     }
 
@@ -1630,18 +1669,28 @@ ProjectProjector::parametersOf(const domain::AutomationTarget& target)
     if (!location)
         return parameters;
 
-    tracktion::PluginList* list = nullptr;
+    // On the strip, or on the notes' track for an instrument and what comes
+    // before it.
+    std::vector<tracktion::PluginList*> lists;
     if (location.value().trackId == domain::ProjectState::masterTrackId())
-        list = &edit_.getMasterPluginList();
-    else if (auto* track = findTrack(location.value().trackId, false); track != nullptr)
-        list = &track->pluginList;
-
-    if (list == nullptr)
-        return parameters;
-    if (auto* plugin = findPlugin(*list, target.plugin); plugin != nullptr)
+        lists.push_back(&edit_.getMasterPluginList());
+    else
     {
-        if (auto* parameter = hostedParameter(*plugin, target.paramId); parameter != nullptr)
-            parameters.push_back(parameter);
+        for (const auto part : {Part::strip, Part::notes})
+        {
+            if (auto* track = findTrack(location.value().trackId, part); track != nullptr)
+                lists.push_back(&track->pluginList);
+        }
+    }
+
+    for (auto* list : lists)
+    {
+        if (auto* plugin = findPlugin(*list, target.plugin); plugin != nullptr)
+        {
+            if (auto* parameter = hostedParameter(*plugin, target.paramId); parameter != nullptr)
+                parameters.push_back(parameter);
+            break;
+        }
     }
     return parameters;
 }

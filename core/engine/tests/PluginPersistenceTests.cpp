@@ -112,14 +112,14 @@ struct HostedProject
 
     [[nodiscard]] tracktion::ExternalPlugin* hostedPlugin()
     {
-        auto* track = tracktion::getAudioTracks(host.edit()).getFirst();
-        if (track == nullptr)
-            return nullptr;
-
-        for (auto plugin : track->pluginList.getPlugins())
+        // On the strip or on the track of the notes (S21).
+        for (auto* track : tracktion::getAudioTracks(host.edit()))
         {
-            if (auto* external = dynamic_cast<tracktion::ExternalPlugin*>(plugin); external != nullptr)
-                return external;
+            for (auto plugin : track->pluginList.getPlugins())
+            {
+                if (auto* external = dynamic_cast<tracktion::ExternalPlugin*>(plugin); external != nullptr)
+                    return external;
+            }
         }
         return nullptr;
     }

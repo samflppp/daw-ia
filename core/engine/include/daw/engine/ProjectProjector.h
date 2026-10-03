@@ -38,6 +38,15 @@ namespace daw::engine
 class ProjectProjector final : public domain::BusObserver
 {
 public:
+    // The Tracktion tracks a domain track is made of (S21): its strip, and
+    // the two that play into it — its notes and its recordings.
+    enum class Part
+    {
+        strip,
+        notes,
+        recordings
+    };
+
     // The pan law: how a position between -1 and +1 becomes a left gain and a
     // right gain. The domain carries the position and never the gains, so this
     // is the one place the question is answered.
@@ -171,19 +180,27 @@ private:
 
     [[nodiscard]] bool reconcileTempo();
 
-    // The Tracktion track of a domain track: the one that plays its patterns,
-    // or, with `companion`, the one that plays its audio clips.
-    [[nodiscard]] tracktion::AudioTrack* findTrack(const domain::TrackId& id, bool companion) const;
-    [[nodiscard]] tracktion::AudioTrack* createTrackFor(const domain::TrackId& id, bool companion);
+    // A Tracktion track of a domain track (S21): its strip — inserts, fader,
+    // sends, meter —, or the track that plays its notes, or the one that
+    // plays its recordings, both into the strip. See the role in the source.
+    [[nodiscard]] tracktion::AudioTrack* findTrack(const domain::TrackId& id, Part part) const;
+    [[nodiscard]] tracktion::AudioTrack* createTrackFor(const domain::TrackId& id, Part part);
 
-    // Name, volume, pan law and pan: written the same on a track and on its
-    // companion, so a recording and a pattern of one track mix as one.
+    // The track's plugins up to its first instrument, played on the notes'
+    // track, and the rest, inserts of the strip.
+    [[nodiscard]] std::pair<domain::Track, domain::Track>
+    splitAtInstrument(const domain::Track& source) const;
+
+    // A part plays into its strip, never to the master.
+    static void playInto(tracktion::AudioTrack& part, tracktion::AudioTrack& strip);
+
+    // Name, volume, pan law and pan, on the strip.
     void applyMix(tracktion::AudioTrack& target, const domain::Track& source);
 
     // Where the strip goes and what it is heard as: its mute, which is the
     // domain's isAudible and not its own muted flag — a solo elsewhere can
     // silence it —, its output, bus or master, and its sends, one AuxSend per
-    // bus, after the fader. Written on a track and on its companion alike.
+    // bus, after the fader. Written on the strip.
     void applyRoute(tracktion::AudioTrack& target, const domain::Track& source);
 
     // What applyRoute depends on, beyond the strip itself: whether it is
@@ -200,8 +217,8 @@ private:
                       std::vector<std::pair<domain::TrackId, domain::Value>>& projected);
     void ensureAuxReturn(tracktion::AudioTrack& track, int number);
 
-    // The audio clips of a track, on its companion.
-    void reconcileAudioTrack(tracktion::AudioTrack& companion, domain::TrackId trackId, bool retimed);
+    // The audio clips of a track, on the track of its recordings.
+    void reconcileAudioTrack(tracktion::AudioTrack& recordings, domain::TrackId trackId, bool retimed);
     void removeUnknownTracks();
 
     // The level tap of a chain, last in it, measuring `strip`: a domain
@@ -264,8 +281,8 @@ private:
     // --- automation
     //
     // Each line of the domain becomes the AutomationCurve of the Tracktion
-    // parameters it drives: a channel's volume or pan on its track and on its
-    // companion, a bus's, the master fader's, or one parameter of a plugin.
+    // parameters it drives: a channel's volume or pan on its strip, a bus's,
+    // the master fader's, or one parameter of a plugin.
     //
     // Tracktion's curve is in seconds and the domain's line in beats, so the
     // curve is computed again whenever the tempo moves; a segment that crosses

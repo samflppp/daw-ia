@@ -13,7 +13,9 @@ TEST_CASE("A domain track becomes a Tracktion track, and nothing else remains")
 
     // Tracktion creates one audio track with a new Edit. It carries no domain
     // identifier, so the projector removed it: the domain decides what exists.
-    REQUIRE(tracks.size() == 1);
+    // The domain track is two: its strip, and the track that plays its notes
+    // into it (S21); the strip comes first.
+    REQUIRE(tracks.size() == 2);
     CHECK(tracks.getFirst()->getName() == "Piste 1");
 }
 
@@ -24,7 +26,7 @@ TEST_CASE("A MIDI clip and its notes reach the Edit")
 
     REQUIRE(harness.bus.execute(harness.createClip(clipId, 0.0, 4.0)).ok());
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.notesTrack();
     REQUIRE(track != nullptr);
     REQUIRE(track->getClips().size() == 1);
 
@@ -45,7 +47,7 @@ TEST_CASE("Undo is projected like any other change, with no engine code of its o
     REQUIRE(harness.bus.execute(harness.createClip(clipId)).ok());
     REQUIRE(harness.bus.execute(EngineHarness::addNote(clipId, NoteId::generate(), 60)).ok());
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.notesTrack();
     REQUIRE(track != nullptr);
 
     REQUIRE(harness.bus.undo().ok()); // note
@@ -65,7 +67,7 @@ TEST_CASE("A volume change reaches the track's volume plugin")
 
     REQUIRE(harness.bus.execute(harness.setVolume(-6.0)).ok());
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.stripTrack();
     REQUIRE(track != nullptr);
 
     auto* volume = track->getVolumePlugin();
@@ -81,7 +83,7 @@ TEST_CASE("A coalesced drag leaves the clips alone")
     REQUIRE(harness.bus.execute(harness.createClip(clipId)).ok());
     REQUIRE(harness.bus.execute(EngineHarness::addNote(clipId, NoteId::generate(), 60)).ok());
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.notesTrack();
     REQUIRE(track != nullptr);
     auto* clipBefore = track->getClips().getFirst();
 
@@ -106,14 +108,14 @@ TEST_CASE("Reconciling twice changes nothing the second time")
     REQUIRE(harness.bus.execute(harness.createClip(clipId)).ok());
     REQUIRE(harness.bus.execute(EngineHarness::addNote(clipId, NoteId::generate(), 60)).ok());
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.notesTrack();
     REQUIRE(track != nullptr);
     auto* clipBefore = track->getClips().getFirst();
 
     harness.projector.reconcile();
     harness.projector.reconcile();
 
-    REQUIRE(tracktion::getAudioTracks(harness.host.edit()).size() == 1);
+    REQUIRE(tracktion::getAudioTracks(harness.host.edit()).size() == 2);
     REQUIRE(track->getClips().size() == 1);
     CHECK(track->getClips().getFirst() == clipBefore);
 }
@@ -136,13 +138,13 @@ TEST_CASE("Removing a track in the middle does not shift the others")
     REQUIRE(harness.state.addTrack(last).ok());
     harness.projector.reconcile();
 
-    REQUIRE(tracktion::getAudioTracks(harness.host.edit()).size() == 3);
+    REQUIRE(tracktion::getAudioTracks(harness.host.edit()).size() == 6);
 
     REQUIRE(harness.state.removeTrack(second).ok());
     harness.projector.reconcile();
 
     const auto tracks = tracktion::getAudioTracks(harness.host.edit());
-    REQUIRE(tracks.size() == 2);
+    REQUIRE(tracks.size() == 4);
 
     // Binding is by identity, so the survivors keep their own names.
     juce::StringArray names;
@@ -158,7 +160,7 @@ TEST_CASE("Every projected track carries an instrument, so a note can be heard")
 {
     EngineHarness harness;
 
-    auto* track = harness.firstAudioTrack();
+    auto* track = harness.notesTrack();
     REQUIRE(track != nullptr);
     CHECK_FALSE(track->pluginList.getPluginsOfType<tracktion::FourOscPlugin>().isEmpty());
 }

@@ -37,9 +37,8 @@ class MixRender
 public:
     struct Measured
     {
-        // One per domain track that sounds: its pre-fader measure. A track
-        // with recordings and notes has two Tracktion tracks; their measures
-        // are combined (see domain::mix::combine).
+        // One per domain track that sounds: its pre-fader measure, taken on
+        // its strip, where its notes and its recordings are summed (S21).
         std::map<std::string, domain::mix::StreamMeasure> tracks;
         domain::mix::StreamMeasure master;
         double renderSeconds{0.0}; // the wall time of render and analysis

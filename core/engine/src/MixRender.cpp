@@ -23,8 +23,8 @@ double nowMs()
 
 struct MixRender::Slots
 {
-    // One analyser per tap: a domain track, its recordings' companion, or the
-    // master. Owned here, looked up by the taps through MixTap's registry.
+    // One analyser per tap: a domain track's strip, or the master. Owned here, looked up by the taps through
+    // MixTap's registry.
     std::map<juce::String, std::unique_ptr<domain::mix::StreamAnalyser>> analysers;
 
     // Every key of this render starts with it: two renders alive at once — the
@@ -98,10 +98,13 @@ std::unique_ptr<MixRender> MixRender::prepare(tracktion::Edit& live,
         const auto parsed = domain::TrackId::parse(id.toStdString());
         if (!parsed || measured->findTrack(parsed.value()) == nullptr)
             continue;
-        const auto companion = track->state.getProperty(domainRoleProperty).toString().isNotEmpty();
+        // The strip only (S21): its notes and its recordings play into it,
+        // summed before its inserts, so one tap hears the whole track.
+        if (track->state.getProperty(domainRoleProperty).toString().isNotEmpty())
+            continue;
         auto* volume = track->getVolumePlugin();
         const auto at = volume != nullptr ? track->pluginList.indexOf(volume) : -1;
-        tap(track->pluginList, at, companion ? id + ":audio" : id);
+        tap(track->pluginList, at, id);
     }
     tap(render->copy_->getMasterPluginList(), -1, "master");
 
@@ -164,24 +167,13 @@ std::unique_ptr<MixRender::Measured> MixRender::run(const std::atomic<bool>& can
     finished_ = true;
 
     auto measured = std::make_unique<Measured>();
-    std::map<std::string, domain::mix::StreamMeasure> companions;
     for (const auto& [key, analyser] : slots_->analysers)
     {
         auto measure = analyser->finish();
         if (key == "master")
             measured->master = std::move(measure);
-        else if (key.endsWith(":audio"))
-            companions[key.upToLastOccurrenceOf(":audio", false, false).toStdString()] = std::move(measure);
         else
             measured->tracks[key.toStdString()] = std::move(measure);
-    }
-    for (auto& [id, recordings] : companions)
-    {
-        auto found = measured->tracks.find(id);
-        if (found == measured->tracks.end())
-            measured->tracks[id] = std::move(recordings);
-        else
-            found->second = domain::mix::combine(found->second, recordings);
     }
     measured->renderSeconds = (nowMs() - started) / 1000.0;
     return measured;
