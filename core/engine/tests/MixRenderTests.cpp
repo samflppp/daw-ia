@@ -83,7 +83,8 @@ struct MixHarness
         return id;
     }
 
-    std::unique_ptr<MixRender::Measured> measure(const ProjectState* proposed = nullptr)
+    std::unique_ptr<MixRender::Measured> measure(const ProjectState* proposed = nullptr,
+                                                 juce::File* released = nullptr)
     {
         auto render = MixRender::prepare(host.edit(), state, proposed, nullptr, &store);
         REQUIRE(render != nullptr);
@@ -105,6 +106,8 @@ struct MixHarness
             cancelled = true;
         worker.join();
         REQUIRE(measured != nullptr);
+        if (released != nullptr)
+            *released = render->releaseFile();
         return measured;
     }
 
@@ -156,6 +159,32 @@ TEST_CASE("The mix render hears each track before its fader, and the master as i
 
     // And the Edit that plays never held a tap.
     CHECK(harness.tapsInLiveEdit() == 0);
+}
+
+TEST_CASE("The rendered master is handed over: it outlives the render and sounds as measured")
+{
+    MixHarness harness;
+    juce::File file;
+    const auto measured = harness.measure(nullptr, &file);
+    REQUIRE(file.existsAsFile());
+
+    // Read back and measured again: the same loudness as the render said.
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader{formats.createReaderFor(file)};
+    REQUIRE(reader != nullptr);
+    juce::AudioBuffer<float> samples{2, static_cast<int>(reader->lengthInSamples)};
+    REQUIRE(reader->read(&samples, 0, samples.getNumSamples(), 0, true, true));
+    daw::domain::mix::StreamAnalyser analyser{reader->sampleRate};
+    analyser.process(samples.getReadPointer(0),
+                     samples.getReadPointer(1),
+                     static_cast<std::size_t>(samples.getNumSamples()));
+    const auto again = analyser.finish();
+    MESSAGE("render " << measured->master.integratedLufs << " LUFS, file " << again.integratedLufs
+                      << " LUFS");
+    CHECK(again.integratedLufs == doctest::Approx(measured->master.integratedLufs).epsilon(0.001));
+    reader.reset();
+    CHECK(file.deleteFile());
 }
 
 TEST_CASE("A proposal is measured on a copy: its effect is heard there, and nowhere else")

@@ -123,6 +123,13 @@ std::unique_ptr<MixRender> MixRender::prepare(tracktion::Edit& live,
     return render;
 }
 
+juce::File MixRender::releaseFile()
+{
+    if (slots_ == nullptr || !finished_)
+        return {};
+    return std::exchange(slots_->file, juce::File{});
+}
+
 MixRender::~MixRender()
 {
     if (slots_ != nullptr)
@@ -148,6 +155,7 @@ std::unique_ptr<MixRender::Measured> MixRender::run(const std::atomic<bool>& can
         if (progress)
             progress(static_cast<double>(slots_->progress.load(std::memory_order_relaxed)));
     }
+    finished_ = true;
 
     auto measured = std::make_unique<Measured>();
     std::map<std::string, domain::mix::StreamMeasure> companions;

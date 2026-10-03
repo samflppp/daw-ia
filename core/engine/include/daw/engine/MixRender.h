@@ -72,6 +72,11 @@ public:
     // moment the interface waits.
     [[nodiscard]] double prepareMs() const noexcept { return prepareMs_; }
 
+    // The master as rendered, a 32-bit WAV, handed over: the caller deletes
+    // it. Empty before run() has finished. Before and after are listened to
+    // from these, never from the Edit that plays.
+    [[nodiscard]] juce::File releaseFile();
+
     // Must be destroyed on the message thread: the copy unloads plugins.
 private:
     MixRender() = default;
@@ -82,6 +87,7 @@ private:
     std::unique_ptr<class ProjectProjector> projector_;
     std::unique_ptr<Slots> slots_;
     double prepareMs_{0.0};
+    std::atomic<bool> finished_{false};
 };
 
 } // namespace daw::engine
