@@ -250,6 +250,14 @@ Result<WorkspaceManifest> WorkspaceManifest::fromValue(const Value& value)
         manifest.description = text.value();
     }
 
+    if (const auto* workshop = value.find("workshop"); workshop != nullptr)
+    {
+        auto flag = workshop->asBool();
+        if (!flag)
+            return flag.error();
+        manifest.workshop = flag.value();
+    }
+
     auto panels = stringsAt(value, "panels", true);
     if (!panels)
         return panels.error();

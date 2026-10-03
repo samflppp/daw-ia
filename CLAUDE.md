@@ -117,6 +117,9 @@ Mécanismes :
   règles, sans clé). `scripts/verify-quit.ps1` : la fermeture finit le processus. Toujours avec
   `--project` dans un dossier jetable **et** `--layout <fichier jetable>` : sans `--layout`, elles
   réécrivent `%APPDATA%\DAW IA\DAW IA.layout`. Une vérification ne mixe jamais par le modèle.
+- **Workspaces réservés aux ateliers** : `"workshop": true` dans le manifeste (Découverte, depuis le
+  03/10/2026). Absents de la barre, refusés par leur nom, une disposition ou une relance qui les nomme
+  ouvre le beatmaker ; seul un lancement avec `--atelier` les montre.
 - **Clé d'API** : variable d'environnement `DAW_IA_ANTHROPIC_API_KEY`, jamais en dur ni dans un fichier
   du dépôt (vérifié en S17 : aucune clé, aucun `.env`, dans tout l'historique).
 - **Tests d'un plugin réel** : label ctest `audio`, exclus de la CI ; `DAW_TEST_VST3` / `DAW_TEST_CLAP`

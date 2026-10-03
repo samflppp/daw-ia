@@ -18,6 +18,10 @@ WORKSPACES = ROOT / "workspaces"
 SCHEMA = WORKSPACES / "schema" / "workspace.schema.json"
 EXPECTED = {"decouverte", "beatmaker", "ugc", "film"}
 
+# Reserved for presentation workshops (3 October 2026): kept as manifests, never
+# offered in the application everyone uses, only in a launch with --atelier.
+WORKSHOP_ONLY = {"decouverte"}
+
 
 def layout_panels(node: dict) -> list[str]:
     if "pages" in node:
@@ -48,6 +52,12 @@ def check_manifest(path: Path, validator: Draft202012Validator) -> list[str]:
         errors.append(f"{path.name}: panel '{panel}' is declared but not placed in layout")
     for panel in sorted({p for p in placed if placed.count(p) > 1}):
         errors.append(f"{path.name}: panel '{panel}' is placed more than once")
+
+    workshop = manifest.get("workshop", False)
+    if path.stem in WORKSHOP_ONLY and not workshop:
+        errors.append(f"{path.name}: reserved for workshops, must say \"workshop\": true")
+    if path.stem not in WORKSHOP_ONLY and workshop:
+        errors.append(f"{path.name}: marked for workshops, but the application everyone uses offers it")
 
     if "pages" in manifest["layout"]:
         shortcuts = [page["shortcut"] for page in manifest["layout"]["pages"] if "shortcut" in page]

@@ -29,6 +29,10 @@
     "description": {
       "type": "string"
     },
+    "workshop": {
+      "description": "Reserved for presentation workshops: never offered in the application everyone uses, only when it is launched with --atelier.",
+      "type": "boolean"
+    },
     "panels": {
       "type": "array",
       "minItems": 1,

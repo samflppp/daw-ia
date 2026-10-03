@@ -72,6 +72,7 @@ Verification::Verification(Wiring wiring)
     , probe_(wiring.probe)
     , project_(wiring.project)
     , mix_(wiring.mix)
+    , workspaces_(wiring.workspaces)
 {
     exporter_ = wiring.exporter;
 }
@@ -1377,7 +1378,7 @@ void Verification::buildList()
             }
             check(labels.contains("Fichier"), "le menu Fichier");
             check(beatmakerLit, "le bouton Beatmaker, allumé");
-            check(buttons == 1 + 4 + 3, "Fichier, quatre workspaces, réduire, agrandir, fermer");
+            check(buttons == 1 + 3 + 3, "Fichier, trois workspaces, réduire, agrandir, fermer");
 
             bool transportSwitch = false;
             if (auto* transport = panel("transport"); transport != nullptr)
@@ -1417,47 +1418,58 @@ void Verification::buildList()
             check(window_.getBounds() == savedBounds_, "et elle a repris sa place");
         });
 
-    add("les workspaces se changent depuis la barre",
+    // Découverte left the application on 3 October 2026: a tool for
+    // presentation workshops, shown only by a launch with --atelier. Nothing
+    // in a normal launch leads to it, neither the bar nor a request by name.
+    add("Découverte n'est plus dans la barre, ni demandable par son nom",
         [this]
         {
-            juce::TextButton* discovery = nullptr;
-            juce::TextButton* beatmaker = nullptr;
-            for (auto* child : titleBar_.getChildren())
+            const auto button = [this](const juce::String& label) -> juce::TextButton*
             {
-                if (auto* button = dynamic_cast<juce::TextButton*>(child); button != nullptr)
+                for (auto* child : titleBar_.getChildren())
                 {
-                    if (button->getButtonText() == juce::String(u8"Découverte"))
-                        discovery = button;
-                    if (button->getButtonText() == "Beatmaker")
-                        beatmaker = button;
+                    if (auto* found = dynamic_cast<juce::TextButton*>(child);
+                        found != nullptr && found->getButtonText() == label)
+                        return found;
                 }
-            }
-            check(discovery != nullptr && beatmaker != nullptr, "les deux boutons existent");
-            if (discovery == nullptr || beatmaker == nullptr)
+                return nullptr;
+            };
+
+            check(button(juce::String(u8"Découverte")) == nullptr, "aucun bouton « Découverte »");
+            check(button("Beatmaker") != nullptr && button("UGC") != nullptr, "Beatmaker et UGC sont là");
+
+            check(workspaces_ != nullptr, "le changement de workspace est branché");
+            if (workspaces_ == nullptr)
                 return;
 
-            discovery->triggerClick();
+            workspaces_->request("decouverte");
+            check(workspaces_->current() == "beatmaker", "demandé par son nom, il est refusé");
+            check(panel("transport") != nullptr, "le beatmaker est toujours affiché");
+
+            if (auto* ugc = button("UGC"); ugc != nullptr)
+                ugc->triggerClick();
         });
 
-    add("Découverte est affiché, puis retour au beatmaker",
+    add("les workspaces se changent depuis la barre : UGC, puis retour au beatmaker",
         [this]
         {
-            juce::TextButton* discovery = nullptr;
+            juce::TextButton* ugc = nullptr;
             juce::TextButton* beatmaker = nullptr;
             for (auto* child : titleBar_.getChildren())
             {
                 if (auto* button = dynamic_cast<juce::TextButton*>(child); button != nullptr)
                 {
-                    if (button->getButtonText() == juce::String(u8"Découverte"))
-                        discovery = button;
+                    if (button->getButtonText() == "UGC")
+                        ugc = button;
                     if (button->getButtonText() == "Beatmaker")
                         beatmaker = button;
                 }
             }
-            if (discovery == nullptr || beatmaker == nullptr)
+            check(ugc != nullptr && beatmaker != nullptr, "les deux boutons existent");
+            if (ugc == nullptr || beatmaker == nullptr)
                 return;
 
-            check(discovery->getToggleState() && !beatmaker->getToggleState(), "Découverte est allumé");
+            check(ugc->getToggleState() && !beatmaker->getToggleState(), "UGC est allumé");
             beatmaker->triggerClick();
         });
 }

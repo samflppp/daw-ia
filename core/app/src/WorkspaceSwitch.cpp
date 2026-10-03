@@ -7,9 +7,10 @@
 namespace daw::app
 {
 
-WorkspaceSwitch::WorkspaceSwitch(const ui::Workspaces& workspaces, std::string current)
+WorkspaceSwitch::WorkspaceSwitch(const ui::Workspaces& workspaces, std::string current, bool workshop)
     : workspaces_(workspaces)
     , current_(std::move(current))
+    , workshop_(workshop)
 {
 }
 
@@ -19,7 +20,10 @@ std::vector<ui::WorkspaceHost::Entry> WorkspaceSwitch::available() const
     entries.reserve(workspaces_.all().size());
 
     for (const auto& manifest : workspaces_.all())
-        entries.push_back(Entry{manifest.id, manifest.label});
+    {
+        if (offers(manifest, workshop_))
+            entries.push_back(Entry{manifest.id, manifest.label});
+    }
 
     return entries;
 }
@@ -35,6 +39,11 @@ void WorkspaceSwitch::request(std::string_view id)
     if (manifest == nullptr)
     {
         juce::Logger::writeToLog("no such workspace: " + juce::String(std::string{id}));
+        return;
+    }
+    if (!offers(*manifest, workshop_))
+    {
+        juce::Logger::writeToLog("workspace reserved for workshops: " + juce::String(manifest->id));
         return;
     }
 

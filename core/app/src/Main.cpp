@@ -270,7 +270,8 @@ public:
                 exporter_.get(),
                 probe_.get(),
                 &projectObserver_,
-                mixSession_.get()});
+                mixSession_.get(),
+                switch_.get()});
 
             // A verification mixes by the rules: never a key, never an API.
             if (mixSession_ != nullptr)
@@ -700,6 +701,8 @@ private:
         juce::String arguments = "--relaunched --project \"" + folder.getFullPathName() + "\"";
         if (lastWorkspace_.isNotEmpty())
             arguments << " --workspace " << lastWorkspace_;
+        if (workshop_)
+            arguments << " --atelier";
         if (layoutArgument_.isNotEmpty())
             arguments << " --layout \"" << layoutArgument_ << "\"";
 
@@ -722,6 +725,10 @@ private:
         for (const auto& rejected : workspaces.rejected())
             juce::Logger::writeToLog("workspace not loaded: " + rejected);
 
+        // --atelier: the launch of a presentation workshop, the only one that
+        // shows the workspaces reserved for it.
+        workshop_ = juce::StringArray::fromTokens(commandLine, true).contains("--atelier");
+
         const auto wanted = workspaceFromCommandLine(commandLine);
         const auto* manifest = workspaces.find(wanted.toStdString());
 
@@ -730,9 +737,16 @@ private:
             juce::Logger::writeToLog("no such workspace: " + wanted);
             manifest = workspaces.find(ui::Workspaces::defaultId());
         }
+        else if (!WorkspaceSwitch::offers(*manifest, workshop_))
+        {
+            juce::Logger::writeToLog("workspace reserved for workshops: " + wanted);
+            manifest = workspaces.find(ui::Workspaces::defaultId());
+        }
 
         switch_ = std::make_unique<WorkspaceSwitch>(
-            workspaces, manifest != nullptr ? manifest->id : std::string{ui::Workspaces::defaultId()});
+            workspaces,
+            manifest != nullptr ? manifest->id : std::string{ui::Workspaces::defaultId()},
+            workshop_);
 
         // The copilot is built before the panels, because one of them reads
         // it, and started after: a process that answers before there is a
@@ -1139,6 +1153,7 @@ private:
     std::unique_ptr<juce::FileChooser> chooser_;
     std::optional<juce::File> relaunchProject_;
     juce::String lastWorkspace_;
+    bool workshop_{false};
     juce::String lastRefusal_;
     std::unique_ptr<MainWindow> window_;
 };

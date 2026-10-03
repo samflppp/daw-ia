@@ -15,6 +15,7 @@
 #include "daw/ui/model/SampleHost.h"
 #include "daw/ui/model/Selection.h"
 #include "daw/ui/model/TransportClock.h"
+#include "daw/ui/model/WorkspaceHost.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <tracktion_engine/tracktion_engine.h>
@@ -119,6 +120,10 @@ public:
 
         // The mix by the AI (S20): --verify-mix drives it, by the rules only.
         MixSession* mix{nullptr};
+
+        // The workspace switch, asked by identifier the way a shortcut or the
+        // copilot would ask: a workspace reserved for workshops is refused.
+        ui::WorkspaceHost* workspaces{nullptr};
     };
 
     explicit Verification(Wiring wiring);
@@ -430,6 +435,7 @@ private:
     const PlaybackProbe* probe_{nullptr};
     ui::ProjectObserver* project_{nullptr};
     MixSession* mix_{nullptr};
+    ui::WorkspaceHost* workspaces_{nullptr};
 
     // S14.
     domain::TrackId leadTrack_{};

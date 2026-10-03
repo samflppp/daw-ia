@@ -5,6 +5,7 @@
 #include <iterator>
 #include <ostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <doctest/doctest.h>
@@ -263,4 +264,27 @@ TEST_CASE("the beatmaker manifest shipped with the application is windowed and p
     REQUIRE(manifest.value().windows.has_value());
     CHECK(manifest.value().windows->bar == std::vector<std::string>{"transport"});
     CHECK(manifest.value().windows->pages.size() == 10); // the canvas, F4, since S18
+}
+
+TEST_CASE("the discovery workspace is reserved for workshops, and the shipped beatmaker is not")
+{
+    const auto shipped = [](const std::string& id)
+    {
+        std::ifstream file{std::string{DAW_WORKSPACES_DIR} + "/" + id + ".json", std::ios::binary};
+        REQUIRE(file.good());
+        const std::string text{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
+        auto manifest = WorkspaceManifest::parse(text);
+        REQUIRE(manifest.ok());
+        return std::move(manifest).value();
+    };
+
+    CHECK(shipped("decouverte").workshop);
+    CHECK_FALSE(shipped("beatmaker").workshop);
+    CHECK_FALSE(shipped("film").workshop);
+    CHECK_FALSE(shipped("ugc").workshop);
+
+    // Absent means offered: the manifests written before the field still open.
+    auto plain = WorkspaceManifest::parse(simpleManifest);
+    REQUIRE(plain.ok());
+    CHECK_FALSE(plain.value().workshop);
 }

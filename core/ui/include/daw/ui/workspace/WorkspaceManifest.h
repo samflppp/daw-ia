@@ -85,6 +85,11 @@ struct WorkspaceManifest
     std::string id;
     std::string label;
     std::string description;
+
+    // Reserved for presentation workshops: the application everyone uses
+    // never offers it, only a launch with --atelier does.
+    bool workshop{false};
+
     std::vector<std::string> panels;
     LayoutNode layout;
 
