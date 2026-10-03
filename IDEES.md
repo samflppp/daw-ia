@@ -148,15 +148,17 @@ Notés en mesurant, non construits :
   choix de canal à chaque changement, même quand les canaux n'ont pas changé.
 - **Mesurer le déplacement natif de la fenêtre principale** (traces ETW de Windows), au lieu de le juger à l'œil.
 
-## La toile, après la S18
+## La toile, après la S19
 
 Notés en construisant la toile, non construits :
 
 - **Rendre un bloc unique** depuis la toile (« éditer seulement ici ») : cloner le pattern et reposer le bloc
   sur le clone. C'est un verbe de domaine de plus ; la règle de la S18 demande une raison de démonstration.
-- **Ajouter une piste à un pattern depuis la toile,** par une bande vide sous les autres. Aujourd'hui c'est
-  le channel rack qui ajoute la rangée.
-- **Le mode pattern dans la toile :** le pattern en cours seul, comme un bloc à l'origine, pour ce qui n'est
-  pas encore posé.
-- **Vélocités, copier-coller de notes, quantifier, transposer, la génération dans une bande :** ce que la
-  toile doit savoir faire avant que le piano-roll disparaisse.
+- **Retirer le piano-roll** une fois la toile essayée : F7 hors du manifeste, `PianoRoll*.cpp` supprimé, les
+  étapes de `--verify` et `--verify-fluidite` qui passent par lui réécrites sur la toile.
+- **La toile à la place de la playlist (F5),** le drapeau toile/playlist retiré.
+- **Une bascule PAT/SONG propre à la toile,** si suivre le transport gêne à l'usage.
+- **Le repeint du glissé d'un point d'automation** (12 à 14 ms de repeint par image, plus que la playlist entière) : la zone salie
+  dépasse la bande d'automation. À trouver avant d'y toucher.
+- **La toile chargée sous 8 ms au 95e centile en Direct2D :** 256 blocs donnent 9 à 13 ms au 95e centile selon
+  la charge de la machine.
