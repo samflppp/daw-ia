@@ -678,4 +678,78 @@ bool SetTrackChannelPitch::canCoalesceWith(const Command& newer) const noexcept
     return other != nullptr && other->trackId_ == trackId_;
 }
 
+// ---------------------------------------------------------------------------
+// track.set_role
+// ---------------------------------------------------------------------------
+
+namespace
+{
+Value roleValue(const std::optional<MixRole>& role)
+{
+    return role.has_value() ? Value{std::string{mixRoleName(*role)}} : Value{};
+}
+
+Result<std::optional<MixRole>> roleAt(const Value& value, std::string_view key)
+{
+    const auto* found = value.find(key);
+    if (found == nullptr)
+        return fail(ErrorCode::invalidPayload, "missing key: " + std::string{key});
+    if (found->isNull())
+        return std::optional<MixRole>{};
+    auto name = value.stringAt(key);
+    if (!name)
+        return fail(ErrorCode::invalidPayload, std::string{key} + " must be a string or null");
+    auto role = mixRoleFromName(name.value());
+    if (!role.has_value())
+        return fail(ErrorCode::invalidArgument, "no such mix role: " + name.value());
+    return std::optional<MixRole>{role};
+}
+} // namespace
+
+SetTrackRole::SetTrackRole(TrackId trackId, std::optional<MixRole> role)
+    : trackId_{trackId}
+    , role_{role}
+{
+}
+
+Result<std::unique_ptr<Command>> SetTrackRole::fromPayload(const Value& payload)
+{
+    auto trackId = trackIdAt(payload, "trackId");
+    if (!trackId)
+        return trackId.error();
+
+    auto role = roleAt(payload, "role");
+    if (!role)
+        return role.error();
+
+    return std::unique_ptr<Command>{new SetTrackRole{trackId.value(), role.value()}};
+}
+
+Value SetTrackRole::payload() const
+{
+    return Value::object({{"trackId", Value{trackId_.toString()}}, {"role", roleValue(role_)}});
+}
+
+Result<Value> SetTrackRole::apply(ProjectState& state) const
+{
+    const auto* strip = state.findStrip(trackId_);
+    if (strip == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + trackId_.toString());
+    const auto previous = strip->role;
+
+    auto applied = state.setTrackRole(trackId_, role_);
+    if (!applied)
+        return applied.error();
+
+    return Value::object({{"previousRole", roleValue(previous)}});
+}
+
+Result<void> SetTrackRole::revert(ProjectState& state, const Value& undoRecord) const
+{
+    auto previous = roleAt(undoRecord, "previousRole");
+    if (!previous)
+        return previous.error();
+    return state.setTrackRole(trackId_, previous.value());
+}
+
 } // namespace daw::domain

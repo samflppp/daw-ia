@@ -241,4 +241,28 @@ private:
     int pitch_;
 };
 
+// track.set_role — the role a person gives a track in the mix (S20).
+//
+// Null takes the decision back: the role is guessed again. Not coalescable: a
+// role is chosen, not dragged.
+class SetTrackRole final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "track.set_role";
+
+    SetTrackRole(TrackId trackId, std::optional<MixRole> role);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Reach reach() const noexcept override { return Reach::mix; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+private:
+    TrackId trackId_;
+    std::optional<MixRole> role_;
+};
+
 } // namespace daw::domain

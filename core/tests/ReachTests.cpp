@@ -141,6 +141,7 @@ std::vector<std::unique_ptr<Command>> mixCommands(const Strip& strip)
     commands.push_back(std::make_unique<SetTrackSend>(track, strip.bus, -3.0));
     commands.push_back(std::make_unique<RemoveTrackSend>(track, strip.bus));
     commands.push_back(std::make_unique<SetTrackOutput>(track, strip.bus));
+    commands.push_back(std::make_unique<SetTrackRole>(track, MixRole::bass));
     PluginInstance more{};
     more.id = PluginId::generate();
     more.ref =

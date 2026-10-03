@@ -327,6 +327,32 @@ struct Send
     friend bool operator==(const Send& lhs, const Send& rhs);
 };
 
+// What a track is for in a mix (S20): the vocabulary a mixing engineer sorts a
+// session by, and what the mixing rules and the copilot reason on. A kick is
+// not mixed like a pad.
+//
+// Kept in the project only when the person chose it: a role guessed from the
+// names, the generator or the sound is a reading of the project, computed
+// again each time and never stored; a role the person corrected is a decision,
+// and a decision is journaled, undone, and survives reopening.
+enum class MixRole : std::uint8_t
+{
+    kick,
+    snare,
+    hats,
+    percussion,
+    bass,
+    chords,
+    melody,
+    vocal,
+    fx
+};
+
+// "kick", "snare", "hats", "percussion", "bass", "chords", "melody", "vocal",
+// "fx": the words of the JSON and of the copilot.
+[[nodiscard]] std::string_view mixRoleName(MixRole role) noexcept;
+[[nodiscard]] std::optional<MixRole> mixRoleFromName(std::string_view name) noexcept;
+
 // A strip of the mixer. What the channel rack calls a channel, what the mixer
 // calls a bus, and the master are all this: a fader, a pan, a mute, a chain of
 // inserts. What tells them apart is where the project keeps them — tracks(),
@@ -383,6 +409,9 @@ struct Track
     // an undo gives it back. What it silences is decided by
     // ProjectState::isAudible, once, for the engine and for anyone asking.
     bool soloed{false};
+
+    // The role the person gave it in the mix. Absent: guessed, every time.
+    std::optional<MixRole> role;
 
     [[nodiscard]] const Send* findSend(TrackId bus) const noexcept;
 
@@ -573,6 +602,7 @@ public:
     [[nodiscard]] Result<std::size_t> sendIndex(TrackId id, TrackId bus) const;
 
     Result<void> setTrackSoloed(TrackId id, bool soloed);
+    Result<void> setTrackRole(TrackId id, std::optional<MixRole> role);
 
     // Whether signal leaving `from` can reach `to`, through outputs and sends.
     [[nodiscard]] bool reaches(TrackId from, TrackId to) const;

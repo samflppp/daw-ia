@@ -20,6 +20,7 @@ constexpr std::pair<std::string_view, std::string_view> labels[] = {
     {"track.set_volume", "Volume de piste"},
     {"track.set_pan", "Panoramique"},
     {"track.set_muted", "Piste coupée"},
+    {"track.set_role", "Rôle dans le mix"},
     {"track.set_channel_pitch", "Hauteur du canal"},
     {"track.set_sample", "Sample du canal"},
     {"audio.place", "Clip audio posé"},

@@ -165,7 +165,8 @@
     "track.set_output",
     "track.set_send",
     "track.remove_send",
-    "track.set_solo"
+    "track.set_solo",
+    "track.set_role"
   ],
   "services": [
     "mcp",

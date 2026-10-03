@@ -1,6 +1,7 @@
 #include "TestSupport.h"
 #include "daw/domain/command/CommandRegistry.h"
 #include "daw/domain/commands/PluginCommands.h"
+#include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/project/InternalEffects.h"
 #include "daw/domain/serialization/Json.h"
 
@@ -140,4 +141,26 @@ TEST_CASE("the equaliser's curve: a bell of -6 dB at 1 kHz is -6 dB there and no
     // Bypassed, it does nothing.
     eq.bypassed = true;
     CHECK(equaliserGainDb(eq, 1000.0) == 0.0);
+}
+
+TEST_CASE("track.set_role: chosen, undone to the byte, and absent from a project that never chose one")
+{
+    Harness harness;
+    const auto before = json::write(harness.state.toValue());
+    CHECK(before.find("\"role\"") == std::string::npos);
+
+    REQUIRE(harness.bus.execute(std::make_unique<SetTrackRole>(harness.trackId, MixRole::bass)).ok());
+    CHECK(harness.state.findTrack(harness.trackId)->role == MixRole::bass);
+    CHECK(replayedTrackMatches(harness));
+
+    REQUIRE(harness.bus.execute(std::make_unique<SetTrackRole>(harness.trackId, std::nullopt)).ok());
+    CHECK_FALSE(harness.state.findTrack(harness.trackId)->role.has_value());
+
+    REQUIRE(harness.bus.undo().ok());
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(json::write(harness.state.toValue()) == before);
+
+    auto refused = SetTrackRole::fromPayload(Value::object(
+        {{"trackId", Value{harness.trackId.toString()}}, {"role", Value{std::string{"guitar"}}}}));
+    CHECK_FALSE(refused.ok());
 }

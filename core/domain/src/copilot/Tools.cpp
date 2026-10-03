@@ -366,6 +366,28 @@ std::vector<Tool> builtinTools()
              schema({{"trackId", trackId}, {"soloed", field("boolean", "Vrai pour mettre en solo.")}},
                     {"trackId", "soloed"})));
 
+    tools.push_back(
+        make("track.set_role",
+             "Donne à une piste son rôle dans le mix : kick, snare, hats, percussion, bass, chords, melody, "
+             "vocal ou fx. null rend la décision : le rôle est de nouveau deviné. Ne change aucun son.",
+             schema({{"trackId", trackId},
+                     {"role",
+                      Value::object(
+                          {{"type", Value::array({Value{std::string{"string"}}, Value{std::string{"null"}}})},
+                           {"enum",
+                            Value::array({Value{std::string{"kick"}},
+                                          Value{std::string{"snare"}},
+                                          Value{std::string{"hats"}},
+                                          Value{std::string{"percussion"}},
+                                          Value{std::string{"bass"}},
+                                          Value{std::string{"chords"}},
+                                          Value{std::string{"melody"}},
+                                          Value{std::string{"vocal"}},
+                                          Value{std::string{"fx"}},
+                                          Value{}})},
+                           {"description", Value{std::string{"Le rôle, ou null."}}}})}},
+                    {"trackId", "role"})));
+
     // --- patterns, placements and rows
     //
     // Le contenu et la position sont séparés : un pattern porte ce qui se joue,

@@ -1013,6 +1013,11 @@ Value Track::toValue() const
     if (soloed)
         members.emplace_back("soloed", Value{true});
 
+    // Written only when chosen (S20): a project without roles serialises the
+    // way it did, byte for byte.
+    if (role.has_value())
+        members.emplace_back("role", Value{std::string{mixRoleName(*role)}});
+
     return Value::object(std::move(members));
 }
 
@@ -1127,6 +1132,16 @@ Result<Track> Track::fromValue(const Value& value)
         track.soloed = soloed.value();
     }
 
+    if (value.find("role") != nullptr)
+    {
+        auto roleName = value.stringAt("role");
+        if (!roleName)
+            return roleName.error();
+        track.role = mixRoleFromName(roleName.value());
+        if (!track.role.has_value())
+            return fail(ErrorCode::invalidPayload, "no such mix role: " + roleName.value());
+    }
+
     auto valid = track.validate();
     if (!valid)
         return valid.error();
@@ -1139,7 +1154,41 @@ bool operator==(const Track& lhs, const Track& rhs)
     return lhs.id == rhs.id && lhs.name == rhs.name && lhs.volumeDb == rhs.volumeDb && lhs.pan == rhs.pan &&
            lhs.muted == rhs.muted && lhs.channelPitch == rhs.channelPitch && lhs.plugins == rhs.plugins &&
            lhs.sample == rhs.sample && lhs.output == rhs.output && lhs.sends == rhs.sends &&
-           lhs.soloed == rhs.soloed;
+           lhs.soloed == rhs.soloed && lhs.role == rhs.role;
+}
+
+namespace
+{
+constexpr std::array<std::pair<MixRole, std::string_view>, 9> mixRoleNames{
+    {{MixRole::kick, "kick"},
+     {MixRole::snare, "snare"},
+     {MixRole::hats, "hats"},
+     {MixRole::percussion, "percussion"},
+     {MixRole::bass, "bass"},
+     {MixRole::chords, "chords"},
+     {MixRole::melody, "melody"},
+     {MixRole::vocal, "vocal"},
+     {MixRole::fx, "fx"}}};
+} // namespace
+
+std::string_view mixRoleName(MixRole role) noexcept
+{
+    for (const auto& [value, name] : mixRoleNames)
+    {
+        if (value == role)
+            return name;
+    }
+    return "fx";
+}
+
+std::optional<MixRole> mixRoleFromName(std::string_view name) noexcept
+{
+    for (const auto& [value, known] : mixRoleNames)
+    {
+        if (known == name)
+            return value;
+    }
+    return std::nullopt;
 }
 
 // ---------------------------------------------------------------------------
@@ -1654,6 +1703,16 @@ Result<void> ProjectState::removeTrackSend(TrackId id, TrackId bus)
 
     auto* strip = findStripMutable(id);
     strip->sends.erase(strip->sends.begin() + static_cast<std::ptrdiff_t>(index.value()));
+    return {};
+}
+
+Result<void> ProjectState::setTrackRole(TrackId id, std::optional<MixRole> role)
+{
+    auto* strip = findStripMutable(id);
+    if (strip == nullptr)
+        return fail(ErrorCode::notFound, "no such track: " + id.toString());
+
+    strip->role = role;
     return {};
 }
 

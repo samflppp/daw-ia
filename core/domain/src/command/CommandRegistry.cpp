@@ -78,6 +78,7 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<SetTrackSend>());
     static_cast<void>(registry.add<RemoveTrackSend>());
     static_cast<void>(registry.add<SetTrackSolo>());
+    static_cast<void>(registry.add<SetTrackRole>());
     static_cast<void>(registry.add<CreateLane>());
     static_cast<void>(registry.add<RemoveLane>());
     static_cast<void>(registry.add<RenameLane>());
