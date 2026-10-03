@@ -12,8 +12,10 @@ l'audio par le même bus. Windows est la seule cible produit. Projet mené en so
 comité en mars 2027, sur un plan de 26 semaines dont chaque semaine ferme sur un bilan dans `docs/`.
 
 **Cap actuel.** Jalon go/no-go atteint en S8. S18–S19 : ergonomie (zoom continu sur une seule toile
-playlist/piano-roll, grammaire de navigation unique). Ensuite, d'autres fonctionnalités d'IA, puis le
-fine-tune du modèle. Plus aucun verbe ajouté au domaine sans une raison de démonstration.
+playlist/piano-roll, grammaire de navigation unique). Fin S19, la toile sait tout ce que faisait le
+piano-roll ; le piano-roll part après l'essai du fondateur, puis le chantier 2 (ancrage des fenêtres,
+défilement du rack et de l'historique). Ensuite, d'autres fonctionnalités d'IA, puis le fine-tune du
+modèle. Plus aucun verbe ajouté au domaine sans une raison de démonstration.
 
 ## 2. Décisions d'architecture acquises — ne jamais rouvrir
 
@@ -51,7 +53,7 @@ Mécanismes :
   commande ajoutée au `CommandRegistry` sans entrée dans la table du copilote casse le test, et
   inversement.
 
-## 4. Règles de méthode — tenues depuis dix-huit semaines
+## 4. Règles de méthode — tenues depuis dix-neuf semaines
 
 - **Exposer avant de coder.** Une décision de modèle ou de comportement se présente et se discute avant
   d'être écrite, jamais découverte dans le diff.
@@ -74,7 +76,7 @@ Mécanismes :
 
 ## 5. Où trouver quoi
 
-- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S18 au 01/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
+- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S19 au 03/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
   `docs/bilan-s7bis.md`. Chaque bilan documente les écarts à l'acquis, les tests cassés une fois, et le
   reste à faire.
 - **Roadmap non engagée** : `IDEES.md` — couche décision du copilote, couche générative, recherche de
@@ -87,7 +89,9 @@ Mécanismes :
 - **Variantes de `--verify`** (auto-vérification de l'application, rendu audio compris) : `--verify`
   (parcours complet), `--verify-reopen` (fermer/rouvrir dans un autre processus), `--verify-legacy`
   (compatibilité d'un ancien projet), `--verify-file` (menu Fichier, jusqu'à un vrai « Enregistrer
-  sous »).
+  sous »), `--verify-canvas` (la toile), `--verify-canvas-charge` et `--verify-fluidite` (mesures de
+  repeint, Direct2D au 95e centile). `scripts/verify-quit.ps1` : la fermeture finit le processus.
+  Toujours avec `--project` dans un dossier jetable ; elles réécrivent `%APPDATA%\DAW IA\DAW IA.layout`.
 - **Clé d'API** : variable d'environnement `DAW_IA_ANTHROPIC_API_KEY`, jamais en dur ni dans un fichier
   du dépôt (vérifié en S17 : aucune clé, aucun `.env`, dans tout l'historique).
 - **Tests d'un plugin réel** : label ctest `audio`, exclus de la CI ; `DAW_TEST_VST3` / `DAW_TEST_CLAP`
@@ -102,6 +106,8 @@ Mécanismes :
 | « Ranger le projet » comme geste explicite | S17 (§6) | demandé en cours de semaine, pas engagé |
 | Fine-tune sur un corpus personnel du fondateur | tranché S15 | écarté définitivement — un générateur enfermé dans le style d'un seul producteur ne sert que lui |
 | Stratégie complète du moteur génératif au-delà de S15 | ouvert depuis S14 | partiellement tranchée (S15) ; le reste (empiler les couches, Markov vs neuronal) reste à trancher |
-| L'application qui ne quitte pas à la fermeture (fenêtre partie, processus vivant) | S18 | vu une fois, non diagnostiqué |
-| La toile ne remplace pas encore le piano-roll (vélocités, copier-coller, génération dans une bande, mode pattern) | S18 | noté dans `IDEES.md` |
+| L'application qui ne quitte pas à la fermeture (fenêtre partie, processus vivant) | S18 | cause non trouvée ; garde S19 : processus terminé 2 s après la sauvegarde, l'étape bloquée écrite dans `daw.log` |
+| Le piano-roll encore là, alors que la toile fait tout ce qu'il faisait | S19 | attend l'essai du fondateur ; le retirer réécrit des étapes de `--verify` et `--verify-fluidite` |
+| La toile chargée au-dessus de 8 ms au 95e centile en Direct2D (256 blocs) | S19 | 9 à 13 ms selon la charge de la machine, mesuré avec Chrome actif |
+| Le glissé d'un point d'automation salit plus que sa bande (12 à 14 ms de repeint par image) | S19 | cause non trouvée |
 | Support Ubuntu en cible produit | reporté S1/S5 | scripts gardés pour la CI seulement |
