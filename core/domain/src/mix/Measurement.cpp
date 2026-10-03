@@ -152,11 +152,18 @@ struct Fft
             const auto stride = fftSize / size;
             for (std::size_t start = 0; start < fftSize; start += size)
             {
+                // By hand, on the real and imaginary parts: the complex
+                // product of the standard library checks for infinities
+                // and costs a third of the whole analysis under MSVC.
                 for (std::size_t offset = 0; offset < half; ++offset)
                 {
-                    const auto product = data[start + offset + half] * twiddles[offset * stride];
-                    data[start + offset + half] = data[start + offset] - product;
-                    data[start + offset] += product;
+                    auto& low = data[start + offset];
+                    auto& high = data[start + offset + half];
+                    const auto& twiddle = twiddles[offset * stride];
+                    const auto re = high.real() * twiddle.real() - high.imag() * twiddle.imag();
+                    const auto im = high.real() * twiddle.imag() + high.imag() * twiddle.real();
+                    high = {low.real() - re, low.imag() - im};
+                    low = {low.real() + re, low.imag() + im};
                 }
             }
         }
@@ -259,7 +266,10 @@ struct StreamAnalyser::State
     // true peak.
     std::vector<double> ringLeft, ringRight;
     std::size_t ringAt{0};
-    std::array<std::array<double, TruePeakFilter::taps>, 2> recent{};
+    // Twice the twelve, each sample written in both halves: the window of
+    // the last twelve is contiguous wherever the ring stands, without a
+    // modulo per tap.
+    std::array<std::array<double, 2 * TruePeakFilter::taps>, 2> recent{};
     std::size_t recentAt{0};
 
     std::vector<double> hopWeightedValues;
@@ -291,19 +301,20 @@ struct StreamAnalyser::State
     void truePeakAt(std::size_t channel)
     {
         // The interpolated values between the samples around the centre of
-        // the twelve last. Computed only near the loudest so far: away from
-        // it, an inter-sample peak cannot catch up the 6 dB of margin.
+        // the twelve last. Computed only within 3 dB of the loudest so far:
+        // below, an inter-sample peak would have to rise more than 3 dB above
+        // both its neighbours, which only content near the Nyquist frequency
+        // does.
         const auto& history = recent[channel];
-        const auto centre = history[(recentAt + TruePeakFilter::taps - 6) % TruePeakFilter::taps];
-        const auto next = history[(recentAt + TruePeakFilter::taps - 5) % TruePeakFilter::taps];
-        if (std::max(std::abs(centre), std::abs(next)) < 0.5 * truePeak)
+        const auto centre = history[recentAt + TruePeakFilter::taps - 6];
+        const auto next = history[recentAt + TruePeakFilter::taps - 5];
+        if (std::max(std::abs(centre), std::abs(next)) < 0.708 * truePeak)
             return;
         for (const auto& phase : truePeakFilter().phases)
         {
             double value = 0.0;
             for (std::size_t tap = 0; tap < TruePeakFilter::taps; ++tap)
-                value +=
-                    phase[tap] * history[(recentAt + TruePeakFilter::taps - 1 - tap) % TruePeakFilter::taps];
+                value += phase[tap] * history[recentAt + TruePeakFilter::taps - 1 - tap];
             truePeak = std::max(truePeak, std::abs(value));
         }
     }
@@ -375,8 +386,10 @@ void StreamAnalyser::process(const float* left, const float* right, std::size_t 
         s.peak = std::max({s.peak, std::abs(l), std::abs(r)});
 
         s.recent[0][s.recentAt] = l;
+        s.recent[0][s.recentAt + TruePeakFilter::taps] = l;
         s.recent[1][s.recentAt] = r;
-        s.recentAt = (s.recentAt + 1) % TruePeakFilter::taps;
+        s.recent[1][s.recentAt + TruePeakFilter::taps] = r;
+        s.recentAt = s.recentAt + 1 == TruePeakFilter::taps ? 0 : s.recentAt + 1;
         s.truePeak = std::max(s.truePeak, std::max(std::abs(l), std::abs(r)));
         s.truePeakAt(0);
         s.truePeakAt(1);
