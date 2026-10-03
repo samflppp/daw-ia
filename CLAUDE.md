@@ -15,7 +15,9 @@ comité en mars 2027, sur un plan de 26 semaines dont chaque semaine ferme sur u
 S20 : le mixage par l'IA — « Mixer » mesure le morceau en local, un modèle (ou des règles, sans clé)
 décide à partir des seuls nombres, des garde-fous en code bornent, l'essai à blanc est rendu, la personne
 écoute avant/après à niveau égal et garde ou refuse tranche par tranche ; un mixage « comme ce morceau »
-vers une référence. Plan des six dernières semaines (`docs/plan-s21-s26.md`) :
+vers une référence. S21 : la lecture muette fermée (la carte son
+gardée ouverte), fenêtres qui se posent, rack et historique qui défilent, premier mixage réel par le modèle
+(0,074 $) ; la piste compagne reste sur la branche `s21-piste-compagne`. Plan des six dernières semaines (`docs/plan-s21-s26.md`) :
 S21 solidité (lecture muette d'abord) et fin de l'ergonomie ; S22 séparateur de stems et direction par
 références ; S23 jouer au clavier MIDI et au clavier AZERTY ; S24 le kit et le mixer ; S25 le DAW à la voix ;
 S26 le prototype emballé. Le piano-roll reste jusqu'à la phase d'essais, après la S26 ; le fine-tune pendant
@@ -96,7 +98,7 @@ Mécanismes :
 
 ## 5. Où trouver quoi
 
-- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S20 au 03/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
+- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S21 au 03/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
   `docs/bilan-s7bis.md`. Chaque bilan documente les écarts à l'acquis, les tests cassés une fois, et le
   reste à faire.
 - **Plan des semaines S21 à S26** : `docs/plan-s21-s26.md` — base des briefs, pas un brief.
@@ -114,7 +116,11 @@ Mécanismes :
   (compatibilité d'un ancien projet), `--verify-file` (menu Fichier, jusqu'à un vrai « Enregistrer
   sous »), `--verify-canvas` (la toile), `--verify-canvas-charge` et `--verify-fluidite` (mesures de
   repeint, Direct2D au 95e centile), `--verify-mix` (le mixage par l'IA sur des signaux connus, par les
-  règles, sans clé). `scripts/verify-quit.ps1` : la fermeture finit le processus. Toujours avec
+  règles, sans clé), `--verify-lecture` (75 lectures de la première mesure après cinq actions, dont la carte
+  son perdue ; le chemin audio écrit à chaque silence). `scripts/verify-quit.ps1 -Repeat N` : la fermeture
+  finit le processus, avec et sans copilote, en lecture, sans passer par la garde. `--mix-once` n'est **pas**
+  une vérification : un mixage réel par le modèle sur le projet donné, écrit dans `daw.log`, refusé, puis
+  quitter (appel payant, hors CI). Toujours avec
   `--project` dans un dossier jetable **et** `--layout <fichier jetable>` : sans `--layout`, elles
   réécrivent `%APPDATA%\DAW IA\DAW IA.layout`. Une vérification ne mixe jamais par le modèle.
 - **Workspaces réservés aux ateliers** : `"workshop": true` dans le manifeste (Découverte, depuis le
@@ -129,21 +135,19 @@ Mécanismes :
 
 | Dette | Depuis | État |
 |---|---|---|
-| Bug intermittent de la lecture, instrumenté | S12 | **S21, première priorité.** Revu une fois en S20 (une boucle jouée sans un son, vu-mètres à −100 dBFS, étapes 58/60 de `--verify`), une fois sur trois passages ; pas fermé |
+| Bug intermittent de la lecture | S12 | **fermé S21** : la carte son (casque Bluetooth) perdue sans réouverture ; `AudioOutputKeeper` rouvre la sortie de Windows et revient à la première |
 | Écoute de la zone multi-pistes (accords/basse/mélodie ensemble, à l'oreille) | S17 | **phase d'essais après la S26.** Pas encore faite, décrite comme le test le plus important de la semaine |
 | « Ranger le projet » comme geste explicite | S17 (§6) | demandé en cours de semaine, pas engagé |
 | Fine-tune sur un corpus personnel du fondateur | tranché S15 | écarté définitivement — un générateur enfermé dans le style d'un seul producteur ne sert que lui |
 | Stratégie complète du moteur génératif au-delà de S15 | ouvert depuis S14 | partiellement tranchée (S15) ; le reste (empiler les couches, Markov vs neuronal) reste à trancher |
-| L'application qui ne quitte pas à la fermeture (fenêtre partie, processus vivant) | S18 | **S21.** Cause non trouvée ; garde S19 : processus terminé 2 s après la sauvegarde, l'étape bloquée écrite dans `daw.log` |
+| L'application qui ne quitte pas à la fermeture (fenêtre partie, processus vivant) | S18 | non reproduite en 44 fermetures (S19, S21 avec copilote et en lecture) ; cause non trouvée, garde S19 en place |
 | Le piano-roll encore là, alors que la toile fait tout ce qu'il faisait | S19 | **phase d'essais après la S26** ; personne n'y touche d'ici là. Le retirer réécrit des étapes de `--verify` et `--verify-fluidite` |
 | La toile chargée au-dessus de 8 ms au 95e centile en Direct2D (256 blocs) | S19 | 9 à 13 ms selon la charge de la machine, mesuré avec Chrome actif |
 | Le glissé d'un point d'automation salit plus que sa bande (12 à 14 ms de repeint par image) | S19 | cause non trouvée |
-| Chantier 2 de la S19 : ancrage des fenêtres, défilement du rack et de l'historique | S19 | **S21.** Reporté sur consigne en S20, pas commencé |
 | La mesure du mixage de 16 pistes de 3 minutes, à peine sous 20 s | S20 | 15 à 19 s machine au repos en fin de semaine, 27 à 28 s en cours de semaine machine chargée ; cause de l'écart non démontrée ; deux pistes d'accélération essayées et retirées |
-| Le mixage décidé par le modèle jamais lancé avec une vraie clé | S20 | **S21** : un appel réel, lancé par Claude hors CI sur le projet de `--verify-mix`, coût relevé dans `daw.log`. La CI et les vérifications passent par les règles |
 | L'avant/après sur trois morceaux du fondateur | S20 | **phase d'essais après la S26** (critères dans `docs/essais-apres-s26.md`) ; plus une dette de développement ; `--verify-mix` ne couvre que des signaux connus |
-| Le recouvrement à 6 dB ne voit pas le niveau d'un son qui décroît (un kick traverse la basse à chaque coup) | S20 | **S21** : le critère devient la marge du kick sur ses coups. Le kick/basse reste à 40 % sur les signaux de `--verify-mix` ; l'effet est vérifié par la marge du kick sur ses coups |
-| Les plugins de la personne ne traitent que la piste d'instrument, pas ses enregistrements (piste compagne) | S20 | **S21.** Trouvé en écrivant les effets internes, qui eux passent sur les deux |
-| 17 étapes de pages et de fenêtres en échec quand le copilote tourne pendant `--verify` | S20 | **S21.** Reproduit deux fois, cause non trouvée ; sans copilote elles passent |
+| Les plugins de la personne ne traitent que la piste d'instrument, pas ses enregistrements (piste compagne) | S20 | construit S21 sur la branche `s21-piste-compagne` (une tranche par piste, prouvée au rendu) ; **non fusionné** : la lecture en direct y devient muette une fois sur trois (`--verify-lecture`), cause non trouvée |
+| La compilation incrémentale laisse un objet périmé (binaire qui plante ou panneaux « à venir ») | S20, revu S21 | une recompilation complète le fait disparaître ; cause non trouvée. Lancer l'application une fois après chaque compilation |
+| Les tests du moteur partagent les réglages persistés de l'engine de test (l'identité CLAP retient `C:\dawS9\…`) | S21 | un cas échoue en local, pas un défaut du code |
 | La ligne de génération lue un geste en retard, par intermittence | S19 | l'étape attend maintenant la fin de la lecture ; la cause de la variante n'est pas trouvée |
 | Support Ubuntu en cible produit | reporté S1/S5 | scripts gardés pour la CI seulement |
