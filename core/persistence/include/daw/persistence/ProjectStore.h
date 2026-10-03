@@ -59,7 +59,10 @@ public:
     //      payload without one reads as the line the S16 playlist drew. The
     //      number is, again, for the other direction — an S16 build would drop
     //      the line of every dragged block without saying so.
-    static constexpr std::int64_t schemaVersion = 5;
+    //   6  no column: S20 adds effects of the DAW, whose parameters are in
+    //      their own units, and a mix role on a track. An S19 build would drop
+    //      the role without saying so.
+    static constexpr std::int64_t schemaVersion = 6;
 
     ~ProjectStore() override;
 

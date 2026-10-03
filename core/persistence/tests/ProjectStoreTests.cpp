@@ -367,7 +367,7 @@ TEST_CASE("a project written before patterns existed reopens as patterns, and is
 
     // The file really was one version behind, and really was migrated.
     CHECK(session.store->versionOnDisk() == ProjectStore::schemaVersion);
-    CHECK(ProjectStore::schemaVersion == 5);
+    CHECK(ProjectStore::schemaVersion == 6);
 
     const auto clipId = ClipId::parse("01JBWQ7Z0000000000000CL1P0").value();
     const auto trackId = TrackId::parse("01JBWQ7Z0000000000000TRACK").value();
@@ -789,10 +789,10 @@ TEST_CASE("an S16 project reopens under free lines with the same state, takes li
         REQUIRE(report.ok());
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startedAt);
-        MESSAGE("réouverture et migration 4 -> 5 d'un projet S16 : " << elapsed.count() << " ms pour "
+        MESSAGE("réouverture et migration 4 -> 6 d'un projet S16 : " << elapsed.count() << " ms pour "
                                                                      << report.value().rows << " lignes");
 
-        CHECK(session.store->versionOnDisk() == 5);
+        CHECK(session.store->versionOnDisk() == ProjectStore::schemaVersion);
         CHECK(session.stateJson() == s16State);
 
         // One line per pattern, in pattern order, then the drum track's audio.

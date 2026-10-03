@@ -116,8 +116,17 @@ constexpr std::string_view schemaV5 = R"sql(
 SELECT 1;
 )sql";
 
+// Version 6 (S20): nothing to migrate either. A plugin may now be an effect of
+// the DAW ("internal") with parameters in its own units, and a track may carry
+// a mix role. An S19 build would refuse the first in a payload it cannot
+// validate and silently drop the second; the number makes it refuse the
+// project, said once, at opening.
+constexpr std::string_view schemaV6 = R"sql(
+SELECT 1;
+)sql";
+
 constexpr Migration migrations[] = {
-    {1, schemaV1}, {2, schemaV2}, {3, schemaV3}, {4, schemaV4}, {5, schemaV5}};
+    {1, schemaV1}, {2, schemaV2}, {3, schemaV3}, {4, schemaV4}, {5, schemaV5}, {6, schemaV6}};
 
 constexpr std::string_view insertSql =
     "INSERT INTO journal (kind, command_id, at_micros, actor, context_digest, context_bytes, "
