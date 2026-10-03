@@ -1,9 +1,11 @@
 #include "MixSession.h"
 #include "Verification.h"
+#include "VerificationTiming.h"
 #include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/serialization/Json.h"
+#include "daw/ui/panels/MixerPanel.h"
 
 #include <algorithm>
 #include <cmath>
@@ -77,6 +79,7 @@ struct MixRun
     double trimDb{0.0};
     std::map<std::string, double> afterTracks;
     double cancelMs{0.0};
+    std::string kickBefore;
 };
 
 } // namespace
@@ -541,6 +544,85 @@ void Verification::buildMix()
             check(depth() == run->depthBefore, "rien n'est écrit");
             mix_->reject();
             mix_->setAxes(domain::mix::Axes{});
+        });
+
+    // --- the same, by the mixer, as a person does it --------------------------
+
+    add("F10 : le mixer", [this] { key(juce::KeyPress{juce::KeyPress::F10Key}); });
+
+    add("la page Mixer est ouverte",
+        [this]
+        {
+            auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer"));
+            check(mixer != nullptr && mixer->isShowing(), "la page Mixer est à l'écran");
+        });
+
+    add(
+        "« Mixer » dans le mixer : la proposition prend la place des tranches",
+        [this, run]
+        {
+            auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer"));
+            auto* ask = mixer != nullptr ? button(*mixer, "Mixer") : nullptr;
+            if (ask == nullptr)
+            {
+                check(false, "le bouton « Mixer »");
+                return;
+            }
+            run->depthBefore = depth();
+            run->projectBefore = domain::json::write(state_.toValue());
+            click(*ask, ask->getLocalBounds().getCentre());
+        },
+        [this] { return settled(*mix_); },
+        mixTimeoutMs);
+
+    add("une ligne par tranche, sa phrase ; le repeint du mixer avec la proposition",
+        [this, run]
+        {
+            auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer"));
+            if (mixer == nullptr)
+                return;
+            auto& shown = mixer->proposal();
+            check(shown.isVisible() && !mixer->strips().back()->isVisible(),
+                  "la proposition est à l'écran, à la place des tranches");
+            check(shown.rowCount() >= 4, std::to_string(shown.rowCount()) + " lignes");
+            check(shown.rowToggle(run->kick) != nullptr && shown.rowToggle(run->kick)->getToggleState(),
+                  "le kick est coché : gardé par défaut");
+            check(shown.shownSentences().contains("LUFS"), "les phrases sont à l'écran");
+            const auto timed = timing::measure(*mixer, juce::NativeImageType{}, 5, 30);
+            note("repeint du mixer avec la proposition (Direct2D) : " + timing::describe(timed));
+            check(timed.p95 < 16.0, "sous 16 ms au 95e centile");
+        });
+
+    add("décocher le kick, « Garder » : une entrée, le kick intact",
+        [this, run]
+        {
+            auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer"));
+            if (mixer == nullptr)
+                return;
+            auto& shown = mixer->proposal();
+            run->kickBefore = domain::json::write(state_.findTrack(run->kick)->toValue());
+            if (auto* toggle = shown.rowToggle(run->kick); toggle != nullptr)
+                click(*toggle, toggle->getLocalBounds().getCentre());
+            check(mix_->isRefused(run->kick), "le kick est refusé d'un clic");
+            if (auto* keep = button(shown, "Garder"); keep != nullptr)
+                click(*keep, keep->getLocalBounds().getCentre());
+            check(depth() == run->depthBefore + 1, "une entrée");
+            check(domain::json::write(state_.findTrack(run->kick)->toValue()) == run->kickBefore,
+                  "le kick n'a pas bougé");
+        });
+
+    add("les tranches reviennent ; Ctrl+Z à l'octet",
+        [this, run]
+        {
+            auto* mixer = dynamic_cast<ui::MixerPanel*>(panel("mixer"));
+            if (mixer == nullptr)
+                return;
+            check(!mixer->proposal().isVisible() && !mixer->strips().empty() &&
+                      mixer->strips().back()->isVisible(),
+                  "les tranches sont revenues");
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == run->projectBefore,
+                  "le projet d'avant, à l'octet près");
         });
 }
 
