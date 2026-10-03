@@ -24,6 +24,7 @@ add_executable(daw_domain_tests
     MotionTests.cpp
     ReachTests.cpp
     InternalEffectsTests.cpp
+    MixMeasurementTests.cpp
     PatternTests.cpp
     RoleTests.cpp
     ZoneProposalTests.cpp
