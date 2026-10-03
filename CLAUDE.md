@@ -11,11 +11,13 @@ mixage, routage et paramètres via le Command Bus ; un moteur génératif (à ve
 l'audio par le même bus. Windows est la seule cible produit. Projet mené en solo, en incubateur, vers un
 comité en mars 2027, sur un plan de 26 semaines dont chaque semaine ferme sur un bilan dans `docs/`.
 
-**Cap actuel.** Jalon go/no-go atteint en S8. S18–S19 : ergonomie (zoom continu sur une seule toile
-playlist/piano-roll, grammaire de navigation unique). Fin S19, la toile sait tout ce que faisait le
-piano-roll ; le piano-roll part après l'essai du fondateur, puis le chantier 2 (ancrage des fenêtres,
-défilement du rack et de l'historique). Ensuite, d'autres fonctionnalités d'IA, puis le fine-tune du
-modèle. Plus aucun verbe ajouté au domaine sans une raison de démonstration.
+**Cap actuel.** Jalon go/no-go atteint en S8. S18–S19 : ergonomie (une seule toile playlist/piano-roll).
+S20 : le mixage par l'IA — « Mixer » mesure le morceau en local, un modèle (ou des règles, sans clé)
+décide à partir des seuls nombres, des garde-fous en code bornent, l'essai à blanc est rendu, la personne
+écoute avant/après à niveau égal et garde ou refuse tranche par tranche ; un mixage « comme ce morceau »
+vers une référence. Le piano-roll part après l'essai du fondateur, puis le chantier 2 de la S19 (ancrage
+des fenêtres, défilement du rack et de l'historique). Ensuite, d'autres fonctionnalités d'IA, puis le
+fine-tune du modèle. Plus aucun verbe ajouté au domaine sans une raison de démonstration.
 
 ## 2. Décisions d'architecture acquises — ne jamais rouvrir
 
@@ -28,6 +30,9 @@ modèle. Plus aucun verbe ajouté au domaine sans une raison de démonstration.
 | Règle de thread du bus : le bus retient le thread qui l'a construit et refuse les autres (`ErrorCode::wrongThread`, vérifié en release) | S3 | `core/domain` ne peut pas demander « suis-je sur le thread message », notion de framework ; `rebindToCurrentThread()` couvre la passation délibérée |
 | Journal append-only distinct de `journal()` (vue de la pile d'undo) | S5 | `core/persistence` garde tout, y compris commandes annulées et annulations elles-mêmes — voir `docs/persistence.md` |
 | Pattern / Placement / Clip / Lane séparés, liaison par identifiant jamais par rang | S9–S17 | `pattern.create`+`ownLane`, `pattern.place`, `Lane{LaneId,name}` dans `ProjectState` ; réordonner les lignes ne réécrit aucun bloc |
+| Mesurer n'est pas décider : la mesure est du code local déterministe, la décision un modèle qui ne lit que des nombres (jamais d'audio), les garde-fous du code vérifiés avant l'essai à blanc | S20 | un réglage se justifie par une mesure vraie, citée dans sa phrase ; le modèle ne peut ni inventer un nombre ni franchir une borne |
+| Effets internes (`PluginRef` format `internal`, `daw.eq`/`daw.compressor`, paramètres en unités du domaine) : seuls effets que le mixage par l'IA règle ; les plugins de la personne restent opaques, jamais retirés ni contournés | S20 | un plugin tiers est une boîte noire ; on ne règle que ce dont on connaît le sens |
+| Le mixage gardé est un seul groupe d'historique par le copilote, sa mesure et ses phrases rangées par empreinte (`Provenance.context`) | S20 | un Ctrl+Z défait tout, à l'octet ; l'historique sait redire pourquoi |
 | Windows seule cible | S1 (annoncé), acté S5 | support Linux/Ubuntu reporté post-MVP ; `setup-ubuntu.sh` reste pour la CI, jamais lancé en cible produit |
 
 Rouvrir une de ces lignes veut dire que quelque chose de nouveau la contredit réellement — c'est couvert
@@ -53,7 +58,7 @@ Mécanismes :
   commande ajoutée au `CommandRegistry` sans entrée dans la table du copilote casse le test, et
   inversement.
 
-## 4. Règles de méthode — tenues depuis dix-neuf semaines
+## 4. Règles de méthode — tenues depuis vingt semaines
 
 - **Exposer avant de coder.** Une décision de modèle ou de comportement se présente et se discute avant
   d'être écrite, jamais découverte dans le diff.
@@ -76,7 +81,7 @@ Mécanismes :
 
 ## 5. Où trouver quoi
 
-- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S19 au 03/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
+- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S20 au 03/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
   `docs/bilan-s7bis.md`. Chaque bilan documente les écarts à l'acquis, les tests cassés une fois, et le
   reste à faire.
 - **Roadmap non engagée** : `IDEES.md` — couche décision du copilote, couche générative, recherche de
@@ -90,8 +95,10 @@ Mécanismes :
   (parcours complet), `--verify-reopen` (fermer/rouvrir dans un autre processus), `--verify-legacy`
   (compatibilité d'un ancien projet), `--verify-file` (menu Fichier, jusqu'à un vrai « Enregistrer
   sous »), `--verify-canvas` (la toile), `--verify-canvas-charge` et `--verify-fluidite` (mesures de
-  repeint, Direct2D au 95e centile). `scripts/verify-quit.ps1` : la fermeture finit le processus.
-  Toujours avec `--project` dans un dossier jetable ; elles réécrivent `%APPDATA%\DAW IA\DAW IA.layout`.
+  repeint, Direct2D au 95e centile), `--verify-mix` (le mixage par l'IA sur des signaux connus, par les
+  règles, sans clé). `scripts/verify-quit.ps1` : la fermeture finit le processus. Toujours avec
+  `--project` dans un dossier jetable **et** `--layout <fichier jetable>` : sans `--layout`, elles
+  réécrivent `%APPDATA%\DAW IA\DAW IA.layout`. Une vérification ne mixe jamais par le modèle.
 - **Clé d'API** : variable d'environnement `DAW_IA_ANTHROPIC_API_KEY`, jamais en dur ni dans un fichier
   du dépôt (vérifié en S17 : aucune clé, aucun `.env`, dans tout l'historique).
 - **Tests d'un plugin réel** : label ctest `audio`, exclus de la CI ; `DAW_TEST_VST3` / `DAW_TEST_CLAP`
@@ -101,7 +108,7 @@ Mécanismes :
 
 | Dette | Depuis | État |
 |---|---|---|
-| Bug intermittent de la lecture, instrumenté | S12 | ne s'est pas présenté depuis S13, pas fermé |
+| Bug intermittent de la lecture, instrumenté | S12 | revu une fois en S20 (une boucle jouée sans un son, vu-mètres à −100 dBFS, étapes 58/60 de `--verify`), une fois sur trois passages ; pas fermé |
 | Écoute de la zone multi-pistes (accords/basse/mélodie ensemble, à l'oreille) | S17 | pas encore faite, décrite comme le test le plus important de la semaine |
 | « Ranger le projet » comme geste explicite | S17 (§6) | demandé en cours de semaine, pas engagé |
 | Fine-tune sur un corpus personnel du fondateur | tranché S15 | écarté définitivement — un générateur enfermé dans le style d'un seul producteur ne sert que lui |
@@ -110,4 +117,12 @@ Mécanismes :
 | Le piano-roll encore là, alors que la toile fait tout ce qu'il faisait | S19 | attend l'essai du fondateur ; le retirer réécrit des étapes de `--verify` et `--verify-fluidite` |
 | La toile chargée au-dessus de 8 ms au 95e centile en Direct2D (256 blocs) | S19 | 9 à 13 ms selon la charge de la machine, mesuré avec Chrome actif |
 | Le glissé d'un point d'automation salit plus que sa bande (12 à 14 ms de repeint par image) | S19 | cause non trouvée |
+| Chantier 2 de la S19 : ancrage des fenêtres, défilement du rack et de l'historique | S19 | reporté sur consigne en S20, pas commencé |
+| La mesure du mixage de 16 pistes de 3 minutes, à peine sous 20 s | S20 | 15 à 19 s machine au repos en fin de semaine, 27 à 28 s en cours de semaine machine chargée ; cause de l'écart non démontrée ; deux pistes d'accélération essayées et retirées |
+| Le mixage décidé par le modèle jamais lancé avec une vraie clé | S20 | la CI et les vérifications passent par les règles ; coût réel par mixage à mesurer au premier essai |
+| L'avant/après sur trois morceaux du fondateur | S20 | attend ses morceaux ; `--verify-mix` ne couvre que des signaux connus |
+| Le recouvrement à 6 dB ne voit pas le niveau d'un son qui décroît (un kick traverse la basse à chaque coup) | S20 | le kick/basse reste à 40 % sur les signaux de `--verify-mix` ; l'effet est vérifié par la marge du kick sur ses coups |
+| Les plugins de la personne ne traitent que la piste d'instrument, pas ses enregistrements (piste compagne) | S20 | trouvé en écrivant les effets internes, qui eux passent sur les deux |
+| 17 étapes de pages et de fenêtres en échec quand le copilote tourne pendant `--verify` | S20 | reproduit deux fois, cause non trouvée ; sans copilote elles passent |
+| La ligne de génération lue un geste en retard, par intermittence | S19 | l'étape attend maintenant la fin de la lecture ; la cause de la variante n'est pas trouvée |
 | Support Ubuntu en cible produit | reporté S1/S5 | scripts gardés pour la CI seulement |
