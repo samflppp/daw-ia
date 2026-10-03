@@ -1376,11 +1376,15 @@ void ProjectProjector::reconcile()
             applyMix(*target, source);
             ensureInstrument(*target, source);
 
-            // The fallback synth, when there is one, stays in front of the
-            // chain: the user's own plugins are placed after it.
+            // The fallback synth or the sampler, when there is one, stays in
+            // front of the chain: the user's own plugins are placed after it.
+            // Before S20 the sampler was not counted, and an effect on a
+            // sampler channel sat in front of the instrument that replaces
+            // what reaches it: it was never heard.
             reconcilePlugins(target->pluginList,
                              source,
-                             target->pluginList.getPluginsOfType<tracktion::FourOscPlugin>().size());
+                             target->pluginList.getPluginsOfType<tracktion::FourOscPlugin>().size() +
+                                 target->pluginList.getPluginsOfType<tracktion::SamplerPlugin>().size());
         }
         if (trackChanged || routeChanged)
             applyRoute(*target, source);
