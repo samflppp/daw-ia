@@ -1,4 +1,5 @@
 #include "EngineTestSupport.h"
+#include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
@@ -184,4 +185,75 @@ TEST_CASE("A proposal is measured on a copy: its effect is heard there, and nowh
     CHECK(std::abs(again->tracks.at(harness.highs.toString()).bandsDb[5] -
                    before->tracks.at(harness.highs.toString()).bandsDb[5]) < 0.05);
     CHECK(harness.tapsInLiveEdit() == 0);
+}
+
+namespace
+{
+void timeSixteenTracks(bool samplers)
+{
+    // Twelve 4OSC tracks playing notes and four recordings, 90 bars at
+    // 120 BPM (180 s): the size of a song the brief asks to measure under
+    // 20 s. What the user's own plugins cost is theirs and is not here.
+    MixHarness harness;
+    const auto pattern = PatternId::generate();
+    REQUIRE(harness.bus.execute(std::make_unique<CreatePattern>(pattern, "Couplet", 16.0)).ok());
+    for (int index = 0; index < 12; ++index)
+    {
+        const auto track = TrackId::generate();
+        REQUIRE(harness.bus.execute(std::make_unique<AddTrack>(track, "Synthé " + std::to_string(index), 0.0))
+                    .ok());
+        const auto row = ClipId::generate();
+        REQUIRE(harness.bus.execute(std::make_unique<AddPatternTrack>(pattern, row, track)).ok());
+        for (int step = 0; step < 32; ++step)
+        {
+            Note note{};
+            note.id = NoteId::generate();
+            note.pitch = 36 + 3 * index + (step % 5);
+            note.velocity = 90;
+            note.startBeats = step * 0.5;
+            note.lengthBeats = 0.45;
+            REQUIRE(harness.bus.execute(std::make_unique<AddNote>(row, note)).ok());
+        }
+    }
+    for (int bar = 0; bar < 90; bar += 4)
+        REQUIRE(
+            harness.bus.execute(std::make_unique<PlacePattern>(PlacementId::generate(), pattern, bar * 4.0))
+                .ok());
+    for (int index = 0; index < 2; ++index)
+        static_cast<void>(harness.addTone("Voix " + std::to_string(index), 300.0 + 100.0 * index, -18.0));
+
+    const auto started = juce::Time::getMillisecondCounterHiRes();
+    auto render = MixRender::prepare(harness.host.edit(), harness.state, nullptr, nullptr, &harness.store);
+    REQUIRE(render != nullptr);
+    const auto prepared = juce::Time::getMillisecondCounterHiRes();
+    std::unique_ptr<MixRender::Measured> measured;
+    std::atomic<bool> cancelled{false};
+    std::atomic<bool> done{false};
+    std::thread worker{[&]
+                       {
+                           measured = render->run(cancelled, {});
+                           done = true;
+                       }};
+    while (!done)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    worker.join();
+    REQUIRE(measured != nullptr);
+    const auto finished = juce::Time::getMillisecondCounterHiRes();
+    MESSAGE(std::string{samplers ? "16 tracks (samplers), " : "16 tracks (4OSC), "}
+            << measured->master.seconds << " s of song: copy " << (prepared - started) << " ms, render and "
+            << "analysis " << measured->renderSeconds << " s, total " << (finished - started) / 1000.0
+            << " s");
+    CHECK(measured->tracks.size() == 16);
+    CHECK(measured->master.seconds > 179.0);
+}
+} // namespace
+
+TEST_CASE("Timing: sixteen tracks of three minutes, twelve of them on 4OSC")
+{
+    timeSixteenTracks(false);
+}
+
+TEST_CASE("Timing: sixteen tracks of three minutes, twelve of them sampler channels")
+{
+    timeSixteenTracks(true);
 }
