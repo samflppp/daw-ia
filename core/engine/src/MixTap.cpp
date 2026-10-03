@@ -1,5 +1,7 @@
 #include "daw/engine/MixTap.h"
 
+#include <algorithm>
+#include <cmath>
 #include <map>
 #include <mutex>
 #include <utility>
@@ -10,6 +12,7 @@ namespace
 {
 
 const juce::Identifier keyProperty{"dawMixTapKey"};
+const juce::Identifier endProperty{"dawMixTapEnd"};
 
 std::mutex& registryLock()
 {
@@ -52,11 +55,12 @@ MixTap::Registration MixTap::enrol(const juce::String& key, domain::mix::StreamA
     return Registration{key};
 }
 
-juce::ValueTree MixTap::create(const juce::String& key)
+juce::ValueTree MixTap::create(const juce::String& key, double endSeconds)
 {
     juce::ValueTree tree{tracktion::IDs::PLUGIN};
     tree.setProperty(tracktion::IDs::type, xmlTypeName, nullptr);
     tree.setProperty(keyProperty, key, nullptr);
+    tree.setProperty(endProperty, endSeconds, nullptr);
     return tree;
 }
 
@@ -70,8 +74,10 @@ MixTap::~MixTap()
     notifyListenersOfDeletion();
 }
 
-void MixTap::initialise(const tracktion::PluginInitialisationInfo&)
+void MixTap::initialise(const tracktion::PluginInitialisationInfo& info)
 {
+    sampleRate_ = info.sampleRate;
+    endSeconds_ = static_cast<double>(state.getProperty(endProperty));
     const std::lock_guard guard{registryLock()};
     const auto found = registry().find(state.getProperty(keyProperty).toString());
     analyser_ = found != registry().end() ? found->second : nullptr;
@@ -84,10 +90,20 @@ void MixTap::applyToBuffer(const tracktion::PluginRenderContext& context)
     const auto& buffer = *context.destBuffer;
     if (buffer.getNumChannels() == 0)
         return;
-    const auto* left = buffer.getReadPointer(0, context.bufferStartSample);
-    const auto* right =
-        buffer.getNumChannels() > 1 ? buffer.getReadPointer(1, context.bufferStartSample) : left;
-    analyser_->process(left, right, static_cast<std::size_t>(context.bufferNumSamples));
+
+    // Only the song: not the blocks the renderer runs before 0, nor past
+    // the end. A block that crosses the end gives what lies before it.
+    const auto start = context.editTime.getStart().inSeconds();
+    if (start < 0.0 || start >= endSeconds_)
+        return;
+    const auto left = static_cast<int>(std::ceil((endSeconds_ - start) * sampleRate_));
+    const auto count = std::min(context.bufferNumSamples, left);
+    if (count <= 0)
+        return;
+    const auto* first = buffer.getReadPointer(0, context.bufferStartSample);
+    const auto* second =
+        buffer.getNumChannels() > 1 ? buffer.getReadPointer(1, context.bufferStartSample) : first;
+    analyser_->process(first, second, static_cast<std::size_t>(count));
 }
 
 } // namespace daw::engine

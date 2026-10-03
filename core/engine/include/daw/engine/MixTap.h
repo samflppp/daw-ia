@@ -35,7 +35,10 @@ public:
     };
 
     [[nodiscard]] static Registration enrol(const juce::String& key, domain::mix::StreamAnalyser& analyser);
-    [[nodiscard]] static juce::ValueTree create(const juce::String& key);
+    // `endSeconds`: where the song ends. The renderer runs half a second of
+    // blocks before 0 to settle the plugins, and may run past the end; the
+    // tap hears only [0, end), the range the file holds.
+    [[nodiscard]] static juce::ValueTree create(const juce::String& key, double endSeconds);
 
     explicit MixTap(tracktion::PluginCreationInfo info);
     ~MixTap() override;
@@ -62,6 +65,8 @@ public:
 
 private:
     domain::mix::StreamAnalyser* analyser_{nullptr};
+    double sampleRate_{0.0};
+    double endSeconds_{0.0};
 };
 
 } // namespace daw::engine

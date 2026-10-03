@@ -138,6 +138,11 @@ TEST_CASE("The mix render hears each track before its fader, and the master as i
     MESSAGE("lows " << lows.integratedLufs << " LUFS, highs " << highs.integratedLufs << " LUFS, master "
                     << open->master.integratedLufs << " LUFS, in " << open->renderSeconds << " s");
 
+    // The song and nothing else: not the half second the renderer runs
+    // before 0 to settle the plugins.
+    CHECK(open->master.seconds == doctest::Approx(toneSeconds).epsilon(0.001));
+    CHECK(lows.seconds == doctest::Approx(toneSeconds).epsilon(0.001));
+
     // Each track's tone in its own octave.
     CHECK(lows.bandsDb[1] > lows.bandsDb[5] + 30.0);
     CHECK(highs.bandsDb[5] > highs.bandsDb[1] + 30.0);

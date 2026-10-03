@@ -77,7 +77,8 @@ std::unique_ptr<MixRender> MixRender::prepare(tracktion::Edit& live,
     {
         slots.analysers[key] = std::make_unique<domain::mix::StreamAnalyser>(sampleRate);
         slots.registrations.push_back(MixTap::enrol(slots.prefix + key, *slots.analysers[key]));
-        if (auto plugin = render->copy_->getPluginCache().createNewPlugin(MixTap::create(slots.prefix + key));
+        if (auto plugin = render->copy_->getPluginCache().createNewPlugin(
+                MixTap::create(slots.prefix + key, render->copy_->getLength().inSeconds()));
             plugin != nullptr)
             list.insertPlugin(plugin, index, nullptr);
     };
