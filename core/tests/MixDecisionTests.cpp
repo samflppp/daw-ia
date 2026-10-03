@@ -130,7 +130,7 @@ TEST_CASE("mix roles: what the person chose, then the names, then the sound")
     CHECK(guessed.because.find("d'après le son") == 0);
 }
 
-TEST_CASE("the base mix carves the bass under the kick, with a sentence that cites the overlap")
+TEST_CASE("the base mix carves the bass under the kick, with a sentence that cites the kick's margin")
 {
     Session session;
     const auto brief = session.brief();
@@ -143,7 +143,12 @@ TEST_CASE("the base mix carves the bass under the kick, with a sentence that cit
     CHECK(carve->parameters.at(std::string{internal::mid1Gain}) < -2.0);
     MESSAGE(carve->sentence);
     CHECK(carve->sentence.find("63 Hz") != std::string::npos);
-    CHECK(carve->sentence.find("100 %") != std::string::npos);
+    // The kick's 63 Hz octave at -12 dB over the bass's at -13: 1 dB on its hits.
+    CHECK(carve->sentence.find("Sur ses coups, le kick ne passe la basse que de 1,0 dB") !=
+          std::string::npos);
+    REQUIRE(carve->evidence.size() == 1);
+    CHECK(carve->evidence.front().measure == "margin.1." + session.kick.toString());
+    CHECK(carve->evidence.front().value == doctest::Approx(1.0));
 
     // In French, with the article each role takes: never « une kick ».
     int levels = 0;
@@ -183,19 +188,47 @@ TEST_CASE("the base mix carves the bass under the kick, with a sentence that cit
     CHECK(refused.empty());
 }
 
-TEST_CASE("masking is judged through the faders: a bass faded under the kick is not carved")
+TEST_CASE("a kick and a bass are judged by the kick's margin, through the faders, never by their overlap")
 {
     Session session;
-    REQUIRE_FALSE(session.brief().overlaps.empty());
+    const auto before = session.brief();
+    REQUIRE_FALSE(before.overlaps.empty());
+    const auto kickWithBass = [&session](const Brief& brief)
+    {
+        for (const auto& overlap : brief.overlaps)
+        {
+            const auto first = brief.strips[overlap.first].track;
+            const auto second = brief.strips[overlap.second].track;
+            if ((first == session.kick && second == session.bass) ||
+                (first == session.bass && second == session.kick))
+                return true;
+        }
+        return false;
+    };
+    CHECK_FALSE(kickWithBass(before));
+    REQUIRE(before.margins.size() == 1);
+    CHECK(before.margins.front().band == 1);
+    CHECK(before.margins.front().marginDb == doctest::Approx(1.0));
+
+    // In what the model reads, and citable: an overlap of the two is not.
+    const auto json = json::write(before.toValue());
+    CHECK(json.find("\"kickMargins\"") != std::string::npos);
+    Change cited{session.bass, Change::Kind::volume, -1.0, {}, {}, {}};
+    cited.sentence = "le kick passe la basse de 1 dB ; recouvrement 100 %";
+    cited.evidence = {{"margin.1." + session.kick.toString(), 1.0}};
+    Proposal fair;
+    fair.changes.push_back(cited);
+    CHECK(check(before, fair).empty());
+    cited.evidence = {{"overlap.1." + session.kick.toString(), 100.0}};
+    Proposal stale;
+    stale.changes.push_back(cited);
+    CHECK(check(before, stale).size() == 1);
+
+    // The bass faded 12 dB down: the kick stands 13 dB over it, no carving.
     REQUIRE(session.state.setTrackVolume(session.bass, -12.0).ok());
     const auto brief = session.brief();
-    for (const auto& overlap : brief.overlaps)
-    {
-        const auto first = brief.strips[overlap.first].track;
-        const auto second = brief.strips[overlap.second].track;
-        CHECK_FALSE(((first == session.kick && second == session.bass) ||
-                     (first == session.bass && second == session.kick)));
-    }
+    REQUIRE(brief.margins.size() == 1);
+    CHECK(brief.margins.front().marginDb == doctest::Approx(13.0));
     CHECK(find(baseMix(brief), session.bass, Change::Kind::equaliser) == nullptr);
 }
 

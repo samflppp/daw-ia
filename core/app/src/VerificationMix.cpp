@@ -229,6 +229,27 @@ void Verification::buildMix()
                   "le kick est le kick que la personne a dit");
             check(bass != nullptr && bass->role.chosen && bass->role.role == domain::MixRole::bass,
                   "la basse aussi");
+
+            // S21: the bass is carved on the kick's margin on its hits, and the
+            // sentence cites that margin, never an overlap of the two.
+            bool citesMargin = false;
+            bool citesOverlap = false;
+            for (const auto& change : proposal->changes)
+            {
+                if (change.track != run->bass || change.kind != domain::mix::Change::Kind::equaliser)
+                    continue;
+                for (const auto& cited : change.evidence)
+                {
+                    citesMargin = citesMargin || cited.measure == "margin.1." + run->kick.toString();
+                    citesOverlap = citesOverlap || cited.measure.starts_with("overlap.");
+                }
+            }
+            if (!brief->margins.empty())
+                note(
+                    "marge du kick sur ses coups, dans le brief : " + fixed(brief->margins.front().marginDb) +
+                    " dB à " + domain::mix::bandName(brief->margins.front().band));
+            check(citesMargin && !citesOverlap,
+                  "la basse est creusée sur la marge du kick, et la phrase la cite");
             const auto* lead = brief->find(run->lead);
             if (lead != nullptr)
                 note("le lead deviné : " + domain::mix::roleLabel(lead->role.role) + ", " +
@@ -290,12 +311,11 @@ void Verification::buildMix()
                  " % avant, " + fixed(overlapAfter * 100.0, 0) +
                  " % après (le critère à 6 dB ne voit pas le niveau d'un kick qui décroît : chaque coup "
                  "traverse la basse, quel que soit son niveau)");
-            check(overlapBefore > 0.1, "le kick et la basse se masquent avant le mixage");
-            check(overlapAfter <= overlapBefore, "pas plus après");
 
-            // What the sentence says it does: the kick passes over the bass
-            // where it hits. Its 63 Hz octave against the bass's, through the
-            // faders, on the fifth of the hops where the kick is loudest.
+            // The criterion since S21, the one the rules read and the sentence
+            // cites: the kick passes over the bass where it hits. Its 63 Hz
+            // octave against the bass's, through the faders, on the fifth of
+            // the hops where the kick is loudest (domain::mix::hitMarginDb).
             const auto margin = [&fader](const engine::MixRender::Measured& measured,
                                          const domain::TrackId& kick,
                                          const domain::TrackId& bass,
@@ -304,19 +324,7 @@ void Verification::buildMix()
                 const auto hit = domain::mix::gained(measured.tracks.at(kick.toString()), fader(kick, after));
                 const auto under =
                     domain::mix::gained(measured.tracks.at(bass.toString()), fader(bass, after));
-                const auto hops = std::min(hit.hopBands.size(), under.hopBands.size());
-                std::vector<std::size_t> order(hops);
-                for (std::size_t hop = 0; hop < hops; ++hop)
-                    order[hop] = hop;
-                std::sort(order.begin(),
-                          order.end(),
-                          [&hit](std::size_t a, std::size_t b)
-                          { return hit.hopBands[a][1] > hit.hopBands[b][1]; });
-                const auto loudest = std::max<std::size_t>(1, hops / 5);
-                double sum = 0.0;
-                for (std::size_t index = 0; index < loudest && index < order.size(); ++index)
-                    sum += hit.hopBands[order[index]][1] - under.hopBands[order[index]][1];
-                return sum / static_cast<double>(loudest);
+                return domain::mix::hitMarginDb(hit, under, 1).value_or(0.0);
             };
             const auto marginBefore = margin(*before, run->kick, run->bass, false);
             const auto marginAfter = margin(*after, run->kick, run->bass, true);

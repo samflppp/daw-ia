@@ -584,6 +584,27 @@ StreamMeasure gained(const StreamMeasure& measure, double gainDb)
 
 // --- masking ----------------------------------------------------------------
 
+std::optional<double> hitMarginDb(const StreamMeasure& hit, const StreamMeasure& under, std::size_t band)
+{
+    const auto hops = std::min(hit.hopBands.size(), under.hopBands.size());
+    if (hops == 0 || band >= bandCount)
+        return std::nullopt;
+
+    std::vector<std::size_t> order(hops);
+    for (std::size_t hop = 0; hop < hops; ++hop)
+        order[hop] = hop;
+    std::stable_sort(order.begin(),
+                     order.end(),
+                     [&hit, band](std::size_t a, std::size_t b)
+                     { return hit.hopBands[a][band] > hit.hopBands[b][band]; });
+
+    const auto loudest = std::max<std::size_t>(1, hops / 5);
+    double sum = 0.0;
+    for (std::size_t index = 0; index < loudest; ++index)
+        sum += static_cast<double>(hit.hopBands[order[index]][band]) - under.hopBands[order[index]][band];
+    return sum / static_cast<double>(loudest);
+}
+
 std::vector<Overlap> overlaps(const std::vector<StreamMeasure>& streams)
 {
     constexpr double significantDb = 20.0;

@@ -178,6 +178,38 @@ TEST_CASE("activity: silence then a tone plays half the time")
     CHECK(half.activeShare == doctest::Approx(0.5).epsilon(0.05));
 }
 
+TEST_CASE("a kick's margin on its hits sees what masking cannot: the level of the bass under it")
+{
+    // A kick that decays from -6 to -46 dB at every beat, over a bass held at
+    // -20 then at -30. Each hit crosses the bass on its way down at both
+    // levels; the margin on the loudest fifth of the hops moves by the 10 dB.
+    const auto stream = [](const std::function<float(int)>& level)
+    {
+        StreamMeasure out;
+        for (int hop = 0; hop < 200; ++hop)
+        {
+            std::array<float, bandCount> bands{};
+            bands.fill(-120.0f);
+            bands[1] = level(hop);
+            out.hopBands.push_back(bands);
+            out.hopActive.push_back(true);
+        }
+        return out;
+    };
+    const auto kick = stream([](int hop) { return -6.0f - 4.0f * static_cast<float>(hop % 10); });
+    const auto loud = stream([](int) { return -20.0f; });
+    const auto quiet = stream([](int) { return -30.0f; });
+
+    const auto overLoud = hitMarginDb(kick, loud, 1);
+    const auto overQuiet = hitMarginDb(kick, quiet, 1);
+    REQUIRE(overLoud.has_value());
+    REQUIRE(overQuiet.has_value());
+    // The loudest fifth: the hops at -6 and -10 dB, a mean of -8.
+    CHECK(*overLoud == doctest::Approx(12.0));
+    CHECK(*overQuiet == doctest::Approx(22.0));
+    CHECK_FALSE(hitMarginDb(kick, StreamMeasure{}, 1).has_value());
+}
+
 TEST_CASE("masking: two lows at the same level overlap in their octave, a high does not")
 {
     const auto kick = sineSegments({{8.0, -12.0}}, 55.0);

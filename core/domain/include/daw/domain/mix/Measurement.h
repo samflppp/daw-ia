@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -150,6 +151,18 @@ struct Overlap
 // within 20 dB of each one's loudest band at that hop, and their two levels
 // are within 6 dB of each other.
 [[nodiscard]] std::vector<Overlap> overlaps(const std::vector<StreamMeasure>& streams);
+
+// How far a hit stands above what plays under it (S21): the mean difference,
+// in dB, between `hit` and `under` in `band`, over the fifth of the hops where
+// `hit` is loudest in that band. Positive when the hit passes over.
+//
+// What masking at 6 dB cannot say about a kick and a bass: a kick decays, so
+// each hit crosses the level of the bass on its way down whatever that level
+// is, and the share of the time they mask each other never falls. What a
+// person hears is whether the hit stands out where it hits. Nothing when one
+// of the two has no hops.
+[[nodiscard]] std::optional<double>
+hitMarginDb(const StreamMeasure& hit, const StreamMeasure& under, std::size_t band);
 
 [[nodiscard]] std::string bandName(std::size_t band); // "63 Hz", "1 kHz"
 

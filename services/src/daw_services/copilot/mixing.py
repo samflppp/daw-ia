@@ -36,7 +36,12 @@ Ce que tu reçois (JSON) :
   side, active (part du temps où elle joue), peak10ms.
 - master : les mêmes mesures sur ce qui sort.
 - masking : les paires qui se masquent, l'octave (index dans bandsHz), share (% du
-  temps où les deux jouent), levelDb, et les secondes où ça arrive.
+  temps où les deux jouent), levelDb, et les secondes où ça arrive. Jamais un kick
+  avec une basse : un kick décroît et traverse la basse à chaque coup, le recouvrement
+  ne dit rien d'eux.
+- kickMargins : pour un kick et une basse, de combien le kick passe la basse sur ses
+  coups (marginDb, dB, négatif s'il reste dessous), dans l'octave qui porte le kick
+  (band, index dans bandsHz).
 - axes : punch (-1 propre, +1 percutant), focus (-1 voix devant, +1 instru devant),
   width (-1 serré, +1 large). target : une cible (pente spectrale, crête, largeur),
   d'après les axes ou un morceau de référence.
@@ -50,12 +55,13 @@ Ce que tu rends : un seul appel à mix.propose. Chaque réglage :
   mid1_freq/mid1_gain/mid1_q, mid2_freq/mid2_gain/mid2_q, high_freq/high_gain/high_q.
   Compresseur : threshold_db, ratio, attack_ms, release_ms, makeup_db.
 - sentence : une phrase en français simple, pour un débutant, qui dit la mesure qui
-  justifie le réglage et ce que tu as fait. Exemple : « La basse et le kick se
-  recouvrent à 63 Hz 72 % du temps : j'ai creusé la basse de 3 dB à 63 Hz. »
+  justifie le réglage et ce que tu as fait. Exemple : « Sur ses coups, le kick ne
+  passe la basse que de 1,3 dB à 63 Hz : j'ai creusé la basse de 3 dB à 63 Hz. »
 - evidence : les mesures que la phrase cite, avec leur nom et leur valeur exacte telle
   que tu l'as reçue (arrondie au dixième) : "lufs", "crest", "truePeak", "correlation",
   "active", "peak10ms", "bands.<index>", "overlap.<index de l'octave>.<trackId de
-  l'autre piste>" (valeur : share). Chaque nombre cité doit être écrit dans la phrase.
+  l'autre piste>" (valeur : share), "margin.<index de l'octave>.<trackId de l'autre
+  piste>" (valeur : marginDb, entre un kick et une basse). Chaque nombre cité doit être écrit dans la phrase.
 
 Règles :
 - Les plugins de la personne ne se touchent pas, ne se retirent pas, ne se

@@ -161,7 +161,19 @@ struct Brief
 
     std::vector<Strip> strips;
     StreamMeasure master;
-    std::vector<Overlap> overlaps; // indices into strips
+    std::vector<Overlap> overlaps; // indices into strips; never a kick with a bass
+
+    // A kick over a bass, where it hits (S21): what the carving of the bass
+    // reads and cites, in place of their overlap, which a decaying kick
+    // keeps whatever the bass does (see hitMarginDb).
+    struct Margin
+    {
+        std::size_t hit{0};   // the kick, an index into strips
+        std::size_t under{0}; // the bass
+        std::size_t band{0};  // the octave that carries the kick, 0 to 2
+        double marginDb{0.0};
+    };
+    std::vector<Margin> margins;
     Axes axes;
     Target target;
 

@@ -40,6 +40,11 @@ std::string bandWord(std::size_t band)
     return bandName(band);
 }
 
+// Under this, on its hits, the kick does not stand over the bass and the bass
+// is carved (S21). On the known signals of --verify-mix the kick passes the
+// bass by 1.3 dB before the mix.
+constexpr double kickMarginDb = 6.0;
+
 bool isDrum(MixRole role)
 {
     return role == MixRole::kick || role == MixRole::snare || role == MixRole::hats ||
@@ -237,6 +242,28 @@ std::optional<double> measured(const Brief& brief, const Brief::Strip& strip, co
                               (overlap.first == with && overlap.second == self);
             if (pair && overlap.band == band)
                 return overlap.share * 100.0;
+        }
+        return std::nullopt;
+    }
+    if (name.starts_with("margin."))
+    {
+        // margin.<band>.<track>: how far the kick stands over the bass on its
+        // hits, dB, cited from either of the two.
+        const auto dot = name.find('.', 7);
+        if (dot == std::string::npos)
+            return std::nullopt;
+        const auto band = static_cast<std::size_t>(std::stoul(name.substr(7, dot - 7)));
+        const auto other = TrackId::parse(name.substr(dot + 1));
+        if (!other)
+            return std::nullopt;
+        for (const auto& margin : brief.margins)
+        {
+            const auto& hit = brief.strips[margin.hit].track;
+            const auto& under = brief.strips[margin.under].track;
+            const bool pair = (hit == strip.track && under == other.value()) ||
+                              (under == strip.track && hit == other.value());
+            if (pair && margin.band == band)
+                return margin.marginDb;
         }
         return std::nullopt;
     }
@@ -693,6 +720,13 @@ Value Brief::toValue() const
                                          {"seconds", Value::array(std::move(spans))}}));
     }
 
+    Value::Array hits;
+    for (const auto& margin : margins)
+        hits.push_back(Value::object({{"kick", Value{strips[margin.hit].track.toString()}},
+                                      {"bass", Value{strips[margin.under].track.toString()}},
+                                      {"band", Value{static_cast<std::int64_t>(margin.band)}},
+                                      {"marginDb", Value{std::round(margin.marginDb * 10.0) / 10.0}}}));
+
     Value::Array centres;
     for (const auto centre : bandCentres)
         centres.push_back(Value{centre});
@@ -701,6 +735,7 @@ Value Brief::toValue() const
                           {"tracks", Value::array(std::move(tracks))},
                           {"master", master.toValue()},
                           {"masking", Value::array(std::move(masking))},
+                          {"kickMargins", Value::array(std::move(hits))},
                           {"axes", axes.toValue()},
                           {"target", target.toValue()},
                           {"bounds", Bounds::toValue()}});
@@ -742,6 +777,41 @@ Brief briefOf(const ProjectState& state,
         brief.strips.push_back(std::move(strip));
     }
     brief.overlaps = overlaps(measures);
+
+    // A kick and a bass are judged by how far the kick stands over the bass
+    // on its hits, never by their overlap (S21): a kick decays through the
+    // level of the bass at every hit, so the overlap stays whatever is done.
+    const auto roleOf = [&brief](std::size_t index) { return brief.strips[index].role.role; };
+    const auto kickAndBass = [&roleOf](std::size_t a, std::size_t b)
+    {
+        return (roleOf(a) == MixRole::kick && roleOf(b) == MixRole::bass) ||
+               (roleOf(a) == MixRole::bass && roleOf(b) == MixRole::kick);
+    };
+    brief.overlaps.erase(std::remove_if(brief.overlaps.begin(),
+                                        brief.overlaps.end(),
+                                        [&kickAndBass](const Overlap& overlap)
+                                        { return kickAndBass(overlap.first, overlap.second); }),
+                         brief.overlaps.end());
+
+    for (std::size_t hit = 0; hit < brief.strips.size(); ++hit)
+    {
+        if (roleOf(hit) != MixRole::kick || brief.strips[hit].muted)
+            continue;
+        // The octave that carries the kick: its loudest of the lowest three.
+        std::size_t band = 0;
+        for (std::size_t candidate = 1; candidate < 3; ++candidate)
+        {
+            if (measures[hit].bandsDb[candidate] > measures[hit].bandsDb[band])
+                band = candidate;
+        }
+        for (std::size_t under = 0; under < brief.strips.size(); ++under)
+        {
+            if (roleOf(under) != MixRole::bass || brief.strips[under].muted)
+                continue;
+            if (const auto margin = hitMarginDb(measures[hit], measures[under], band); margin.has_value())
+                brief.margins.push_back(Brief::Margin{hit, under, band, *margin});
+        }
+    }
     return brief;
 }
 
@@ -1029,9 +1099,35 @@ Proposal baseMix(const Brief& brief)
             }
         }
 
-        // 3. Carving: the bass makes room for the kick, the chords for the
-        // voice or the lead. Where they overlap the loudest first: two
-        // octaves both shared, the one that carries the kick is carved.
+        // 3. Carving: the bass makes room for the kick where the kick does
+        // not stand over it on its hits (S21), in the octave that carries the
+        // kick; the chords make room for the voice or the lead where they
+        // overlap, the loudest overlap first.
+        for (const auto& margin : brief.margins)
+        {
+            const auto& hit = brief.strips[margin.hit];
+            if (brief.strips[margin.under].track != strip.track || !hit.role.known || !strip.role.known ||
+                margin.marginDb >= kickMarginDb || eq.find(std::string{internal::mid1Gain}) != eq.end())
+                continue;
+            const auto depth =
+                std::round(clampTo(-3.0 - 1.0 * axes.punch, Bounds::cutDb, -2.0) * 10.0) / 10.0;
+            const auto stands = std::round(margin.marginDb * 10.0) / 10.0;
+            eq[std::string{internal::mid1Frequency}] = bandCentres[margin.band];
+            eq[std::string{internal::mid1Gain}] = depth;
+            eq[std::string{internal::mid1Q}] = 1.4;
+            Change change{strip.track, Kind::equaliser, 0.0, {}, {}, {}};
+            change.sentence =
+                "Sur ses coups, le kick " +
+                (stands >= 0.0 ? "ne passe " + theRole(MixRole::bass) + " que de " + french(stands) + " dB"
+                               : "reste " + french(-stands) + " dB sous " + theRole(MixRole::bass)) +
+                " à " + bandWord(margin.band) + " : j'ai creusé " + name + " de " + french(std::abs(depth)) +
+                " dB à " + bandWord(margin.band) + " pour laisser passer le kick.";
+            change.evidence = {
+                {"margin." + std::to_string(margin.band) + "." + hit.track.toString(), stands}};
+            change.parameters = eq;
+            proposal.changes.push_back(std::move(change));
+        }
+
         auto byLevel = brief.overlaps;
         std::stable_sort(byLevel.begin(),
                          byLevel.end(),
@@ -1048,27 +1144,6 @@ Proposal baseMix(const Brief& brief)
             if (other == nullptr || !other->role.known || !strip.role.known)
                 continue;
             const auto share = std::round(overlap.share * 100.0);
-
-            if (role == MixRole::bass && other->role.role == MixRole::kick && overlap.band <= 2 &&
-                overlap.share >= 0.25 && eq.find(std::string{internal::mid1Gain}) == eq.end())
-            {
-                const auto depth =
-                    std::round(clampTo(-3.0 - 1.0 * axes.punch, Bounds::cutDb, -2.0) * 10.0) / 10.0;
-                const auto frequency = bandCentres[overlap.band];
-                eq[std::string{internal::mid1Frequency}] = frequency;
-                eq[std::string{internal::mid1Gain}] = depth;
-                eq[std::string{internal::mid1Q}] = 1.4;
-                Change change{strip.track, Kind::equaliser, 0.0, {}, {}, {}};
-                change.sentence = "La " + label + " et le kick se recouvrent à " + bandWord(overlap.band) +
-                                  " " + french(share, 0) +
-                                  " % du temps où ils jouent ensemble : j'ai creusé " + name + " de " +
-                                  french(std::abs(depth)) + " dB à " + bandWord(overlap.band) +
-                                  " pour laisser passer le kick.";
-                change.evidence = {
-                    {"overlap." + std::to_string(overlap.band) + "." + other->track.toString(), share}};
-                change.parameters = eq;
-                proposal.changes.push_back(std::move(change));
-            }
 
             const bool lead = other->role.role == MixRole::vocal || other->role.role == MixRole::melody;
             if ((role == MixRole::chords || role == MixRole::fx) && lead && overlap.band >= 5 &&
