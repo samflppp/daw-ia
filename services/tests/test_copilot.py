@@ -69,6 +69,7 @@ class FakeDaw:
 
     def __init__(self, refuse: str | None = None, check: Any = None) -> None:
         self.executed: list[dict[str, Any]] = []
+        self.mixes: list[dict[str, Any]] = []
         self.checked: list[list[dict[str, Any]]] = []
         self.refuse = refuse
         # What commands.check answers; None plays a DAW from before it existed.
@@ -96,6 +97,7 @@ class FakeDaw:
                     "clip.notes": lambda _params: NOTES,
                     "plugins.find": lambda params: {"query": params.get("query", ""), "found": []},
                     "mix.levels": lambda _params: LEVELS,
+                    "mix.start": self._mix_start,
                     "commands.execute": self._execute,
                     **({"commands.check": self._check} if self.check is not None else {}),
                 },
@@ -104,6 +106,10 @@ class FakeDaw:
 
         self._thread = threading.Thread(target=serve, daemon=True)
         self._thread.start()
+
+    def _mix_start(self, params: dict[str, Any]) -> dict[str, Any]:
+        self.mixes.append(params)
+        return {"started": True, "status": "Mesure du morceau…", "axes": params}
 
     def _execute(self, params: dict[str, Any]) -> dict[str, Any]:
         if self.refuse is not None:
@@ -230,6 +236,23 @@ def test_levels_are_read_from_the_daw_and_handed_to_the_model(daw: FakeDaw) -> N
     handed = provider.messages[-1][-1]["content"][0]["content"]
     assert '"peakDb":-3.0' in handed
     assert '"strip":"master"' in handed
+
+
+def test_mixing_the_song_starts_the_mix_and_writes_nothing(daw: FakeDaw) -> None:
+    provider = ScriptedProvider(
+        [
+            tool_turn(ToolCall("a", "mix.start", {"punch": 0.5})),
+            Turn(text="Je mesure le morceau ; la proposition s'affiche dans la console."),
+        ]
+    )
+
+    answer = Agent(connected(daw), provider).answer("mixe le morceau, plus percutant")
+
+    assert not answer.failed
+    assert daw.mixes == [{"punch": 0.5}]
+    assert daw.executed == []
+    handed = provider.messages[-1][-1]["content"][0]["content"]
+    assert '"started":true' in handed
 
 
 def test_a_request_out_of_reach_changes_nothing(daw: FakeDaw) -> None:

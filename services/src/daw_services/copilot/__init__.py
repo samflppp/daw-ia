@@ -51,6 +51,8 @@ SYSTEM_PROMPT = f"""Tu pilotes un logiciel de musique. Tu réponds en français,
 Ce que tu peux faire :
 - lire l'état du projet, les notes d'un clip, les plugins installés ;
 - mesurer les niveaux de chaque piste et du master (mix.get_levels) ;
+- lancer le mixage par l'IA (mix.start) : il mesure, propose, et l'utilisateur
+  écoute avant/après puis garde ou refuse — rien n'est écrit avant ;
 - demander des modifications en appelant les outils de commande.
 
 Règles :
@@ -202,6 +204,28 @@ READ_TOOLS.append(
             "over indique une crête à 0 dBFS ou plus."
         ),
         "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+    }
+)
+
+READ_TOOLS.append(
+    {
+        "name": "mix.start",
+        "description": (
+            "Lance le mixage par l'IA de tout le morceau : mesure, proposition, vérification. "
+            "Rien n'est écrit : la proposition s'affiche dans la console de mixage, l'utilisateur "
+            "l'écoute et la garde ou la refuse. Pour « mixe le morceau », appelle cet outil plutôt "
+            "que des volumes un par un. Les axes vont de -1 à 1 : punch (doux ↔ percutant), "
+            "focus (chaud ↔ brillant), width (serré ↔ large) ; 0 par défaut."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "punch": {"type": "number", "minimum": -1, "maximum": 1},
+                "focus": {"type": "number", "minimum": -1, "maximum": 1},
+                "width": {"type": "number", "minimum": -1, "maximum": 1},
+            },
+            "additionalProperties": False,
+        },
     }
 )
 
@@ -360,6 +384,9 @@ class Agent:
 
             if call.name == "mix.get_levels":
                 return self._daw.request("mix.levels")
+
+            if call.name == "mix.start":
+                return self._daw.request("mix.start", dict(call.arguments))
 
             if call.name == "clip.get_notes":
                 return self._daw.request("clip.notes", {"clipId": call.arguments.get("clipId", "")})

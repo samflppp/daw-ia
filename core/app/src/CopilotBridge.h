@@ -70,6 +70,10 @@ public:
         // What the meters read now, as mix.levels answers it. Run on the
         // message thread, where the meters live.
         std::function<domain::Value()> levels;
+
+        // The mix by the AI started from a sentence (S20): it starts, says
+        // what it does, and writes nothing. Run on the message thread.
+        std::function<domain::Value(const domain::Value&)> startMix;
     };
 
     explicit CopilotBridge(Wiring wiring);

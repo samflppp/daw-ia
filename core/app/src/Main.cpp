@@ -742,7 +742,13 @@ private:
                                   state_,
                                   registry_,
                                   [this] { return rack_->available(); },
-                                  [this] { return levels_->toValue(state_); }});
+                                  [this] { return levels_->toValue(state_); },
+                                  [this](const domain::Value& arguments) -> domain::Value
+                                  {
+                                      if (mixSession_ == nullptr)
+                                          return domain::Value::object({{"started", domain::Value{false}}});
+                                      return mixSession_->startFromCopilot(arguments);
+                                  }});
         mixSession_ = std::make_unique<MixSession>(
             MixSession::Wiring{bus_,
                                state_,

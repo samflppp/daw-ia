@@ -422,6 +422,20 @@ void CopilotBridge::handleRequest(const Value& message)
         else
             failure = errorValue("levels", levels.error().message);
     }
+    else if (method.value() == "mix.start")
+    {
+        auto started = onMessageThread(
+            [this, &arguments]() -> domain::Result<Value>
+            {
+                if (!wiring_.startMix)
+                    return domain::fail(domain::ErrorCode::notFound, "no mixer in this process");
+                return wiring_.startMix(arguments);
+            });
+        if (started)
+            result = std::move(started).value();
+        else
+            failure = errorValue("mix", started.error().message);
+    }
     else if (method.value() == "plugins.find")
     {
         const auto query = arguments.stringAt("query");
