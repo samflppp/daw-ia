@@ -30,6 +30,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from daw_services.copilot.mixing import Mixer
 from daw_services.copilot.reading import TRANSLATION_RULES, Reader
 from daw_services.ia_provider import (
     DEFAULT_MODEL,
@@ -425,7 +426,23 @@ def run(port: int, provider: IAProvider | None = None) -> int:
         )
         return read
 
+    mixer = Mixer(chosen)
+
+    def decide(params: dict[str, Any]) -> dict[str, Any]:
+        brief = params.get("brief") if isinstance(params.get("brief"), dict) else {}
+        previous = params.get("previous") if isinstance(params.get("previous"), dict) else None
+        refusals = params.get("refusals") if isinstance(params.get("refusals"), list) else None
+        decided = mixer.decide(brief, previous, refusals)
+        usage = decided.get("usage") or {}
+        print(
+            f"mixage : {usage.get('inputTokens', 0)} jetons en entrée, "
+            f"{usage.get('outputTokens', 0)} en sortie",
+            flush=True,
+        )
+        return decided
+
     peer.on("copilot.ask", ask)
     peer.on("generation.interpret", interpret)
+    peer.on("mix.decide", decide)
     peer.serve_forever()
     return 0
