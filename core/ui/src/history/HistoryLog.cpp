@@ -127,6 +127,7 @@ void HistoryLog::onExecuted(const domain::Receipt& receipt)
     entry.at = receipt.at;
     entry.actor = receipt.origin.actor;
     entry.group = receipt.group;
+    entry.context = receipt.origin.context;
     entries_.push_back(std::move(entry));
     cursor_ = entries_.size();
 }

@@ -69,6 +69,7 @@ public:
     [[nodiscard]] const domain::mix::Proposal* proposal() const override;
     [[nodiscard]] const domain::mix::Brief* brief() const override;
     [[nodiscard]] std::string masterSentence() const override { return masterSentence_; }
+    [[nodiscard]] std::vector<std::string> sentencesOf(const domain::BlobRef& context) const override;
     void refuseTrack(domain::TrackId track, bool refused) override;
     [[nodiscard]] bool isRefused(domain::TrackId track) const override;
     void accept() override;

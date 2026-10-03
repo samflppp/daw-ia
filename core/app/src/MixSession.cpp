@@ -262,7 +262,15 @@ void MixSession::decideWithModel(int round, Value previous, Value refusals)
         {
             if (!alive->load() || generation != generation_ || cancelled_.load() || brief_ == nullptr)
                 return;
-            usage_ = std::move(usage);
+            // Two rounds cost two requests: the tokens add up.
+            const auto tokens = [](const Value& from, const char* key)
+            {
+                const auto found = from.intAt(key);
+                return found ? found.value() : std::int64_t{0};
+            };
+            usage_ = Value::object(
+                {{"input_tokens", Value{tokens(usage_, "input_tokens") + tokens(usage, "input_tokens")}},
+                 {"output_tokens", Value{tokens(usage_, "output_tokens") + tokens(usage, "output_tokens")}}});
             if (!answer)
             {
                 decisionNote_ = "Le modèle n'a pas proposé (" + answer.error().message +
@@ -365,6 +373,21 @@ void MixSession::verify()
                         (refusals_.size() > 1 ? "s" : "") + " par les garde-fous.";
             if (!decisionNote_.empty())
                 line += " " + decisionNote_;
+            // What the person will be asked about later, kept in daw.log: the
+            // master before and after, who decided, what it cost, each sentence.
+            std::string record = "mix: master avant " + french(before_->master.integratedLufs) + " LUFS, " +
+                                 french(before_->master.truePeakDb) + " dBTP ; après l'essai " +
+                                 french(after_->master.integratedLufs) + " LUFS, " +
+                                 french(after_->master.truePeakDb) + " dBTP ; mesure " +
+                                 french(measureSeconds_) + " s ; décidé par " + proposal_->decidedBy;
+            if (const auto in = usage_.intAt("input_tokens"); in)
+                record += " ; jetons " + std::to_string(in.value()) + " en entrée, " +
+                          std::to_string(usage_.intAt("output_tokens") ? usage_.intAt("output_tokens").value()
+                                                                       : 0) +
+                          " en sortie";
+            juce::Logger::writeToLog(toJuce(record));
+            for (const auto& change : proposal_->changes)
+                juce::Logger::writeToLog(toJuce("mix:   " + change.sentence));
             setStage(Stage::ready, line);
         });
 }
@@ -439,6 +462,31 @@ void MixSession::accept()
     }
     clearProposal();
     setStage(Stage::idle, "Mixage gardé : une entrée d'historique, un Ctrl+Z le défait.");
+}
+
+std::vector<std::string> MixSession::sentencesOf(const domain::BlobRef& context) const
+{
+    std::vector<std::string> sentences;
+    if (wiring_.store == nullptr)
+        return sentences;
+    const auto bytes = wiring_.store->get(context);
+    if (!bytes)
+        return sentences;
+    const auto value = domain::json::read(
+        std::string_view{static_cast<const char*>(bytes.value().getData()), bytes.value().getSize()});
+    if (!value)
+        return sentences;
+    const auto* proposal = value.value().find("proposal");
+    if (proposal == nullptr || proposal->find("changes") == nullptr)
+        return sentences;
+    auto kept = domain::mix::Proposal::fromValue(*proposal);
+    if (!kept)
+        return sentences;
+    for (const auto& change : kept.value().changes)
+        sentences.push_back(change.sentence);
+    if (const auto master = value.value().stringAt("master"); master)
+        sentences.push_back(master.value());
+    return sentences;
 }
 
 void MixSession::reject()

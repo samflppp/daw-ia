@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daw/domain/BlobRef.h"
 #include "daw/domain/Ids.h"
 #include "daw/domain/mix/Decision.h"
 
@@ -8,6 +9,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace daw::ui
 {
@@ -56,6 +58,10 @@ public:
     // What the verification did to the master, said: empty when it did not
     // have to touch it. Refusing the master's strip leaves it out.
     [[nodiscard]] virtual std::string masterSentence() const = 0;
+
+    // The sentences of a mix that was kept, read back from what the history
+    // line holds by digest: empty when the context is not a mix, or is gone.
+    [[nodiscard]] virtual std::vector<std::string> sentencesOf(const domain::BlobRef& context) const = 0;
 
     // A strip whose changes the person refuses: left out at acceptance.
     virtual void refuseTrack(domain::TrackId track, bool refused) = 0;

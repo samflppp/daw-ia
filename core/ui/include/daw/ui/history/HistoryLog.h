@@ -49,6 +49,10 @@ public:
         // request that asked for a track and a plugin on it.
         std::optional<domain::GroupRef> group;
 
+        // What the copilot acted upon, by digest, when it said: the mix by
+        // the AI keeps its measures and its sentences there (S20).
+        std::optional<domain::BlobRef> context;
+
         // What a reader of the panel should see on this line.
         [[nodiscard]] std::string_view label() const noexcept;
     };

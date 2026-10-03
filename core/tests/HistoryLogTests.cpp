@@ -183,6 +183,25 @@ TEST_CASE("a group is one line, holding the sentence that was asked")
     CHECK(fixture.log.entries().size() == 1);
 }
 
+TEST_CASE("a line keeps what the copilot acted upon, and a user's line has nothing")
+{
+    Logged fixture;
+
+    std::vector<std::unique_ptr<Command>> commands;
+    commands.push_back(fixture.harness.setVolume(-6.0));
+    GroupOptions options{};
+    options.label = "Mixage par l'IA : 1 réglage";
+    options.origin.actor = Actor::copilot;
+    options.origin.context = BlobRef{std::string(BlobRef::digestLength, 'a'), 42};
+    REQUIRE(fixture.harness.bus.executeGroup(std::move(commands), options).ok());
+    REQUIRE(fixture.harness.bus.execute(fixture.harness.setVolume(-3.0)).ok());
+
+    REQUIRE(fixture.log.entries().size() == 2);
+    REQUIRE(fixture.log.entries()[0].context.has_value());
+    CHECK(fixture.log.entries()[0].context->byteCount == 42);
+    CHECK_FALSE(fixture.log.entries()[1].context.has_value());
+}
+
 TEST_CASE("the transport of a group leaves no line behind")
 {
     Logged fixture;

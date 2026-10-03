@@ -5,6 +5,7 @@
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/serialization/Json.h"
+#include "daw/ui/panels/HistoryPanel.h"
 #include "daw/ui/panels/MixerPanel.h"
 
 #include <algorithm>
@@ -212,6 +213,15 @@ void Verification::buildMix()
                   "les garde-fous relus sur ce qui est montré : rien ne les franchit");
             for (const auto& change : proposal->changes)
                 note("« " + change.sentence + " »");
+
+            // What a model would read and write, in characters: the cost of a
+            // mix by the model is estimated from them (about 3,5 characters a
+            // token for this JSON), never measured here, where no API is called.
+            const auto read = domain::json::write(brief->toValue()).size();
+            const auto written = domain::json::write(proposal->toValue()).size();
+            note("brief : " + std::to_string(read) + " caractères pour " +
+                 std::to_string(brief->strips.size()) + " pistes ; proposition : " + std::to_string(written) +
+                 " caractères");
 
             const auto* kick = brief->find(run->kick);
             const auto* bass = brief->find(run->bass);
@@ -620,6 +630,13 @@ void Verification::buildMix()
             check(!mixer->proposal().isVisible() && !mixer->strips().empty() &&
                       mixer->strips().back()->isVisible(),
                   "les tranches sont revenues");
+
+            // The history line says what was done, sentence by sentence.
+            auto* history = dynamic_cast<ui::HistoryPanel*>(panel("history"));
+            const auto said = history != nullptr ? history->sentencesAtRow(0) : juce::String{};
+            note("survol de la ligne d'historique :\n\n```\n" + said.toStdString() + "\n```");
+            check(said.contains("LUFS") && !said.contains("Kick jouait"),
+                  "l'historique redit les phrases gardées, sans celles du kick laissé de côté");
             key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
             check(domain::json::write(state_.toValue()) == run->projectBefore,
                   "le projet d'avant, à l'octet près");

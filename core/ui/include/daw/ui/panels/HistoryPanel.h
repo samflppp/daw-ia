@@ -15,7 +15,7 @@ namespace daw::ui
 // walks the bus to it, one undo or one redo at a time: there is no "jump to
 // state" on the bus and there must not be one, because every step of the walk
 // is an operation observers and the journal are told about.
-class HistoryPanel final : public juce::Component, private juce::ChangeListener
+class HistoryPanel final : public juce::Component, public juce::TooltipClient, private juce::ChangeListener
 {
 public:
     explicit HistoryPanel(const PanelContext& context);
@@ -27,6 +27,11 @@ public:
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
+
+    // Over a line the copilot wrote with a context — the mix by the AI — the
+    // sentences of what it did, each with the measure it cites (S20).
+    [[nodiscard]] juce::String getTooltip() override;
+    [[nodiscard]] juce::String sentencesAtRow(int row) const;
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -44,6 +49,7 @@ private:
     DawLookAndFeel& lookAndFeel_;
     domain::CommandBus& bus_;
     History& history_;
+    MixHost& mix_;
 
     juce::TextButton undo_{"Annuler"};
     juce::TextButton redo_{u8"Rétablir"};

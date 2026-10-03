@@ -44,6 +44,10 @@ public:
 private:
     bool ownTitleBar_{false};
 
+    // The tooltips of everything in the window: the history's sentences of a
+    // mix (S20), and the few buttons that already had one.
+    juce::TooltipWindow tooltips_{this};
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainWindow)
 };
 

@@ -44,6 +44,7 @@ HistoryPanel::HistoryPanel(const PanelContext& context)
     , lookAndFeel_(context.lookAndFeel)
     , bus_(context.bus)
     , history_(context.history)
+    , mix_(context.mix)
 {
     titled_ = context.titled;
     setLookAndFeel(&lookAndFeel_);
@@ -140,6 +141,25 @@ void HistoryPanel::mouseMove(const juce::MouseEvent& event)
 
     hovered_ = row;
     repaint();
+}
+
+juce::String HistoryPanel::getTooltip()
+{
+    return sentencesAtRow(hovered_);
+}
+
+juce::String HistoryPanel::sentencesAtRow(int row) const
+{
+    if (row < 0)
+        return {};
+    const auto index = entryAtRow(row);
+    const auto& entries = history_.entries();
+    if (index >= entries.size() || !entries[index].context.has_value())
+        return {};
+    juce::StringArray lines;
+    for (const auto& sentence : mix_.sentencesOf(*entries[index].context))
+        lines.add(juce::String::fromUTF8(sentence.c_str()));
+    return lines.joinIntoString("\n");
 }
 
 void HistoryPanel::mouseExit(const juce::MouseEvent& event)
