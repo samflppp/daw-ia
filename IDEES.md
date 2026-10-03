@@ -184,3 +184,39 @@ Demandés par le fondateur, non construits, hors du périmètre de la S20 tant q
   l'utilisateur, que la S20 laisse volontairement de côté. Forme probable : une fiche déclarative par plugin,
   liée par l'identifiant stable du format (jamais par le nom ni par l'index d'un paramètre), versionnée avec
   le plugin. Liste des plugins : à fournir.
+
+## Quatre idées d'IA (notées le 3 octobre 2026)
+
+Demandées par le fondateur, non construites. Trois d'entre elles touchent une décision déjà écrite plus haut
+dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une semaine ne le prend pas.
+
+- **La direction IA du projet, fondée sur des références.** L'utilisateur donne un ou plusieurs morceaux de
+  référence, et c'est d'eux que l'IA tire sa direction pour tout le projet : tonalité, tempo, structure,
+  densité, équilibre du mixage, couleur. Une seule direction partagée par la génération, l'arrangement et le
+  mixage, au lieu d'une consigne redonnée à chaque geste. C'est le « conditionnement paramétrique par
+  extraction depuis une référence utilisateur » du positionnement, et le prolongement de la piste de référence
+  prévue pour le mixage en S21 : la même mesure, appliquée à un fichier, donne une cible. À trancher : ce qui
+  est extrait d'une référence (des nombres, jamais son audio ni ses notes), et où vit la direction (dans le
+  projet, puisqu'elle doit se rouvrir avec lui).
+- **Le push-to-talk.** Tenir une touche, parler, relâcher : la phrase part au copilote. Proposé avec Jev, ou
+  Laya pour rester en local. Deux points à voir avant :
+  - **Jev a été écarté** plus haut (« Couche décision ») : service hébergé, aucun poids public, un second
+    fournisseur dans le chemin critique d'une démo. Le reprendre, c'est rouvrir cette ligne.
+  - **Laya ne transcrit pas la voix** : c'est un classeur de texte (routeur d'intention, 512 tokens). Il manque
+    donc une brique de reconnaissance vocale avant lui, locale si l'on veut tenir « inférence locale, coût
+    marginal nul » ; Laya, lui, classerait la phrase transcrite. Aucune inférence sur le thread audio, et le
+    micro du push-to-talk ne passe pas par le moteur.
+- **Des instruments IA** (vu chez ACE Studio, « AI Instruments » : des interprétations d'instruments réalistes,
+  sans télécharger de banques de samples). Un instrument dont le son est rendu par un modèle à partir des notes
+  écrites, au lieu d'un synthé ou d'un sampler. **À ne pas confondre avec la génération audio écartée plus haut**
+  (Suno, Udio) : ici les notes restent dans le projet, déplaçables, sur la grille ; seul le timbre vient du
+  modèle. À trancher : rendu local ou distant, latence à la lecture (un rendu hors ligne mis en cache par
+  pattern, invalidé quand ses notes changent, plutôt qu'une inférence en temps réel), et ce que devient le
+  projet sans le modèle.
+- **Composer sur une vidéo** (vu chez ACE Studio, « Video Composer », https://acestudio.ai/video-composer/ :
+  des musiques et des bruitages générés pour coller à une vidéo). Pour les workspaces pub / UGC et musique de
+  film : l'IA lit la vidéo (coupes, rythme, durée, ambiance) et propose une musique et des bruitages calés
+  dessus. **Tension avec la génération audio écartée** : pour tenir la promesse de contrôle, la musique
+  proposée devrait être des patterns et des notes posés sur des repères tirés de la vidéo, pas un fichier
+  audio fini ; les bruitages, eux, sont de l'audio par nature (recherche de samples par l'IA, ou génération).
+  Dépend d'une piste vidéo dans le DAW, qui n'existe pas.
