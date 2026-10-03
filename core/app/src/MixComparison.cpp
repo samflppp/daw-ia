@@ -120,25 +120,31 @@ void MixComparison::audioDeviceIOCallbackWithContext(const float* const* inputs,
 
     // Both advance together, whichever is heard: switching never jumps.
     const bool after = after_.load(std::memory_order_relaxed);
+    // The renders are stereo, and go to the first two outputs, where the song
+    // goes (Tracktion's default « Output channel 1 + 2 »). A card with more
+    // outputs — the speakers of the founder's laptop declare eight — used to
+    // be skipped whole, block after block: the comparison was silent there
+    // (S21). The others stay silent.
+    const auto heard = std::min(outputCount, stereo);
     for (auto* side : {&before_, &afterSide_})
     {
-        if (side->scratch.getNumChannels() < outputCount || side->scratch.getNumSamples() < samples)
+        if (side->scratch.getNumSamples() < samples)
             continue; // sized in audioDeviceAboutToStart; a larger block is skipped, never allocated here
-        juce::AudioBuffer<float> into{side->scratch.getArrayOfWritePointers(), outputCount, samples};
+        juce::AudioBuffer<float> into{side->scratch.getArrayOfWritePointers(), stereo, samples};
         side->transport.getNextAudioBlock(juce::AudioSourceChannelInfo{&into, 0, samples});
         const auto index = side == &afterSide_ ? 1 : 0;
         const auto gain = index == 1 ? afterGain_.load() : beforeGain_.load();
         if ((index == 1) == after)
         {
-            for (int channel = 0; channel < outputCount; ++channel)
+            for (int channel = 0; channel < heard; ++channel)
                 view.copyFromWithRamp(channel, 0, into.getReadPointer(channel), samples, gain, gain);
             double sum = 0.0;
-            for (int channel = 0; channel < outputCount; ++channel)
+            for (int channel = 0; channel < heard; ++channel)
             {
                 const auto rms = view.getRMSLevel(channel, 0, samples);
                 sum += static_cast<double>(rms) * rms * samples;
             }
-            heardSum_[index].store(heardSum_[index].load() + sum / std::max(1, outputCount));
+            heardSum_[index].store(heardSum_[index].load() + sum / std::max(1, heard));
             heardCount_[index].store(heardCount_[index].load() + samples);
         }
     }
