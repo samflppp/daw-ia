@@ -388,10 +388,10 @@ void MixSession::verify()
                                  french(after_->master.truePeakDb) + " dBTP ; mesure " +
                                  french(measureSeconds_) + " s ; décidé par " + proposal_->decidedBy;
             if (const auto in = usage_.intAt("inputTokens"); in)
-                record += " ; jetons " + std::to_string(in.value()) + " en entrée, " +
-                          std::to_string(usage_.intAt("outputTokens") ? usage_.intAt("outputTokens").value()
-                                                                       : 0) +
-                          " en sortie";
+                record +=
+                    " ; jetons " + std::to_string(in.value()) + " en entrée, " +
+                    std::to_string(usage_.intAt("outputTokens") ? usage_.intAt("outputTokens").value() : 0) +
+                    " en sortie";
             juce::Logger::writeToLog(toJuce(record));
             for (const auto& strip : brief_->strips)
                 juce::Logger::writeToLog(toJuce("mix:   " + strip.name + " (" +
