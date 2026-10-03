@@ -77,13 +77,10 @@ void Verification::addGenerationSteps()
     };
     // The words as a person types them: UTF-8, never a char literal read as
     // Latin-1 by juce::String, which turned "mélodie" into a word nobody wrote.
-    const auto enter = [roll](const juce::String& text)
+    const auto enter = [this, roll](const juce::String& text)
     {
         if (auto* panel = roll(); panel != nullptr)
-        {
-            panel->promptField().setText(text, false);
-            static_cast<void>(panel->promptField().keyPressed(juce::KeyPress{juce::KeyPress::returnKey}));
-        }
+            prompt(panel->generationBar(), text);
     };
 
     add("un canal Lead sans sample ; au piano-roll, Maj + glisser sur la règle prend les mesures 2 et 3",

@@ -104,9 +104,7 @@ void Verification::addZoneSteps()
             check(view->generationBar().getY() >= view->timelineArea().getBottom(),
                   "sous la grille, jamais sur les blocs");
 
-            view->generationBar().field().setText(juce::String::fromUTF8("boucle trap F#m"), false);
-            static_cast<void>(
-                view->generationBar().field().keyPressed(juce::KeyPress{juce::KeyPress::returnKey}));
+            prompt(view->generationBar(), juce::String::fromUTF8("boucle trap F#m"));
 
             const auto* proposal = view->zoneProposal();
             check(proposal != nullptr, "une proposition sur la zone");

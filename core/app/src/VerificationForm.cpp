@@ -50,13 +50,10 @@ void Verification::addFormSteps()
     // understood. What is measured is the rhythm of each bar, not a label.
 
     const auto roll = [this] { return dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll")); };
-    const auto enter = [roll](const juce::String& text)
+    const auto enter = [this, roll](const juce::String& text)
     {
         if (auto* panel = roll(); panel != nullptr)
-        {
-            panel->promptField().setText(text, false);
-            static_cast<void>(panel->promptField().keyPressed(juce::KeyPress{juce::KeyPress::returnKey}));
-        }
+            prompt(panel->generationBar(), text);
     };
     const auto aaba = [this](const auto& notes, double from, const std::string& what)
     {
@@ -107,8 +104,7 @@ void Verification::addFormSteps()
             generationDepth_ = depth();
 
             static_cast<void>(panel->keyPressed(juce::KeyPress{'g', juce::ModifierKeys::ctrlModifier, 0}));
-            panel->promptField().setText(juce::String::fromUTF8("propose"), false);
-            static_cast<void>(panel->promptField().keyPressed(juce::KeyPress{juce::KeyPress::returnKey}));
+            prompt(panel->generationBar(), juce::String::fromUTF8("propose"));
             check(panel->proposing(), "une proposition est à l'écran");
             note(panel->proposalLine().toStdString());
             check(panel->proposalLine().contains(juce::String::fromUTF8("AABA (déduit)")),

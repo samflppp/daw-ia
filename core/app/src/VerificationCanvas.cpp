@@ -993,9 +993,7 @@ void Verification::addCanvasSteps()
             check(view->generationBar().isShowing(), "la fenêtre s'ouvre sous la toile");
             check(view->generationBar().getY() >= view->timelineArea().getBottom(),
                   "sous la grille, jamais sur les notes");
-            view->generationBar().field().setText(juce::String::fromUTF8("une mélodie en la mineur"), false);
-            static_cast<void>(
-                view->generationBar().field().keyPressed(juce::KeyPress{juce::KeyPress::returnKey}));
+            prompt(view->generationBar(), juce::String::fromUTF8("une mélodie en la mineur"));
 
             const auto ghosts = view->ghostNotes();
             check(!ghosts.empty(), "des notes proposées : " + std::to_string(ghosts.size()));

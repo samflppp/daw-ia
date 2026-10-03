@@ -13,6 +13,7 @@
 #include "daw/ui/FrameTicker.h"
 #include "daw/ui/panels/BrowserPanel.h"
 #include "daw/ui/panels/ChannelRackPanel.h"
+#include "daw/ui/panels/GenerationPanel.h"
 #include "daw/ui/panels/MixerPanel.h"
 #include "daw/ui/panels/PianoRollPanel.h"
 #include "daw/ui/panels/PlaylistPanel.h"
@@ -542,6 +543,23 @@ void Verification::writeHit(const juce::File& file, double seconds)
 void Verification::key(const juce::KeyPress& press)
 {
     static_cast<void>(view_.keyPressed(press));
+}
+
+void Verification::prompt(ui::GenerationPanel& bar, const juce::String& words)
+{
+    bar.field().setText(words, false);
+    static_cast<void>(bar.field().keyPressed(juce::KeyPress{juce::KeyPress::returnKey}));
+
+    // The list's own timer is held while the messages run: a step must not
+    // start inside the step that waits. Past the reader's patience the local
+    // words have answered; the margin is for the message that brings them.
+    stopTimer();
+    const auto until = juce::Time::getMillisecondCounterHiRes() + 10000.0;
+    while (bar.isReading() && juce::Time::getMillisecondCounterHiRes() < until)
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    startTimer(tickMs);
+    if (bar.isReading())
+        check(false, "la lecture des mots n'a pas abouti en 10 s");
 }
 
 engine::StripLevel Verification::levelIn(const std::vector<engine::StripLevel>& levels,

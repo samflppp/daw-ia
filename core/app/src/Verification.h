@@ -23,6 +23,11 @@
 #include <string>
 #include <vector>
 
+namespace daw::ui
+{
+class GenerationPanel;
+}
+
 namespace daw::app
 {
 
@@ -316,6 +321,12 @@ private:
 
     static void writeHit(const juce::File& file, double seconds);
     void key(const juce::KeyPress& press);
+
+    // Types the words in a generation window and presses Enter, then waits
+    // until the prompt is read. With the copilot's process connected, the
+    // reading goes through it and answers later, on the message thread: a
+    // step that read the screen in the same call read the previous gesture.
+    void prompt(ui::GenerationPanel& bar, const juce::String& words);
 
     // Writes notes on a channel the way a person does since S12: the channel
     // clicked in the rack, a click per note in the piano roll.

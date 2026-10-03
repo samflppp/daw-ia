@@ -75,13 +75,10 @@ void Verification::addLearningSteps()
     // deletes the files.
 
     const auto roll = [this] { return dynamic_cast<ui::PianoRollPanel*>(panel("piano_roll")); };
-    const auto enter = [roll](const juce::String& text)
+    const auto enter = [this, roll](const juce::String& text)
     {
         if (auto* panel = roll(); panel != nullptr)
-        {
-            panel->promptField().setText(text, false);
-            static_cast<void>(panel->promptField().keyPressed(juce::KeyPress{juce::KeyPress::returnKey}));
-        }
+            prompt(panel->generationBar(), text);
     };
     // Asks again with words that differ from the last ones: a new proposal,
     // drawn with the style as it is now.
@@ -144,8 +141,7 @@ void Verification::addLearningSteps()
                  true);
 
             static_cast<void>(panel->keyPressed(juce::KeyPress{'g', juce::ModifierKeys::ctrlModifier, 0}));
-            panel->promptField().setText(juce::String::fromUTF8("Am mélodie"), false);
-            static_cast<void>(panel->promptField().keyPressed(juce::KeyPress{juce::KeyPress::returnKey}));
+            prompt(panel->generationBar(), juce::String::fromUTF8("Am mélodie"));
             lineSays(panel->proposalLine(), "style : repli", "rien d'appris pour une mélodie : la ligne dit");
         });
 
