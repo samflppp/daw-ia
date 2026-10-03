@@ -14,6 +14,9 @@ le prend pas explicitement dans son périmètre.
   chaque tour, pas les requêtes inutiles.
 - Nécessite un fine-tune : le modèle de base est à peine au-dessus de l'aléatoire (0,36 contre
   0,318) et monte à 0,766 une fois affiné.
+  **Reporté à l'incubation** (3 octobre 2026) : la machine du fondateur (portable i5-8365U, sans carte
+  graphique) n'entraîne pas un modèle de 421 M de paramètres, et un fine-tune bricolé ne vaut pas le
+  détour. Il se fera pendant l'incubation, avec de vraies machines et un jeu de données plus grand.
 - Le jeu de données se constitue DÉJÀ tout seul dans le journal SQLite : `group_label` porte la
   phrase, `origin=copilot` marque la provenance, et les commandes produites sont l'étiquette. Ne pas
   purger ces lignes.
@@ -178,6 +181,7 @@ Demandés par le fondateur, non construits, hors du périmètre de la S20 tant q
   lecture seule ; on les ajoute depuis la page de la chaîne de plugins. Il faut un endroit dans chaque tranche
   pour ajouter, retirer, réordonner et contourner un effet, sans quitter le mixer. Les commandes existent
   (`plugin.insert`, `plugin.remove`, `plugin.set_bypassed`) : c'est de l'écran, pas du domaine.
+  **Prise en S24** (`docs/plan-s21-s26.md`).
 - **La création de bus intelligente.** Le logiciel remarque qu'un même plugin est posé plusieurs fois avec les
   mêmes réglages (la même réverbération sur six pistes, par exemple) et propose de le remplacer par un bus et
   des envois. À trancher avant d'y toucher : ce que veut dire « les mêmes réglages » pour un plugin dont l'état
@@ -185,6 +189,7 @@ Demandés par le fondateur, non construits, hors du périmètre de la S20 tant q
   un effet d'insertion (compresseur, égaliseur) ne se mutualise pas comme un effet d'envoi (réverbération,
   délai) ; la proposition passe par l'essai à blanc et un seul groupe d'annulation, comme le reste. Les
   commandes existent (`bus.add`, `track.set_send`, `plugin.remove`).
+  **Prise en S24** (`docs/plan-s21-s26.md`).
 - **Apprendre au DAW les VST externes les plus connus.** Pour une liste de plugins que le fondateur donnera
   plus tard, le DAW sait ce que fait chaque paramètre (nom, unité, plage utile, rôle), au lieu de voir un
   plugin opaque. C'est ce qui permettrait au copilote et au mixage par l'IA de régler les plugins de
@@ -205,6 +210,7 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
   prévue pour le mixage en S21 : la même mesure, appliquée à un fichier, donne une cible. À trancher : ce qui
   est extrait d'une référence (des nombres, jamais son audio ni ses notes), et où vit la direction (dans le
   projet, puisqu'elle doit se rouvrir avec lui).
+  **Prise en S22** (`docs/plan-s21-s26.md`).
 - **Le push-to-talk.** Tenir une touche, parler, relâcher : la phrase part au copilote. Proposé avec Jev, ou
   Laya pour rester en local. Deux points à voir avant :
   - **Jev a été écarté** plus haut (« Couche décision ») : service hébergé, aucun poids public, un second
@@ -213,6 +219,7 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
     donc une brique de reconnaissance vocale avant lui, locale si l'on veut tenir « inférence locale, coût
     marginal nul » ; Laya, lui, classerait la phrase transcrite. Aucune inférence sur le thread audio, et le
     micro du push-to-talk ne passe pas par le moteur.
+  **Prise en S25** (`docs/plan-s21-s26.md`).
 - **Des instruments IA** (vu chez ACE Studio, « AI Instruments » : des interprétations d'instruments réalistes,
   sans télécharger de banques de samples). Un instrument dont le son est rendu par un modèle à partir des notes
   écrites, au lieu d'un synthé ou d'un sampler. **Ce n'est pas la génération d'un morceau fini, écartée plus haut**
@@ -220,6 +227,7 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
   modèle. À trancher : rendu local ou distant, latence à la lecture (un rendu hors ligne mis en cache par
   pattern, invalidé quand ses notes changent, plutôt qu'une inférence en temps réel), et ce que devient le
   projet sans le modèle.
+  **Prise en S25, en évaluation écrite seulement, sans code** (`docs/plan-s21-s26.md`).
 - **Composer sur une vidéo** (vu chez ACE Studio, « Video Composer », https://acestudio.ai/video-composer/ :
   des musiques et des bruitages générés pour coller à une vidéo). Pour les workspaces pub / UGC et musique de
   film : l'IA lit la vidéo (coupes, rythme, durée, ambiance) et propose une musique et des bruitages calés
@@ -235,6 +243,7 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
   long, donc hors du thread message, annulable, avec sa progression ; les stems entrent dans le magasin de
   contenu du projet comme n'importe quel sample ; poser les pistes est un seul groupe d'annulation. Sert aussi
   la direction par références (mesurer une référence stem par stem) et l'audio vers MIDI.
+  **Prise en S22** (`docs/plan-s21-s26.md`).
 - **Les bruitages sur une vidéo, par IA** (noté le 3 octobre 2026 ; précise « Composer sur une vidéo »
   ci-dessus). Le fondateur veut d'abord le volet bruitages (SFX) : l'IA lit la vidéo, repère ce qui demande un
   son (une coupe, un impact, un mouvement, une ambiance) et pose un bruitage à chaque repère, sur la timeline.
@@ -253,3 +262,18 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
   Dans les deux cas : pas une liste de kits tout faits, des axes continus (sombre ↔ brillant, sec ↔ ample,
   propre ↔ saturé) et une direction tirée des références du projet ; le kit s'écoute avant d'être posé, et le
   poser est un seul groupe d'annulation. Les commandes existent (`track.add`, `track.set_sample`).
+  **Prise en S24, version « assembler »** (`docs/plan-s21-s26.md`).
+
+## Jouer (noté le 3 octobre 2026)
+
+Demandés par le fondateur :
+
+- **Brancher un clavier MIDI.** Détection, choix de l'entrée, jouer l'instrument de la piste choisie, enregistrer
+  ce qu'on joue dans le pattern en cours. Le jeu passe par le moteur en temps réel et n'écrit rien ; une prise
+  enregistrée devient des commandes (`note.add`, identifiants engendrés par l'appelant) en un seul groupe
+  d'annulation, à la fin de la prise.
+  **Prise en S23** (`docs/plan-s21-s26.md`).
+- **Le clavier AZERTY comme clavier MIDI,** comme dans FL : les rangées de touches jouent des notes, avec
+  changement d'octave. Disposition AZERTY, pas QWERTY. À trancher : la cohabitation avec les raccourcis
+  existants (Ctrl+C, F, flèches), et quand le mode est actif.
+  **Prise en S23** (`docs/plan-s21-s26.md`).
