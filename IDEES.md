@@ -220,6 +220,21 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
   proposée devrait être des patterns et des notes posés sur des repères tirés de la vidéo, pas un fichier
   audio fini ; les bruitages, eux, sont de l'audio par nature (recherche de samples par l'IA, ou génération).
   Dépend d'une piste vidéo dans le DAW, qui n'existe pas.
+- **Un séparateur de stems par IA** (noté le 3 octobre 2026, demandé par le fondateur ; ACE Studio en propose
+  un). Un fichier audio déposé sur une piste se sépare en voix, batterie, basse et le reste, chaque stem sur sa
+  propre piste, calé au même endroit. C'est la « séparation de stems intégrée à la piste » du contexte produit.
+  Ce n'est pas de la génération : rien n'est inventé, donc la ligne « génération audio écartée » n'est pas
+  touchée. À trancher : modèle ouvert en local (licence à vérifier avant de s'engager) ou API ; le calcul est
+  long, donc hors du thread message, annulable, avec sa progression ; les stems entrent dans le magasin de
+  contenu du projet comme n'importe quel sample ; poser les pistes est un seul groupe d'annulation. Sert aussi
+  la direction par références (mesurer une référence stem par stem) et l'audio vers MIDI.
+- **Les bruitages sur une vidéo, par IA** (noté le 3 octobre 2026 ; précise « Composer sur une vidéo »
+  ci-dessus). Le fondateur veut d'abord le volet bruitages (SFX) : l'IA lit la vidéo, repère ce qui demande un
+  son (une coupe, un impact, un mouvement, une ambiance) et pose un bruitage à chaque repère, sur la timeline.
+  Chaque bruitage est un clip audio à sa place : déplaçable, remplaçable, supprimable un par un. D'où vient le
+  son, à trancher : cherché dans les samples de l'utilisateur (recherche par le son), ou généré — et là c'est
+  de l'audio généré, à accepter comme matière si la règle est reformulée (voir la question ouverte en fin de
+  section). Dépend toujours d'une piste vidéo dans le DAW, qui n'existe pas : c'est elle le premier chantier.
 - **Un générateur de drum kit automatique** (noté le 3 octobre 2026, demandé par le fondateur). En un geste, le
   DAW compose un kit complet et cohérent — kick, caisse claire ou clap, charleys fermé et ouvert, percussions,
   808 — et le range dans le channel rack, un canal par élément. Deux lectures possibles, à trancher :
@@ -233,3 +248,9 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
   Dans les deux cas : pas une liste de kits tout faits, des axes continus (sombre ↔ brillant, sec ↔ ample,
   propre ↔ saturé) et une direction tirée des références du projet ; le kit s'écoute avant d'être posé, et le
   poser est un seul groupe d'annulation. Les commandes existent (`track.add`, `track.set_sample`).
+
+**Question ouverte, posée le 3 octobre 2026 : reformuler la ligne « génération audio écartée » (S14).** Elle
+visait Suno et Udio, un morceau fini sans grille ni notes. Face à ACE Studio, la proposition est : l'audio
+généré est accepté comme matière (un timbre rendu depuis des notes, un coup de batterie, un bruitage, une voix
+depuis notes et paroles), jamais comme morceau fini ni comme boucle sans notes. **Non tranché par le
+fondateur** ; tant que ce n'est pas tranché, la ligne de la S14 tient.
