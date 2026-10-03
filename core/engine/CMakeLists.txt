@@ -11,6 +11,7 @@ add_library(daw_engine INTERFACE)
 add_library(daw::engine ALIAS daw_engine)
 
 target_sources(daw_engine INTERFACE
+    src/AudioOutputKeeper.cpp
     src/ClapPluginFormat.cpp
     src/EngineHost.cpp
     src/Export.cpp

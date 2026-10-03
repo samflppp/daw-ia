@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 namespace daw::ui
 {
 
@@ -34,6 +36,14 @@ public:
     // implementation may carry it forward between two blocks. Drawing only:
     // what an edit lands on is positionBeats().
     [[nodiscard]] virtual double displayBeats() const { return positionBeats(); }
+
+    // What the screen says about the sound card under the position (S21):
+    // « sortie perdue » for as long as no card is open, « sortie : <name> » for
+    // a few seconds after the song moved to another one. Empty otherwise.
+    [[nodiscard]] virtual std::string outputNotice() const { return {}; }
+
+    // Whether the notice says the sound is gone, rather than where it went.
+    [[nodiscard]] virtual bool outputLost() const { return false; }
 };
 
 } // namespace daw::ui

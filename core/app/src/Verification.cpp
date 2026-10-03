@@ -73,6 +73,7 @@ Verification::Verification(Wiring wiring)
     , project_(wiring.project)
     , mix_(wiring.mix)
     , workspaces_(wiring.workspaces)
+    , output_(wiring.output)
 {
     exporter_ = wiring.exporter;
 }
@@ -124,6 +125,9 @@ void Verification::start()
         break;
     case Run::mix:
         buildMix();
+        break;
+    case Run::playback:
+        buildList();
         break;
     }
 
@@ -1337,6 +1341,15 @@ void Verification::buildList()
     addPlaylistViewSteps();
     addPreviewSteps();
     addClipboardSteps();
+
+    // --verify-lecture stops here: the project is the one the meters of the
+    // list play, built by the same steps, and the cycles take their place.
+    if (run_ == Run::playback)
+    {
+        addPlaybackCycles();
+        return;
+    }
+
     addMeterSteps();
     addMixerSteps();
     addTempoSteps();

@@ -29,6 +29,7 @@ EngineHost::EngineHost(const juce::String& applicationName)
     // and when, which is exactly the kind of question a caller should not have
     // to ask.
     engine_->getDeviceManager().dispatchPendingUpdates();
+    output_ = std::make_unique<AudioOutputKeeper>(engine_->getDeviceManager().deviceManager);
 
     auto& pluginManager = engine_->getPluginManager();
 

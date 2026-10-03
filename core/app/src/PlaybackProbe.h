@@ -46,6 +46,14 @@ public:
     // One line: the transport, TransportSync, the bus, the recent commands.
     [[nodiscard]] std::string describe() const;
 
+    // One line on the audio path, for a song that plays and is not heard
+    // (S20, steps 58 and 60: every meter at -100 dBFS, the engine playing):
+    // the device and whether Tracktion's stream time moves, the playback
+    // context and its graph, every tap with the blocks it has seen, and every
+    // track of the Edit with its mute, solo, clips and plugins. Read twice, a
+    // moment apart, it says where the sound stops.
+    [[nodiscard]] std::string describeAudio() const;
+
     // Refusals seen since the start, and the last ones as written to the log.
     [[nodiscard]] std::size_t refusalCount() const noexcept { return refusalCount_; }
     [[nodiscard]] const std::deque<std::string>& recentRefusals() const noexcept { return refusals_; }

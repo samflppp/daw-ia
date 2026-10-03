@@ -106,6 +106,15 @@ public:
     // is harmless because a render is read from the totals.
     [[nodiscard]] std::size_t dropped() const noexcept { return dropped_.load(std::memory_order_relaxed); }
 
+    // Every block the audio thread handed the tap since it was made, audible
+    // or not, never reset: read twice, it says whether the graph runs at all.
+    // A meter at -100 dBFS is either a strip that plays silence or a strip
+    // nobody processes, and only this tells them apart (S21).
+    [[nodiscard]] std::uint64_t blocksSeen() const noexcept
+    {
+        return blocksSeen_.load(std::memory_order_relaxed);
+    }
+
 private:
     void clearTotals() noexcept;
 
@@ -116,6 +125,7 @@ private:
     std::atomic<int> write_{0};
     std::atomic<int> read_{0};
     std::atomic<std::size_t> dropped_{0};
+    std::atomic<std::uint64_t> blocksSeen_{0};
 
     std::array<std::atomic<float>, BlockLevel::maxChannels> totalPeak_{};
     std::array<std::atomic<double>, BlockLevel::maxChannels> totalSumSquares_{};
@@ -135,6 +145,7 @@ private:
     static_assert(std::atomic<float>::is_always_lock_free);
     static_assert(std::atomic<double>::is_always_lock_free);
     static_assert(std::atomic<std::int64_t>::is_always_lock_free);
+    static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
 };
 
 } // namespace daw::engine

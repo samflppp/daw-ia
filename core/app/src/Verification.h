@@ -6,6 +6,7 @@
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/generation/Generator.h"
 #include "daw/domain/project/ProjectState.h"
+#include "daw/engine/AudioOutputKeeper.h"
 #include "daw/ui/TitleBarView.h"
 #include "daw/ui/Tokens.h"
 #include "daw/ui/WorkspaceView.h"
@@ -21,6 +22,7 @@
 #include <tracktion_engine/tracktion_engine.h>
 
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -57,6 +59,9 @@ class MixSession;
 //                    always did
 //   --verify-fluidite  how long the interface takes to paint, on an empty
 //                    project it fills first
+//   --verify-lecture the list up to its meters, then the first bar looped
+//                    and stopped sixty times, after four kinds of action:
+//                    how often the song plays and is not heard (S21)
 class Verification final : private juce::Timer, private juce::ChangeListener
 {
 public:
@@ -69,7 +74,8 @@ public:
         canvas,
         canvasLoad,
         fluidity,
-        mix
+        mix,
+        playback
     };
 
     struct Wiring
@@ -124,6 +130,9 @@ public:
         // The workspace switch, asked by identifier the way a shortcut or the
         // copilot would ask: a workspace reserved for workshops is refused.
         ui::WorkspaceHost* workspaces{nullptr};
+
+        // The sound card kept open (S21): --verify-lecture loses it on purpose.
+        engine::AudioOutputKeeper* output{nullptr};
     };
 
     explicit Verification(Wiring wiring);
@@ -179,6 +188,14 @@ private:
     // before and after at equal loudness, one entry by the copilot, Ctrl+Z to
     // the byte, a strip refused, a cancel, a reference.
     void buildMix();
+
+    // S21 (VerificationPlayback.cpp): the silent playback of S12 and S20,
+    // reproduced. Seventy-five cycles of the looped first bar, each after one
+    // of five actions — nothing, an offline render of the live Edit, a
+    // command, a sample auditioned, the sound card lost — and when one is
+    // silent, the audio path described twice, half a second apart. The report
+    // ends on the count per action.
+    void addPlaybackCycles();
 
     // The meters, live and rendered, and the copilot reading them. Part of
     // the list, after the samples: a project with a sampler channel and a
@@ -436,6 +453,13 @@ private:
     ui::ProjectObserver* project_{nullptr};
     MixSession* mix_{nullptr};
     ui::WorkspaceHost* workspaces_{nullptr};
+    engine::AudioOutputKeeper* output_{nullptr};
+
+    // S21: cycles run and silent ones, per action before the play.
+    std::map<std::string, int> cyclesByAction_;
+    std::map<std::string, int> silentByAction_;
+    bool cycleSilent_{false};
+    int reopenedBefore_{0};
 
     // S14.
     domain::TrackId leadTrack_{};

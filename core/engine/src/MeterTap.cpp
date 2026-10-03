@@ -55,6 +55,8 @@ void MeterTapPlugin::applyToBuffer(const tracktion::PluginRenderContext& context
     if (context.destBuffer == nullptr || context.bufferNumSamples <= 0)
         return;
 
+    blocksSeen_.store(blocksSeen_.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+
     if (const auto asked = resetsAsked_.load(std::memory_order_acquire);
         asked != resetsDone_.load(std::memory_order_relaxed))
     {

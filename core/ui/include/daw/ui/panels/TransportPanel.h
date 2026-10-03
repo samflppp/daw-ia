@@ -93,7 +93,8 @@ private:
                       juce::Rectangle<int> area,
                       const juce::String& value,
                       const juce::String& label,
-                      bool strong) const;
+                      bool strong,
+                      bool alarm = false) const;
 
     [[nodiscard]] juce::String positionText() const;
     [[nodiscard]] juce::String tempoText() const;
@@ -138,6 +139,7 @@ private:
     // nothing. The readout is redrawn thirty times a second and the rest of the
     // panel almost never.
     juce::String lastPosition_;
+    juce::String lastNotice_; // the sound card, under the position (S21)
 
     std::optional<domain::GestureId> wheelGesture_;
     juce::uint32 lastWheelMs_{0};

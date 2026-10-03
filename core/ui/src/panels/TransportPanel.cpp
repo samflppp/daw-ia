@@ -316,10 +316,12 @@ void TransportPanel::frame()
         closeWheelGesture();
 
     const auto position = positionText();
-    if (position == lastPosition_)
+    const auto notice = juce::String::fromUTF8(clock_.outputNotice().c_str());
+    if (position == lastPosition_ && notice == lastNotice_)
         return;
 
     lastPosition_ = position;
+    lastNotice_ = notice;
     play_->setToggleState(clock_.isPlaying(), juce::dontSendNotification);
 
     // The position, and the tempo an automated tempo moves with it: the
@@ -554,7 +556,8 @@ void TransportPanel::paintReadout(juce::Graphics& g,
                                   juce::Rectangle<int> area,
                                   const juce::String& value,
                                   const juce::String& label,
-                                  bool strong) const
+                                  bool strong,
+                                  bool alarm) const
 {
     auto bounds = area;
     auto caption = bounds.removeFromBottom(tokens_.integer("font.size.micro") + tokens_.integer("space.xs"));
@@ -564,7 +567,7 @@ void TransportPanel::paintReadout(juce::Graphics& g,
                      : lookAndFeel_.typography().mono("font.size.title", "font.weight.regular"));
     g.drawText(value, bounds, juce::Justification::centredLeft, false);
 
-    g.setColour(tokens_.colour("color.text.disabled"));
+    g.setColour(alarm ? tokens_.colour("color.accent.danger") : tokens_.colour("color.text.disabled"));
     g.setFont(lookAndFeel_.typography().caps("font.size.micro"));
     g.drawText(label.toUpperCase(), caption, juce::Justification::centredLeft, false);
 }
@@ -573,7 +576,12 @@ void TransportPanel::paint(juce::Graphics& g)
 {
     g.fillAll(tokens_.colour("color.surface.panel"));
 
-    paintReadout(g, readoutArea(0), lastPosition_, "mesure", true);
+    paintReadout(g,
+                 readoutArea(0),
+                 lastPosition_,
+                 lastNotice_.isNotEmpty() ? lastNotice_ : juce::String{"mesure"},
+                 true,
+                 clock_.outputLost());
     paintReadout(g,
                  readoutArea(1),
                  tempoText(),

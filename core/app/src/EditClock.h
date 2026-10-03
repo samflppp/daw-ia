@@ -25,10 +25,19 @@ public:
     // passed, pulled towards the engine's position: see DrawnPlayhead.
     [[nodiscard]] double displayBeats() const override;
 
+    // What the output keeper said last, and when (S21).
+    void setOutputNotice(std::string notice, bool lost);
+    [[nodiscard]] std::string outputNotice() const override;
+    [[nodiscard]] bool outputLost() const override { return outputLost_; }
+
 private:
     tracktion::Edit& edit_;
 
     mutable ui::DrawnPlayhead drawn_;
+
+    std::string outputNotice_;
+    bool outputLost_{false};
+    double outputNoticeAtMs_{0.0};
 };
 
 } // namespace daw::app

@@ -118,6 +118,11 @@ public:
         // state. No panel is notified of what a command did.
         bus_.addObserver(projectObserver_);
         clock_ = std::make_unique<EditClock>(engineHost_->edit());
+        engineHost_->output().onChanged = [this](const juce::String& what)
+        {
+            if (clock_ != nullptr)
+                clock_->setOutputNotice(what.toStdString(), engineHost_->output().outputName().isEmpty());
+        };
         levels_ = std::make_unique<LevelMonitor>(engineHost_->edit());
         rack_ = std::make_unique<PluginRack>(
             engineHost_->edit(), engineHost_->catalogue(), ui::Tokens::builtIn());
@@ -222,6 +227,8 @@ public:
                 run = Verification::Run::fluidity;
             else if (tokens[index] == "--verify-mix")
                 run = Verification::Run::mix;
+            else if (tokens[index] == "--verify-lecture")
+                run = Verification::Run::playback;
             else if (tokens[index] != "--verify")
                 continue;
 
@@ -271,7 +278,8 @@ public:
                 probe_.get(),
                 &projectObserver_,
                 mixSession_.get(),
-                switch_.get()});
+                switch_.get(),
+                &engineHost_->output()});
 
             // A verification mixes by the rules: never a key, never an API.
             if (mixSession_ != nullptr)

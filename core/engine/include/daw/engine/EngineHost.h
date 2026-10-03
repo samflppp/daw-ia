@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daw/engine/AudioOutputKeeper.h"
 #include "daw/engine/PluginCatalogue.h"
 
 #include <tracktion_engine/tracktion_engine.h>
@@ -38,6 +39,11 @@ public:
     // the store and hands it to the projector.
     [[nodiscard]] PluginCatalogue& catalogue() noexcept { return *catalogue_; }
 
+    // The sound card, kept open for the whole session (S21): a headset that
+    // goes away hands the song to the default output of Windows, and gets it
+    // back when it returns. See AudioOutputKeeper.h.
+    [[nodiscard]] AudioOutputKeeper& output() noexcept { return *output_; }
+
     // True when a command line asks this process to be a plugin scanner rather
     // than the application. Call it first in main(): the child process must not
     // build an Engine, an Edit or a window.
@@ -47,6 +53,9 @@ private:
     std::unique_ptr<tracktion::Engine> engine_;
     std::unique_ptr<tracktion::Edit> edit_;
     std::unique_ptr<PluginCatalogue> catalogue_;
+
+    // Last, so the first to go: it listens to the engine's device manager.
+    std::unique_ptr<AudioOutputKeeper> output_;
 };
 
 } // namespace daw::engine

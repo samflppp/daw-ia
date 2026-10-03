@@ -1,5 +1,7 @@
 #include "PlaybackProbe.h"
 
+#include "daw/engine/MeterTap.h"
+
 #include <sstream>
 
 namespace daw::app
@@ -56,6 +58,69 @@ std::string PlaybackProbe::describe() const
     text << " ; derniers appliqués :";
     for (const auto& line : applied_)
         text << " [" << line << "]";
+    return text.str();
+}
+
+std::string PlaybackProbe::describeAudio() const
+{
+    auto& devices = edit_.engine.getDeviceManager();
+    std::ostringstream text;
+
+    text << "carte son : ";
+    if (auto* device = devices.deviceManager.getCurrentAudioDevice(); device != nullptr)
+        text << "« " << device->getName() << " », " << (device->isOpen() ? "ouverte" : "fermée") << ", "
+             << (device->isPlaying() ? "en marche" : "arrêtée") << ", " << device->getCurrentSampleRate()
+             << " Hz, " << device->getCurrentBufferSizeSamples() << " échantillons";
+    else
+        text << "aucune";
+    text << " ; charge Tracktion " << juce::String(devices.getCpuUsage(), 3) << " ; temps du flux "
+         << juce::String(devices.getCurrentStreamTime(), 3) << " s";
+    if (auto* out = devices.getDefaultWaveOutDevice(); out != nullptr)
+        text << " ; sortie « " << out->getName() << " » " << (out->isEnabled() ? "active" : "INACTIVE");
+    else
+        text << " ; AUCUNE sortie par défaut";
+
+    const auto& transport = edit_.getTransport();
+    text << " ; transport " << (transport.isPlaying() ? "en lecture" : "à l'arrêt") << " à "
+         << juce::String(transport.getPosition().inSeconds(), 3) << " s"
+         << (transport.looping.get() ? ", en boucle" : "");
+    if (auto* context = transport.getCurrentPlaybackContext(); context != nullptr)
+        text << " ; contexte "
+             << (context->isPlaybackGraphAllocated() ? "graphe alloué" : "GRAPHE NON ALLOUÉ") << ", "
+             << (context->isPlaying() ? "joue" : "ne joue pas")
+             << (context->isPlayPending() ? ", lecture en attente" : "") << " à "
+             << juce::String(context->getPosition().inSeconds(), 3) << " s";
+    else
+        text << " ; AUCUN contexte de lecture";
+
+    const auto describeTaps = [&text](tracktion::PluginList& plugins)
+    {
+        for (auto* plugin : plugins)
+        {
+            if (plugin == nullptr)
+                continue;
+            text << " " << plugin->getName();
+            if (!plugin->isEnabled())
+                text << " (éteint)";
+            if (auto* tap = dynamic_cast<engine::MeterTapPlugin*>(plugin); tap != nullptr)
+                text << " (" << tap->blocksSeen() << " blocs" << (tap->audible() ? "" : ", NON AUDIBLE")
+                     << ")";
+        }
+    };
+
+    for (auto* track : tracktion::getAudioTracks(edit_))
+    {
+        if (track == nullptr)
+            continue;
+        text << " ; piste « " << track->getName() << " »";
+        if (const auto role = track->state.getProperty("dawDomainRole").toString(); role.isNotEmpty())
+            text << " [" << role << "]";
+        text << (track->isMuted(true) ? " MUETTE" : "") << (track->isSolo(false) ? " SOLO" : "") << ", "
+             << track->getClips().size() << " clips, plugins :";
+        describeTaps(track->pluginList);
+    }
+    text << " ; master :";
+    describeTaps(edit_.getMasterPluginList());
     return text.str();
 }
 
