@@ -1,0 +1,547 @@
+#include "MixSession.h"
+#include "Verification.h"
+#include "daw/domain/commands/SampleCommands.h"
+#include "daw/domain/commands/SetTrackVolume.h"
+#include "daw/domain/commands/TrackCommands.h"
+#include "daw/domain/serialization/Json.h"
+
+#include <algorithm>
+#include <cmath>
+#include <functional>
+#include <memory>
+#include <numbers>
+
+// --verify-mix (S20): the mix by the AI, run on signals whose measures are
+// known in advance, by the rules only — no key, no API, the same in CI as on
+// this machine. Measuring is checked against numbers a calculator gives;
+// deciding against the guards; the result against what was rendered, never
+// against what the state says.
+
+namespace daw::app
+{
+namespace
+{
+
+using Stage = ui::MixHost::Stage;
+
+constexpr double signalRate = 44100.0;
+constexpr double signalSeconds = 20.0;
+constexpr double beatSeconds = 0.5; // 120 BPM, the tempo of a new project
+constexpr double mixTimeoutMs = 180000.0;
+
+// Stereo, 24 bits, the same signal on both sides.
+void writeSignal(const juce::File& file, const std::function<double(double)>& at)
+{
+    juce::AudioBuffer<float> buffer{2, static_cast<int>(signalSeconds * signalRate)};
+    for (int index = 0; index < buffer.getNumSamples(); ++index)
+    {
+        const auto value = static_cast<float>(at(static_cast<double>(index) / signalRate));
+        buffer.setSample(0, index, value);
+        buffer.setSample(1, index, value);
+    }
+    static_cast<void>(file.deleteFile());
+    std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream>(file);
+    juce::WavAudioFormat wav;
+    auto writer = wav.createWriterFor(
+        stream,
+        juce::AudioFormatWriterOptions{}.withSampleRate(signalRate).withNumChannels(2).withBitsPerSample(24));
+    if (writer != nullptr)
+        static_cast<void>(writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples()));
+}
+
+double sine(double frequency, double seconds)
+{
+    return std::sin(2.0 * std::numbers::pi * frequency * seconds);
+}
+
+std::string fixed(double value, int decimals = 2)
+{
+    return juce::String(value, decimals).toStdString();
+}
+
+bool settled(const MixSession& mix)
+{
+    return mix.stage() == Stage::ready || mix.stage() == Stage::failed || mix.stage() == Stage::idle;
+}
+
+// What the run carries from one step to the next.
+struct MixRun
+{
+    domain::TrackId kick;
+    domain::TrackId bass;
+    domain::TrackId chords;
+    domain::TrackId lead;
+    std::string projectBefore;
+    std::size_t depthBefore{0};
+    double afterMasterLufs{0.0};
+    double trimDb{0.0};
+    std::map<std::string, double> afterTracks;
+    double cancelMs{0.0};
+};
+
+} // namespace
+
+void Verification::buildMix()
+{
+    auto run = std::make_shared<MixRun>();
+    if (mix_ == nullptr)
+    {
+        add("le mixage est là", [this] { check(false, "une session de mixage dans ce processus"); });
+        return;
+    }
+    mix_->setUseModel(false);
+
+    add("le projet de mesure : quatre signaux connus, deux rôles dits",
+        [this, run]
+        {
+            const auto folder = folder_.getChildFile("signaux");
+            static_cast<void>(folder.createDirectory());
+
+            // A kick on every beat, 60 Hz falling 36 dB in half a second; a
+            // bass holding 60 Hz under it: the two share the 63 Hz octave.
+            // Chords at 250 and 500 Hz. A lead, 1 kHz at -20 dBFS: -20 LUFS
+            // and -20 dBTP, by the definition of both.
+            writeSignal(folder.getChildFile("Kick.wav"),
+                        [](double t)
+                        {
+                            const auto since = std::fmod(t, beatSeconds);
+                            return 0.9 * std::exp(-since / 0.12) * sine(60.0, since);
+                        });
+            writeSignal(folder.getChildFile("Basse.wav"), [](double t) { return 0.5 * sine(60.0, t); });
+            writeSignal(folder.getChildFile("Accords.wav"),
+                        [](double t) { return 0.2 * sine(250.0, t) + 0.2 * sine(500.0, t); });
+            writeSignal(folder.getChildFile("Lead.wav"), [](double t) { return 0.1 * sine(1000.0, t); });
+
+            const auto place = [this, &folder](const std::string& name) -> domain::TrackId
+            {
+                const auto id = domain::TrackId::generate();
+                if (!bus_.execute(std::make_unique<domain::AddTrack>(id, name, 0.0)).ok())
+                    return id;
+                const auto sample = samples_.import(folder.getChildFile(name + ".wav"));
+                if (sample)
+                    static_cast<void>(bus_.execute(std::make_unique<domain::PlaceAudio>(
+                        domain::AudioClipId::generate(), id, sample.value(), 0.0)));
+                return id;
+            };
+            run->kick = place("Kick");
+            run->bass = place("Basse");
+            run->chords = place("Accords");
+            run->lead = place("Lead");
+            static_cast<void>(
+                bus_.execute(std::make_unique<domain::SetTrackRole>(run->kick, domain::MixRole::kick)));
+            static_cast<void>(
+                bus_.execute(std::make_unique<domain::SetTrackRole>(run->bass, domain::MixRole::bass)));
+
+            check(state_.tracks().size() >= 4, "quatre pistes");
+            check(state_.audioClips().size() == 4, "quatre clips audio");
+        });
+
+    add(
+        "Mixer : la mesure, la décision par les règles, l'essai à blanc",
+        [this, run]
+        {
+            run->projectBefore = domain::json::write(state_.toValue());
+            run->depthBefore = depth();
+            mix_->start();
+            check(mix_->stage() == Stage::measuring, "la mesure commence");
+        },
+        [this] { return settled(*mix_); },
+        mixTimeoutMs);
+
+    add("les mesures des signaux connus donnent les nombres attendus",
+        [this, run]
+        {
+            note("état : " + mix_->status());
+            check(mix_->stage() == Stage::ready, "une proposition est prête");
+            const auto* before = mix_->before();
+            if (before == nullptr)
+            {
+                check(false, "la mesure est là");
+                return;
+            }
+            note("mesure en " + fixed(mix_->measureSeconds(), 1) + " s, copie de l'Edit " +
+                 fixed(mix_->prepareMs(), 0) + " ms sur le fil des messages");
+
+            const auto& master = before->master;
+            check(std::abs(master.seconds - signalSeconds) < 0.01,
+                  "le master dure 20 s (" + fixed(master.seconds, 3) + ")");
+
+            const auto lead = before->tracks.find(run->lead.toString());
+            if (lead == before->tracks.end())
+            {
+                check(false, "le lead est mesuré");
+                return;
+            }
+            const auto& tone = lead->second;
+            check(std::abs(tone.integratedLufs + 20.0) < 0.2,
+                  "lead 1 kHz à -20 dBFS : -20 LUFS (" + fixed(tone.integratedLufs) + ")");
+            check(std::abs(tone.truePeakDb + 20.0) < 0.2, "et -20 dBTP (" + fixed(tone.truePeakDb) + ")");
+            check(std::abs(tone.bandsDb[5] + 23.01) < 0.5,
+                  "l'octave 1 kHz à -23 dB, une sinusoïde d'amplitude 0,1 (" + fixed(tone.bandsDb[5]) + ")");
+            check(tone.bandsDb[5] > tone.bandsDb[3] + 30.0, "rien dans l'octave 250 Hz");
+            check(tone.activeShare > 0.95, "le lead joue tout le morceau");
+
+            const auto bass = before->tracks.find(run->bass.toString());
+            if (bass != before->tracks.end())
+                check(std::abs(bass->second.bandsDb[1] + 9.03) < 0.5,
+                      "basse 60 Hz d'amplitude 0,5 : -9 dB dans l'octave 63 Hz (" +
+                          fixed(bass->second.bandsDb[1]) + ")");
+            check(master.truePeakDb > 0.0,
+                  "le master avant mixage dépasse 0 dBTP (" + fixed(master.truePeakDb) + ")");
+        });
+
+    add("la proposition passe les garde-fous, chaque réglage cite une vraie mesure",
+        [this, run]
+        {
+            const auto* proposal = mix_->proposal();
+            const auto* brief = mix_->brief();
+            if (proposal == nullptr || brief == nullptr)
+            {
+                check(false, "une proposition et son brief");
+                return;
+            }
+            check(proposal->decidedBy == "règles",
+                  "décidée par les règles, sans clé (" + proposal->decidedBy + ")");
+            check(!proposal->changes.empty(),
+                  std::to_string(proposal->changes.size()) + " réglages proposés");
+            check(mix_->refused().empty(), "rien de refusé par les garde-fous");
+            check(domain::mix::check(*brief, *proposal).empty(),
+                  "les garde-fous relus sur ce qui est montré : rien ne les franchit");
+            for (const auto& change : proposal->changes)
+                note("« " + change.sentence + " »");
+
+            const auto* kick = brief->find(run->kick);
+            const auto* bass = brief->find(run->bass);
+            check(kick != nullptr && kick->role.chosen && kick->role.role == domain::MixRole::kick,
+                  "le kick est le kick que la personne a dit");
+            check(bass != nullptr && bass->role.chosen && bass->role.role == domain::MixRole::bass,
+                  "la basse aussi");
+            const auto* lead = brief->find(run->lead);
+            if (lead != nullptr)
+                note("le lead deviné : " + domain::mix::roleLabel(lead->role.role) + ", " +
+                     lead->role.because);
+        });
+
+    add("l'essai rendu : le master sous -1 dBTP, le kick et la basse se masquent moins",
+        [this, run]
+        {
+            const auto* before = mix_->before();
+            const auto* after = mix_->after();
+            if (before == nullptr || after == nullptr)
+            {
+                check(false, "l'avant et l'après sont rendus");
+                return;
+            }
+            const auto trim = mix_->masterTrimDb();
+            run->trimDb = trim.has_value() ? *trim - state_.master().volumeDb : 0.0;
+            const auto peak = after->master.truePeakDb + run->trimDb;
+            note("master : " + fixed(before->master.integratedLufs) + " LUFS avant, " +
+                 fixed(after->master.integratedLufs) + " LUFS après l'essai ; crête vraie " +
+                 fixed(after->master.truePeakDb) + " dBTP, correction du master " + fixed(run->trimDb) +
+                 " dB");
+            if (!mix_->masterSentence().empty())
+                note("« " + mix_->masterSentence() + " »");
+            check(peak <= -1.0 + 1e-6, "le master gardé reste sous -1 dBTP (" + fixed(peak) + ")");
+
+            // As heard: each track through its fader, before and after.
+            const auto* proposal = mix_->proposal();
+            const auto fader = [this, proposal](const domain::TrackId& track, bool after)
+            {
+                auto volume = state_.findTrack(track) != nullptr ? state_.findTrack(track)->volumeDb : 0.0;
+                if (after && proposal != nullptr)
+                {
+                    for (const auto* change : proposal->of(track))
+                    {
+                        if (change->kind == domain::mix::Change::Kind::volume)
+                            volume = change->value;
+                    }
+                }
+                return volume;
+            };
+            const auto pair = [&fader](const engine::MixRender::Measured& measured,
+                                       const domain::TrackId& first,
+                                       const domain::TrackId& second,
+                                       bool after)
+            {
+                std::vector<domain::mix::StreamMeasure> streams{
+                    domain::mix::gained(measured.tracks.at(first.toString()), fader(first, after)),
+                    domain::mix::gained(measured.tracks.at(second.toString()), fader(second, after))};
+                double worst = 0.0;
+                for (const auto& overlap : domain::mix::overlaps(streams))
+                    worst = std::max(worst, overlap.share);
+                return worst;
+            };
+            const auto overlapBefore = pair(*before, run->kick, run->bass, false);
+            const auto overlapAfter = pair(*after, run->kick, run->bass, true);
+            note("recouvrement kick/basse, à travers les faders : " + fixed(overlapBefore * 100.0, 0) +
+                 " % avant, " + fixed(overlapAfter * 100.0, 0) +
+                 " % après (le critère à 6 dB ne voit pas le niveau d'un kick qui décroît : chaque coup "
+                 "traverse la basse, quel que soit son niveau)");
+            check(overlapBefore > 0.1, "le kick et la basse se masquent avant le mixage");
+            check(overlapAfter <= overlapBefore, "pas plus après");
+
+            // What the sentence says it does: the kick passes over the bass
+            // where it hits. Its 63 Hz octave against the bass's, through the
+            // faders, on the fifth of the hops where the kick is loudest.
+            const auto margin = [&fader](const engine::MixRender::Measured& measured,
+                                         const domain::TrackId& kick,
+                                         const domain::TrackId& bass,
+                                         bool after)
+            {
+                const auto hit = domain::mix::gained(measured.tracks.at(kick.toString()), fader(kick, after));
+                const auto under =
+                    domain::mix::gained(measured.tracks.at(bass.toString()), fader(bass, after));
+                const auto hops = std::min(hit.hopBands.size(), under.hopBands.size());
+                std::vector<std::size_t> order(hops);
+                for (std::size_t hop = 0; hop < hops; ++hop)
+                    order[hop] = hop;
+                std::sort(order.begin(),
+                          order.end(),
+                          [&hit](std::size_t a, std::size_t b)
+                          { return hit.hopBands[a][1] > hit.hopBands[b][1]; });
+                const auto loudest = std::max<std::size_t>(1, hops / 5);
+                double sum = 0.0;
+                for (std::size_t index = 0; index < loudest && index < order.size(); ++index)
+                    sum += hit.hopBands[order[index]][1] - under.hopBands[order[index]][1];
+                return sum / static_cast<double>(loudest);
+            };
+            const auto marginBefore = margin(*before, run->kick, run->bass, false);
+            const auto marginAfter = margin(*after, run->kick, run->bass, true);
+            note("sur ses coups, le kick passe la basse à 63 Hz de " + fixed(marginBefore) + " dB avant, " +
+                 fixed(marginAfter) + " dB après");
+            check(marginAfter >= marginBefore + 3.0,
+                  "le kick passe au-dessus de la basse d'au moins 3 dB de plus");
+
+            run->afterMasterLufs = after->master.integratedLufs;
+            for (const auto& [key, measure] : after->tracks)
+                run->afterTracks[key] = measure.integratedLufs;
+
+            auto* comparison = mix_->comparison();
+            if (comparison != nullptr)
+            {
+                const auto difference = after->master.integratedLufs - before->master.integratedLufs;
+                note("écoute à niveau égal : avant " + fixed(comparison->beforeGainDb()) + " dB, après " +
+                     fixed(comparison->afterGainDb()) + " dB");
+                check(std::abs(comparison->beforeGainDb() + comparison->afterGainDb() +
+                               std::abs(difference)) < 0.01 &&
+                          (comparison->beforeGainDb() == 0.0 || comparison->afterGainDb() == 0.0),
+                      "le plus fort des deux est baissé de l'écart mesuré, l'autre ne bouge pas");
+            }
+            check(depth() == run->depthBefore, "rien n'est écrit tant que la personne n'a pas gardé");
+            check(domain::json::write(state_.toValue()) == run->projectBefore, "le projet n'a pas bougé");
+        });
+
+    add(
+        "écouter l'avant",
+        [this]
+        {
+            if (mix_->comparison() != nullptr)
+                mix_->comparison()->stop();
+            mix_->listen(false);
+            check(!mix_->listeningAfter(), "l'avant joue");
+        },
+        [this] { return mix_->comparison() == nullptr || mix_->comparison()->heardRmsDb(false) > -60.0; },
+        6000.0);
+
+    add(
+        "basculer sur l'après, à la même position",
+        [this] { mix_->listen(true); },
+        [this]
+        {
+            return mix_->comparison() == nullptr || (mix_->comparison()->heardRmsDb(true) > -60.0 &&
+                                                     mix_->comparison()->heardRmsDb(false) > -60.0);
+        },
+        6000.0);
+
+    add("l'avant et l'après s'entendent au même niveau",
+        [this]
+        {
+            auto* comparison = mix_->comparison();
+            if (comparison == nullptr)
+            {
+                note("pas de carte son : l'écoute n'est pas vérifiée");
+                return;
+            }
+            check(mix_->listeningAfter(), "l'après joue");
+            const auto heardBefore = comparison->heardRmsDb(false);
+            const auto heardAfter = comparison->heardRmsDb(true);
+            note("entendu : avant " + fixed(heardBefore) + " dB RMS, après " + fixed(heardAfter) + " dB RMS");
+            check(std::abs(heardBefore - heardAfter) < 1.5, "à 1,5 dB près");
+            comparison->stop();
+        });
+
+    add("garder : une seule entrée d'historique, par le copilote",
+        [this, run]
+        {
+            mix_->accept();
+            note("état : " + mix_->status());
+            check(depth() == run->depthBefore + 1, "une seule entrée d'historique");
+            const auto& entries = history_.entries();
+            const auto* last = history_.cursor() > 0 ? &entries[history_.cursor() - 1] : nullptr;
+            check(last != nullptr && last->actor == domain::Actor::copilot, "marquée copilote");
+            check(last != nullptr && std::string{last->label()}.starts_with("Mixage par l'IA"),
+                  "nommée « Mixage par l'IA » (" + (last != nullptr ? std::string{last->label()} : "") + ")");
+            check(domain::json::write(state_.toValue()) != run->projectBefore, "le projet a changé");
+        });
+
+    add(
+        "le mixage écrit sonne comme l'essai : mesuré de nouveau, rendu à l'appui",
+        [this] { mix_->start(); },
+        [this] { return settled(*mix_); },
+        mixTimeoutMs);
+
+    add("les mesures du projet mixé sont celles de l'essai",
+        [this, run]
+        {
+            const auto* now = mix_->before();
+            check(!mix_->measureReused(), "le projet a changé : il est mesuré de nouveau");
+            if (now == nullptr)
+            {
+                check(false, "la mesure est là");
+                return;
+            }
+            const auto expected = run->afterMasterLufs + run->trimDb;
+            check(std::abs(now->master.integratedLufs - expected) < 0.1,
+                  "le master : " + fixed(now->master.integratedLufs) +
+                      " LUFS, l'essai et la correction disaient " + fixed(expected));
+            double worst = 0.0;
+            for (const auto& [key, lufs] : run->afterTracks)
+            {
+                if (const auto found = now->tracks.find(key); found != now->tracks.end())
+                    worst = std::max(worst, std::abs(found->second.integratedLufs - lufs));
+            }
+            check(worst < 0.1, "chaque piste comme à l'essai, à " + fixed(worst, 3) + " LU près");
+            mix_->reject();
+        });
+
+    add("Ctrl+Z défait le mixage, à l'octet près",
+        [this, run]
+        {
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(depth() == run->depthBefore, "l'entrée est défaite");
+            check(domain::json::write(state_.toValue()) == run->projectBefore,
+                  "le projet est celui d'avant, octet pour octet");
+        });
+
+    add(
+        "refuser une piste : relancer",
+        [this] { mix_->start(); },
+        [this] { return settled(*mix_); },
+        mixTimeoutMs);
+
+    add("la piste refusée n'est pas touchée, les autres le sont",
+        [this, run]
+        {
+            if (mix_->proposal() == nullptr)
+            {
+                check(false, "une proposition");
+                return;
+            }
+            const auto kickBefore = domain::json::write(state_.findTrack(run->kick)->toValue());
+            const auto touchesKick = !mix_->proposal()->of(run->kick).empty();
+            note(std::string{"la proposition touche le kick : "} + (touchesKick ? "oui" : "non"));
+            mix_->refuseTrack(run->kick, true);
+            check(mix_->isRefused(run->kick), "le kick est refusé");
+            mix_->accept();
+            check(depth() == run->depthBefore + 1, "une entrée");
+            check(domain::json::write(state_.findTrack(run->kick)->toValue()) == kickBefore,
+                  "le kick n'a pas bougé");
+            check(domain::json::write(state_.toValue()) != run->projectBefore, "le reste a bougé");
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == run->projectBefore, "Ctrl+Z, à l'octet près");
+        });
+
+    add(
+        "refuser tout : rien n'est écrit, la mesure resservie",
+        [this] { mix_->start(); },
+        [this] { return settled(*mix_); },
+        mixTimeoutMs);
+
+    add("refusé",
+        [this, run]
+        {
+            check(mix_->measureReused(), "rien n'a changé depuis : la mesure est reprise, pas refaite");
+            mix_->reject();
+            check(mix_->stage() == Stage::idle, "plus de proposition");
+            check(depth() == run->depthBefore, "aucune entrée");
+            check(domain::json::write(state_.toValue()) == run->projectBefore, "le projet n'a pas bougé");
+        });
+
+    add("annuler pendant la mesure : vite, et rien d'écrit",
+        [this, run]
+        {
+            // Something that sounds changes: the measure must be made again.
+            static_cast<void>(bus_.execute(std::make_unique<domain::SetTrackVolume>(run->lead, -3.0)));
+            mix_->start();
+            check(mix_->stage() == Stage::measuring, "la mesure commence");
+            const auto started = juce::Time::getMillisecondCounterHiRes();
+            mix_->cancel();
+            run->cancelMs = juce::Time::getMillisecondCounterHiRes() - started;
+            note("annulation en " + fixed(run->cancelMs, 0) + " ms");
+            check(run->cancelMs < 1000.0, "en moins d'une seconde");
+            check(mix_->stage() == Stage::idle, "plus rien en cours");
+            check(depth() == run->depthBefore + 1, "seul le volume du lead est dans l'historique");
+            key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            check(domain::json::write(state_.toValue()) == run->projectBefore, "et il est défait");
+        });
+
+    add(
+        "une référence : un morceau mesuré comme le master",
+        [this]
+        {
+            const auto reference = folder_.getChildFile("signaux").getChildFile("Référence.wav");
+            writeSignal(reference,
+                        [](double t)
+                        { return 0.3 * sine(60.0, t) + 0.3 * sine(4000.0, t) + 0.1 * sine(1000.0, t); });
+            mix_->setReference(reference.getFullPathName().toStdString());
+        },
+        [this] { return mix_->stage() == Stage::idle && !mix_->reference().empty(); },
+        30000.0);
+
+    add(
+        "Mixer vers la référence",
+        [this]
+        {
+            note("état : " + mix_->status());
+            mix_->start();
+        },
+        [this] { return settled(*mix_); },
+        mixTimeoutMs);
+
+    add("la cible est la référence, la proposition passe les garde-fous",
+        [this]
+        {
+            const auto* brief = mix_->brief();
+            check(mix_->stage() == Stage::ready, "une proposition");
+            check(brief != nullptr && brief->target.source == "Référence.wav",
+                  "la cible vient de la référence (" + (brief != nullptr ? brief->target.source : "") + ")");
+            check(brief != nullptr && brief->target.tilt.has_value(), "avec sa pente spectrale");
+            check(mix_->refused().empty(), "rien de refusé");
+            mix_->reject();
+            mix_->clearReference();
+        });
+
+    add(
+        "le copilote lance le mixage avec un axe",
+        [this]
+        {
+            const auto said = mix_->startFromCopilot(domain::Value::object({{"punch", domain::Value{0.5}}}));
+            const auto started = said.boolAt("started");
+            check(started && started.value(), "lancé");
+        },
+        [this] { return settled(*mix_); },
+        mixTimeoutMs);
+
+    add("l'axe est dans le brief, rien n'est écrit",
+        [this, run]
+        {
+            const auto* brief = mix_->brief();
+            check(brief != nullptr && std::abs(brief->axes.punch - 0.5) < 1e-9, "punch à 0,5");
+            check(mix_->stage() == Stage::ready, "une proposition attend la personne");
+            check(depth() == run->depthBefore, "rien n'est écrit");
+            mix_->reject();
+            mix_->setAxes(domain::mix::Axes{});
+        });
+}
+
+} // namespace daw::app

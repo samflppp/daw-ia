@@ -220,6 +220,8 @@ public:
                 run = Verification::Run::canvasLoad;
             else if (tokens[index] == "--verify-fluidite")
                 run = Verification::Run::fluidity;
+            else if (tokens[index] == "--verify-mix")
+                run = Verification::Run::mix;
             else if (tokens[index] != "--verify")
                 continue;
 
@@ -267,7 +269,12 @@ public:
                 [this] { return lastRefusal_; },
                 exporter_.get(),
                 probe_.get(),
-                &projectObserver_});
+                &projectObserver_,
+                mixSession_.get()});
+
+            // The mix is verified by the rules: never a key, never an API.
+            if (run == Verification::Run::mix && mixSession_ != nullptr)
+                mixSession_->setUseModel(false);
 
             if (exporter_ != nullptr)
                 exporter_->writeInto(juce::File{tokens[index + 1].unquoted()}.getChildFile("export"));

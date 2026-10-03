@@ -31,6 +31,8 @@ class GenerationPanel;
 namespace daw::app
 {
 
+class MixSession;
+
 // The checks a person would run on the real binary, run by the binary itself.
 //
 // Launched with --verify <folder>, the application builds its window as usual
@@ -65,7 +67,8 @@ public:
         file,
         canvas,
         canvasLoad,
-        fluidity
+        fluidity,
+        mix
     };
 
     struct Wiring
@@ -113,6 +116,9 @@ public:
         // hands its pending message over within an image, the way the
         // message loop would between two moves of the hand.
         ui::ProjectObserver* project{nullptr};
+
+        // The mix by the AI (S20): --verify-mix drives it, by the rules only.
+        MixSession* mix{nullptr};
     };
 
     explicit Verification(Wiring wiring);
@@ -162,6 +168,12 @@ private:
     // the playlist, the piano roll and the mixer whole, and sixty images of an
     // internal window dragged over the playlist. Median and 95th percentile.
     void buildFluidity();
+
+    // S20 (VerificationMix.cpp): the mix by the AI on known signals, without
+    // a key — measures against the numbers the signals must give, the guards,
+    // before and after at equal loudness, one entry by the copilot, Ctrl+Z to
+    // the byte, a strip refused, a cancel, a reference.
+    void buildMix();
 
     // The meters, live and rendered, and the copilot reading them. Part of
     // the list, after the samples: a project with a sampler channel and a
@@ -417,6 +429,7 @@ private:
     std::function<juce::String()> lastRefusal_;
     const PlaybackProbe* probe_{nullptr};
     ui::ProjectObserver* project_{nullptr};
+    MixSession* mix_{nullptr};
 
     // S14.
     domain::TrackId leadTrack_{};

@@ -70,6 +70,7 @@ Verification::Verification(Wiring wiring)
     , lastRefusal_(std::move(wiring.lastRefusal))
     , probe_(wiring.probe)
     , project_(wiring.project)
+    , mix_(wiring.mix)
 {
     exporter_ = wiring.exporter;
 }
@@ -118,6 +119,9 @@ void Verification::start()
         break;
     case Run::fluidity:
         buildFluidity();
+        break;
+    case Run::mix:
+        buildMix();
         break;
     }
 
