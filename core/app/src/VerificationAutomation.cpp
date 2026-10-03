@@ -282,6 +282,15 @@ void Verification::addAutomationSteps()
     add("un Ctrl+Z défait le fondu du copilote",
         [this, undo]
         {
+            // Without the copilot nothing was written, and a Ctrl+Z here would
+            // undo the bars filled above: the steps by hand would then measure
+            // a song that is silent three bars out of four. The copilot's own
+            // failure is already reported by the step before.
+            if (depth() == savedDepth_)
+            {
+                note("le copilote n'a rien écrit : rien à défaire, Ctrl+Z non pressé");
+                return;
+            }
             undo();
             check(depth() == savedDepth_, "l'entrée est défaite");
             check(domain::json::write(state_.toValue()) == savedState_, "le projet d'avant, à l'octet près");
