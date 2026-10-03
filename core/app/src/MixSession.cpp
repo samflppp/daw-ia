@@ -269,8 +269,8 @@ void MixSession::decideWithModel(int round, Value previous, Value refusals)
                 return found ? found.value() : std::int64_t{0};
             };
             usage_ = Value::object(
-                {{"input_tokens", Value{tokens(usage_, "input_tokens") + tokens(usage, "input_tokens")}},
-                 {"output_tokens", Value{tokens(usage_, "output_tokens") + tokens(usage, "output_tokens")}}});
+                {{"inputTokens", Value{tokens(usage_, "inputTokens") + tokens(usage, "inputTokens")}},
+                 {"outputTokens", Value{tokens(usage_, "outputTokens") + tokens(usage, "outputTokens")}}});
             if (!answer)
             {
                 decisionNote_ = "Le modèle n'a pas proposé (" + answer.error().message +
@@ -290,7 +290,12 @@ void MixSession::decideWithModel(int round, Value previous, Value refusals)
             {
                 Value::Array said;
                 for (const auto& refusal : refused)
+                {
+                    // Kept in daw.log (S21): what the guards refused at the
+                    // first round is shown to the model and never on screen.
+                    juce::Logger::writeToLog(toJuce("mix: refusé au premier tour : " + refusal.why));
                     said.push_back(refusal.toValue());
+                }
                 decideWithModel(2, proposal.value().toValue(), Value::array(std::move(said)));
                 return;
             }
@@ -301,6 +306,8 @@ void MixSession::decideWithModel(int round, Value previous, Value refusals)
 void MixSession::decided(domain::mix::Proposal proposal)
 {
     refusals_ = domain::mix::check(*brief_, proposal);
+    for (const auto& refusal : refusals_)
+        juce::Logger::writeToLog(toJuce("mix: refusé : " + refusal.why));
     proposal_ = std::make_unique<domain::mix::Proposal>(domain::mix::without(proposal, refusals_));
     verify();
 }
@@ -380,9 +387,9 @@ void MixSession::verify()
                                  french(after_->master.integratedLufs) + " LUFS, " +
                                  french(after_->master.truePeakDb) + " dBTP ; mesure " +
                                  french(measureSeconds_) + " s ; décidé par " + proposal_->decidedBy;
-            if (const auto in = usage_.intAt("input_tokens"); in)
+            if (const auto in = usage_.intAt("inputTokens"); in)
                 record += " ; jetons " + std::to_string(in.value()) + " en entrée, " +
-                          std::to_string(usage_.intAt("output_tokens") ? usage_.intAt("output_tokens").value()
+                          std::to_string(usage_.intAt("outputTokens") ? usage_.intAt("outputTokens").value()
                                                                        : 0) +
                           " en sortie";
             juce::Logger::writeToLog(toJuce(record));

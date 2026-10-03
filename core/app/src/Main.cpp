@@ -5,6 +5,7 @@
 #include "LevelMonitor.h"
 #include "Listening.h"
 #include "MainWindow.h"
+#include "MixOnce.h"
 #include "MixSession.h"
 #include "PlaybackProbe.h"
 #include "PluginRack.h"
@@ -202,6 +203,18 @@ public:
             copilot_->start();
 
         startVerificationIfAsked(commandLine);
+
+        // --mix-once: one mix by the model on this project, logged, refused,
+        // and out (S21). Never with a verification: those mix by the rules.
+        if (commandLine.contains("--mix-once") && verification_ == nullptr && mixSession_ != nullptr &&
+            copilot_ != nullptr)
+            mixOnce_ = std::make_unique<MixOnce>(
+                *mixSession_,
+                *copilot_,
+                [] {
+                    juce::MessageManager::callAsync(
+                        [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); });
+                });
     }
 
     // --verify, --verify-reopen, --verify-legacy <folder>: the checks a person
@@ -295,6 +308,7 @@ public:
     void shutdown() override
     {
         stopTimer();
+        mixOnce_.reset();
         verification_.reset();
         exporter_.reset();
 
@@ -1156,6 +1170,7 @@ private:
     std::unique_ptr<SampleLibrary> sampleLibrary_;
     ui::WorkspaceView* view_{nullptr};
     std::unique_ptr<Verification> verification_;
+    std::unique_ptr<MixOnce> mixOnce_;
     std::unique_ptr<SongExporter> exporter_;
     ui::TitleBarView* titleBar_{nullptr};
     std::unique_ptr<juce::FileChooser> chooser_;
