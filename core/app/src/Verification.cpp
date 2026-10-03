@@ -2562,10 +2562,24 @@ void Verification::addMixerSteps()
                       !mixer->strips().back()->isVisible(),
                   "la proposition a pris la place des tranches");
             auto& shown = mixer->proposal();
-            check(shown.rowCount() > 0, std::to_string(shown.rowCount()) + " tranches touchées");
+            // This project may need nothing: its kick already sits at its
+            // target, two tracks never play in the song, the clap hits once.
+            // Then no line, and the status says so; the lines and their
+            // sentences are checked on known signals by --verify-mix.
+            const auto* proposal = mix_->proposal();
+            std::size_t touched = 0;
+            if (proposal != nullptr)
+            {
+                for (const auto& track : state_.tracks())
+                    touched += proposal->of(track.id).empty() ? 0 : 1;
+            }
+            touched += mix_->masterSentence().empty() ? 0 : 1;
+            check(static_cast<std::size_t>(shown.rowCount()) == touched,
+                  std::to_string(shown.rowCount()) + " lignes, une par tranche touchée");
             const auto sentences = shown.shownSentences();
             note("phrases :\n\n```\n" + sentences.toStdString() + "\n```");
-            check(sentences.contains("LUFS") || sentences.contains("dB"), "les phrases citent des mesures");
+            check(touched == 0 || sentences.contains("LUFS") || sentences.contains("dB"),
+                  "les phrases citent des mesures");
             check(depth() == *mixDepth, "rien n'est écrit par la proposition");
 
             auto* refuse = button(shown, "Refuser");

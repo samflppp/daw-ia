@@ -386,6 +386,12 @@ void MixSession::verify()
                                                                        : 0) +
                           " en sortie";
             juce::Logger::writeToLog(toJuce(record));
+            for (const auto& strip : brief_->strips)
+                juce::Logger::writeToLog(toJuce("mix:   " + strip.name + " (" +
+                                                domain::mix::roleLabel(strip.role.role) + ") " +
+                                                french(strip.measure.integratedLufs) + " LUFS, joue " +
+                                                french(strip.measure.activeShare * 100.0, 0) + " %, fader " +
+                                                french(strip.volumeDb) + " dB"));
             for (const auto& change : proposal_->changes)
                 juce::Logger::writeToLog(toJuce("mix:   " + change.sentence));
             setStage(Stage::ready, line);
