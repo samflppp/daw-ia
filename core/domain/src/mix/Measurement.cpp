@@ -265,7 +265,6 @@ struct StreamAnalyser::State
     std::vector<double> hopWeightedValues;
     std::vector<double> hopRawValues;
     std::vector<std::array<float, bandCount>> hopBands;
-    std::vector<std::array<double, bandCount>> hopBandPower;
 
     std::vector<std::complex<double>> spectrum;
     std::vector<std::array<std::size_t, 2>> bandBins;
@@ -343,7 +342,6 @@ struct StreamAnalyser::State
             power[band] = sum * scale;
             levels[band] = static_cast<float>(toDb(power[band]));
         }
-        hopBandPower.push_back(power);
         hopBands.push_back(levels);
     }
 };
@@ -399,20 +397,22 @@ void StreamAnalyser::process(const float* left, const float* right, std::size_t 
     }
 }
 
-StreamMeasure StreamAnalyser::finish() const
+namespace
 {
-    const auto& s = *state_;
-    StreamMeasure out;
-    out.seconds = static_cast<double>(s.samples) / s.sampleRate;
-    out.samplePeakDb = s.peak > 0.0 ? 20.0 * std::log10(s.peak) : silenceDb;
-    out.truePeakDb = s.truePeak > 0.0 ? 20.0 * std::log10(s.truePeak) : silenceDb;
 
-    const auto hops = s.hopWeightedValues.size();
-    const auto window = [&s](std::size_t from, std::size_t length)
+// Every figure of a measure, from its raw fields.
+void summarise(StreamMeasure& out)
+{
+    out.seconds = static_cast<double>(out.hopWeighted.size()) * hopSeconds;
+    out.samplePeakDb = out.samplePeak > 0.0 ? 20.0 * std::log10(out.samplePeak) : silenceDb;
+    out.truePeakDb = out.truePeak > 0.0 ? 20.0 * std::log10(out.truePeak) : silenceDb;
+
+    const auto hops = out.hopWeighted.size();
+    const auto window = [&out](std::size_t from, std::size_t length)
     {
         double sum = 0.0;
         for (std::size_t hop = from; hop < from + length; ++hop)
-            sum += s.hopWeightedValues[hop];
+            sum += out.hopWeighted[hop];
         return sum / static_cast<double>(length);
     };
 
@@ -420,8 +420,10 @@ StreamMeasure StreamAnalyser::finish() const
     std::vector<double> blocks;
     for (std::size_t hop = 0; hop + 4 <= hops; ++hop)
         blocks.push_back(window(hop, 4));
+    out.momentaryMaxLufs = silenceDb;
     for (const auto block : blocks)
         out.momentaryMaxLufs = std::max(out.momentaryMaxLufs, lufsOf(block));
+    out.shortTermMaxLufs = silenceDb;
     for (std::size_t hop = 0; hop + 30 <= hops; ++hop)
         out.shortTermMaxLufs = std::max(out.shortTermMaxLufs, lufsOf(window(hop, 30)));
 
@@ -439,6 +441,7 @@ StreamMeasure StreamAnalyser::finish() const
         }
         return kept > 0 ? sum / static_cast<double>(kept) : 0.0;
     };
+    out.integratedLufs = silenceDb;
     const auto absolute = gatedMean(-70.0);
     if (absolute > 0.0)
         out.integratedLufs = lufsOf(gatedMean(lufsOf(absolute) - 10.0));
@@ -462,28 +465,76 @@ StreamMeasure StreamAnalyser::finish() const
     double activeRaw = 0.0;
     std::size_t activeHops = 0;
     std::array<double, bandCount> bandSum{};
-    for (std::size_t hop = 0; hop < hops; ++hop)
+    for (std::size_t hop = 0; hop < hops && hop < out.hopBands.size(); ++hop)
     {
         if (!out.hopActive[hop])
             continue;
-        activeRaw += s.hopRawValues[hop];
+        activeRaw += out.hopRaw[hop];
         ++activeHops;
         for (std::size_t band = 0; band < bandCount; ++band)
-            bandSum[band] += s.hopBandPower[hop][band];
+            bandSum[band] += std::pow(10.0, out.hopBands[hop][band] / 10.0);
     }
     for (std::size_t band = 0; band < bandCount; ++band)
         out.bandsDb[band] =
             activeHops > 0 ? toDb(bandSum[band] / static_cast<double>(activeHops)) : silenceDb;
-    if (activeHops > 0 && activeRaw > 0.0 && s.loudestCrest > 0.0)
-        out.crestDb = 10.0 * std::log10(s.loudestCrest / (activeRaw / static_cast<double>(activeHops)));
+    out.crestDb = 0.0;
+    if (activeHops > 0 && activeRaw > 0.0 && out.loudestTenMs > 0.0)
+        out.crestDb = 10.0 * std::log10(out.loudestTenMs / (activeRaw / static_cast<double>(activeHops)));
 
-    const auto energy = s.sumLL + s.sumRR;
-    if (s.sumLL > 0.0 && s.sumRR > 0.0)
-        out.correlation = s.sumLR / std::sqrt(s.sumLL * s.sumRR);
-    if (energy > 0.0)
-        out.sideShare = std::max(0.0, (energy - 2.0 * s.sumLR) / (2.0 * energy));
+    const auto energy = out.sumLL + out.sumRR;
+    out.correlation = 1.0;
+    if (out.sumLL > 0.0 && out.sumRR > 0.0)
+        out.correlation = out.sumLR / std::sqrt(out.sumLL * out.sumRR);
+    out.sideShare = energy > 0.0 ? std::max(0.0, (energy - 2.0 * out.sumLR) / (2.0 * energy)) : 0.0;
+}
 
+} // namespace
+
+StreamMeasure StreamAnalyser::finish() const
+{
+    const auto& s = *state_;
+    StreamMeasure out;
+    out.hopWeighted = s.hopWeightedValues;
+    out.hopRaw = s.hopRawValues;
     out.hopBands = s.hopBands;
+    out.loudestTenMs = s.loudestCrest;
+    out.sumLL = s.sumLL;
+    out.sumRR = s.sumRR;
+    out.sumLR = s.sumLR;
+    out.samplePeak = s.peak;
+    out.truePeak = s.truePeak;
+    summarise(out);
+    return out;
+}
+
+StreamMeasure combine(const StreamMeasure& first, const StreamMeasure& second)
+{
+    StreamMeasure out;
+    const auto hops = std::max(first.hopWeighted.size(), second.hopWeighted.size());
+    const auto at = [](const std::vector<double>& values, std::size_t hop)
+    { return hop < values.size() ? values[hop] : 0.0; };
+    for (std::size_t hop = 0; hop < hops; ++hop)
+    {
+        out.hopWeighted.push_back(at(first.hopWeighted, hop) + at(second.hopWeighted, hop));
+        out.hopRaw.push_back(at(first.hopRaw, hop) + at(second.hopRaw, hop));
+        std::array<float, bandCount> bands{};
+        for (std::size_t band = 0; band < bandCount; ++band)
+        {
+            const auto power = [band, hop](const StreamMeasure& measure) {
+                return hop < measure.hopBands.size() ? std::pow(10.0, measure.hopBands[hop][band] / 10.0)
+                                                     : 0.0;
+            };
+            bands[band] = static_cast<float>(toDb(power(first) + power(second)));
+        }
+        out.hopBands.push_back(bands);
+    }
+    out.loudestTenMs = std::max(first.loudestTenMs, second.loudestTenMs);
+    out.sumLL = first.sumLL + second.sumLL;
+    out.sumRR = first.sumRR + second.sumRR;
+    out.sumLR = first.sumLR + second.sumLR;
+    out.samplePeak = std::max(first.samplePeak, second.samplePeak);
+    out.truePeak = std::max(first.truePeak, second.truePeak);
+    summarise(out);
     return out;
 }
 

@@ -77,6 +77,16 @@ struct StreamMeasure
     std::vector<std::array<float, bandCount>> hopBands;
     std::vector<bool> hopActive;
 
+    // What the figures above are summarised from, kept so that two streams
+    // can be combined: K-weighted and plain mean squares per hop, the loudest
+    // 10 ms, the stereo sums, the peaks (linear).
+    std::vector<double> hopWeighted;
+    std::vector<double> hopRaw;
+    double loudestTenMs{0.0};
+    double sumLL{0.0}, sumRR{0.0}, sumLR{0.0};
+    double samplePeak{0.0};
+    double truePeak{0.0};
+
     [[nodiscard]] Value toValue() const; // the summary, rounded to 0.1, without the hops
 };
 
@@ -101,6 +111,13 @@ private:
     struct State;
     std::unique_ptr<State> state_;
 };
+
+// Two streams that are one track: what a track plays through its instrument
+// and its recordings, rendered on two Tracktion tracks. Summed as unrelated
+// signals — powers add — which is exact for the loudness and the bands as
+// long as the two do not play the same sound at the same time; peaks are
+// the louder of the two, a bound and not a sum.
+[[nodiscard]] StreamMeasure combine(const StreamMeasure& first, const StreamMeasure& second);
 
 // Two streams that play the same band at the same level at the same time: the
 // ear cannot tell them apart there. A kick and a bass in the 63 Hz octave, a

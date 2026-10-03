@@ -198,3 +198,30 @@ TEST_CASE("masking: two lows at the same level overlap in their octave, a high d
     const auto quiet = sineSegments({{8.0, -24.0}}, 70.0);
     CHECK(overlaps({kick, quiet}).empty());
 }
+
+TEST_CASE("combine: a track's two roads add their powers, and silence adds nothing")
+{
+    std::mt19937 first{11};
+    std::mt19937 second{12};
+    std::normal_distribution<float> gauss{0.0f, 0.05f};
+    const auto a = stereo(6.0,
+                          [&](std::size_t)
+                          {
+                              const auto value = gauss(first);
+                              return std::pair{value, value};
+                          });
+    const auto b = stereo(6.0,
+                          [&](std::size_t)
+                          {
+                              const auto value = gauss(second);
+                              return std::pair{value, value};
+                          });
+    const auto both = combine(a, b);
+    CHECK(both.integratedLufs - a.integratedLufs == doctest::Approx(3.01).epsilon(0.05));
+    CHECK(both.bandsDb[6] - a.bandsDb[6] == doctest::Approx(3.01).epsilon(0.1));
+
+    const auto silent = sineSegments({{6.0, -200.0}});
+    const auto alone = combine(a, silent);
+    CHECK(alone.integratedLufs == doctest::Approx(a.integratedLufs).epsilon(0.001));
+    CHECK(alone.truePeakDb == doctest::Approx(a.truePeakDb));
+}
