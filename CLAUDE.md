@@ -15,9 +15,11 @@ comité en mars 2027, sur un plan de 26 semaines dont chaque semaine ferme sur u
 S20 : le mixage par l'IA — « Mixer » mesure le morceau en local, un modèle (ou des règles, sans clé)
 décide à partir des seuls nombres, des garde-fous en code bornent, l'essai à blanc est rendu, la personne
 écoute avant/après à niveau égal et garde ou refuse tranche par tranche ; un mixage « comme ce morceau »
-vers une référence. Le piano-roll part après l'essai du fondateur, puis le chantier 2 de la S19 (ancrage
-des fenêtres, défilement du rack et de l'historique). Ensuite, d'autres fonctionnalités d'IA, puis le
-fine-tune du modèle. Plus aucun verbe ajouté au domaine sans une raison de démonstration.
+vers une référence. Plan des six dernières semaines (`docs/plan-s21-s26.md`) :
+S21 solidité (lecture muette d'abord) et fin de l'ergonomie ; S22 séparateur de stems et direction par
+références ; S23 jouer au clavier MIDI et au clavier AZERTY ; S24 le kit et le mixer ; S25 le DAW à la voix ;
+S26 le prototype emballé. Le piano-roll reste jusqu'à la phase d'essais, après la S26 ; le fine-tune pendant
+l'incubation. Plus aucun verbe ajouté au domaine sans une raison de démonstration.
 
 ## 2. Décisions d'architecture acquises — ne jamais rouvrir
 
@@ -60,6 +62,19 @@ Mécanismes :
 
 ## 4. Règles de méthode — tenues depuis vingt semaines
 
+- **Un excellent logiciel, même si ça prend plus de temps et de moyens** (3 octobre 2026). Une chose
+  mieux faite plus tard, avec plus de moyens, se reporte au lieu d'être faite au rabais pour tenir une
+  semaine. Une semaine trop chargée perd un chantier, elle ne le bâcle pas : dire ce qui tombe et où il va.
+  Entre deux voies, recommander la meilleure pour le produit et dire franchement ce qu'elle coûte en temps
+  et en moyens ; le coût ne la disqualifie pas, le fondateur tranche. La S26 livre un prototype aux
+  fondations bien faites, pas un produit poli.
+- **On construit, puis on essaie par phases ; aucune semaine n'attend un essai du fondateur** (3 octobre
+  2026). Ses essais à la main et à l'oreille viennent après la S26, dans une phase consacrée à
+  l'ergonomie. Aucun brief ni bilan ne met son essai en condition bloquante. Chaque bilan garde sa section
+  « À essayer, dans l'ordre » et l'ajoute à `docs/essais-apres-s26.md`. Pendant les 26 semaines, n'est
+  exigé que ce que la machine prouve : rendu mesuré, `--verify`, tests cassés une fois. Une cause non
+  trouvée se dit et se note dans les dettes ; elle n'arrête la semaine que si elle empêche de montrer la
+  fonctionnalité.
 - **Exposer avant de coder.** Une décision de modèle ou de comportement se présente et se discute avant
   d'être écrite, jamais découverte dans le diff.
 - **Un test qui interroge l'état ne prouve pas l'effet.** Trouvé en S3 sur `EngineHostTests` : un test
@@ -84,6 +99,9 @@ Mécanismes :
 - **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S20 au 03/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
   `docs/bilan-s7bis.md`. Chaque bilan documente les écarts à l'acquis, les tests cassés une fois, et le
   reste à faire.
+- **Plan des semaines S21 à S26** : `docs/plan-s21-s26.md` — base des briefs, pas un brief.
+- **Essais du fondateur, après la S26** : `docs/essais-apres-s26.md` — les sections « À essayer » des
+  bilans depuis la S17, dans l'ordre ; chaque bilan y ajoute la sienne.
 - **Roadmap non engagée** : `IDEES.md` — couche décision du copilote, couche générative, recherche de
   samples par IA, stratégie du moteur génératif.
 - **Modèle du Command Bus** : `docs/command-bus.md`.
@@ -108,21 +126,21 @@ Mécanismes :
 
 | Dette | Depuis | État |
 |---|---|---|
-| Bug intermittent de la lecture, instrumenté | S12 | revu une fois en S20 (une boucle jouée sans un son, vu-mètres à −100 dBFS, étapes 58/60 de `--verify`), une fois sur trois passages ; pas fermé |
-| Écoute de la zone multi-pistes (accords/basse/mélodie ensemble, à l'oreille) | S17 | pas encore faite, décrite comme le test le plus important de la semaine |
+| Bug intermittent de la lecture, instrumenté | S12 | **S21, première priorité.** Revu une fois en S20 (une boucle jouée sans un son, vu-mètres à −100 dBFS, étapes 58/60 de `--verify`), une fois sur trois passages ; pas fermé |
+| Écoute de la zone multi-pistes (accords/basse/mélodie ensemble, à l'oreille) | S17 | **phase d'essais après la S26.** Pas encore faite, décrite comme le test le plus important de la semaine |
 | « Ranger le projet » comme geste explicite | S17 (§6) | demandé en cours de semaine, pas engagé |
 | Fine-tune sur un corpus personnel du fondateur | tranché S15 | écarté définitivement — un générateur enfermé dans le style d'un seul producteur ne sert que lui |
 | Stratégie complète du moteur génératif au-delà de S15 | ouvert depuis S14 | partiellement tranchée (S15) ; le reste (empiler les couches, Markov vs neuronal) reste à trancher |
-| L'application qui ne quitte pas à la fermeture (fenêtre partie, processus vivant) | S18 | cause non trouvée ; garde S19 : processus terminé 2 s après la sauvegarde, l'étape bloquée écrite dans `daw.log` |
-| Le piano-roll encore là, alors que la toile fait tout ce qu'il faisait | S19 | attend l'essai du fondateur ; le retirer réécrit des étapes de `--verify` et `--verify-fluidite` |
+| L'application qui ne quitte pas à la fermeture (fenêtre partie, processus vivant) | S18 | **S21.** Cause non trouvée ; garde S19 : processus terminé 2 s après la sauvegarde, l'étape bloquée écrite dans `daw.log` |
+| Le piano-roll encore là, alors que la toile fait tout ce qu'il faisait | S19 | **phase d'essais après la S26** ; personne n'y touche d'ici là. Le retirer réécrit des étapes de `--verify` et `--verify-fluidite` |
 | La toile chargée au-dessus de 8 ms au 95e centile en Direct2D (256 blocs) | S19 | 9 à 13 ms selon la charge de la machine, mesuré avec Chrome actif |
 | Le glissé d'un point d'automation salit plus que sa bande (12 à 14 ms de repeint par image) | S19 | cause non trouvée |
-| Chantier 2 de la S19 : ancrage des fenêtres, défilement du rack et de l'historique | S19 | reporté sur consigne en S20, pas commencé |
+| Chantier 2 de la S19 : ancrage des fenêtres, défilement du rack et de l'historique | S19 | **S21.** Reporté sur consigne en S20, pas commencé |
 | La mesure du mixage de 16 pistes de 3 minutes, à peine sous 20 s | S20 | 15 à 19 s machine au repos en fin de semaine, 27 à 28 s en cours de semaine machine chargée ; cause de l'écart non démontrée ; deux pistes d'accélération essayées et retirées |
-| Le mixage décidé par le modèle jamais lancé avec une vraie clé | S20 | la CI et les vérifications passent par les règles ; coût réel par mixage à mesurer au premier essai |
-| L'avant/après sur trois morceaux du fondateur | S20 | attend ses morceaux ; `--verify-mix` ne couvre que des signaux connus |
-| Le recouvrement à 6 dB ne voit pas le niveau d'un son qui décroît (un kick traverse la basse à chaque coup) | S20 | le kick/basse reste à 40 % sur les signaux de `--verify-mix` ; l'effet est vérifié par la marge du kick sur ses coups |
-| Les plugins de la personne ne traitent que la piste d'instrument, pas ses enregistrements (piste compagne) | S20 | trouvé en écrivant les effets internes, qui eux passent sur les deux |
-| 17 étapes de pages et de fenêtres en échec quand le copilote tourne pendant `--verify` | S20 | reproduit deux fois, cause non trouvée ; sans copilote elles passent |
+| Le mixage décidé par le modèle jamais lancé avec une vraie clé | S20 | **S21** : un appel réel, lancé par Claude hors CI sur le projet de `--verify-mix`, coût relevé dans `daw.log`. La CI et les vérifications passent par les règles |
+| L'avant/après sur trois morceaux du fondateur | S20 | **phase d'essais après la S26** (critères dans `docs/essais-apres-s26.md`) ; plus une dette de développement ; `--verify-mix` ne couvre que des signaux connus |
+| Le recouvrement à 6 dB ne voit pas le niveau d'un son qui décroît (un kick traverse la basse à chaque coup) | S20 | **S21** : le critère devient la marge du kick sur ses coups. Le kick/basse reste à 40 % sur les signaux de `--verify-mix` ; l'effet est vérifié par la marge du kick sur ses coups |
+| Les plugins de la personne ne traitent que la piste d'instrument, pas ses enregistrements (piste compagne) | S20 | **S21.** Trouvé en écrivant les effets internes, qui eux passent sur les deux |
+| 17 étapes de pages et de fenêtres en échec quand le copilote tourne pendant `--verify` | S20 | **S21.** Reproduit deux fois, cause non trouvée ; sans copilote elles passent |
 | La ligne de génération lue un geste en retard, par intermittence | S19 | l'étape attend maintenant la fin de la lecture ; la cause de la variante n'est pas trouvée |
 | Support Ubuntu en cible produit | reporté S1/S5 | scripts gardés pour la CI seulement |
