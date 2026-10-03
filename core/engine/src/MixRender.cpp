@@ -27,8 +27,8 @@ struct MixRender::Slots
     // master. Owned here, looked up by the taps through MixTap's registry.
     std::map<juce::String, std::unique_ptr<domain::mix::StreamAnalyser>> analysers;
 
-    // Every key of this render starts with it: two renders alive at once â€”
-    // the project and a proposal â€” never share a tap's analyser.
+    // Every key of this render starts with it: two renders alive at once — the
+    // project and a proposal — never share a tap's analyser.
     juce::String prefix{juce::Uuid{}.toString() + "/"};
     std::vector<MixTap::Registration> registrations;
     std::unique_ptr<tracktion::Renderer::RenderTask> task;
@@ -58,15 +58,21 @@ std::unique_ptr<MixRender> MixRender::prepare(tracktion::Edit& live,
     if (render->copy_ == nullptr)
         return {};
 
-    const domain::ProjectState* measured = &state;
-    if (proposed != nullptr)
-    {
-        render->proposed_ = std::make_unique<domain::ProjectState>(*proposed);
-        render->projector_ =
-            std::make_unique<ProjectProjector>(*render->copy_, *render->proposed_, catalogue, store);
-        render->projector_->reconcile();
-        measured = render->proposed_.get();
-    }
+    // Always the song, as it is laid out on the timeline: the beatmaker
+    // opens in pattern mode, where the session plays the pattern alone and
+    // the Edit is as long as nothing. Stopped, not looping, from the start.
+    render->proposed_ = std::make_unique<domain::ProjectState>(proposed != nullptr ? *proposed : state);
+    static_cast<void>(render->proposed_->setPlaying(false));
+    static_cast<void>(render->proposed_->setPlayMode(domain::PlayMode::song, domain::PatternId{}));
+    if (render->proposed_->transport().looping)
+        static_cast<void>(render->proposed_->setLoop(false,
+                                                     render->proposed_->transport().loopStartBeats,
+                                                     render->proposed_->transport().loopEndBeats));
+    static_cast<void>(render->proposed_->setPositionBeats(0.0));
+    render->projector_ =
+        std::make_unique<ProjectProjector>(*render->copy_, *render->proposed_, catalogue, store);
+    render->projector_->reconcile();
+    const domain::ProjectState* measured = render->proposed_.get();
 
     render->slots_ = std::make_unique<Slots>();
     auto& slots = *render->slots_;

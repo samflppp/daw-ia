@@ -4,6 +4,7 @@
 #include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
+#include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/project/InternalEffects.h"
 #include "daw/engine/ContentStore.h"
 #include "daw/engine/MixRender.h"
@@ -159,6 +160,23 @@ TEST_CASE("The mix render hears each track before its fader, and the master as i
 
     // And the Edit that plays never held a tap.
     CHECK(harness.tapsInLiveEdit() == 0);
+}
+
+TEST_CASE("The song is measured whatever the session plays: pattern mode, a loop, the playhead elsewhere")
+{
+    MixHarness harness;
+
+    // As the beatmaker opens: pattern mode, the Edit holding no song, a loop
+    // over one beat, the playhead in the middle.
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetMode>(PlayMode::pattern, PatternId{})).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetLoop>(true, 0.0, 1.0)).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<TransportSetPosition>(4.0)).ok());
+    MESSAGE("the session's Edit lasts " << harness.host.edit().getLength().inSeconds() << " s");
+
+    const auto measured = harness.measure();
+    CHECK(measured->master.seconds == doctest::Approx(toneSeconds).epsilon(0.001));
+    CHECK(measured->tracks.at(harness.lows.toString()).activeShare > 0.9);
+    CHECK(harness.state.transport().mode == PlayMode::pattern);
 }
 
 TEST_CASE("The rendered master is handed over: it outlives the render and sounds as measured")
