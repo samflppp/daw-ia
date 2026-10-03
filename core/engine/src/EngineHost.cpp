@@ -2,6 +2,7 @@
 
 #include "daw/engine/ClapPluginFormat.h"
 #include "daw/engine/MeterTap.h"
+#include "daw/engine/MixTap.h"
 
 namespace daw::engine
 {
@@ -39,6 +40,9 @@ EngineHost::EngineHost(const juce::String& applicationName)
     // The level taps the projector places at the end of every chain. A type
     // Tracktion has to know before an Edit can hold one.
     pluginManager.createBuiltInType<MeterTapPlugin>();
+
+    // The ear of the mix measurement (S20), only ever in a copy of the Edit.
+    pluginManager.createBuiltInType<MixTap>();
 
     // A plugin that crashes must take a scanner process down, never the DAW.
     pluginManager.setUsesSeparateProcessForScanning(true);

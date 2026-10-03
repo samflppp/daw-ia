@@ -18,6 +18,8 @@ target_sources(daw_engine INTERFACE
     src/LevelMeters.cpp
     src/MediaFoundation.cpp
     src/MeterTap.cpp
+    src/MixRender.cpp
+    src/MixTap.cpp
     src/ParameterBridge.cpp
     src/PitchDetection.cpp
     src/PluginCatalogue.cpp

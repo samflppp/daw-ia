@@ -26,7 +26,8 @@ target_sources(daw_engine_tests PRIVATE
     PluginHostingTests.cpp
     PluginPersistenceTests.cpp
     GenerationRenderTests.cpp
-    InternalEffectsRenderTests.cpp)
+    InternalEffectsRenderTests.cpp
+    MixRenderTests.cpp)
 
 target_compile_definitions(daw_engine_tests PRIVATE
     JUCE_WEB_BROWSER=0
