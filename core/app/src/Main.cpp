@@ -691,6 +691,8 @@ private:
         juce::String arguments = "--relaunched --project \"" + folder.getFullPathName() + "\"";
         if (lastWorkspace_.isNotEmpty())
             arguments << " --workspace " << lastWorkspace_;
+        if (layoutArgument_.isNotEmpty())
+            arguments << " --layout \"" << layoutArgument_ << "\"";
 
         const auto executable = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
         if (!executable.startAsProcess(arguments))
@@ -743,7 +745,15 @@ private:
         layoutOptions.folderName = "DAW IA";
         layoutOptions.filenameSuffix = ".layout";
         layoutOptions.osxLibrarySubFolder = "Application Support";
-        layoutSettings_ = std::make_unique<juce::PropertiesFile>(layoutOptions);
+
+        // --layout "<file>": another arrangement of pages than this machine's.
+        // A verification moves pages and writes where they went; with its own
+        // file it never rewrites the person's.
+        const auto layoutFile = layoutFromCommandLine(commandLine);
+        layoutArgument_ = layoutFile;
+        layoutSettings_ = layoutFile.isNotEmpty()
+                              ? std::make_unique<juce::PropertiesFile>(juce::File{layoutFile}, layoutOptions)
+                              : std::make_unique<juce::PropertiesFile>(layoutOptions);
 
         // The samples: bytes into the project's store, folders into the same
         // settings as the pages, because both are this machine's.
@@ -926,6 +936,20 @@ private:
         store_.reset();
     }
 
+    // --layout "<path to a .layout file>"
+    [[nodiscard]] static juce::String layoutFromCommandLine(const juce::String& commandLine)
+    {
+        const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+        for (int index = 0; index < tokens.size() - 1; ++index)
+        {
+            if (tokens[index] == "--layout")
+                return juce::File::getCurrentWorkingDirectory()
+                    .getChildFile(tokens[index + 1].unquoted())
+                    .getFullPathName();
+        }
+        return {};
+    }
+
     // --demo --plugin "<path to a .vst3 or a .clap>"
     [[nodiscard]] static juce::String pluginPathFromCommandLine(const juce::String& commandLine)
     {
@@ -1076,6 +1100,7 @@ private:
     std::unique_ptr<Listening> listening_;
     std::unique_ptr<WorkspaceSwitch> switch_;
     std::unique_ptr<CopilotBridge> copilot_;
+    juce::String layoutArgument_;
     std::unique_ptr<PluginRack> rack_;
     std::unique_ptr<TransportSync> transportSync_;
     std::unique_ptr<PlaybackProbe> probe_;
