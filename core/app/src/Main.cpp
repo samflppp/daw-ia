@@ -5,6 +5,7 @@
 #include "LevelMonitor.h"
 #include "Listening.h"
 #include "MainWindow.h"
+#include "MixSession.h"
 #include "PlaybackProbe.h"
 #include "PluginRack.h"
 #include "PluginWindow.h"
@@ -330,6 +331,7 @@ public:
         juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
         lookAndFeel_.reset();
         switch_.reset();
+        mixSession_.reset(); // it asks the copilot, and plays through the device
         copilot_.reset();
         clock_.reset();
         bridge_.reset();
@@ -734,6 +736,15 @@ private:
                                   registry_,
                                   [this] { return rack_->available(); },
                                   [this] { return levels_->toValue(state_); }});
+        mixSession_ = std::make_unique<MixSession>(
+            MixSession::Wiring{bus_,
+                               state_,
+                               engineHost_->edit(),
+                               &engineHost_->catalogue(),
+                               contentStore_.get(),
+                               copilot_.get(),
+                               clock_.get(),
+                               &engineHost_->engine().getDeviceManager().deviceManager});
         promptReader_ = std::make_unique<PromptReading>(*copilot_);
         listening_ = std::make_unique<Listening>(*projector_, state_);
 
@@ -1100,6 +1111,7 @@ private:
     std::unique_ptr<Listening> listening_;
     std::unique_ptr<WorkspaceSwitch> switch_;
     std::unique_ptr<CopilotBridge> copilot_;
+    std::unique_ptr<MixSession> mixSession_;
     juce::String layoutArgument_;
     std::unique_ptr<PluginRack> rack_;
     std::unique_ptr<TransportSync> transportSync_;

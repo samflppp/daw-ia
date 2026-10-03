@@ -19,6 +19,8 @@ target_sources(daw_app PRIVATE
     src/PluginRack.cpp
     src/EditClock.cpp
     src/LevelMonitor.cpp
+    src/MixComparison.cpp
+    src/MixSession.cpp
     src/TransportSync.cpp
     src/PlaybackProbe.cpp
     src/NativeWindow.cpp
