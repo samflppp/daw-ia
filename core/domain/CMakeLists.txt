@@ -39,6 +39,7 @@ add_library(daw_domain STATIC
     src/commands/TransportCommands.cpp
     src/project/ProjectState.cpp
     src/project/Automation.cpp
+    src/project/InternalEffects.cpp
     src/serialization/Json.cpp)
 add_library(daw::domain ALIAS daw_domain)
 

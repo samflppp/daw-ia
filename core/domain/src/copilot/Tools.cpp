@@ -1,8 +1,10 @@
 #include "daw/domain/copilot/Tools.h"
 
+#include "daw/domain/project/InternalEffects.h"
 #include "daw/domain/project/ProjectState.h"
 
 #include <algorithm>
+#include <string>
 #include <utility>
 
 namespace daw::domain::copilot
@@ -85,6 +87,34 @@ Value schema(Value::Object properties, std::vector<std::string> required)
                           {"additionalProperties", Value{false}}});
 }
 
+// The internal effects and their parameters, in the words a copilot reads:
+// generated from the domain's table, so a parameter added there is a parameter
+// the copilot is told about.
+std::string describeInternalEffects()
+{
+    std::string text;
+    for (const auto& effect : internalEffects())
+    {
+        text += std::string{effect.identifier} + " (" + std::string{effect.name} + ") :";
+        for (const auto& parameter : effect.parameters)
+        {
+            auto bound = [](double value)
+            {
+                auto written = std::to_string(value);
+                written.erase(written.find_last_not_of('0') + 1);
+                if (!written.empty() && written.back() == '.')
+                    written.pop_back();
+                return written;
+            };
+            text += " " + std::string{parameter.id} + " " + bound(parameter.minimum) + " à " +
+                    bound(parameter.maximum) + " " + std::string{parameter.unit} + " (défaut " +
+                    bound(parameter.defaultValue) + ") ;";
+        }
+        text += " ";
+    }
+    return text + "Un paramètre absent vaut son défaut. Le coupe-bas est coupé à 20 Hz.";
+}
+
 Value pluginSchema()
 {
     // The whole instance, because that is what plugin.insert reads. bypassed
@@ -100,7 +130,10 @@ Value pluginSchema()
                 Value::object(
                     {{"type", Value{std::string{"object"}}},
                      {"properties",
-                      Value::object({{"format", field("string", "VST3 ou CLAP, tel que l'état le donne.")},
+                      Value::object({{"format",
+                                      field("string",
+                                            "VST3 ou CLAP, tel que l'état le donne ; internal pour un "
+                                            "effet du DAW (daw.eq, daw.compressor).")},
                                      {"identifier",
                                       field("string",
                                             "Identifiant stable du plugin, tel que la "
@@ -535,8 +568,10 @@ std::vector<Tool> builtinTools()
     // --- plugins
     tools.push_back(
         make("plugin.insert",
-             "Insère un plugin dans la chaîne d'une piste. Le plugin doit exister sur cette machine : "
-             "lire la liste des plugins disponibles avant d'appeler.",
+             "Insère un plugin dans la chaîne d'une piste. Un plugin VST3 ou CLAP doit exister sur cette "
+             "machine : "
+             "lire la liste des plugins disponibles avant d'appeler. Les effets du DAW sont toujours là : "
+             "format internal, identifier daw.eq (égaliseur) ou daw.compressor (compresseur).",
              schema({{"trackId", trackId},
                      {"plugin", pluginSchema()},
                      {"index", integer("Place dans la chaîne, 0 en tête.", 0, 4096)}},
@@ -551,15 +586,20 @@ std::vector<Tool> builtinTools()
              schema({{"pluginId", pluginId}, {"bypassed", field("boolean", "Vrai pour contourner.")}},
                     {"pluginId", "bypassed"})));
 
-    tools.push_back(make("plugin.set_parameter",
-                         "Règle un paramètre d'un plugin, en valeur normalisée de 0 à 1.",
-                         schema({{"pluginId", pluginId},
-                                 {"paramId",
-                                  field("string",
-                                        "Identifiant du paramètre, tel que le "
-                                        "plugin le nomme.")},
-                                 {"value", number("Valeur normalisée.", 0.0, 1.0)}},
-                                {"pluginId", "paramId", "value"})));
+    tools.push_back(make(
+        "plugin.set_parameter",
+        "Règle un paramètre d'un plugin : de 0 à 1 pour un VST3 ou un CLAP ; dans son unité pour un effet "
+        "du DAW. " +
+            describeInternalEffects(),
+        schema({{"pluginId", pluginId},
+                {"paramId",
+                 field("string",
+                       "Identifiant du paramètre, tel que le "
+                       "plugin le nomme.")},
+                {"value",
+                 field("number",
+                       "La valeur : normalisée pour un VST3 ou un CLAP, en unité pour un effet du DAW.")}},
+               {"pluginId", "paramId", "value"})));
 
     tools.push_back(hidden(make(
         "plugin.capture_state",

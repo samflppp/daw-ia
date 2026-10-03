@@ -1,5 +1,7 @@
 #include "daw/domain/project/ProjectState.h"
 
+#include "daw/domain/project/InternalEffects.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -496,10 +498,13 @@ bool operator==(const Placement& lhs, const Placement& rhs)
 
 Result<void> PluginRef::validate() const
 {
-    if (format != PluginRef::vst3Format && format != PluginRef::clapFormat)
+    if (format != PluginRef::vst3Format && format != PluginRef::clapFormat &&
+        format != PluginRef::internalFormat)
         return fail(ErrorCode::invalidArgument, "unsupported plugin format: " + format);
     if (identifier.empty())
         return fail(ErrorCode::invalidArgument, "plugin identifier is empty");
+    if (format == PluginRef::internalFormat && findInternalEffect(identifier) == nullptr)
+        return fail(ErrorCode::invalidArgument, "no such internal effect: " + identifier);
     return {};
 }
 
@@ -546,10 +551,13 @@ bool operator==(const PluginRef& lhs, const PluginRef& rhs)
 
 Result<void> PluginParam::validate() const
 {
+    // The scale of the value is the instance's format to decide: 0..1 for a
+    // hosted plugin, the effect's own units for an internal one. Here, only what
+    // holds for both.
     if (paramId.empty())
         return fail(ErrorCode::invalidArgument, "parameter identifier is empty");
-    if (!(value >= 0.0 && value <= 1.0))
-        return fail(ErrorCode::invalidArgument, "parameter out of the normalised range: " + paramId);
+    if (!std::isfinite(value))
+        return fail(ErrorCode::invalidArgument, "parameter is not a number: " + paramId);
     return {};
 }
 
@@ -588,6 +596,27 @@ bool operator==(const PluginParam& lhs, const PluginParam& rhs)
 // PluginInstance
 // ---------------------------------------------------------------------------
 
+Result<void> PluginInstance::validParameter(std::string_view paramId, double value) const
+{
+    PluginParam param{};
+    param.paramId = std::string{paramId};
+    param.value = value;
+    auto valid = param.validate();
+    if (!valid)
+        return valid;
+
+    if (ref.format == PluginRef::internalFormat)
+    {
+        const auto* effect = findInternalEffect(ref.identifier);
+        if (effect == nullptr)
+            return fail(ErrorCode::invalidArgument, "no such internal effect: " + ref.identifier);
+        return validateInternalParameter(*effect, paramId, value);
+    }
+    if (!(value >= 0.0 && value <= 1.0))
+        return fail(ErrorCode::invalidArgument, "parameter out of the normalised range: " + param.paramId);
+    return {};
+}
+
 const PluginParam* PluginInstance::findParam(std::string_view paramId) const noexcept
 {
     for (const auto& param : params)
@@ -611,11 +640,17 @@ Result<void> PluginInstance::validate() const
     if (!validState)
         return validState;
 
+    // An internal effect has no blob: its whole state is its parameters.
+    const auto* internal =
+        ref.format == PluginRef::internalFormat ? findInternalEffect(ref.identifier) : nullptr;
+    if (internal != nullptr && !state.digest.empty())
+        return fail(ErrorCode::invalidArgument, "an internal effect holds no captured state");
+
     // Sorted and without duplicates, so that two instances holding the same
     // parameters always serialise to the same text.
     for (std::size_t index = 0; index < params.size(); ++index)
     {
-        auto valid = params[index].validate();
+        auto valid = validParameter(params[index].paramId, params[index].value);
         if (!valid)
             return valid;
 
@@ -2701,13 +2736,13 @@ Result<void> ProjectState::setPluginParameter(PluginId id, std::string paramId, 
     param.paramId = std::move(paramId);
     param.value = value;
 
-    auto valid = param.validate();
-    if (!valid)
-        return valid;
-
     auto* plugin = findPluginMutable(id);
     if (plugin == nullptr)
         return fail(ErrorCode::notFound, "no such plugin: " + id.toString());
+
+    auto valid = plugin->validParameter(param.paramId, param.value);
+    if (!valid)
+        return valid;
 
     const auto position = std::lower_bound(plugin->params.begin(),
                                            plugin->params.end(),
@@ -2749,6 +2784,8 @@ Result<void> ProjectState::setPluginState(PluginId id, StateBlobRef state)
     auto* plugin = findPluginMutable(id);
     if (plugin == nullptr)
         return fail(ErrorCode::notFound, "no such plugin: " + id.toString());
+    if (plugin->ref.format == PluginRef::internalFormat && !state.digest.empty())
+        return fail(ErrorCode::invalidArgument, "an internal effect holds no captured state");
 
     plugin->state = std::move(state);
     return {};

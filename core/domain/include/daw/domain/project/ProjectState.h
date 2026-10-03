@@ -223,8 +223,12 @@ struct PluginRef
     static constexpr std::string_view vst3Format = "VST3";
     static constexpr std::string_view clapFormat = "CLAP";
 
-    std::string format;     // "VST3" or "CLAP"
-    std::string identifier; // VST3 unique id, or CLAP plugin id
+    // An effect the DAW ships (S20): see InternalEffects.h. The identifier is
+    // one of its constants, "daw.eq" or "daw.compressor".
+    static constexpr std::string_view internalFormat = "internal";
+
+    std::string format;     // "VST3", "CLAP" or "internal"
+    std::string identifier; // VST3 unique id, CLAP plugin id, or internal effect
     std::string name;       // human label, informative only
 
     [[nodiscard]] Result<void> validate() const;
@@ -252,7 +256,8 @@ using StateBlobRef = BlobRef;
 struct PluginParam
 {
     std::string paramId; // the format's own parameter id, never an index
-    double value{0.0};   // normalised 0..1, as the host sees it
+    double value{0.0};   // normalised 0..1 for a hosted plugin; the unit of the
+                         // parameter (Hz, dB, ms, ratio) for an internal effect
 
     [[nodiscard]] Result<void> validate() const;
     [[nodiscard]] Value toValue() const;
@@ -270,6 +275,10 @@ struct PluginInstance
     StateBlobRef state{};
 
     [[nodiscard]] const PluginParam* findParam(std::string_view paramId) const noexcept;
+
+    // Whether this instance accepts that value for that parameter: 0..1 for a
+    // hosted plugin, the effect's own bounds for an internal one.
+    [[nodiscard]] Result<void> validParameter(std::string_view paramId, double value) const;
 
     [[nodiscard]] Result<void> validate() const;
     [[nodiscard]] Value toValue() const;

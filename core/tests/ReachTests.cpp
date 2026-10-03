@@ -5,6 +5,7 @@
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
+#include "daw/domain/project/InternalEffects.h"
 #include "daw/domain/serialization/Json.h"
 
 #include <algorithm>
@@ -104,7 +105,7 @@ Value withoutMix(const Value& value)
     return value;
 }
 
-// A track with a bus to send to and a plugin on it.
+// A track with a bus to send to, a plugin and an internal effect on it.
 struct Strip
 {
     Strip()
@@ -115,11 +116,17 @@ struct Strip
         hosted.id = plugin;
         hosted.ref = PluginRef{std::string{PluginRef::vst3Format}, "uid", "Synthé"};
         REQUIRE(harness.bus.execute(std::make_unique<InsertPlugin>(harness.trackId, hosted, 0)).ok());
+        PluginInstance eq{};
+        eq.id = effect;
+        eq.ref =
+            PluginRef{std::string{PluginRef::internalFormat}, std::string{internal::equaliser}, "Égaliseur"};
+        REQUIRE(harness.bus.execute(std::make_unique<InsertPlugin>(harness.trackId, eq, 1)).ok());
     }
 
     Harness harness;
     TrackId bus{TrackId::generate()};
     PluginId plugin{PluginId::generate()};
+    PluginId effect{PluginId::generate()};
 };
 
 // One of each command that declares it reaches the mix alone.
@@ -136,11 +143,13 @@ std::vector<std::unique_ptr<Command>> mixCommands(const Strip& strip)
     commands.push_back(std::make_unique<SetTrackOutput>(track, strip.bus));
     PluginInstance more{};
     more.id = PluginId::generate();
-    more.ref = PluginRef{std::string{PluginRef::vst3Format}, "uid2", "Compresseur"};
-    commands.push_back(std::make_unique<InsertPlugin>(track, more, 1));
+    more.ref =
+        PluginRef{std::string{PluginRef::internalFormat}, std::string{internal::compressor}, "Compresseur"};
+    commands.push_back(std::make_unique<InsertPlugin>(track, more, 2));
     commands.push_back(std::make_unique<RemovePlugin>(strip.plugin));
     commands.push_back(std::make_unique<SetPluginBypassed>(strip.plugin, true));
-    commands.push_back(std::make_unique<SetPluginParameter>(strip.plugin, "cutoff", 0.25));
+    commands.push_back(
+        std::make_unique<SetPluginParameter>(strip.effect, std::string{internal::lowGain}, -3.0));
     commands.push_back(std::make_unique<CapturePluginState>(
         strip.plugin, StateBlobRef{std::string(BlobRef::digestLength, 'a'), 12}));
     return commands;
@@ -248,7 +257,7 @@ TEST_CASE("a group of mix commands reaches the mix, and so does its undo")
 
     std::vector<std::unique_ptr<Command>> mix;
     mix.push_back(std::make_unique<SetTrackVolume>(strip.harness.trackId, -4.0));
-    mix.push_back(std::make_unique<SetPluginParameter>(strip.plugin, "cutoff", 0.75));
+    mix.push_back(std::make_unique<SetPluginParameter>(strip.effect, std::string{internal::mid1Gain}, -2.0));
     GroupOptions group{};
     group.label = "mixage";
     REQUIRE(strip.harness.bus.executeGroup(std::move(mix), group).ok());
