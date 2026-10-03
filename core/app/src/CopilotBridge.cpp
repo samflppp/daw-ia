@@ -271,6 +271,18 @@ void CopilotBridge::run()
     readMessages();
 
     connected_ = false;
+
+    // A mix asked for and never answered: said, so that the mix falls back
+    // on the rules instead of waiting for a process that is gone.
+    std::map<std::int64_t, Decided> unanswered;
+    {
+        const std::lock_guard<std::mutex> lock{mutex_};
+        unanswered.swap(mixes_);
+    }
+    for (auto& [id, decided] : unanswered)
+        juce::MessageManager::callAsync(
+            [decided = std::move(decided)]
+            { decided(domain::fail(domain::ErrorCode::conflict, "le copilote s'est arrêté"), Value{}); });
 }
 
 void CopilotBridge::readMessages()
@@ -571,6 +583,45 @@ void CopilotBridge::handleAnswer(const Value& message)
         }
     }
 
+    // A mix asked for (S20): its proposal, or why there is none.
+    if (const auto id = message.intAt("id"); id)
+    {
+        Decided decided;
+        {
+            const std::lock_guard<std::mutex> lock{mutex_};
+            if (auto found = mixes_.find(id.value()); found != mixes_.end())
+            {
+                decided = std::move(found->second);
+                mixes_.erase(found);
+            }
+        }
+        if (decided)
+        {
+            domain::Result<Value> proposal =
+                domain::fail(domain::ErrorCode::conflict, "le copilote n'a rien rendu");
+            Value usage;
+            if (const auto* result = message.find("result"); result != nullptr && !result->isNull())
+            {
+                if (const auto* cost = result->find("usage"); cost != nullptr)
+                    usage = *cost;
+                if (const auto* found = result->find("proposal"); found != nullptr)
+                    proposal = *found;
+                else if (const auto text = result->stringAt("message"); text)
+                    proposal = domain::fail(domain::ErrorCode::conflict, text.value());
+            }
+            else if (const auto* failure = message.find("error"); failure != nullptr)
+            {
+                const auto text = failure->stringAt("message");
+                proposal =
+                    domain::fail(domain::ErrorCode::conflict, text ? text.value() : "le copilote a échoué");
+            }
+            juce::MessageManager::callAsync(
+                [decided = std::move(decided), proposal = std::move(proposal), usage]
+                { decided(proposal, usage); });
+            return;
+        }
+    }
+
     // Otherwise, a request typed by the user: an answer is that request's
     // answer.
     if (const auto* failure = message.find("error"); failure != nullptr && !failure->isNull())
@@ -744,6 +795,35 @@ void CopilotBridge::interpret(std::uint64_t ticket,
                                                         {"beatsPerBar", Value{zone.beatsPerBar}},
                                                         {"hasNotes", Value{zone.hasNotes}},
                                                         {"tracks", Value::array(std::move(tracks))}})}})}}));
+}
+
+void CopilotBridge::decideMix(const Value& brief,
+                              const Value& previous,
+                              const Value& refusals,
+                              Decided decided)
+{
+    if (!connected_)
+    {
+        if (decided)
+            decided(domain::fail(domain::ErrorCode::conflict, "le copilote n'est pas là"), Value{});
+        return;
+    }
+
+    const auto id = nextRequestId_++;
+    {
+        const std::lock_guard<std::mutex> lock{mutex_};
+        mixes_[id] = std::move(decided);
+    }
+
+    Value::Object params{{"brief", brief}};
+    if (!previous.isNull())
+        params.emplace_back("previous", previous);
+    if (!refusals.isNull())
+        params.emplace_back("refusals", refusals);
+    send(Value::object({{"jsonrpc", Value{std::string{"2.0"}}},
+                        {"id", Value{id}},
+                        {"method", Value{std::string{"mix.decide"}}},
+                        {"params", Value::object(std::move(params))}}));
 }
 
 void CopilotBridge::setStatus(Status status, std::string message)

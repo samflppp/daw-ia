@@ -107,6 +107,19 @@ public:
                    const ui::PromptReader::Zone& zone,
                    ui::RoutedPromptReader::Answered answered);
 
+    // --- the mix (S20)
+
+    // Sends the brief of a mix — numbers only — and, on a second round, the
+    // proposal and what the guards refused of it. `decided` is called once,
+    // on the message thread, with the proposal as the model wrote it (the
+    // caller checks it), or a French failure. Nothing when the process is
+    // not there: the caller falls back on the rules.
+    using Decided = std::function<void(domain::Result<domain::Value> proposal, domain::Value usage)>;
+    void decideMix(const domain::Value& brief,
+                   const domain::Value& previous,
+                   const domain::Value& refusals,
+                   Decided decided);
+
 private:
     // --- the socket thread
     void run() override;
@@ -158,6 +171,7 @@ private:
         ui::RoutedPromptReader::Answered answered;
     };
     std::map<std::int64_t, Read> reads_;
+    std::map<std::int64_t, Decided> mixes_;
 
     std::mutex writeMutex_;
     std::atomic<std::int64_t> nextRequestId_{1};
