@@ -6,6 +6,8 @@
 #include <numbers>
 #include <utility>
 
+#include "../dsp/Fft.h"
+
 namespace daw::domain::mix
 {
 namespace
@@ -118,61 +120,9 @@ const TruePeakFilter& truePeakFilter()
     return filter;
 }
 
-// An iterative radix-2 FFT of fftSize complex points.
-struct Fft
+const dsp::Fft& fft()
 {
-    std::vector<std::complex<double>> twiddles;
-    std::vector<std::size_t> reversed;
-
-    Fft()
-        : twiddles(fftSize / 2)
-        , reversed(fftSize)
-    {
-        for (std::size_t index = 0; index < fftSize / 2; ++index)
-            twiddles[index] = std::polar(1.0, -2.0 * std::numbers::pi * static_cast<double>(index) / fftSize);
-        for (std::size_t index = 0; index < fftSize; ++index)
-        {
-            std::size_t value = 0;
-            for (std::size_t bit = 0; bit < fftOrder; ++bit)
-                value |= ((index >> bit) & 1U) << (fftOrder - 1 - bit);
-            reversed[index] = value;
-        }
-    }
-
-    void operator()(std::vector<std::complex<double>>& data) const
-    {
-        for (std::size_t index = 0; index < fftSize; ++index)
-        {
-            if (index < reversed[index])
-                std::swap(data[index], data[reversed[index]]);
-        }
-        for (std::size_t size = 2; size <= fftSize; size *= 2)
-        {
-            const auto half = size / 2;
-            const auto stride = fftSize / size;
-            for (std::size_t start = 0; start < fftSize; start += size)
-            {
-                // By hand, on the real and imaginary parts: the complex
-                // product of the standard library checks for infinities
-                // and costs a third of the whole analysis under MSVC.
-                for (std::size_t offset = 0; offset < half; ++offset)
-                {
-                    auto& low = data[start + offset];
-                    auto& high = data[start + offset + half];
-                    const auto& twiddle = twiddles[offset * stride];
-                    const auto re = high.real() * twiddle.real() - high.imag() * twiddle.imag();
-                    const auto im = high.real() * twiddle.imag() + high.imag() * twiddle.real();
-                    high = {low.real() - re, low.imag() - im};
-                    low = {low.real() + re, low.imag() + im};
-                }
-            }
-        }
-    }
-};
-
-const Fft& fft()
-{
-    static const Fft transform;
+    static const dsp::Fft transform{fftOrder};
     return transform;
 }
 
