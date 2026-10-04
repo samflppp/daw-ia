@@ -24,7 +24,8 @@ std::vector<double> hann(std::size_t size)
 {
     std::vector<double> window(size);
     for (std::size_t index = 0; index < size; ++index)
-        window[index] = 0.5 - 0.5 * std::cos(2.0 * std::numbers::pi * static_cast<double>(index) / size);
+        window[index] = 0.5 - 0.5 * std::cos(2.0 * std::numbers::pi * static_cast<double>(index) /
+                                             static_cast<double>(size));
     return window;
 }
 
@@ -59,7 +60,8 @@ std::vector<double> onsetStrength(const std::vector<float>& mono, double rate, s
         // Below 1.5 kHz: the kick and the snare carry the beat; hats on the
         // eighths would double it.
         double flux = 0.0;
-        const auto topBin = std::min(size / 2, static_cast<std::size_t>(1500.0 * size / rate));
+        const auto topBin =
+            std::min(size / 2, static_cast<std::size_t>(1500.0 * static_cast<double>(size) / rate));
         for (std::size_t bin = 1; bin < topBin; ++bin)
         {
             const auto magnitude = std::log1p(1000.0 * std::abs(frame[bin]));
@@ -265,9 +267,9 @@ Reading read(const std::map<std::string, Stereo>& stems, double rate, std::strin
     if (frames == 0)
         return reading;
 
-    const auto stemOf = [&stems, frames](const char* name) -> Stereo
+    const auto stemOf = [&stems, frames](const char* stemName) -> Stereo
     {
-        auto found = stems.find(name);
+        auto found = stems.find(stemName);
         if (found != stems.end())
             return found->second;
         return Stereo{std::vector<float>(frames, 0.0f), std::vector<float>(frames, 0.0f)};

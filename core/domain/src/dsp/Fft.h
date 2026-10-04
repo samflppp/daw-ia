@@ -22,7 +22,8 @@ public:
         , reversed_(size_)
     {
         for (std::size_t index = 0; index < size_ / 2; ++index)
-            twiddles_[index] = std::polar(1.0, -2.0 * std::numbers::pi * static_cast<double>(index) / size_);
+            twiddles_[index] = std::polar(
+                1.0, -2.0 * std::numbers::pi * static_cast<double>(index) / static_cast<double>(size_));
         for (std::size_t index = 0; index < size_; ++index)
         {
             std::size_t value = 0;
