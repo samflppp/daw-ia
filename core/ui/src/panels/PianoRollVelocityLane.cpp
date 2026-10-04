@@ -169,10 +169,17 @@ void PianoRollPanel::strokeVelocity(juce::Point<int> from, juce::Point<int> to)
         auto& stroke = *velocityStroke_;
         const auto found = std::find_if(
             stroke.begin(), stroke.end(), [&note](const auto& entry) { return entry.first == note.id; });
-        if (found != stroke.end())
-            found->second = velocity;
-        else
+        if (found == stroke.end())
+        {
             stroke.emplace_back(note.id, velocity);
+            continue;
+        }
+        // The reach is for a stem not yet touched. One the stroke has set
+        // changes again only when the hand passes over it once more: else
+        // the next segment, a few pixels on, gave the first stem of a
+        // crescendo the pointer's later height (63 for 60, S22).
+        if (x >= std::min(from.getX(), to.getX()) && x <= std::max(from.getX(), to.getX()))
+            found->second = velocity;
     }
     repaint(velocityArea());
 }
