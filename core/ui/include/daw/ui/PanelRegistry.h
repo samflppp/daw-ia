@@ -5,6 +5,7 @@
 #include "daw/ui/DawLookAndFeel.h"
 #include "daw/ui/Tokens.h"
 #include "daw/ui/model/CopilotHost.h"
+#include "daw/ui/model/DirectionHost.h"
 #include "daw/ui/model/History.h"
 #include "daw/ui/model/LevelSource.h"
 #include "daw/ui/model/ListeningHost.h"
@@ -82,6 +83,9 @@ struct PanelServices
 
     // The stem separator (S22): another process, minutes, cancellable.
     StemHost& stems;
+
+    // The direction by references (S22): what was understood, corrected by hand.
+    DirectionHost& direction;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

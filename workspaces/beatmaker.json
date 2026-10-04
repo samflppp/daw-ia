@@ -15,6 +15,7 @@
     "plugin_chain",
     "mixer",
     "history",
+    "direction",
     "copilot"
   ],
   "layout": {
@@ -100,6 +101,16 @@
         "y": 0.15,
         "width": 0.4,
         "height": 0.7
+      },
+      {
+        "panel": "direction",
+        "title": "Direction",
+        "shortcut": "F11",
+        "open": false,
+        "x": 0.45,
+        "y": 0.1,
+        "width": 0.3,
+        "height": 0.6
       },
       {
         "panel": "history",

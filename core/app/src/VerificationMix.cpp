@@ -5,6 +5,7 @@
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/serialization/Json.h"
+#include "daw/ui/panels/DirectionPanel.h"
 #include "daw/ui/panels/HistoryPanel.h"
 #include "daw/ui/panels/MixerPanel.h"
 
@@ -599,7 +600,7 @@ void Verification::buildMix()
         [this] { return settled(*mix_); },
         mixTimeoutMs);
 
-    add("le master à l'essai est plus sombre que sans direction, et un Ctrl+Z retire la direction",
+    add("le master à l'essai est plus sombre que sans direction",
         [this, run]
         {
             check(mix_->stage() == Stage::ready && mix_->after() != nullptr,
@@ -611,6 +612,71 @@ void Verification::buildMix()
                  " dB, sans : " + fixed(run->brightWithout, 1) + " dB");
             check(with < run->brightWithout - 0.5, "plus sombre d'au moins 0,5 dB");
             mix_->reject();
+        });
+
+    // The panel of the direction (S22): what was understood, corrected by
+    // hand through its own controls, each correction one Ctrl+Z.
+    add(
+        "le panneau de direction : la référence, et un tempo tapé à la main",
+        [this]
+        {
+            static_cast<void>(view_.showPage("direction", true));
+            auto* direction = dynamic_cast<ui::DirectionPanel*>(panel("direction"));
+            check(direction != nullptr, "le panneau de direction est ouvert");
+            if (direction != nullptr)
+                direction->typeTempo("118");
+        },
+        [this]
+        {
+            const auto* direction = dynamic_cast<ui::DirectionPanel*>(panel("direction"));
+            return direction != nullptr && direction->tempoLine().contains("118 BPM (à la main)");
+        },
+        5000.0);
+
+    add(
+        "le tempo à la main est dans le projet ; une tonalité choisie à la main",
+        [this]
+        {
+            auto* direction = dynamic_cast<ui::DirectionPanel*>(panel("direction"));
+            if (direction == nullptr)
+                return;
+            check(direction->referenceRows() == 1, "une ligne, la référence sombre");
+            const auto& corrections = state_.direction().corrections;
+            check(corrections.bpm.has_value() && *corrections.bpm == 118.0, "le projet tient 118 BPM");
+            direction->chooseKey(10); // mi majeur
+        },
+        [this]
+        {
+            const auto* direction = dynamic_cast<ui::DirectionPanel*>(panel("direction"));
+            return direction != nullptr && direction->keyLine().contains("(à la main)");
+        },
+        5000.0);
+
+    add(
+        "deux Ctrl+Z : la tonalité puis le tempo rendus aux références",
+        [this]
+        {
+            const auto key = state_.direction().corrections.key;
+            check(key.has_value() && key->tonic == 4 && key->mode == domain::generation::Mode::major,
+                  "le projet tient mi majeur");
+            this->key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+            this->key(juce::KeyPress{'z', juce::ModifierKeys::ctrlModifier, 0});
+        },
+        [this]
+        {
+            const auto* direction = dynamic_cast<ui::DirectionPanel*>(panel("direction"));
+            return direction != nullptr && !direction->tempoLine().contains("à la main") &&
+                   !direction->keyLine().contains("à la main");
+        },
+        5000.0);
+
+    add("le projet n'a plus de correction ; « Sans direction » la retire",
+        [this]
+        {
+            const auto& corrections = state_.direction().corrections;
+            check(!corrections.bpm.has_value() && !corrections.key.has_value(), "plus aucune correction");
+            check(state_.direction().references.size() == 1, "la référence reste");
+            static_cast<void>(view_.showPage("direction", false));
             mix_->clearReference();
             check(state_.direction().empty(), "la direction est retirée");
         });

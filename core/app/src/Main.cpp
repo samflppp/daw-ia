@@ -879,7 +879,8 @@ private:
                                          *promptReader_,
                                          *listening_,
                                          *mixSession_,
-                                         *stemSession_};
+                                         *stemSession_,
+                                         *directionSession_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();

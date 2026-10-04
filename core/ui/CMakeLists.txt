@@ -114,6 +114,7 @@ target_sources(daw_ui INTERFACE
     src/panels/BrowserPanel.cpp
     src/panels/PluginChainPanel.cpp
     src/panels/HistoryPanel.cpp
+    src/panels/DirectionPanel.cpp
     src/panels/CopilotPanel.cpp)
 
 target_include_directories(daw_ui INTERFACE include)
