@@ -959,6 +959,13 @@ Context::of(const ProjectState& state, PatternId patternId, TrackId trackId, dou
     context.sampleChannel = owner->sample.has_value();
     context.channelPitch = owner->channelPitch;
 
+    if (const auto& direction = state.direction(); !direction.empty() && direction.amount > 0.0)
+    {
+        const auto combined = direction::combine(direction);
+        context.directedKey = combined.key;
+        context.directedActivity = combined.activeShare;
+    }
+
     // What says something about the harmony: not a sample channel, and not a
     // row that plays one pitch only -- a kick drawn in the rack on 4OSC is a
     // drum, whatever its instrument, and its C would make the key C.
@@ -1006,6 +1013,19 @@ std::uint64_t Context::hash() const
     // proposal that never read it.
     if (row.empty() && harmony.empty())
         hasher.add(project);
+    // The direction, which the resolution reads: a new reference must
+    // regenerate a proposal that followed the old one.
+    if (directedKey.has_value())
+    {
+        hasher.add(static_cast<std::int64_t>(directedKey->tonic));
+        hasher.add(static_cast<std::int64_t>(directedKey->mode == Mode::major ? 1 : 0));
+    }
+    for (const auto& [stem, share] : directedActivity)
+    {
+        for (const auto c : stem)
+            hasher.add(static_cast<std::int64_t>(static_cast<unsigned char>(c)));
+        hasher.add(share);
+    }
     hasher.add(static_cast<std::int64_t>(sampleChannel ? 1 : 0));
     hasher.add(static_cast<std::int64_t>(channelPitch));
     for (const auto c : trackName)
@@ -1014,6 +1034,22 @@ std::uint64_t Context::hash() const
 }
 
 // --- resolution ----------------------------------------------------------------------
+
+std::string stemOf(Role role)
+{
+    switch (role)
+    {
+    case Role::melody:
+        return "vocals";
+    case Role::bass:
+        return "bass";
+    case Role::chords:
+        return "other";
+    case Role::rhythm:
+        return "drums";
+    }
+    return {};
+}
 
 ResolvedConstraints resolve(const Constraints& constraints, const Context& context)
 {
@@ -1045,6 +1081,8 @@ ResolvedConstraints resolve(const Constraints& constraints, const Context& conte
             out.key = {*key, Source::deduced};
         else if (const auto far = detectKey(weighted(context.project)); far.has_value())
             out.key = {*far, Source::deduced};
+        else if (context.directedKey.has_value())
+            out.key = {*context.directedKey, Source::directed};
         else
             out.key = {Key{9, Mode::minor}, Source::defaulted};
     }
@@ -1082,8 +1120,25 @@ ResolvedConstraints resolve(const Constraints& constraints, const Context& conte
         out.form = {defaultForm(out.role.value, layout.units), Source::deduced};
     }
 
-    out.density = constraints.density.has_value() ? Resolved<Density>{*constraints.density, Source::imposed}
-                                                  : Resolved<Density>{Density::medium, Source::defaulted};
+    if (constraints.density.has_value())
+    {
+        out.density = {*constraints.density, Source::imposed};
+    }
+    else if (const auto share = context.directedActivity.find(stemOf(out.role.value));
+             share != context.directedActivity.end())
+    {
+        // How much of the reference the role's stem plays: a voice heard a
+        // fifth of the song asks for a sparse melody, drums that never stop
+        // for a dense rhythm.
+        const auto density = share->second < sparseBelow  ? Density::sparse
+                             : share->second > denseAbove ? Density::dense
+                                                          : Density::medium;
+        out.density = {density, Source::directed};
+    }
+    else
+    {
+        out.density = {Density::medium, Source::defaulted};
+    }
 
     if (constraints.reg.has_value())
     {

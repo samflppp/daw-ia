@@ -151,6 +151,7 @@ enum class Source : std::uint8_t
 {
     imposed,  // written by the user
     deduced,  // read from the notes around the range
+    directed, // from the project's direction, its references (S22)
     defaulted // nothing to read it from
 };
 

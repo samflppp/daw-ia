@@ -8,6 +8,7 @@
 #include "daw/domain/project/ProjectState.h"
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -46,6 +47,13 @@ struct Context
     bool sampleChannel{false};
     int channelPitch{60};
 
+    // The project's direction (S22), when its amount is above 0: read after
+    // the user and the notes of the project, before the defaults. The key
+    // its references settle, and for each stem the share of the song where
+    // it plays ("vocals", "drums", "bass", "other").
+    std::optional<Key> directedKey;
+    std::map<std::string, double> directedActivity;
+
     // Built from the project. The range is clamped to the pattern and the
     // grid; an empty range is an error.
     [[nodiscard]] static Result<Context>
@@ -56,8 +64,17 @@ struct Context
     [[nodiscard]] std::uint64_t hash() const;
 };
 
-// Fills every field the user left empty, from the context.
+// Fills every field the user left empty, from the context: the notes around,
+// then the direction, then the defaults.
 [[nodiscard]] ResolvedConstraints resolve(const Constraints& constraints, const Context& context);
+
+// The stem of a reference a role is heard in (S22): melody → vocals, bass →
+// bass, chords → other, rhythm → drums.
+[[nodiscard]] std::string stemOf(Role role);
+
+// The share of a reference where a stem plays, and the density it asks for.
+inline constexpr double sparseBelow = 0.4;
+inline constexpr double denseAbove = 0.8;
 
 // The chord each bar of the range sits on, read from the other rows. Nothing
 // for a bar where they play nothing in the key.

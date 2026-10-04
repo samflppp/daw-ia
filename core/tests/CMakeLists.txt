@@ -42,6 +42,7 @@ add_executable(daw_domain_tests
     StemLayingTests.cpp
     DirectionReadingTests.cpp
     DirectionTests.cpp
+    DirectionGenerationTests.cpp
     NoteClipboardTests.cpp
     TempoEditingTests.cpp
     AutomationTests.cpp

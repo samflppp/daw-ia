@@ -694,6 +694,8 @@ std::string_view describe(Source source) noexcept
         return "imposé";
     case Source::deduced:
         return "déduit";
+    case Source::directed:
+        return "référence";
     case Source::defaulted:
         return "défaut";
     }
