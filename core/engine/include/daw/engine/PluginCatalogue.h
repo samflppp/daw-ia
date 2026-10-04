@@ -33,8 +33,6 @@ class PluginCatalogue
 public:
     PluginCatalogue(tracktion::Engine& engine, juce::File listFile);
 
-    [[nodiscard]] static juce::File defaultListFile(const juce::String& applicationName);
-
     struct ScanReport
     {
         int scanned{0};     // files the scanner opened

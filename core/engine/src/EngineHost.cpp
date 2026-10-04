@@ -14,8 +14,46 @@ bool EngineHost::runAsPluginScannerIfAsked(const juce::String& commandLine)
     return tracktion::PluginManager::startChildProcessPluginScan(commandLine);
 }
 
+namespace
+{
+
+// Tracktion's settings, kept in a folder given rather than in %APPDATA%.
+class FolderPropertyStorage final : public tracktion::PropertyStorage
+{
+public:
+    FolderPropertyStorage(const juce::String& applicationName, juce::File folder)
+        : tracktion::PropertyStorage{applicationName}
+        , folder_{std::move(folder)}
+    {
+    }
+
+    juce::File getAppPrefsFolder() override
+    {
+        if (!folder_.isDirectory())
+            folder_.createDirectory();
+        return folder_;
+    }
+
+private:
+    juce::File folder_;
+};
+
+juce::File personalFolder(const juce::String& applicationName)
+{
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile(applicationName);
+}
+
+} // namespace
+
 EngineHost::EngineHost(const juce::String& applicationName)
-    : engine_{std::make_unique<tracktion::Engine>(applicationName)}
+    : EngineHost{applicationName, personalFolder(applicationName)}
+{
+}
+
+EngineHost::EngineHost(const juce::String& applicationName, const juce::File& settingsFolder)
+    : engine_{std::make_unique<tracktion::Engine>(
+          std::make_unique<FolderPropertyStorage>(applicationName, settingsFolder), nullptr, nullptr)}
 {
     // Tracktion opens the audio device while the Engine is being constructed,
     // but it builds its list of wave devices from an async update, so the list
@@ -48,8 +86,7 @@ EngineHost::EngineHost(const juce::String& applicationName)
     // A plugin that crashes must take a scanner process down, never the DAW.
     pluginManager.setUsesSeparateProcessForScanning(true);
 
-    catalogue_ =
-        std::make_unique<PluginCatalogue>(*engine_, PluginCatalogue::defaultListFile(applicationName));
+    catalogue_ = std::make_unique<PluginCatalogue>(*engine_, settingsFolder.getChildFile("plugins.xml"));
     catalogue_->load();
 
     edit_ = std::make_unique<tracktion::Edit>(*engine_, tracktion::Edit::forEditing);

@@ -20,13 +20,6 @@ PluginCatalogue::PluginCatalogue(tracktion::Engine& engine, juce::File listFile)
 {
 }
 
-juce::File PluginCatalogue::defaultListFile(const juce::String& applicationName)
-{
-    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile(applicationName)
-        .getChildFile("plugins.xml");
-}
-
 bool PluginCatalogue::isHostedFormat(const juce::String& formatName)
 {
     return formatName == "VST3" || formatName == ClapPluginFormat::formatName;

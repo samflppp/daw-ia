@@ -1,4 +1,5 @@
 #include "EngineTestSupport.h"
+#include "TestSettings.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/TempoCommands.h"
@@ -56,7 +57,7 @@ struct SampleHarness
     SampleHarness()
         : registry{CommandRegistry::withBuiltinCommands()}
         , bus{state, registry}
-        , host{"daw_engine_tests"}
+        , host{"daw_engine_tests", daw::testing::engineSettingsFolder()}
         , folder{juce::File::createTempFile("samples")}
         , store{folder.getChildFile("blobs")}
         , projector{host.edit(), state, nullptr, &store}

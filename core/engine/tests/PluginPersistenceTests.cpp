@@ -1,5 +1,6 @@
 #include "HostedParameters.h"
 #include "PluginPersistenceScenario.h"
+#include "TestSettings.h"
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/command/CommandRegistry.h"
 #include "daw/domain/commands/AddNote.h"
@@ -77,7 +78,7 @@ struct HostedProject
     explicit HostedProject(const juce::File& projectFolder)
         : registry{CommandRegistry::withBuiltinCommands()}
         , bus{state, registry}
-        , host{"daw_engine_tests"}
+        , host{"daw_engine_tests", daw::testing::engineSettingsFolder()}
         , catalogue{host.engine(), projectFolder.getChildFile("plugins.xml")}
         , store{blobsFolderOf(projectFolder)}
         , projector{host.edit(), state, &catalogue, &store}

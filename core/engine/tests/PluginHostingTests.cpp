@@ -1,5 +1,6 @@
 #include "EngineTestSupport.h"
 #include "HostedParameters.h"
+#include "TestSettings.h"
 #include "daw/domain/commands/AutomationCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/engine/ClapPluginFormat.h"
@@ -87,7 +88,7 @@ struct PluginHarness
     PluginHarness()
         : registry{CommandRegistry::withBuiltinCommands()}
         , bus{state, registry}
-        , host{"daw_engine_tests"}
+        , host{"daw_engine_tests", daw::testing::engineSettingsFolder()}
         , catalogue{host.engine(), temporary.directory.getChildFile("plugins.xml")}
         , store{temporary.directory.getChildFile("plugin-state")}
         , projector{host.edit(), state, &catalogue, &store}
@@ -245,7 +246,7 @@ TEST_CASE("A damaged state is refused instead of being handed to a plugin")
 TEST_CASE("A plugin that killed the scanner is blacklisted at the next start")
 {
     TemporaryDirectory temporary;
-    daw::engine::EngineHost host{"daw_engine_tests"};
+    daw::engine::EngineHost host{"daw_engine_tests", daw::testing::engineSettingsFolder()};
 
     const auto listFile = temporary.directory.getChildFile("plugins.xml");
     const auto hostile = temporary.directory.getChildFile("hostile.vst3").getFullPathName();
@@ -262,7 +263,7 @@ TEST_CASE("A plugin that killed the scanner is blacklisted at the next start")
 TEST_CASE("The plugin list is persisted, so a start costs no scan")
 {
     TemporaryDirectory temporary;
-    daw::engine::EngineHost host{"daw_engine_tests"};
+    daw::engine::EngineHost host{"daw_engine_tests", daw::testing::engineSettingsFolder()};
     const auto listFile = temporary.directory.getChildFile("plugins.xml");
 
     juce::PluginDescription description;

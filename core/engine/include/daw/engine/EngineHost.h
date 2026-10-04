@@ -20,7 +20,15 @@ namespace daw::engine
 class EngineHost
 {
 public:
+    // The engine's settings and the list of plugins live in
+    // %APPDATA%\<applicationName>: the person's, kept from one session to the
+    // next.
     explicit EngineHost(const juce::String& applicationName);
+
+    // The same, kept in `settingsFolder` instead (S22). A test run passes a
+    // folder of its own: it never reads what an earlier run, an old copy of
+    // the repository or the application left in %APPDATA%.
+    EngineHost(const juce::String& applicationName, const juce::File& settingsFolder);
     ~EngineHost();
 
     EngineHost(const EngineHost&) = delete;

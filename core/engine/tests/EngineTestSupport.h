@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TestSettings.h"
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/command/CommandRegistry.h"
 #include "daw/domain/commands/AddNote.h"
@@ -29,7 +30,7 @@ struct EngineHarness
     EngineHarness()
         : registry{CommandRegistry::withBuiltinCommands()}
         , bus{state, registry}
-        , host{"daw_engine_tests"}
+        , host{"daw_engine_tests", daw::testing::engineSettingsFolder()}
         , projector{host.edit(), state}
     {
         bus.addObserver(projector);
