@@ -55,7 +55,29 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--csv", type=Path, default=None, help="Annotations (default: next to --raw).")
     build.add_argument("--out", type=Path, default=_default_model())
 
+    # The stem separator (S22): one file, one process, progress on stdout.
+    # The DAW cancels by ending the process.
+    separate = subcommands.add_parser("separate", help="Separate an audio file into four stems.")
+    separate.add_argument("--model", choices=["best", "fast", "fake"], default="best")
+    separate.add_argument("--input", type=Path)
+    separate.add_argument("--output", type=Path)
+    separate.add_argument(
+        "--signature", action="store_true", help="Print the model's signature, load nothing, and stop."
+    )
+    separate.add_argument("--models", type=Path, default=None, help="Where the weights are kept.")
+
     arguments = parser.parse_args(argv)
+
+    if arguments.service == "separate":
+        from daw_services.stems import run as separate_file
+        from daw_services.stems import signature_of
+
+        if arguments.signature:
+            print(signature_of(arguments.model), flush=True)
+            return 0
+        if arguments.input is None or arguments.output is None:
+            parser.error("separate: --input and --output are required")
+        return separate_file(arguments.model, arguments.input, arguments.output, arguments.models)
 
     if arguments.service == "corpus":
         annotations = arguments.csv or arguments.raw.parent / "corpus.csv"

@@ -3,7 +3,19 @@ name = "daw-services"
 version = "0.1.0"
 description = "Python services for DAW IA: MCP server, harmonic engine, conditioning, IAProvider."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "numpy>=2",
+]
+
+# The stem separator's models (S22): installed by the DAW the first time a
+# separation is asked for (`uv sync --extra stems`), never by the CI.
+[project.optional-dependencies]
+stems = [
+    "torch>=2.4",
+    "torchaudio>=2.4",
+    "demucs>=4.1",
+    "soundfile>=0.12",
+]
 
 [project.scripts]
 daw-services = "daw_services.__main__:main"
@@ -30,3 +42,19 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
+
+# Windows is the only target, Linux runs the CI: the lock is resolved for
+# those two and no other.
+[tool.uv]
+environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]
+
+# PyTorch for the CPU only: the CUDA wheels weigh gigabytes, and the DAW
+# targets laptops without a graphics card (S22).
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
