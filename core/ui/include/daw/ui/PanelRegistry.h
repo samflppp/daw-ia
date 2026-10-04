@@ -15,6 +15,7 @@
 #include "daw/ui/model/PromptReader.h"
 #include "daw/ui/model/SampleHost.h"
 #include "daw/ui/model/Selection.h"
+#include "daw/ui/model/StemHost.h"
 #include "daw/ui/model/TransportClock.h"
 #include "daw/ui/model/WorkspaceHost.h"
 
@@ -78,6 +79,9 @@ struct PanelServices
 
     // The mix by the AI (S20): measured, decided and verified behind it.
     MixHost& mix;
+
+    // The stem separator (S22): another process, minutes, cancellable.
+    StemHost& stems;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

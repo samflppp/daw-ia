@@ -72,6 +72,7 @@ Verification::Verification(Wiring wiring)
     , probe_(wiring.probe)
     , project_(wiring.project)
     , mix_(wiring.mix)
+    , stems_(wiring.stems)
     , workspaces_(wiring.workspaces)
     , output_(wiring.output)
 {
@@ -128,6 +129,9 @@ void Verification::start()
         break;
     case Run::playback:
         buildList();
+        break;
+    case Run::stems:
+        buildStems();
         break;
     }
 

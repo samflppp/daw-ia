@@ -75,6 +75,7 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context, bool canvas)
     , samples_(context.samples)
     , reader_(context.prompts)
     , listening_(context.listening)
+    , stems_(context.stems)
     , bar_(context.tokens, context.lookAndFeel)
     , canvas_(canvas)
     , notesClipboard_(context.clipboard)
@@ -110,6 +111,7 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context, bool canvas)
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
     samples_.addChangeListener(this);
+    stems_.addChangeListener(this);
     static_cast<void>(previews_.refresh(state_));
     if (canvas_)
         static_cast<void>(bands_.refresh(state_));
@@ -123,6 +125,7 @@ PlaylistPanel::~PlaylistPanel()
     horizontal_.removeListener(this);
     vertical_.removeListener(this);
     samples_.removeChangeListener(this);
+    stems_.removeChangeListener(this);
     selection_.removeChangeListener(this);
     project_.removeChangeListener(this);
     setLookAndFeel(nullptr);
@@ -148,6 +151,13 @@ void PlaylistPanel::resized()
 
 void PlaylistPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
+    // The separation moved: its header only.
+    if (source == &stems_)
+    {
+        repaint(getLocalBounds().removeFromTop(tokens_.integer("metric.panel.headerHeight")));
+        return;
+    }
+
     // A waveform came back from its thread: draw it, nothing else changed.
     if (source == &samples_)
     {
@@ -897,6 +907,7 @@ void PlaylistPanel::paint(juce::Graphics& g)
     g.setFont(lookAndFeel_.typography().caps("font.size.micro"));
     if (!titled_)
         g.drawText(canvas_ ? "TOILE" : "PLAYLIST", header, juce::Justification::centredLeft, false);
+    paintStems(g);
 
     // Nothing but the line that makes a line: nothing to arrange yet.
     if (!patternMode() && state_.lanes().empty() && laneCount() == 1)
@@ -1659,6 +1670,12 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
         return;
     }
 
+    if (stemsCancelArea().contains(point))
+    {
+        stems_.cancel();
+        return;
+    }
+
     // The zone's pill first: it sits above the zone, on the ruler when the
     // zone starts on the first line.
     if (zonePill().contains(point))
@@ -1735,7 +1752,7 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
         return;
 
     // Alt + drag draws the zone of generation.
-    if (mods.isAltDown())
+    if (mods.isAltDown() && !mods.isRightButtonDown())
     {
         zoneStart_ = point;
         zone_ = zoneBetween(point, point);
@@ -1756,6 +1773,13 @@ void PlaylistPanel::mouseDown(const juce::MouseEvent& event)
                 selected_.push_back(*hit);
             pickedNotes_.clear();
             repaint();
+            return;
+        }
+
+        if (mods.isRightButtonDown() && mods.isAltDown() && hit->audio)
+        {
+            if (const auto clip = domain::AudioClipId::parse(hit->id); clip)
+                showAudioClipMenu(clip.value());
             return;
         }
 
@@ -2027,6 +2051,80 @@ bool PlaylistPanel::keyPressed(const juce::KeyPress& key)
     }
 
     return false;
+}
+
+// --- the stem separator ---------------------------------------------------------
+
+void PlaylistPanel::showAudioClipMenu(domain::AudioClipId clip)
+{
+    constexpr int bestItem = 1;
+    constexpr int fastItem = 2;
+    const auto busy =
+        stems_.stage() == StemHost::Stage::separating || stems_.stage() == StemHost::Stage::installing;
+
+    juce::PopupMenu menu;
+    menu.addItem(bestItem, juce::String::fromUTF8(u8"Séparer en stems"), !busy);
+    menu.addItem(fastItem, juce::String::fromUTF8(u8"Séparer en stems (rapide)"), !busy);
+
+    juce::Component::SafePointer<PlaylistPanel> safe{this};
+    menu.showMenuAsync(juce::PopupMenu::Options{}.withMousePosition(),
+                       [safe, clip](int chosen)
+                       {
+                           if (safe == nullptr || (chosen != bestItem && chosen != fastItem))
+                               return;
+                           safe->stems_.separate(
+                               clip, chosen == fastItem ? StemHost::Quality::fast : StemHost::Quality::best);
+                       });
+}
+
+juce::Rectangle<int> PlaylistPanel::stemsArea() const
+{
+    if (stems_.stage() == StemHost::Stage::idle)
+        return {};
+    return getLocalBounds()
+        .removeFromTop(tokens_.integer("metric.panel.headerHeight"))
+        .removeFromRight(tokens_.integer("metric.playlist.stemsStatusWidth"))
+        .reduced(tokens_.integer("space.xs"));
+}
+
+juce::Rectangle<int> PlaylistPanel::stemsCancelArea() const
+{
+    const auto stage = stems_.stage();
+    if (stage != StemHost::Stage::separating && stage != StemHost::Stage::installing)
+        return {};
+    return stemsArea().removeFromRight(tokens_.integer("metric.playlist.headerWidth") / 2);
+}
+
+void PlaylistPanel::paintStems(juce::Graphics& g) const
+{
+    auto area = stemsArea();
+    if (area.isEmpty())
+        return;
+
+    const auto cancel = stemsCancelArea();
+    if (!cancel.isEmpty())
+    {
+        g.setColour(tokens_.colour("color.text.secondary"));
+        g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
+        g.drawText(juce::String::fromUTF8(u8"Annuler"), cancel, juce::Justification::centred, false);
+        area.removeFromRight(cancel.getWidth());
+    }
+
+    const auto failed = stems_.stage() == StemHost::Stage::failed;
+    g.setColour(tokens_.colour("color.surface.sunken"));
+    g.fillRect(area);
+    if (!failed)
+    {
+        g.setColour(tokens_.colour("color.state.selected"));
+        g.fillRect(
+            area.withWidth(static_cast<int>(area.getWidth() * std::clamp(stems_.progress(), 0.0, 1.0))));
+    }
+    g.setColour(tokens_.colour(failed ? "color.accent.danger" : "color.text.primary"));
+    g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
+    g.drawText(juce::String::fromUTF8(stems_.status().c_str()),
+               area.reduced(tokens_.integer("space.xs"), 0),
+               juce::Justification::centredLeft,
+               true);
 }
 
 // --- dropping samples ---------------------------------------------------------

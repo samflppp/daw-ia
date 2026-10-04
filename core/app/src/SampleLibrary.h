@@ -36,6 +36,11 @@ public:
 
     [[nodiscard]] domain::Result<domain::SampleRef> import(const juce::File& file) override;
 
+    // The same, into a given store, from any thread: the stems (S22) enter
+    // the store off the message thread.
+    [[nodiscard]] static domain::Result<domain::SampleRef> importInto(engine::ContentStore& store,
+                                                                      const juce::File& file);
+
     [[nodiscard]] std::vector<juce::File> folders() const override;
     void addFolder(const juce::File& folder) override;
     void removeFolder(const juce::File& folder) override;

@@ -453,6 +453,16 @@ private:
     // --- editing
     void placeAt(int lane, double beats);
     void showLaneMenu(int lane);
+
+    // --- the stem separator (S22)
+    // Alt + right click on an audio clip: « Séparer en stems ». A plain right
+    // click still removes, as it has since S17.
+    void showAudioClipMenu(domain::AudioClipId clip);
+    // The separation in flight, in the header: its stage, its progress, and
+    // « Annuler ». Empty when nothing runs and nothing failed.
+    [[nodiscard]] juce::Rectangle<int> stemsArea() const;
+    [[nodiscard]] juce::Rectangle<int> stemsCancelArea() const;
+    void paintStems(juce::Graphics& g) const;
     void renamePattern(domain::PatternId patternId);
     void renameLane(domain::LaneId laneId);
     void dropSample(const juce::File& file, juce::Point<int> at);
@@ -707,6 +717,7 @@ private:
     // The zone of generation, being drawn or drawn, and what was proposed.
     PromptReader& reader_;
     ListeningHost& listening_;
+    StemHost& stems_;
     GenerationPanel bar_;
     std::optional<Zone> zone_;
     std::optional<juce::Point<int>> zoneStart_;

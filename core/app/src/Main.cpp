@@ -14,6 +14,7 @@
 #include "QuitWatchdog.h"
 #include "SampleLibrary.h"
 #include "SongExporter.h"
+#include "StemSession.h"
 #include "TransportSync.h"
 #include "Verification.h"
 #include "WorkspaceSwitch.h"
@@ -242,6 +243,8 @@ public:
                 run = Verification::Run::mix;
             else if (tokens[index] == "--verify-lecture")
                 run = Verification::Run::playback;
+            else if (tokens[index] == "--verify-stems")
+                run = Verification::Run::stems;
             else if (tokens[index] != "--verify")
                 continue;
 
@@ -292,7 +295,8 @@ public:
                 &projectObserver_,
                 mixSession_.get(),
                 switch_.get(),
-                &engineHost_->output()});
+                &engineHost_->output(),
+                stemSession_.get()});
 
             // A verification mixes by the rules: never a key, never an API.
             if (mixSession_ != nullptr)
@@ -361,7 +365,8 @@ public:
         juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
         lookAndFeel_.reset();
         switch_.reset();
-        mixSession_.reset(); // it asks the copilot, and plays through the device
+        mixSession_.reset();  // it asks the copilot, and plays through the device
+        stemSession_.reset(); // a separation in flight: its process is ended, not waited for
         copilot_.reset();
         clock_.reset();
         bridge_.reset();
@@ -784,6 +789,12 @@ private:
                                       if (mixSession_ == nullptr)
                                           return domain::Value::object({{"started", domain::Value{false}}});
                                       return mixSession_->startFromCopilot(arguments);
+                                  },
+                                  [this](const domain::Value& arguments) -> domain::Value
+                                  {
+                                      if (stemSession_ == nullptr)
+                                          return domain::Value::object({{"started", domain::Value{false}}});
+                                      return stemSession_->startFromCopilot(arguments);
                                   }});
         mixSession_ = std::make_unique<MixSession>(
             MixSession::Wiring{bus_,
@@ -821,6 +832,18 @@ private:
             std::make_unique<SampleLibrary>([this] { return contentStore_.get(); }, layoutSettings_.get());
         sampleLibrary_->attachPreview(engineHost_->engine().getDeviceManager().deviceManager);
 
+        // The stem separator (S22): another process per separation, its
+        // stems kept under %LOCALAPPDATA%. --stems-model fake runs the band
+        // filters of the CI instead of a model.
+        stemSession_ =
+            std::make_unique<StemSession>(StemSession::Wiring{bus_,
+                                                              state_,
+                                                              [this] { return contentStore_.get(); },
+                                                              *sampleLibrary_,
+                                                              CopilotBridge::servicesFolder(),
+                                                              stemsCacheFromCommandLine(commandLine),
+                                                              stemsModelFromCommandLine(commandLine)});
+
         const ui::PanelServices services{tokens,
                                          *lookAndFeel_,
                                          bus_,
@@ -837,7 +860,8 @@ private:
                                          clipboard_,
                                          *promptReader_,
                                          *listening_,
-                                         *mixSession_};
+                                         *mixSession_,
+                                         *stemSession_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();
@@ -933,6 +957,32 @@ private:
                 return juce::File{tokens[index + 1].unquoted()}.getChildFile("appris");
         }
         return ui::StyleLearning::defaultFolder();
+    }
+
+    // Where separations are kept: the person's cache, or, for a verification,
+    // a folder of its own inside the run's, so a run never hits a cache an
+    // earlier run filled, nor fills the person's.
+    [[nodiscard]] static juce::File stemsCacheFromCommandLine(const juce::String& commandLine)
+    {
+        const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+        for (int index = 0; index < tokens.size() - 1; ++index)
+        {
+            if (tokens[index].startsWith("--verify"))
+                return juce::File{tokens[index + 1].unquoted()}.getChildFile("cache-stems");
+        }
+        return StemSession::defaultCache();
+    }
+
+    // --stems-model fake: the separator of the CI, band filters, no model.
+    [[nodiscard]] static std::string stemsModelFromCommandLine(const juce::String& commandLine)
+    {
+        const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+        for (int index = 0; index < tokens.size() - 1; ++index)
+        {
+            if (tokens[index] == "--stems-model")
+                return tokens[index + 1].unquoted().toStdString();
+        }
+        return {};
     }
 
     [[nodiscard]] juce::File projectFolderFromCommandLine(const juce::String& commandLine)
@@ -1162,6 +1212,7 @@ private:
     std::unique_ptr<WorkspaceSwitch> switch_;
     std::unique_ptr<CopilotBridge> copilot_;
     std::unique_ptr<MixSession> mixSession_;
+    std::unique_ptr<StemSession> stemSession_;
     juce::String layoutArgument_;
     std::unique_ptr<PluginRack> rack_;
     std::unique_ptr<TransportSync> transportSync_;

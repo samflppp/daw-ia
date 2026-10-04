@@ -35,6 +35,7 @@ namespace daw::app
 {
 
 class MixSession;
+class StemSession;
 
 // The checks a person would run on the real binary, run by the binary itself.
 //
@@ -59,6 +60,7 @@ class MixSession;
 //                    always did
 //   --verify-fluidite  how long the interface takes to paint, on an empty
 //                    project it fills first
+//   --verify-stems   the stem separator with a real model, on known sources
 //   --verify-lecture the list up to its meters, then the first bar looped
 //                    and stopped sixty times, after four kinds of action:
 //                    how often the song plays and is not heard (S21)
@@ -75,7 +77,8 @@ public:
         canvasLoad,
         fluidity,
         mix,
-        playback
+        playback,
+        stems
     };
 
     struct Wiring
@@ -133,6 +136,9 @@ public:
 
         // The sound card kept open (S21): --verify-lecture loses it on purpose.
         engine::AudioOutputKeeper* output{nullptr};
+
+        // The stem separator (S22): --verify-stems drives it with the fast model.
+        StemSession* stems{nullptr};
     };
 
     explicit Verification(Wiring wiring);
@@ -188,6 +194,7 @@ private:
     // before and after at equal loudness, one entry by the copilot, Ctrl+Z to
     // the byte, a strip refused, a cancel, a reference.
     void buildMix();
+    void buildStems();
 
     // S21 (VerificationPlayback.cpp): the silent playback of S12 and S20,
     // reproduced. Seventy-five cycles of the looped first bar, each after one
@@ -457,6 +464,7 @@ private:
     const PlaybackProbe* probe_{nullptr};
     ui::ProjectObserver* project_{nullptr};
     MixSession* mix_{nullptr};
+    StemSession* stems_{nullptr};
     ui::WorkspaceHost* workspaces_{nullptr};
     engine::AudioOutputKeeper* output_{nullptr};
 

@@ -185,19 +185,27 @@ std::shared_ptr<const ui::WaveformPeaks> SampleLibrary::waveform(const domain::S
 
 domain::Result<domain::SampleRef> SampleLibrary::import(const juce::File& file)
 {
-    using domain::ErrorCode;
-    using domain::fail;
-
     auto* store = store_ ? store_() : nullptr;
     if (store == nullptr)
-        return fail(ErrorCode::storageError, "no project is open to hold the sample");
+        return domain::fail(domain::ErrorCode::storageError, "no project is open to hold the sample");
+    return importInto(*store, file);
+}
+
+domain::Result<domain::SampleRef> SampleLibrary::importInto(engine::ContentStore& store,
+                                                            const juce::File& file)
+{
+    using domain::ErrorCode;
+    using domain::fail;
 
     if (!file.existsAsFile() || !isSampleFile(file))
         return fail(ErrorCode::invalidArgument, "not a sample: " + file.getFileName().toStdString());
 
     // Measured before anything is stored: a file JUCE cannot read is refused
-    // here, and never reaches the project as bytes nothing can play.
-    std::unique_ptr<juce::AudioFormatReader> reader{formats_.createReaderFor(file)};
+    // here, and never reaches the project as bytes nothing can play. Formats
+    // of its own: this runs off the message thread for the stems (S22).
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader{formats.createReaderFor(file)};
     if (reader == nullptr || reader->sampleRate <= 0.0 || reader->lengthInSamples <= 0)
         return fail(ErrorCode::invalidArgument, "unreadable audio: " + file.getFileName().toStdString());
 
@@ -208,7 +216,7 @@ domain::Result<domain::SampleRef> SampleLibrary::import(const juce::File& file)
     if (!file.loadFileAsData(bytes))
         return fail(ErrorCode::storageError, "cannot read " + file.getFileName().toStdString());
 
-    auto blob = store->put(bytes.getData(), bytes.getSize());
+    auto blob = store.put(bytes.getData(), bytes.getSize());
     if (!blob)
         return blob.error();
 

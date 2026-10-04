@@ -191,6 +191,30 @@ void CopilotBridge::restart()
     start();
 }
 
+juce::File CopilotBridge::servicesFolder()
+{
+    if (const auto given = juce::SystemStats::getEnvironmentVariable("DAW_IA_SERVICES_DIR", {});
+        given.isNotEmpty())
+        return juce::File{given};
+
+    // The working directory first, then the folders above the binary. The
+    // working directory alone was the rule until S10, and it held only for a
+    // launch from the repository root: a double-click on the executable, or a
+    // launch from anywhere else, started uv on a folder that does not exist
+    // and the copilot died with code 2 before saying a word.
+    const auto isServices = [](const juce::File& folder)
+    { return folder.getChildFile("pyproject.toml").existsAsFile(); };
+
+    auto candidate = juce::File::getCurrentWorkingDirectory().getChildFile("services");
+    for (auto folder = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
+         !isServices(candidate) && folder.exists() && !folder.isRoot();
+         folder = folder.getParentDirectory())
+    {
+        candidate = folder.getChildFile("services");
+    }
+    return candidate;
+}
+
 juce::StringArray CopilotBridge::childCommand(int port) const
 {
     // A whole command line, when the machine wants something else. Nothing in
@@ -211,29 +235,7 @@ juce::StringArray CopilotBridge::childCommand(int port) const
         return command;
     }
 
-    auto servicesDirectory = juce::SystemStats::getEnvironmentVariable("DAW_IA_SERVICES_DIR", {});
-
-    // The working directory first, then the folders above the binary. The
-    // working directory alone was the rule until S10, and it held only for a
-    // launch from the repository root: a double-click on the executable, or a
-    // launch from anywhere else, started uv on a folder that does not exist
-    // and the copilot died with code 2 before saying a word.
-    if (servicesDirectory.isEmpty())
-    {
-        const auto isServices = [](const juce::File& folder)
-        { return folder.getChildFile("pyproject.toml").existsAsFile(); };
-
-        auto candidate = juce::File::getCurrentWorkingDirectory().getChildFile("services");
-        for (auto folder =
-                 juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
-             !isServices(candidate) && folder.exists() && !folder.isRoot();
-             folder = folder.getParentDirectory())
-        {
-            candidate = folder.getChildFile("services");
-        }
-
-        servicesDirectory = candidate.getFullPathName();
-    }
+    const auto servicesDirectory = servicesFolder().getFullPathName();
 
     juce::StringArray command;
     command.add("uv");
@@ -435,6 +437,20 @@ void CopilotBridge::handleRequest(const Value& message)
             result = std::move(started).value();
         else
             failure = errorValue("mix", started.error().message);
+    }
+    else if (method.value() == "stems.separate")
+    {
+        auto started = onMessageThread(
+            [this, &arguments]() -> domain::Result<Value>
+            {
+                if (!wiring_.separateStems)
+                    return domain::fail(domain::ErrorCode::notFound, "no stem separator in this process");
+                return wiring_.separateStems(arguments);
+            });
+        if (started)
+            result = std::move(started).value();
+        else
+            failure = errorValue("stems", started.error().message);
     }
     else if (method.value() == "plugins.find")
     {

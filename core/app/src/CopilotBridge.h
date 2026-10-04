@@ -74,7 +74,16 @@ public:
         // The mix by the AI started from a sentence (S20): it starts, says
         // what it does, and writes nothing. Run on the message thread.
         std::function<domain::Value(const domain::Value&)> startMix;
+
+        // The stem separation of an audio clip started from a sentence (S22):
+        // it starts and says so; the stems are laid when it ends. Run on the
+        // message thread.
+        std::function<domain::Value(const domain::Value&)> separateStems;
     };
+
+    // The services' folder (the one holding pyproject.toml): DAW_IA_SERVICES_DIR,
+    // else services/ in the working directory or above the executable.
+    [[nodiscard]] static juce::File servicesFolder();
 
     explicit CopilotBridge(Wiring wiring);
     ~CopilotBridge() override;

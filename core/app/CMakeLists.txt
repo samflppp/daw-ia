@@ -35,12 +35,15 @@ target_sources(daw_app PRIVATE
     src/VerificationCanvas.cpp
     src/VerificationLearning.cpp
     src/VerificationMix.cpp
+    src/VerificationStems.cpp
     src/VerificationPlayback.cpp
     src/VerificationTiming.cpp
     src/VerificationWindows.cpp
     src/SampleLibrary.cpp
     src/SamplePreview.cpp
     src/SongExporter.cpp
+    src/StemSeparation.cpp
+    src/StemSession.cpp
     src/WorkspaceSwitch.cpp)
 
 target_include_directories(daw_app PRIVATE src)
