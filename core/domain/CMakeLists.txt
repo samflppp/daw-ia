@@ -15,6 +15,7 @@ add_library(daw_domain STATIC
     src/copilot/StateView.cpp
     src/copilot/Tools.cpp
     src/copilot/Usage.cpp
+    src/stems/Laying.cpp
     src/generation/Constraints.cpp
     src/generation/Form.cpp
     src/generation/Generator.cpp
