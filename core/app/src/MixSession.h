@@ -3,6 +3,7 @@
 #include "CopilotBridge.h"
 #include "MixComparison.h"
 #include "daw/domain/command/CommandBus.h"
+#include "daw/domain/copilot/Usage.h"
 #include "daw/domain/mix/Decision.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/engine/ContentStore.h"
@@ -94,7 +95,7 @@ public:
     [[nodiscard]] double prepareMs() const { return prepareMs_; }
     [[nodiscard]] bool measureReused() const { return measureReused_; }
     [[nodiscard]] const std::vector<domain::mix::Refusal>& refused() const { return refusals_; }
-    [[nodiscard]] domain::Value usage() const { return usage_; }
+    [[nodiscard]] const domain::copilot::Usage& usage() const { return usage_; }
     [[nodiscard]] MixComparison* comparison() { return comparison_.get(); }
 
     // The rules only, never the model: what --verify-mix runs, without a key.
@@ -160,7 +161,7 @@ private:
     std::set<std::string> refusedTracks_;
     std::optional<double> masterTrim_;
     std::string masterSentence_;
-    domain::Value usage_;
+    domain::copilot::Usage usage_;
     std::string decisionNote_;
 
     domain::mix::Axes axes_;

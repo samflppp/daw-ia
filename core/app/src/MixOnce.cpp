@@ -55,17 +55,12 @@ void MixOnce::timerCallback()
     {
         const auto* proposal = mix_.proposal();
         const auto by = proposal != nullptr ? proposal->decidedBy : std::string{"rien"};
-        const auto usage = mix_.usage();
-        const auto tokens = [&usage](const char* key)
-        {
-            const auto found = usage.intAt(key);
-            return found ? found.value() : std::int64_t{0};
-        };
+        const auto& usage = mix_.usage();
         juce::Logger::writeToLog(
             "mix-once: decided by " + juce::String::fromUTF8(by.c_str()) + ", " +
             juce::String(proposal != nullptr ? static_cast<int>(proposal->changes.size()) : 0) +
             " settings, " + juce::String(static_cast<int>(mix_.refused().size())) + " refused; tokens " +
-            juce::String(tokens("inputTokens")) + " in, " + juce::String(tokens("outputTokens")) + " out");
+            juce::String(usage.inputTokens) + " in, " + juce::String(usage.outputTokens) + " out");
         mix_.reject();
         finish("done, the proposal refused: the project is untouched");
         return;

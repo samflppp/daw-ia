@@ -241,7 +241,7 @@ void MixSession::decide()
     brief_ = std::make_unique<domain::mix::Brief>(
         domain::mix::briefOf(wiring_.state, before_->tracks, before_->master, effectiveAxes(), target()));
     decisionNote_.clear();
-    usage_ = Value{};
+    usage_ = {};
 
     if (useModel_ && wiring_.copilot != nullptr && wiring_.copilot->canInterpret())
     {
@@ -263,14 +263,7 @@ void MixSession::decideWithModel(int round, Value previous, Value refusals)
             if (!alive->load() || generation != generation_ || cancelled_.load() || brief_ == nullptr)
                 return;
             // Two rounds cost two requests: the tokens add up.
-            const auto tokens = [](const Value& from, const char* key)
-            {
-                const auto found = from.intAt(key);
-                return found ? found.value() : std::int64_t{0};
-            };
-            usage_ = Value::object(
-                {{"inputTokens", Value{tokens(usage_, "inputTokens") + tokens(usage, "inputTokens")}},
-                 {"outputTokens", Value{tokens(usage_, "outputTokens") + tokens(usage, "outputTokens")}}});
+            usage_ = usage_.plus(domain::copilot::Usage::fromValue(usage));
             if (!answer)
             {
                 decisionNote_ = "Le modèle n'a pas proposé (" + answer.error().message +
@@ -387,11 +380,9 @@ void MixSession::verify()
                                  french(after_->master.integratedLufs) + " LUFS, " +
                                  french(after_->master.truePeakDb) + " dBTP ; mesure " +
                                  french(measureSeconds_) + " s ; décidé par " + proposal_->decidedBy;
-            if (const auto in = usage_.intAt("inputTokens"); in)
-                record +=
-                    " ; jetons " + std::to_string(in.value()) + " en entrée, " +
-                    std::to_string(usage_.intAt("outputTokens") ? usage_.intAt("outputTokens").value() : 0) +
-                    " en sortie";
+            if (usage_ != domain::copilot::Usage{})
+                record += " ; jetons " + std::to_string(usage_.inputTokens) + " en entrée, " +
+                          std::to_string(usage_.outputTokens) + " en sortie";
             juce::Logger::writeToLog(toJuce(record));
             for (const auto& strip : brief_->strips)
                 juce::Logger::writeToLog(toJuce("mix:   " + strip.name + " (" +
