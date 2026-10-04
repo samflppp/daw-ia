@@ -7,12 +7,15 @@
 namespace daw::ui
 {
 
-PromptReader::Reading LocalPromptReader::parse(std::string_view text)
+PromptReader::Reading LocalPromptReader::parse(std::string_view text, const Zone& zone)
 {
     Reading out;
     out.interpretation = domain::generation::LocalInterpreter::parse(text);
 
-    // "plus sombre" asks to rework: its words are used, not ignored.
+    // "plus sombre" asks to rework: its words are used, not ignored — when
+    // there are notes to rework.
+    if (!zone.hasNotes)
+        return out;
     if (auto asked = domain::generation::readTransform(text); asked.has_value())
     {
         out.transform = asked->transform;
@@ -35,9 +38,8 @@ PromptReader::Reading LocalPromptReader::parse(std::string_view text)
 
 void LocalPromptReader::read(std::string text, Zone zone, Done done)
 {
-    static_cast<void>(zone);
     if (done)
-        done(parse(text));
+        done(parse(text, zone));
 }
 
 RoutedPromptReader::RoutedPromptReader(Remote remote)
@@ -49,7 +51,7 @@ void RoutedPromptReader::read(std::string text, Zone zone, Done done)
 {
     // A second prompt replaces the first: the window only ever shows the
     // answer to the last question asked.
-    pending_ = Pending{nextTicket_++, std::move(text), std::move(done)};
+    pending_ = Pending{nextTicket_++, std::move(text), zone, std::move(done)};
 
     if (!remote_.available || !remote_.available() || !remote_.ask)
     {
@@ -110,7 +112,7 @@ void RoutedPromptReader::local(std::string_view notice)
     if (!taken.done)
         return;
 
-    auto out = LocalPromptReader::parse(taken.text);
+    auto out = LocalPromptReader::parse(taken.text, taken.zone);
     out.notice = std::string{notice};
     taken.done(std::move(out));
 }

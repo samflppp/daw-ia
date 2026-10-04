@@ -141,9 +141,21 @@ TEST_CASE("prompt reading: a second prompt replaces the first, a cancelled one n
     CHECK(answers.size() == 1);
 }
 
+namespace
+{
+
+PromptReader::Zone withNotes(bool hasNotes)
+{
+    PromptReader::Zone zone{};
+    zone.hasNotes = hasNotes;
+    return zone;
+}
+
+} // namespace
+
 TEST_CASE("prompt reading: the local words that ask to rework notes are used, not ignored")
 {
-    const auto reading = LocalPromptReader::parse("plus sombre en croches");
+    const auto reading = LocalPromptReader::parse("plus sombre en croches", withNotes(true));
     REQUIRE(reading.transform.has_value());
     CHECK(*reading.transform == domain::generation::Transform::darker);
     // "en" is a filler the S14 words report; "plus" and "sombre" were used.
@@ -152,5 +164,16 @@ TEST_CASE("prompt reading: the local words that ask to rework notes are used, no
     CHECK(std::find(ignored.begin(), ignored.end(), "sombre") == ignored.end());
     CHECK(reading.interpretation.constraints.resolution == domain::generation::Resolution::eighth);
 
-    CHECK_FALSE(LocalPromptReader::parse("Am basse").transform.has_value());
+    CHECK_FALSE(LocalPromptReader::parse("Am basse", withNotes(true)).transform.has_value());
+}
+
+TEST_CASE("prompt reading: over an empty zone, a word to rework notes is said ignored, not lost")
+{
+    // Nothing to rework: "sombre" is no constraint of a new proposal. Before
+    // S22 it left the ignored words all the same, and vanished unsaid.
+    const auto reading = LocalPromptReader::parse("Am doubles dense grave basse sombre", withNotes(false));
+    CHECK_FALSE(reading.transform.has_value());
+    const auto& ignored = reading.interpretation.ignored;
+    CHECK(std::find(ignored.begin(), ignored.end(), "sombre") != ignored.end());
+    CHECK(reading.interpretation.constraints.role == Role::bass);
 }

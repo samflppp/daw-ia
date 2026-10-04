@@ -78,7 +78,10 @@ public:
 class LocalPromptReader final : public PromptReader
 {
 public:
-    [[nodiscard]] static Reading parse(std::string_view text);
+    // The words that ask to rework notes ("plus sombre") are a transform when
+    // the zone holds notes. Over an empty zone there is nothing to rework:
+    // they are no constraint, and are said ignored like any other (S22).
+    [[nodiscard]] static Reading parse(std::string_view text, const Zone& zone);
 
     void read(std::string text, Zone zone, Done done) override;
     void cancel() override {}
@@ -135,6 +138,7 @@ private:
     {
         std::uint64_t ticket{0};
         std::string text;
+        Zone zone;
         Done done;
     };
 
