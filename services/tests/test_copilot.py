@@ -70,6 +70,7 @@ class FakeDaw:
     def __init__(self, refuse: str | None = None, check: Any = None) -> None:
         self.executed: list[dict[str, Any]] = []
         self.mixes: list[dict[str, Any]] = []
+        self.separations: list[dict[str, Any]] = []
         self.checked: list[list[dict[str, Any]]] = []
         self.refuse = refuse
         # What commands.check answers; None plays a DAW from before it existed.
@@ -98,6 +99,7 @@ class FakeDaw:
                     "plugins.find": lambda params: {"query": params.get("query", ""), "found": []},
                     "mix.levels": lambda _params: LEVELS,
                     "mix.start": self._mix_start,
+                    "stems.separate": self._separate,
                     "commands.execute": self._execute,
                     **({"commands.check": self._check} if self.check is not None else {}),
                 },
@@ -106,6 +108,10 @@ class FakeDaw:
 
         self._thread = threading.Thread(target=serve, daemon=True)
         self._thread.start()
+
+    def _separate(self, params: dict[str, Any]) -> dict[str, Any]:
+        self.separations.append(params)
+        return {"started": True, "status": "Séparation : 0 %"}
 
     def _mix_start(self, params: dict[str, Any]) -> dict[str, Any]:
         self.mixes.append(params)
@@ -253,6 +259,24 @@ def test_mixing_the_song_starts_the_mix_and_writes_nothing(daw: FakeDaw) -> None
     assert daw.executed == []
     handed = provider.messages[-1][-1]["content"][0]["content"]
     assert '"started":true' in handed
+
+
+def test_separating_a_clip_asks_the_daw_and_writes_nothing_itself(daw: FakeDaw) -> None:
+    provider = ScriptedProvider(
+        [
+            tool_turn(
+                ToolCall("a", "stems.separate", {"clipId": "01JBWQ7Z0000000000000CLIP1", "quality": "fast"})
+            ),
+            Turn(text="Je sépare le clip ; la progression s'affiche dans la playlist."),
+        ]
+    )
+
+    answer = Agent(connected(daw), provider).answer("sépare ce morceau en stems, vite")
+
+    assert not answer.failed
+    assert daw.separations == [{"clipId": "01JBWQ7Z0000000000000CLIP1", "quality": "fast"}]
+    assert daw.executed == []
+    assert "stems.separate" in [tool["name"] for tool in provider.calls[0]]
 
 
 def test_a_request_out_of_reach_changes_nothing(daw: FakeDaw) -> None:

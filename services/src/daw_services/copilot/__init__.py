@@ -53,6 +53,8 @@ Ce que tu peux faire :
 - mesurer les niveaux de chaque piste et du master (mix.get_levels) ;
 - lancer le mixage par l'IA (mix.start) : il mesure, propose, et l'utilisateur
   écoute avant/après puis garde ou refuse — rien n'est écrit avant ;
+- séparer un clip audio en stems (stems.separate) : voix, batterie, basse et le
+  reste, sur quatre pistes, à la place du clip ; le calcul prend des minutes ;
 - demander des modifications en appelant les outils de commande.
 
 Règles :
@@ -229,6 +231,28 @@ READ_TOOLS.append(
     }
 )
 
+READ_TOOLS.append(
+    {
+        "name": "stems.separate",
+        "description": (
+            "Sépare un clip audio du projet en quatre stems — voix, batterie, basse, le reste — "
+            "posés chacun sur sa piste à la place du clip, en une seule entrée d'historique. "
+            "Le calcul tourne en fond plusieurs minutes ; la playlist montre sa progression et "
+            "l'utilisateur peut l'annuler. clipId est l'identifiant du clip audio (audioClips dans "
+            "l'état du projet). quality : best (le meilleur modèle, lent) ou fast (quelques minutes)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "clipId": {"type": "string"},
+                "quality": {"type": "string", "enum": ["best", "fast"]},
+            },
+            "required": ["clipId"],
+            "additionalProperties": False,
+        },
+    }
+)
+
 READ_TOOL_NAMES = {tool["name"] for tool in READ_TOOLS}
 
 
@@ -387,6 +411,9 @@ class Agent:
 
             if call.name == "mix.start":
                 return self._daw.request("mix.start", dict(call.arguments))
+
+            if call.name == "stems.separate":
+                return self._daw.request("stems.separate", dict(call.arguments))
 
             if call.name == "clip.get_notes":
                 return self._daw.request("clip.notes", {"clipId": call.arguments.get("clipId", "")})
