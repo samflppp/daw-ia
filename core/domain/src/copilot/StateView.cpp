@@ -219,6 +219,44 @@ Value transportValue(const ProjectState& state)
 
 } // namespace
 
+namespace
+{
+
+Value directionValue(const direction::Direction& direction)
+{
+    const auto combined = direction::combine(direction);
+    Value::Object said;
+    if (combined.bpm)
+        said.emplace_back("bpm", Value{*combined.bpm});
+    if (combined.key)
+        said.emplace_back("key", Value{generation::describe(*combined.key)});
+    Value::Array candidates;
+    for (const auto& key : combined.keyCandidates)
+        candidates.push_back(Value{generation::describe(key)});
+    if (!candidates.empty())
+        said.emplace_back("keyCandidates", Value::array(std::move(candidates)));
+    Value::Array contradictions;
+    for (const auto& sentence : combined.contradictions)
+        contradictions.push_back(Value{sentence});
+    if (!contradictions.empty())
+        said.emplace_back("contradictions", Value::array(std::move(contradictions)));
+    Value::Array sections;
+    for (const auto& section : combined.sections)
+        sections.push_back(Value::object({{"fromSeconds", Value{section.fromSeconds}},
+                                          {"toSeconds", Value{section.toSeconds}},
+                                          {"label", Value{std::string(1, section.label)}}}));
+    if (!sections.empty())
+        said.emplace_back("sections", Value::array(std::move(sections)));
+    Value::Object balance;
+    for (const auto& [stem, db] : combined.balanceDb)
+        balance.emplace_back(stem, Value{db});
+    if (!balance.empty())
+        said.emplace_back("stemBalanceDb", Value::object(std::move(balance)));
+    return Value::object({{"says", Value::object(std::move(said))}, {"value", direction.toValue()}});
+}
+
+} // namespace
+
 Value summarise(const ProjectState& state, const MachinePlugins& plugins)
 {
     Value::Array tracks;
@@ -291,6 +329,13 @@ Value summarise(const ProjectState& state, const MachinePlugins& plugins)
             lines.push_back(line.toValue());
         static_cast<void>(summary.set("automation", Value::array(std::move(lines))));
     }
+
+    // The direction by references (S22), only when there is one: what the
+    // references say together, in words the model can cite, and the whole
+    // direction as direction.set takes it back (a correction is a change of
+    // that value). A project without one reads as before.
+    if (!state.direction().empty())
+        static_cast<void>(summary.set("direction", directionValue(state.direction())));
     return summary;
 }
 

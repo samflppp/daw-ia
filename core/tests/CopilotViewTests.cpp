@@ -243,3 +243,36 @@ TEST_CASE("the summary carries the automation lines, and nothing when there are 
     REQUIRE(lines->asArray()->size() == 1);
     CHECK(lines->asArray()->front().stringAt("id").value() == line.toString());
 }
+
+TEST_CASE("the summary carries the direction, what it says together and its value, only when there is one")
+{
+    Harness harness;
+    CHECK(summarise(harness.state, machineWith(0)).find("direction") == nullptr);
+
+    direction::Direction wanted;
+    for (const auto& [name, bpm] :
+         {std::pair{std::string{"a.wav"}, 120.0}, std::pair{std::string{"b.wav"}, 92.0}})
+    {
+        direction::Reference reference;
+        reference.reading.name = name;
+        reference.reading.digest = std::string(64, name.front());
+        reference.reading.bpm = bpm;
+        reference.reading.key = generation::Key{9, generation::Mode::minor};
+        wanted.references.push_back(reference);
+    }
+    harness.state.setDirection(wanted);
+
+    const auto summary = summarise(harness.state, machineWith(0));
+    const auto* direction = summary.find("direction");
+    REQUIRE(direction != nullptr);
+    const auto* says = direction->find("says");
+    REQUIRE(says != nullptr);
+    // The key they share, in words; the tempos they do not, said.
+    CHECK(says->stringAt("key").value() == "La mineur");
+    CHECK(says->find("bpm") == nullptr);
+    REQUIRE(says->find("contradictions") != nullptr);
+    CHECK(json::write(*says->find("contradictions")).find("120 BPM") != std::string::npos);
+    // And the whole direction, as direction.set takes it back.
+    REQUIRE(direction->find("value") != nullptr);
+    CHECK(direction::Direction::fromValue(*direction->find("value")).value() == wanted);
+}
