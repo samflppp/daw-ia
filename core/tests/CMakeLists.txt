@@ -40,6 +40,7 @@ add_executable(daw_domain_tests
     MixingReadinessTests.cpp
     CopilotUsageTests.cpp
     StemLayingTests.cpp
+    DirectionReadingTests.cpp
     NoteClipboardTests.cpp
     TempoEditingTests.cpp
     AutomationTests.cpp
