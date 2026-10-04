@@ -184,7 +184,20 @@ void Verification::addCanvasSteps()
             if (!lane)
                 return;
 
-            const auto at = view->pointFor(static_cast<int>(lane.value()), placement->startBeats + 0.5);
+            // On the long project of --verify the blocks are laid after the
+            // end of the song, past the right edge of the view: the hand
+            // scrolls to them first — Shift and the wheel sideways, the wheel
+            // up and down —, the way inSight does for a row of notes.
+            auto at = view->pointFor(static_cast<int>(lane.value()), placement->startBeats + 0.5);
+            for (int notch = 0; notch < 400 && !view->timelineArea().contains(at); ++notch)
+            {
+                const auto area = view->timelineArea();
+                if (at.getX() < area.getX() || at.getX() >= area.getRight())
+                    wheel(*view, area.getCentre(), at.getX() >= area.getRight() ? -0.1f : 0.1f, true);
+                else
+                    wheel(*view, area.getCentre(), at.getY() >= area.getBottom() ? -0.1f : 0.1f);
+                at = view->pointFor(static_cast<int>(lane.value()), placement->startBeats + 0.5);
+            }
             check(view->timelineArea().contains(at), "le bloc est à l'écran avant d'être visé");
             doubleClick(*view, at);
             note("cadré : " + juce::String(view->beatWidth(), 1).toStdString() +

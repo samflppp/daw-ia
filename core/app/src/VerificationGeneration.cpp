@@ -191,8 +191,8 @@ void Verification::addGenerationSteps()
             snapshot("s16-fenetre");
         });
 
-    add("« Am doubles dense grave basse sombre », Entrée : une basse en La mineur ; « sombre » est dit "
-        "ignoré",
+    add("« Am doubles dense grave basse sombre », Entrée : une basse en La mineur ; « sombre » n'est pas "
+        "une retouche sur une zone vide",
         [this, roll, untouched, ghostsLegal, enter]
         {
             enter("Am doubles dense grave basse sombre");
@@ -208,8 +208,14 @@ void Verification::addGenerationSteps()
                   "La mineur, imposé");
             check(constraints.role.value == domain::generation::Role::bass, "une basse");
             check(constraints.reg.value == domain::generation::Register::low, "grave");
-            check(panel->proposalLine().contains(juce::String::fromUTF8("ignoré : sombre")),
-                  "« sombre » est dit ignoré");
+            // Read by the copilot's model, « sombre » may be translated
+            // (minor, low) or said ignored: the model's call, and the line
+            // says which. Read by the local words, it is said ignored — a
+            // unit test pins it (PromptReaderTests). Never a retouche: the
+            // zone has nothing to rework.
+            const auto line = panel->proposalLine();
+            note("ligne : " + line.toStdString());
+            check(!line.contains(juce::String::fromUTF8("retouche")), "pas de retouche sur une zone vide");
 
             const auto [low, high] = domain::generation::registerRange(domain::generation::Role::bass,
                                                                        domain::generation::Register::low);
