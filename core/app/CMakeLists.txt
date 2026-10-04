@@ -44,6 +44,7 @@ target_sources(daw_app PRIVATE
     src/SongExporter.cpp
     src/StemSeparation.cpp
     src/StemSession.cpp
+    src/DirectionSession.cpp
     src/WorkspaceSwitch.cpp)
 
 target_include_directories(daw_app PRIVATE src)

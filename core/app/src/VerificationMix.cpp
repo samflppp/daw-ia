@@ -62,6 +62,20 @@ std::string fixed(double value, int decimals = 2)
     return juce::String(value, decimals).toStdString();
 }
 
+// How bright a master is: its top four octaves (2 to 16 kHz) against its
+// bottom four (31.5 to 250 Hz), in dB.
+double brightness(const domain::mix::StreamMeasure& master)
+{
+    double top = 0.0;
+    double bottom = 0.0;
+    for (std::size_t band = 0; band < 4; ++band)
+    {
+        bottom += master.bandsDb[band] / 4.0;
+        top += master.bandsDb[domain::mix::bandCount - 1 - band] / 4.0;
+    }
+    return top - bottom;
+}
+
 bool settled(const MixSession& mix)
 {
     return mix.stage() == Stage::ready || mix.stage() == Stage::failed || mix.stage() == Stage::idle;
@@ -80,6 +94,7 @@ struct MixRun
     double trimDb{0.0};
     std::map<std::string, double> afterTracks;
     double cancelMs{0.0};
+    double brightWithout{0.0};
     std::string kickBefore;
 };
 
@@ -534,18 +549,79 @@ void Verification::buildMix()
         {
             const auto* brief = mix_->brief();
             check(mix_->stage() == Stage::ready, "une proposition");
-            check(brief != nullptr && brief->target.source == "Référence.wav",
-                  "la cible vient de la référence (" + (brief != nullptr ? brief->target.source : "") + ")");
+            // Since S22 the reference is read into the project's direction,
+            // and the mix aims at the direction.
+            check(brief != nullptr && brief->target.source == "direction : Référence.wav",
+                  "la cible vient de la direction, qui tient la référence (" +
+                      (brief != nullptr ? brief->target.source : "") + ")");
             check(brief != nullptr && brief->target.tilt.has_value(), "avec sa pente spectrale");
             check(mix_->refused().empty(), "rien de refusé");
             mix_->reject();
             mix_->clearReference();
         });
 
+    // The direction at its effect (S22): the same song mixed without one, then
+    // towards a dark reference, all the way; the second master is measured
+    // darker. The rules decide both: no key.
     add(
-        "le copilote lance le mixage avec un axe",
+        "sans direction : Mixer, et mesurer la brillance du master à l'essai",
+        [this] { mix_->start(); },
+        [this] { return settled(*mix_); },
+        mixTimeoutMs);
+
+    add(
+        "une référence sombre, la direction à fond",
+        [this, run]
+        {
+            check(mix_->stage() == Stage::ready && mix_->after() != nullptr,
+                  "une proposition sans direction");
+            if (mix_->after() != nullptr)
+                run->brightWithout = brightness(mix_->after()->master);
+            note("brillance sans direction : " + fixed(run->brightWithout, 1) + " dB");
+            mix_->reject();
+
+            const auto dark = folder_.getChildFile("signaux").getChildFile("Sombre.wav");
+            writeSignal(dark,
+                        [](double t)
+                        { return 0.5 * sine(60.0, t) + 0.3 * sine(125.0, t) + 0.01 * sine(4000.0, t); });
+            mix_->setReference(dark.getFullPathName().toStdString());
+        },
+        [this] { return mix_->reference().find("Sombre.wav") != std::string::npos; },
+        60000.0);
+
+    add(
+        "Mixer vers elle",
         [this]
         {
+            mix_->setReferenceAmount(1.0);
+            mix_->start();
+        },
+        [this] { return settled(*mix_); },
+        mixTimeoutMs);
+
+    add("le master à l'essai est plus sombre que sans direction, et un Ctrl+Z retire la direction",
+        [this, run]
+        {
+            check(mix_->stage() == Stage::ready && mix_->after() != nullptr,
+                  "une proposition vers la référence");
+            if (mix_->after() == nullptr)
+                return;
+            const auto with = brightness(mix_->after()->master);
+            note("brillance vers la référence sombre : " + fixed(with, 1) +
+                 " dB, sans : " + fixed(run->brightWithout, 1) + " dB");
+            check(with < run->brightWithout - 0.5, "plus sombre d'au moins 0,5 dB");
+            mix_->reject();
+            mix_->clearReference();
+            check(state_.direction().empty(), "la direction est retirée");
+        });
+
+    add(
+        "le copilote lance le mixage avec un axe",
+        [this, run]
+        {
+            // What is in the history before: the references of the direction
+            // were written on purpose (S22); the copilot's mix writes nothing.
+            run->depthBefore = depth();
             const auto said = mix_->startFromCopilot(domain::Value::object({{"punch", domain::Value{0.5}}}));
             const auto started = said.boolAt("started");
             check(started && started.value(), "lancé");

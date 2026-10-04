@@ -219,15 +219,26 @@ void MixSession::measure()
 
 domain::mix::Axes MixSession::effectiveAxes() const
 {
-    if (referenceMeasure_.has_value() && before_ != nullptr)
-        return domain::mix::towards(target(), before_->master, axes_, referenceAmount_);
+    const auto aim = target();
+    if (aim.tilt.has_value() && before_ != nullptr)
+        return domain::mix::towards(aim, before_->master, axes_, wiring_.state.direction().amount);
     return axes_;
 }
 
 domain::mix::Target MixSession::target() const
 {
-    if (referenceMeasure_.has_value())
-        return domain::mix::targetOf(*referenceMeasure_, referenceName_);
+    // The project's direction (S22): what its references say together, as
+    // a master's shape. One path: « Référence… » adds to it.
+    const auto combined = domain::direction::combine(wiring_.state.direction());
+    if (combined.tilt.has_value())
+    {
+        domain::mix::Target aim;
+        aim.tilt = combined.tilt;
+        aim.crestDb = combined.crestDb;
+        aim.sideShare = combined.sideShare;
+        aim.source = "direction : " + reference();
+        return aim;
+    }
     domain::mix::Target fromAxes;
     fromAxes.source = "axes";
     return fromAxes;
@@ -552,64 +563,37 @@ void MixSession::setAxes(domain::mix::Axes axes)
 
 void MixSession::setReference(const std::string& path)
 {
-    // One render at a time: the reference waits for the song.
-    if (stage_ == Stage::measuring || stage_ == Stage::deciding || stage_ == Stage::verifying)
-        return;
-    cancelled_.store(false);
-    const juce::File file{toJuce(path)};
-    auto measured = std::make_shared<std::optional<domain::mix::StreamMeasure>>();
-    setStage(Stage::measuring, "Je mesure la référence « " + file.getFileName().toStdString() + " »…");
-    offThread(
-        [file, measured]
-        {
-            juce::AudioFormatManager formats;
-            formats.registerBasicFormats();
-            std::unique_ptr<juce::AudioFormatReader> reader{formats.createReaderFor(file)};
-            if (reader == nullptr)
-                return;
-            domain::mix::StreamAnalyser analyser{reader->sampleRate};
-            juce::AudioBuffer<float> block{2, 8192};
-            for (juce::int64 at = 0; at < reader->lengthInSamples; at += block.getNumSamples())
-            {
-                const auto count = static_cast<int>(
-                    std::min<juce::int64>(block.getNumSamples(), reader->lengthInSamples - at));
-                block.clear();
-                reader->read(&block, 0, count, at, true, true);
-                analyser.process(block.getReadPointer(0),
-                                 block.getReadPointer(reader->numChannels > 1 ? 1 : 0),
-                                 static_cast<std::size_t>(count));
-            }
-            *measured = analyser.finish();
-        },
-        [this, measured, file]
-        {
-            if (!measured->has_value())
-            {
-                setStage(Stage::failed,
-                         "Cette référence ne se lit pas : " + file.getFileName().toStdString());
-                return;
-            }
-            referenceMeasure_ = std::move(*measured);
-            referenceName_ = file.getFileName().toStdString();
-            setStage(Stage::idle,
-                     "Référence : « " + referenceName_ + " », " + french(referenceMeasure_->integratedLufs) +
-                         " LUFS. « Mixer » ira vers elle.");
-            if (before_ != nullptr && proposal_ != nullptr)
-                decide();
-        });
+    // Since S22 a reference is read into the project's direction: separated,
+    // measured stem by stem, written by direction.set. The mix reads it from
+    // there (target()), like the generation and the copilot.
+    if (auto* direction = wiring_.direction ? wiring_.direction() : nullptr; direction != nullptr)
+        direction->addReference(path);
 }
 
 void MixSession::clearReference()
 {
-    referenceMeasure_.reset();
-    referenceName_.clear();
-    sendChangeMessage();
+    if (auto* direction = wiring_.direction ? wiring_.direction() : nullptr; direction != nullptr)
+        direction->clear();
+}
+
+std::string MixSession::reference() const
+{
+    std::string names;
+    for (const auto& reference : wiring_.state.direction().references)
+        names += (names.empty() ? "" : ", ") + reference.reading.name;
+    return names;
 }
 
 void MixSession::setReferenceAmount(double amount)
 {
-    referenceAmount_ = std::clamp(amount, 0.0, 1.0);
-    if (referenceMeasure_.has_value() && before_ != nullptr && stage_ == Stage::ready)
+    if (auto* direction = wiring_.direction ? wiring_.direction() : nullptr; direction != nullptr)
+        direction->setAmount(amount);
+}
+
+void MixSession::directionChanged()
+{
+    sendChangeMessage();
+    if (before_ != nullptr && stage_ == Stage::ready)
     {
         clearProposal();
         decide();

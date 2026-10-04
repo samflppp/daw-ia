@@ -1,5 +1,6 @@
 #include "AppShellView.h"
 #include "CopilotBridge.h"
+#include "DirectionSession.h"
 #include "DisplayMode.h"
 #include "EditClock.h"
 #include "LevelMonitor.h"
@@ -367,6 +368,7 @@ public:
         switch_.reset();
         mixSession_.reset();  // it asks the copilot, and plays through the device
         stemSession_.reset(); // a separation in flight: its process is ended, not waited for
+        directionSession_.reset();
         copilot_.reset();
         clock_.reset();
         bridge_.reset();
@@ -804,7 +806,8 @@ private:
                                contentStore_.get(),
                                copilot_.get(),
                                clock_.get(),
-                               &engineHost_->engine().getDeviceManager().deviceManager});
+                               &engineHost_->engine().getDeviceManager().deviceManager,
+                               [this]() -> ui::DirectionHost* { return directionSession_.get(); }});
         promptReader_ = std::make_unique<PromptReading>(*copilot_);
         listening_ = std::make_unique<Listening>(*projector_, state_);
 
@@ -843,6 +846,21 @@ private:
                                                               CopilotBridge::servicesFolder(),
                                                               stemsCacheFromCommandLine(commandLine),
                                                               stemsModelFromCommandLine(commandLine)});
+
+        // The direction by references (S22): a reference separated by the fast
+        // model, read into numbers, written by direction.set. The mix decides
+        // again when it changes under a proposal.
+        directionSession_ = std::make_unique<DirectionSession>(
+            DirectionSession::Wiring{bus_,
+                                     state_,
+                                     CopilotBridge::servicesFolder(),
+                                     stemsCacheFromCommandLine(commandLine),
+                                     stemsModelFromCommandLine(commandLine)});
+        directionSession_->onDirectionChanged = [this]
+        {
+            if (mixSession_ != nullptr)
+                mixSession_->directionChanged();
+        };
 
         const ui::PanelServices services{tokens,
                                          *lookAndFeel_,
@@ -973,7 +991,9 @@ private:
         return StemSession::defaultCache();
     }
 
-    // --stems-model fake: the separator of the CI, band filters, no model.
+    // --stems-model fake: the separator of the CI, band filters, no model. A
+    // verification runs it unless it names another: only --verify-stems
+    // separates with a model, which it downloads the first time.
     [[nodiscard]] static std::string stemsModelFromCommandLine(const juce::String& commandLine)
     {
         const auto tokens = juce::StringArray::fromTokens(commandLine, true);
@@ -981,6 +1001,11 @@ private:
         {
             if (tokens[index] == "--stems-model")
                 return tokens[index + 1].unquoted().toStdString();
+        }
+        for (const auto& token : tokens)
+        {
+            if (token.startsWith("--verify") && token != "--verify-stems")
+                return "fake";
         }
         return {};
     }
@@ -1213,6 +1238,7 @@ private:
     std::unique_ptr<CopilotBridge> copilot_;
     std::unique_ptr<MixSession> mixSession_;
     std::unique_ptr<StemSession> stemSession_;
+    std::unique_ptr<DirectionSession> directionSession_;
     juce::String layoutArgument_;
     std::unique_ptr<PluginRack> rack_;
     std::unique_ptr<TransportSync> transportSync_;

@@ -9,12 +9,14 @@
 #include "daw/engine/ContentStore.h"
 #include "daw/engine/MixRender.h"
 #include "daw/engine/PluginCatalogue.h"
+#include "daw/ui/model/DirectionHost.h"
 #include "daw/ui/model/MixHost.h"
 #include "daw/ui/model/TransportClock.h"
 
 #include <tracktion_engine/tracktion_engine.h>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <set>
 #include <thread>
@@ -51,6 +53,11 @@ public:
         CopilotBridge* copilot{nullptr};
         const ui::TransportClock* clock{nullptr};
         juce::AudioDeviceManager* device{nullptr};
+
+        // The direction by references (S22): the mix's target comes from the
+        // project's direction, and « Référence… » adds to it. Asked for when
+        // needed, built after this session.
+        std::function<ui::DirectionHost*()> direction;
     };
 
     explicit MixSession(Wiring wiring);
@@ -80,11 +87,14 @@ public:
     [[nodiscard]] bool listeningAfter() const override;
     [[nodiscard]] domain::mix::Axes axes() const override { return axes_; }
     void setAxes(domain::mix::Axes axes) override;
+    // The direction changed: a proposal on screen is decided again, towards it.
+    void directionChanged();
+
     void setReference(const std::string& path) override;
     void clearReference() override;
-    [[nodiscard]] std::string reference() const override { return referenceName_; }
+    [[nodiscard]] std::string reference() const override;
     void setReferenceAmount(double amount) override;
-    [[nodiscard]] double referenceAmount() const override { return referenceAmount_; }
+    [[nodiscard]] double referenceAmount() const override { return wiring_.state.direction().amount; }
 
     // --- what the verification and the copilot read
     [[nodiscard]] const engine::MixRender::Measured* before() const { return before_.get(); }
@@ -166,9 +176,6 @@ private:
 
     domain::mix::Axes axes_;
     bool useModel_{true};
-    std::optional<domain::mix::StreamMeasure> referenceMeasure_;
-    std::string referenceName_;
-    double referenceAmount_{1.0};
 
     std::unique_ptr<MixComparison> comparison_;
 };
