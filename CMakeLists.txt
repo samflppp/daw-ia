@@ -30,6 +30,17 @@ set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedd
 # juce_recommended_config_flags adds /Zi, which overrides /Z7 (warning D9025).
 set(CMAKE_POLICY_DEFAULT_CMP0141 NEW)
 
+# A compiler that does not speak English writes its /showIncludes prefix with
+# characters outside ASCII ("Remarque : inclusion du fichier :", non-breaking
+# spaces). Ninja then records header dependencies only when the build runs
+# under the code page CMake read the prefix in (S22, see scripts/build.cmd):
+# said once, at configure time, rather than found as a stale object.
+if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja" AND CMAKE_CXX_CL_SHOWINCLUDES_PREFIX MATCHES "[^ -~]")
+    message(STATUS
+        "MSVC is localised: build with scripts\\build.cmd (code page 65001), or Ninja loses the "
+        "header dependencies of what it compiles")
+endif()
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
