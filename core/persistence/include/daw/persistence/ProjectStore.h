@@ -62,7 +62,10 @@ public:
     //   6  no column: S20 adds effects of the DAW, whose parameters are in
     //      their own units, and a mix role on a track. An S19 build would drop
     //      the role without saying so.
-    static constexpr std::int64_t schemaVersion = 6;
+    //   7  no column: S22 adds the direction by references, one verb,
+    //      direction.set. An S21 build would refuse it at replay, half-way;
+    //      the number makes it refuse the project at opening, said once.
+    static constexpr std::int64_t schemaVersion = 7;
 
     ~ProjectStore() override;
 

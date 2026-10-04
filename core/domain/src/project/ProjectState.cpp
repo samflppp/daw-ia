@@ -2975,6 +2975,11 @@ Value ProjectState::toValue() const
         members.emplace_back("automation", Value::array(std::move(serialisedAutomation)));
     }
 
+    // Only when there is one: a project without a direction serialises the
+    // way it did before S22, byte for byte.
+    if (!direction_.empty())
+        members.emplace_back("direction", direction_.toValue());
+
     return Value::object(std::move(members));
 }
 
@@ -3193,6 +3198,14 @@ Result<ProjectState> ProjectState::fromValue(const Value& value)
             if (!added)
                 return added.error();
         }
+    }
+
+    if (const auto* directionValue = value.find("direction"); directionValue != nullptr)
+    {
+        auto read = direction::Direction::fromValue(*directionValue);
+        if (!read)
+            return read.error();
+        state.direction_ = std::move(read).value();
     }
 
     return state;

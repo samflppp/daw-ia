@@ -4,6 +4,7 @@
 #include "daw/domain/command/CommandRegistry.h"
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/CreateMidiClip.h"
+#include "daw/domain/commands/DirectionCommands.h"
 #include "daw/domain/commands/PatternCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SampleCommands.h"
@@ -288,6 +289,26 @@ int writeSession(const std::filesystem::path& projectFolder, const std::filesyst
     BlobRef context{};
     context.digest = std::string(BlobRef::digestLength, 'b');
     context.byteCount = 2048;
+
+    // A direction by references (S22): read numbers, a correction, an amount.
+    // It must come back whole in the process that reopens.
+    direction::Direction wanted;
+    direction::Reference reference;
+    reference.reading.name = "Reference.wav";
+    reference.reading.digest = std::string(64, 'f');
+    reference.reading.seconds = 184.5;
+    reference.reading.bpm = 121.5;
+    reference.reading.bpmConfidence = 0.8;
+    reference.reading.key = generation::Key{9, generation::Mode::minor};
+    reference.reading.keyConfidence = 0.3;
+    reference.reading.crestDb = 11.2;
+    reference.reading.stems["vocals"] = direction::StemReading{-15.0, -4.5, 0.6};
+    reference.weight = 2.0;
+    wanted.references.push_back(reference);
+    wanted.corrections.bpm = 120.0;
+    wanted.amount = 0.8;
+    if (!session.bus.execute(std::make_unique<SetDirection>(wanted)))
+        return 13;
 
     Provenance copilot{};
     copilot.actor = Actor::copilot;

@@ -803,6 +803,22 @@ std::vector<Tool> builtinTools()
                     "En mode pattern, l'identifiant du pattern à jouer. En mode chanson, une chaîne vide.")}},
             {"mode", "patternId"})));
 
+    // --- the direction by references (S22)
+    tools.push_back(
+        make("direction.set",
+             "Remplace la direction du projet, en entier : ses références (lues en nombres par le DAW, "
+             "jamais écrites à la main), les corrections de la personne (tempo, tonalité) et la part de "
+             "direction, de 0 à 1. Pour corriger un tempo ou une tonalité, reprends la direction telle que "
+             "l'état du projet la donne et change seulement corrections. Une direction sans référence ni "
+             "correction retire la direction.",
+             schema({{"direction",
+                      Value::object(
+                          {{"type", Value{std::string{"object"}}},
+                           {"description",
+                            Value{std::string{"{references: [...], corrections: {bpm?, key?: {tonic, mode}}, "
+                                              "amount}"}}}})}},
+                    {"direction"})));
+
     return tools;
 }
 

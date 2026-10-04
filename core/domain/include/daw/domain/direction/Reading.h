@@ -37,8 +37,10 @@ struct Section
     double toSeconds{0.0};
     char label{'A'};        // A, B, C…: the same letter for sections that sound alike
     double loudnessDb{0.0}; // mean level of the mix there, dBFS
-    std::array<double, 4>
-        activity{}; // per stem, in stemNames' order: the share of the section where it plays
+    // Per stem, in stemNames' order: the share of the section where it plays.
+    std::array<double, 4> activity{};
+
+    friend bool operator==(const Section& lhs, const Section& rhs) = default;
 };
 
 struct StemReading
@@ -46,6 +48,8 @@ struct StemReading
     double loudnessLufs{mix::silenceDb};
     double balanceDb{0.0};   // against the mix: -6 is a stem 6 dB under the whole
     double activeShare{0.0}; // of the song
+
+    friend bool operator==(const StemReading& lhs, const StemReading& rhs) = default;
 };
 
 struct Reading

@@ -4,6 +4,7 @@
 #include "daw/domain/Ids.h"
 #include "daw/domain/Result.h"
 #include "daw/domain/Value.h"
+#include "daw/domain/direction/Direction.h"
 #include "daw/domain/project/Automation.h"
 
 #include <cstddef>
@@ -555,6 +556,12 @@ public:
     [[nodiscard]] double beatsPerBar() const noexcept { return timeSignature_.beatsPerBar(); }
     Result<void> setTimeSignature(TimeSignature signature);
 
+    // The direction by references (S22). Empty in a project that never had
+    // one, and then not serialised: such a project is the one of S21, byte
+    // for byte.
+    [[nodiscard]] const direction::Direction& direction() const noexcept { return direction_; }
+    void setDirection(direction::Direction direction) { direction_ = std::move(direction); }
+
     static constexpr int lowestChannelPitch = Note::lowestPitch;
     static constexpr int highestChannelPitch = Note::highestPitch;
 
@@ -900,6 +907,7 @@ private:
 
     std::vector<TempoPoint> tempo_{TempoPoint{originTempoPointId(), 0.0, 120.0}};
     TimeSignature timeSignature_;
+    direction::Direction direction_;
     std::vector<Track> tracks_;
     std::vector<Pattern> patterns_;
     std::vector<Lane> lanes_;

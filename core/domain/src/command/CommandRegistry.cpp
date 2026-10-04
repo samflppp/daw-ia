@@ -3,6 +3,7 @@
 #include "daw/domain/commands/AddNote.h"
 #include "daw/domain/commands/AutomationCommands.h"
 #include "daw/domain/commands/CreateMidiClip.h"
+#include "daw/domain/commands/DirectionCommands.h"
 #include "daw/domain/commands/LaneCommands.h"
 #include "daw/domain/commands/MixCommands.h"
 #include "daw/domain/commands/NoteCommands.h"
@@ -83,6 +84,7 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<RemoveLane>());
     static_cast<void>(registry.add<RenameLane>());
     static_cast<void>(registry.add<MoveLane>());
+    static_cast<void>(registry.add<SetDirection>());
     return registry;
 }
 

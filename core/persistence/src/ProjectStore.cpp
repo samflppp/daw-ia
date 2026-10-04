@@ -125,8 +125,15 @@ constexpr std::string_view schemaV6 = R"sql(
 SELECT 1;
 )sql";
 
+// Version 7 (S22): nothing to migrate. A project may hold a direction by
+// references (direction.set); an S21 build would stop at that row of the
+// journal, half-way through the replay. The number refuses the project whole.
+constexpr std::string_view schemaV7 = R"sql(
+SELECT 1;
+)sql";
+
 constexpr Migration migrations[] = {
-    {1, schemaV1}, {2, schemaV2}, {3, schemaV3}, {4, schemaV4}, {5, schemaV5}, {6, schemaV6}};
+    {1, schemaV1}, {2, schemaV2}, {3, schemaV3}, {4, schemaV4}, {5, schemaV5}, {6, schemaV6}, {7, schemaV7}};
 
 constexpr std::string_view insertSql =
     "INSERT INTO journal (kind, command_id, at_micros, actor, context_digest, context_bytes, "

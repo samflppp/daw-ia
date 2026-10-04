@@ -74,6 +74,12 @@ TEST_CASE("a project written by another process reopens identical")
     CHECK(report.value().undone == 1);
 
     CHECK(session.stateJson() == expected);
+
+    // The direction too (S22): written by the other process, read back here.
+    REQUIRE(session.state.direction().references.size() == 1);
+    CHECK(session.state.direction().references.front().reading.bpm == 121.5);
+    CHECK(session.state.direction().corrections.bpm == 120.0);
+    CHECK(session.state.direction().amount == 0.8);
 }
 
 TEST_CASE("the identifiers come back, not just the shape")
@@ -126,9 +132,9 @@ TEST_CASE("the history still undoes after a reload")
         REQUIRE(session.bus.undo().ok());
         ++undone;
     }
-    // Two tracks, one clip, four notes, and the fader sweep: one entry, not
-    // the twenty commands it took.
-    CHECK(undone == 8);
+    // Two tracks, one clip, four notes, the fader sweep — one entry, not the
+    // twenty commands it took — and the direction (S22).
+    CHECK(undone == 9);
 }
 
 TEST_CASE("a command that was undone stays in the journal and stays undone")
@@ -367,7 +373,7 @@ TEST_CASE("a project written before patterns existed reopens as patterns, and is
 
     // The file really was one version behind, and really was migrated.
     CHECK(session.store->versionOnDisk() == ProjectStore::schemaVersion);
-    CHECK(ProjectStore::schemaVersion == 6);
+    CHECK(ProjectStore::schemaVersion == 7);
 
     const auto clipId = ClipId::parse("01JBWQ7Z0000000000000CL1P0").value();
     const auto trackId = TrackId::parse("01JBWQ7Z0000000000000TRACK").value();
