@@ -164,3 +164,28 @@ Sur `main`, Release recompilé. Ta clé dans `DAW_IA_ANTHROPIC_API_KEY`.
 5. **L'historique.** Descends-le, fais une action : ce que tu regardais ne doit pas bouger. Remonte en haut :
    il suit.
 6. **Fermer**, en lecture, copilote ouvert : le processus doit disparaître (gestionnaire des tâches).
+
+## S22 — les stems, la direction par références
+
+### À essayer, dans l'ordre
+
+Sur `main`, Release recompilé par `scripts/build.cmd`. Ta clé dans `DAW_IA_ANTHROPIC_API_KEY`.
+
+1. **Séparer une vraie chanson.** Pose un morceau sur la playlist, Alt+clic droit, « Séparer en stems
+   (rapide) ». La première fois, l'installation et le téléchargement des poids prennent du temps. Compte environ
+   la durée du morceau pour le calcul. Écoute chaque stem seul : dis-moi où ça bave (la voix dans le reste, la
+   basse dans la batterie).
+2. **« Annuler » pendant la séparation** : rien ne doit rester, ni piste ni fichier.
+3. **La meilleure qualité** sur le même morceau (environ quatre fois plus long) : l'écart s'entend-il assez pour
+   la proposer ?
+4. **Une référence.** F11, ajoute un morceau que tu connais : le tempo et la tonalité lus sont-ils justes ? Les
+   sections tombent-elles aux bons endroits ?
+5. **Deux références qui ne s'accordent pas** sur le tempo : la contradiction doit être dite, le tempo laissé
+   vide jusqu'à ce que tu le tapes.
+6. **Le mixage vers la référence** : F10, « Mixer », part de direction à fond puis à zéro. Écoute l'avant/après
+   à niveau égal.
+7. **Générer avec une référence** : un pattern vide, Ctrl+G. Les notes doivent être dans la tonalité de la
+   référence, et plus denses si sa voix joue tout le temps.
+8. **Demander au copilote** de « suivre la structure de la référence » : dis-moi ce qu'il fait des sections.
+   C'est la question du §5 du bilan S22.
+
