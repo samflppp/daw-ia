@@ -6,7 +6,8 @@
 **Volume S22 sur `main` (hors ce bilan) :** 96 fichiers, +6 917 lignes, −231.
 **Tests :** suite du domaine, 447 cas (+30) ; persistance, 21 cas ; Python, 63 cas (+12). Moteur (label `audio`,
 local) : 99 sur 99, l'identité CLAP comprise (§6).
-**CI :** rouge sur `dd23ec2`, le dernier commit du 4 octobre (§9), corrigé par `84ab1ca`.
+**CI :** rouge sur `dd23ec2`, le dernier commit du 4 octobre (§9), corrigé par `84ab1ca` ; **verte** à `3dcfc82`
+(linux-clang et windows-msvc).
 **Vérifications de l'application (Release, sur ta machine, le 4 octobre) :**
 - `--verify` complet avec copilote, 674 passées, **0 en échec**, mais avant les stems (`c91ac5e`, §6) ;
 - `--verify-stems` (neuve), 27 sur 27 ;
