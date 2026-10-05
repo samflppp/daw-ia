@@ -164,3 +164,70 @@ TEST_CASE("Direction: continuous values are weighted means, the sections the hea
     CHECK(combined.balanceDb.at("vocals") == doctest::Approx(-7.0));
     CHECK(combined.sections.size() == 2);
 }
+
+TEST_CASE("Direction: the sections stand on the project's grid, in bars of the reference")
+{
+    // 120 BPM: a bar of the reference is 2 s. The last section is cut short
+    // by the end of the file, 61.3 s, and rounds to its nearest bar.
+    auto read = reference("a.wav", 120.0, aMinor);
+    read.reading.sections.clear();
+    const auto section = [](double from, double to, char label)
+    {
+        direction::Section out;
+        out.fromSeconds = from;
+        out.toSeconds = to;
+        out.label = label;
+        return out;
+    };
+    read.reading.sections = {section(0.0, 16.0, 'A'), section(16.0, 48.0, 'B'), section(48.0, 61.3, 'A')};
+
+    direction::Direction wanted;
+    wanted.references.push_back(read);
+    const auto placed = direction::onGrid(direction::combine(wanted));
+    REQUIRE(placed.size() == 3);
+    CHECK(placed[0] == direction::GridSection{0.0, 32.0, 'A'});
+    CHECK(placed[1] == direction::GridSection{32.0, 96.0, 'B'});
+    CHECK(placed[2] == direction::GridSection{96.0, 124.0, 'A'});
+
+    // In 4/4: bars 1 to 8, 9 to 24, 25 to 31, as the ruler counts them.
+    CHECK(direction::firstBar(placed[0], 4.0) == 1);
+    CHECK(direction::lastBar(placed[0], 4.0) == 8);
+    CHECK(direction::firstBar(placed[1], 4.0) == 9);
+    CHECK(direction::lastBar(placed[1], 4.0) == 24);
+    CHECK(direction::firstBar(placed[2], 4.0) == 25);
+    CHECK(direction::lastBar(placed[2], 4.0) == 31);
+
+    // In 3/4 a beat is still a beat: 32 beats reach into the eleventh bar.
+    CHECK(direction::lastBar(placed[0], 3.0) == 11);
+    CHECK(direction::firstBar(placed[1], 3.0) == 11);
+}
+
+TEST_CASE("Direction: the grid is the tempo the sections were cut at, not a correction")
+{
+    // 92 BPM: a bar is 60/92*4 s. Four bars, then twelve.
+    const auto bar = 4.0 * 60.0 / 92.0;
+    auto read = reference("a.wav", 92.0, aMinor);
+    read.reading.sections.clear();
+    direction::Section first;
+    first.toSeconds = 4 * bar;
+    direction::Section second;
+    second.fromSeconds = 4 * bar;
+    second.toSeconds = 16 * bar;
+    second.label = 'B';
+    read.reading.sections = {first, second};
+
+    direction::Direction wanted;
+    wanted.references.push_back(read);
+    const auto placed = direction::onGrid(direction::combine(wanted));
+    REQUIRE(placed.size() == 2);
+    CHECK(placed[1] == direction::GridSection{16.0, 64.0, 'B'});
+
+    // A tempo typed by hand moves the project's pulse, not the reference's
+    // cuts.
+    wanted.corrections.bpm = 140.0;
+    CHECK(direction::onGrid(direction::combine(wanted)) == placed);
+
+    // Without a tempo the reading cut two-second blocks: no bar to stand on.
+    wanted.references.front().reading.bpm.reset();
+    CHECK(direction::onGrid(direction::combine(wanted)).empty());
+}

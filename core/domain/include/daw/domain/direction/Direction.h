@@ -81,12 +81,39 @@ struct Combined
     std::map<std::string, double> balanceDb;   // per stem
     std::map<std::string, double> activeShare; // per stem
 
-    // The sections of the reference that counts most.
+    // The sections of the reference that counts most, and the tempo they
+    // were cut at: that reference's own reading, never a correction or a
+    // mean — the cuts fall on its bars and no others.
     std::vector<Section> sections;
+    std::optional<double> sectionsBpm;
     double amount{0.0};
 };
 
 [[nodiscard]] Combined combine(const Direction& direction);
+
+// A section on the project's grid (S23): where it would fall if the project
+// started where the reference starts, in beats of the project. A bar of the
+// reference is a bar: eight of them are eight at any tempo of the project.
+// The reading cuts sections on whole bars of four beats from the start of
+// the file, so the bounds are whole bars of the reference; the last one,
+// cut short by the end of the file, is rounded to the nearest.
+struct GridSection
+{
+    double fromBeats{0.0};
+    double toBeats{0.0};
+    char label{'A'};
+
+    friend bool operator==(const GridSection& lhs, const GridSection& rhs) = default;
+};
+
+// Empty when the sections were not cut on a tempo (the reading found none:
+// they are then two-second blocks, with no bar to stand on).
+[[nodiscard]] std::vector<GridSection> onGrid(const Combined& combined);
+
+// The bars a section covers, counted from 1 as the ruler counts them: the
+// bar its first beat falls in, and the last bar it reaches into.
+[[nodiscard]] int firstBar(const GridSection& section, double beatsPerBar);
+[[nodiscard]] int lastBar(const GridSection& section, double beatsPerBar);
 
 // Two tempos are the same pulse within this share.
 inline constexpr double sameTempo = 0.03;

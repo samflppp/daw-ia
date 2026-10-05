@@ -227,7 +227,43 @@ Combined combine(const Direction& direction)
                          references.end(),
                          [](const Reference& a, const Reference& b) { return a.weight < b.weight; });
     combined.sections = heaviest->reading.sections;
+    combined.sectionsBpm = heaviest->reading.bpm;
     return combined;
+}
+
+std::vector<GridSection> onGrid(const Combined& combined)
+{
+    std::vector<GridSection> out;
+    if (!combined.sectionsBpm || *combined.sectionsBpm <= 0.0)
+        return out;
+
+    // Reading.cpp: a bar of the reference is four beats at its tempo.
+    constexpr double beatsPerReferenceBar = 4.0;
+    const auto barSeconds = beatsPerReferenceBar * 60.0 / *combined.sectionsBpm;
+    const auto toBar = [barSeconds](double seconds)
+    { return static_cast<double>(std::lround(seconds / barSeconds)); };
+
+    for (const auto& section : combined.sections)
+    {
+        GridSection placed;
+        placed.fromBeats = toBar(section.fromSeconds) * beatsPerReferenceBar;
+        placed.toBeats = std::max(placed.fromBeats + beatsPerReferenceBar,
+                                  toBar(section.toSeconds) * beatsPerReferenceBar);
+        placed.label = section.label;
+        out.push_back(placed);
+    }
+    return out;
+}
+
+int firstBar(const GridSection& section, double beatsPerBar)
+{
+    return 1 + static_cast<int>(std::floor(section.fromBeats / beatsPerBar + 1e-9));
+}
+
+int lastBar(const GridSection& section, double beatsPerBar)
+{
+    return std::max(firstBar(section, beatsPerBar),
+                    static_cast<int>(std::ceil(section.toBeats / beatsPerBar - 1e-9)));
 }
 
 } // namespace daw::domain::direction

@@ -39,11 +39,14 @@ public:
     void resized() override;
 
     // What the panel shows, as text, for the verification: the tempo line,
-    // the key line, the contradictions, the sections' letters.
+    // the key line, the contradictions, the sections' letters, and the
+    // sections as they read on the project's grid ("A 1–8, B 9–24"), empty
+    // when they were cut without a tempo.
     [[nodiscard]] juce::String tempoLine() const { return tempo_.getText(); }
     [[nodiscard]] juce::String keyLine() const { return key_.getText(); }
     [[nodiscard]] juce::String contradictionsLine() const { return contradictions_.getText(); }
     [[nodiscard]] std::string sectionLetters() const;
+    [[nodiscard]] std::string sectionBars() const;
     [[nodiscard]] int referenceRows() const { return static_cast<int>(rows_.size()); }
 
     // Corrects the tempo or the key the way the person does, through the

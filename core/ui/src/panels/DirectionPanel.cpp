@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
+#include <vector>
 
 namespace daw::ui
 {
@@ -272,6 +274,27 @@ std::string DirectionPanel::sectionLetters() const
     return letters;
 }
 
+namespace
+{
+
+// "A 1–8": the letter, and the bars of the project the section covers.
+std::string onGridText(const domain::direction::GridSection& section, double beatsPerBar)
+{
+    return std::string(1, section.label) + " " +
+           std::to_string(domain::direction::firstBar(section, beatsPerBar)) + "–" +
+           std::to_string(domain::direction::lastBar(section, beatsPerBar));
+}
+
+} // namespace
+
+std::string DirectionPanel::sectionBars() const
+{
+    std::string bars;
+    for (const auto& section : domain::direction::onGrid(domain::direction::combine(state_.direction())))
+        bars += (bars.empty() ? "" : ", ") + onGridText(section, state_.beatsPerBar());
+    return bars;
+}
+
 juce::Rectangle<int> DirectionPanel::sectionsArea() const
 {
     return contradictions_.getBounds()
@@ -296,27 +319,49 @@ void DirectionPanel::paint(juce::Graphics& g)
         g.drawText("DIRECTION", header, juce::Justification::centredLeft, false);
     }
 
-    // The sections of the reference that counts most, in proportion.
-    const auto sections = domain::direction::combine(state_.direction()).sections;
+    // The sections of the reference that counts most, in proportion: on the
+    // project's grid, with the bars they cover, when they were cut on a
+    // tempo (S23); in seconds, with their letter alone, when not.
+    const auto combined = domain::direction::combine(state_.direction());
     const auto area = sectionsArea();
-    if (sections.empty() || area.isEmpty())
+    if (combined.sections.empty() || area.isEmpty())
         return;
-    const auto length = std::max(1e-9, sections.back().toSeconds);
+
+    struct Box
+    {
+        double from;
+        double to;
+        std::string text;
+    };
+    std::vector<Box> boxes;
+    const auto placed = domain::direction::onGrid(combined);
+    if (!placed.empty())
+    {
+        for (const auto& section : placed)
+            boxes.push_back({section.fromBeats, section.toBeats, onGridText(section, state_.beatsPerBar())});
+    }
+    else
+    {
+        for (const auto& section : combined.sections)
+            boxes.push_back({section.fromSeconds, section.toSeconds, std::string(1, section.label)});
+    }
+
+    const auto length = std::max(1e-9, boxes.back().to);
     g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
-    for (const auto& section : sections)
+    for (const auto& section : boxes)
     {
         const auto from =
-            area.getX() + static_cast<int>(std::lround(area.getWidth() * section.fromSeconds / length));
-        const auto to =
-            area.getX() + static_cast<int>(std::lround(area.getWidth() * section.toSeconds / length));
+            area.getX() + static_cast<int>(std::lround(area.getWidth() * section.from / length));
+        const auto to = area.getX() + static_cast<int>(std::lround(area.getWidth() * section.to / length));
         const juce::Rectangle<int> box{from, area.getY(), std::max(1, to - from), area.getHeight()};
         g.setColour(tokens_.colour("color.state.selected"));
         g.fillRect(box.reduced(tokens_.integer("stroke.hairline"), 0));
         g.setColour(tokens_.colour("color.text.primary"));
-        g.drawText(juce::String::charToString(static_cast<juce::juce_wchar>(section.label)),
-                   box,
-                   juce::Justification::centred,
-                   false);
+        // Too narrow for its bars, a section keeps its letter.
+        const auto text = juce::String::fromUTF8(section.text.c_str());
+        const auto fits =
+            juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), text) <= box.getWidth();
+        g.drawText(fits ? text : text.substring(0, 1), box, juce::Justification::centred, false);
     }
 }
 
