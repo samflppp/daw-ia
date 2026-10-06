@@ -52,7 +52,10 @@ void LiveInputPlugin::remember(const domain::live::Event& event) noexcept
     const auto channel = static_cast<std::size_t>(event.bytes[0] & 0x0F);
     const auto data = event.bytes[1] & 0x7F;
     if (status == 0x90 && event.bytes[2] > 0)
+    {
         held_[channel].set(static_cast<std::size_t>(data));
+        velocity_[channel][static_cast<std::size_t>(data)] = event.bytes[2];
+    }
     else if (status == 0x80 || status == 0x90)
         held_[channel].reset(static_cast<std::size_t>(data));
     else if (status == 0xB0 && data == sustainController)
@@ -91,6 +94,30 @@ void LiveInputPlugin::keepHeldNotesSounding(tracktion::MidiMessageArray& midi) c
         });
 }
 
+bool LiveInputPlugin::strikeHeldAgain(tracktion::MidiMessageArray& midi, int startSample)
+{
+    const auto time = static_cast<double>(startSample) / sampleRate_;
+    bool struck = false;
+    for (std::size_t channel = 0; channel < held_.size(); ++channel)
+    {
+        if (held_[channel].none())
+            continue;
+        for (std::size_t note = 0; note < 128; ++note)
+        {
+            if (held_[channel].test(note))
+            {
+                midi.addMidiMessage(juce::MidiMessage::noteOn(static_cast<int>(channel) + 1,
+                                                              static_cast<int>(note),
+                                                              velocity_[channel][note])
+                                        .withTimeStamp(time),
+                                    source_);
+                struck = true;
+            }
+        }
+    }
+    return struck;
+}
+
 void LiveInputPlugin::applyToBuffer(const tracktion::PluginRenderContext& context)
 {
     auto* queue = queue_.load(std::memory_order_acquire);
@@ -107,6 +134,25 @@ void LiveInputPlugin::applyToBuffer(const tracktion::PluginRenderContext& contex
 
     keepHeldNotesSounding(*midi);
 
+    // Started, stopped, or moved while stopped: every voice was turned off.
+    // Stopped, the song's time does not move from one block to the next, so
+    // a block that starts elsewhere is a playhead moved. (One moved while it
+    // plays cannot be told from the loop going round, which turns nothing
+    // off: it is not struck again, and a held note is cut there.)
+    const auto editStart = context.editTime.getStart().inSeconds();
+    const bool jumped = seen_ && (context.isPlaying != lastPlaying_ ||
+                                  (!context.isPlaying && std::abs(editStart - lastEditStart_) > 1.0e-6));
+    seen_ = true;
+    lastPlaying_ = context.isPlaying;
+    lastEditStart_ = editStart;
+    bool added = false;
+    int last = -1; // the sample of the last message placed: none share one
+    if (jumped && strikeHeldAgain(*midi, context.bufferStartSample))
+    {
+        added = true;
+        last = 0; // the attacks struck again have the first sample
+    }
+
     double start = 0.0;
     double delay = 0.0;
     if (mode == Clock::edit)
@@ -122,7 +168,6 @@ void LiveInputPlugin::applyToBuffer(const tracktion::PluginRenderContext& contex
             router->publish({start, context.editTime.getStart().inSeconds(), context.isPlaying});
     }
 
-    bool added = false;
     for (;;)
     {
         if (!hasNext_)
@@ -135,7 +180,14 @@ void LiveInputPlugin::applyToBuffer(const tracktion::PluginRenderContext& contex
         const auto at = std::floor((next_.seconds + delay - start) * sampleRate_);
         if (at >= static_cast<double>(samples))
             break; // a later block's
-        const auto offset = at <= 0.0 ? 0 : static_cast<int>(at);
+        auto offset = at <= 0.0 ? 0 : static_cast<int>(at);
+        if (offset <= last)
+        {
+            if (last + 1 >= samples)
+                break; // the next block's first
+            offset = last + 1;
+        }
+        last = offset;
 
         if (next_.size == 3)
         {

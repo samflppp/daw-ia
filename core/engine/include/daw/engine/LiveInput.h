@@ -8,6 +8,7 @@
 #include <array>
 #include <atomic>
 #include <bitset>
+#include <cstdint>
 
 namespace daw::engine
 {
@@ -29,9 +30,16 @@ namespace daw::engine
 //
 // What it also does: while a note played live is held, the cuts Tracktion
 // makes for its clips — a release of the same pitch, the pedal lifted, an
-// all-notes-off when the loop goes round or the song stops — are kept from
-// the instrument, so that a chord held over the end of the loop goes on
-// sounding until its keys come up.
+// all-notes-off when the loop goes round — are kept from the instrument, so
+// that a chord held over the end of the loop goes on sounding until its keys
+// come up. When the song starts or stops, or the playhead is moved while it
+// is stopped, Tracktion turns every voice of every instrument off, past this
+// plugin's reach: the notes still held are struck again in that block. A
+// held note is heard again from its attack, rather than cut.
+//
+// Two of its own messages never share a sample: Tracktion sorts a release
+// before an attack at the same instant, and a key struck again (a release
+// and an attack) right after its first attack would leave a voice behind.
 //
 // The audio thread reads; nothing below allocates, locks or waits, except
 // Tracktion's MIDI array, which keeps its storage from one block to the next
@@ -100,6 +108,7 @@ public:
 
 private:
     void keepHeldNotesSounding(tracktion::MidiMessageArray& midi) const;
+    bool strikeHeldAgain(tracktion::MidiMessageArray& midi, int startSample);
     void remember(const domain::live::Event& event) noexcept;
 
     std::atomic<domain::live::TrackQueue*> queue_{nullptr};
@@ -112,9 +121,17 @@ private:
     domain::live::Event next_{};
     bool hasNext_{false};
     std::array<std::bitset<128>, 16> held_{}; // per channel, the notes played live and not released
-    std::bitset<16> pedal_{};                 // per channel, the sustain pedal played live, down
+    std::array<std::array<std::uint8_t, 128>, 16> velocity_{}; // and the velocity each was played at
+    std::bitset<16> pedal_{}; // per channel, the sustain pedal played live, down
     double sampleRate_{44100.0};
     tracktion::MPESourceID source_;
+
+    // Where the last block started, and whether the song played: a start, a
+    // stop or a playhead moved while stopped is when Tracktion turns every
+    // voice of the instrument off (S23).
+    bool seen_{false};
+    bool lastPlaying_{false};
+    double lastEditStart_{0.0};
 
     std::atomic<double> wait_{0.0};
 };

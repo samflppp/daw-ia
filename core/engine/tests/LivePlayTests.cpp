@@ -60,8 +60,10 @@ struct LiveHarness : EngineHarness
 
 // `seconds` of the Edit, rendered block by block; `during` is told the
 // time reached after each block, which lets a test act in the middle.
-tracktion::test_utilities::BufferAndSampleRate
-render(tracktion::Edit& edit, double seconds, const std::function<void(double)>& during = {})
+tracktion::test_utilities::BufferAndSampleRate render(tracktion::Edit& edit,
+                                                      double seconds,
+                                                      const std::function<void(double)>& during = {},
+                                                      int blockSize = block)
 {
     auto file = std::make_unique<juce::TemporaryFile>(".wav");
     tracktion::Renderer::Parameters parameters{edit};
@@ -69,7 +71,7 @@ render(tracktion::Edit& edit, double seconds, const std::function<void(double)>&
     parameters.audioFormat = edit.engine.getAudioFileFormatManager().getWavFormat();
     parameters.bitDepth = 32;
     parameters.sampleRateForAudio = rate;
-    parameters.blockSizeForAudio = block;
+    parameters.blockSizeForAudio = blockSize;
     parameters.time =
         tracktion::TimeRange{tracktion::TimePosition{}, tracktion::TimePosition::fromSeconds(seconds)};
     parameters.tracksToDo = tracktion::toBitSet(tracktion::getAllTracks(edit));
@@ -274,4 +276,45 @@ TEST_CASE("Live: a note held over the end of a clip's note of the same pitch goe
 
     CHECK(levelDb(rendered.buffer, 0.7, 1.4) > heardDb);
     CHECK(levelDb(rendered.buffer, 2.1, 2.5) < silentDb);
+}
+
+TEST_CASE("Live: the live input is placed once, first, and a command does not make it again")
+{
+    LiveHarness harness;
+    auto* track = harness.firstAudioTrack();
+    REQUIRE(track != nullptr);
+    const auto inputs = track->pluginList.getPluginsOfType<LiveInputPlugin>();
+    REQUIRE(inputs.size() == 1);
+    auto* placed = inputs.getFirst();
+    CHECK(track->pluginList.getPlugins().getFirst() == placed);
+
+    // A mute and back, a volume, a note: the track's form and what it plays
+    // change, the live input stays the same object.
+    REQUIRE(harness.bus.execute(std::make_unique<SetTrackMuted>(harness.trackId, true)).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<SetTrackMuted>(harness.trackId, false)).ok());
+    REQUIRE(harness.bus.execute(harness.setVolume(-3.0)).ok());
+    const auto clip = ClipId::generate();
+    REQUIRE(harness.bus.execute(harness.createClip(clip)).ok());
+    REQUIRE(harness.bus.execute(EngineHarness::addNote(clip, NoteId::generate())).ok());
+    harness.projector.reconcile();
+
+    const auto after = track->pluginList.getPluginsOfType<LiveInputPlugin>();
+    REQUIRE(after.size() == 1);
+    CHECK(after.getFirst() == placed);
+    CHECK(track->pluginList.getPlugins().getFirst() == placed);
+}
+
+TEST_CASE("Live: an attack and its release at the same instant leave no voice behind")
+{
+    // Two messages of one note at one instant: what a burst of late messages
+    // becomes once pulled to the start of a block (a stall of the card), or a
+    // key tapped and released within the same sample. Tracktion sorts a
+    // release before an attack at the same sample: the attack would come
+    // last, and the note would never end.
+    const EditClock clock;
+    LiveHarness harness;
+    REQUIRE(harness.router().noteOn(sim, 1, 72, 100, 0.2));
+    REQUIRE(harness.router().noteOff(sim, 1, 72, 0.2));
+    const auto rendered = render(harness.host.edit(), 2.0);
+    CHECK(levelDb(rendered.buffer, 1.5, 2.0) < silentDb);
 }
