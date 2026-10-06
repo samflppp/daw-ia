@@ -132,9 +132,12 @@ private:
         Event event{};
     };
 
+    // No alignas between the two: MSVC warns that the queue is padded for
+    // it (C4324), and the false sharing it would spare costs nothing here —
+    // a few messages a block.
     std::array<Cell, Capacity> cells_{};
-    alignas(64) std::atomic<std::size_t> enqueue_{0};
-    alignas(64) std::atomic<std::size_t> dequeue_{0};
+    std::atomic<std::size_t> enqueue_{0};
+    std::atomic<std::size_t> dequeue_{0};
 };
 
 // About a second of a ten-finger trill with its releases: more than a hand
