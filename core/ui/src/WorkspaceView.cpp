@@ -460,6 +460,14 @@ bool WorkspaceView::keyPressed(const juce::KeyPress& key)
         return true;
     }
 
+    // Ctrl+T: the computer's keyboard plays the chosen track, or stops (S23),
+    // the shortcut FL gives the same button.
+    if (key == juce::KeyPress{'t', juce::ModifierKeys::ctrlModifier, 0})
+    {
+        services_.live.setKeyboardPlaying(!services_.live.keyboardPlaying());
+        return true;
+    }
+
     // A page key opens its page, brings it to the front, or closes it when it
     // is already the one in front — the way F5, F6 and F7 behave in FL.
     for (auto& slot : pages_)

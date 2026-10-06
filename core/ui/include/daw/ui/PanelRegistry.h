@@ -9,6 +9,7 @@
 #include "daw/ui/model/History.h"
 #include "daw/ui/model/LevelSource.h"
 #include "daw/ui/model/ListeningHost.h"
+#include "daw/ui/model/LiveHost.h"
 #include "daw/ui/model/MixHost.h"
 #include "daw/ui/model/NoteClipboard.h"
 #include "daw/ui/model/PluginHost.h"
@@ -86,6 +87,8 @@ struct PanelServices
 
     // The direction by references (S22): what was understood, corrected by hand.
     DirectionHost& direction;
+    // Playing live (S23): the computer's keyboard as a piano, the track played.
+    LiveHost& live;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

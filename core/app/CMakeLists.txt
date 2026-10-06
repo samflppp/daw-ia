@@ -20,6 +20,7 @@ target_sources(daw_app PRIVATE
     src/EditClock.cpp
     src/LevelMonitor.cpp
     src/LivePlay.cpp
+    src/RawKeyboard.cpp
     src/MixComparison.cpp
     src/MixOnce.cpp
     src/MixSession.cpp

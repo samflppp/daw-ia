@@ -18,6 +18,7 @@ add_library(daw_domain STATIC
     src/stems/Laying.cpp
     src/live/Router.cpp
     src/live/Timeline.cpp
+    src/live/TypingKeyboard.cpp
     src/direction/Reading.cpp
     src/direction/Direction.cpp
     src/commands/DirectionCommands.cpp
