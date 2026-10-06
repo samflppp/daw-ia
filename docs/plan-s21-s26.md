@@ -145,6 +145,11 @@ mixer.
   d'annulation.
 - **Les effets depuis la tranche du mixer** : poser, retirer, réordonner et contourner un effet, sans quitter le
   mixer.
+- **La chaîne d'effets vue comme un flux** (demandé le 6 octobre 2026) : les plugins d'une piste alignés sur une
+  même ligne, dans l'ordre où le son les traverse, et entre chacun la forme d'onde du son à cet endroit, en
+  direct. On voit le signal entrer, ce que chaque effet en fait, et sortir : la forme d'onde passe d'un état à
+  l'autre. C'est le même chantier que le point précédent, pas un cinquième : la ligne est l'endroit où l'on pose,
+  retire, réordonne et contourne.
 - **La création de bus intelligente** : proposer un bus et des envois quand un même plugin revient avec les mêmes
   réglages.
 - **La fenêtre « Audio »**, tombée en S23 (décidé le 6 octobre 2026) : le pilote, la sortie, le tampon, la
@@ -162,6 +167,9 @@ mixer.
   (808 à la tonalité à quelques cents près, pas de recouvrement kick / 808), et le poser est un seul Ctrl+Z.
 - Les effets : chaque geste de la tranche produit la commande attendue (`plugin.insert`, `plugin.remove`,
   `plugin.set_bypassed`, réordonner), vérifiée au rendu pour le contournement.
+- Le flux : sur une piste dont l'effet est connu (un creux de l'égaliseur interne, un compresseur), la forme
+  d'onde montrée après l'effet est celle du rendu à cet endroit, mesurée ; un effet contourné donne la même
+  forme avant et après ; la lecture n'en devient pas muette et aucun bloc audio n'attend l'écran.
 - Les bus : sur un projet construit (la même réverbération sur six pistes), la proposition est faite, essayée à
   blanc, gardée en un seul groupe ; le rendu avant / après est mesuré.
 - La fenêtre « Audio » : un tampon changé est celui que la carte ouvre (relu au moteur), la latence affichée est
@@ -171,11 +179,19 @@ mixer.
 - Le kit : comment on choisit des samples qui « vont ensemble » sans recherche par le son — des descripteurs
   mesurés sur l'audio (attaque, brillance, longueur, hauteur) sont sans doute à construire d'abord.
 - Réordonner un effet : il n'y a pas de commande pour ça aujourd'hui.
+- Le flux : où il s'affiche (une tranche de mixer est étroite et verticale ; une ligne horizontale ouverte sous
+  le mixer pour la piste choisie, ou la page de la chaîne de plugins qui devient cette vue) ; comment le son est
+  prélevé entre deux effets (une prise par emplacement, sans allocation ni verrou sur le fil audio, comme
+  `MeterTap`) et ce que ça coûte en processeur par piste ouverte ; la forme d'onde seule, ou aussi le spectre ;
+  le retard qu'un plugin ajoute, pour que l'avant et l'après se lisent au même instant ; ça marche pour les
+  plugins de la personne, opaques, puisqu'on prélève le son et pas leurs réglages ; et ce que la proposition du
+  mixage par l'IA y montre (l'avant / après d'un réglage, vu et pas seulement dit).
 - Ce que veut dire « les mêmes réglages » pour un plugin dont l'état est un blob opaque ; un effet d'insertion
   ne se mutualise pas comme un effet d'envoi.
 - La fenêtre « Audio » : ce qu'on fait quand le réglage choisi échoue à l'ouverture (revenir à l'ancien, le
   dire), et comment elle cohabite avec `AudioOutputKeeper`, qui revient à la première sortie quand la carte part.
-- La semaine porte quatre chantiers : si elle est trop chargée, dire lequel tombe, plutôt que d'en bâcler un.
+- La semaine porte quatre chantiers, et celui des effets a grossi avec le flux : si elle est trop chargée, dire
+  lequel tombe, plutôt que d'en bâcler un. Le fondateur n'a pas tranché lequel.
 
 ## S25 — Diriger le DAW à la voix
 
