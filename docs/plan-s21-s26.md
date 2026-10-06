@@ -9,8 +9,9 @@ il ne les remplace pas. Chaque brief reprend la semaine, l'expose avant de coder
 Quatre décisions du 3 octobre 2026 (détail dans `docs/contexte-projet.md`, « Méthode de travail ») :
 
 - **Un excellent logiciel, même si ça prend plus de temps et de moyens.** Une chose mieux faite plus tard, avec
-  plus de moyens, est reportée plutôt que faite au rabais. Une semaine trop chargée perd un chantier, elle ne le
-  bâcle pas : le bilan dit ce qui tombe et où il va.
+  plus de moyens, est reportée plutôt que faite au rabais. **Une semaine est un périmètre, pas une durée** (6 octobre 2026) :
+  elle dure ce qu'il faut pour que tout son périmètre soit bien fait. Un chantier ne tombe plus faute de temps ;
+  il ne se reporte que s'il sera mieux fait plus tard, et le bilan dit où il va.
 - **On construit, puis on essaie par phases.** Les 26 semaines servent à développer. Les essais du fondateur, à la
   main et à l'oreille, viennent après la S26, dans une phase consacrée à l'ergonomie. Aucune semaine n'attend un
   de ses essais. Chaque bilan garde sa section « À essayer, dans l'ordre » et l'ajoute à
@@ -198,9 +199,8 @@ mixer.
   ne se mutualise pas comme un effet d'envoi.
 - La fenêtre « Audio » : ce qu'on fait quand le réglage choisi échoue à l'ouverture (revenir à l'ancien, le
   dire), et comment elle cohabite avec `AudioOutputKeeper`, qui revient à la première sortie quand la carte part.
-- La semaine porte quatre chantiers, et le flux audio est un panneau neuf, pas un détail d'écran : elle est
-  trop chargée telle quelle. Dire lequel tombe et où il va, plutôt que d'en bâcler un. Le fondateur n'a pas
-  tranché lequel.
+- La semaine porte quatre chantiers, et le flux audio est un panneau neuf. **Tous sont faits dans la S24**,
+  quitte à ce qu'elle dure plus qu'une semaine (décidé le 6 octobre 2026) : aucun ne tombe faute de temps.
 
 ## S25 — Diriger le DAW à la voix
 

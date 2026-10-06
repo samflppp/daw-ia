@@ -74,7 +74,9 @@ Mécanismes :
 
 - **Un excellent logiciel, même si ça prend plus de temps et de moyens** (3 octobre 2026). Une chose
   mieux faite plus tard, avec plus de moyens, se reporte au lieu d'être faite au rabais pour tenir une
-  semaine. Une semaine trop chargée perd un chantier, elle ne le bâcle pas : dire ce qui tombe et où il va.
+  semaine. **Une semaine est un périmètre, pas une durée** (6 octobre 2026) : elle dure ce qu'il faut pour
+  que tout son périmètre soit bien fait ; un chantier ne tombe plus faute de temps, il ne se reporte que s'il
+  sera mieux fait plus tard, et le bilan dit où il va.
   Entre deux voies, recommander la meilleure pour le produit et dire franchement ce qu'elle coûte en temps
   et en moyens ; le coût ne la disqualifie pas, le fondateur tranche. La S26 livre un prototype aux
   fondations bien faites, pas un produit poli.
