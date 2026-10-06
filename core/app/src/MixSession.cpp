@@ -236,6 +236,7 @@ domain::mix::Target MixSession::target() const
         aim.tilt = combined.tilt;
         aim.crestDb = combined.crestDb;
         aim.sideShare = combined.sideShare;
+        aim.amount = wiring_.state.direction().amount;
         aim.source = "direction : " + reference();
         return aim;
     }

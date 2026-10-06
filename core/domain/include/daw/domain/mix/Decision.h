@@ -72,6 +72,7 @@ struct Target
     std::optional<std::array<double, bandCount>> tilt; // nothing: no spectral aim
     std::optional<double> crestDb;
     std::optional<double> sideShare;
+    double amount{1.0}; // how far towards it, 0 to 1: the direction's « amount »
     std::string source; // « axes », or the reference's file name
 
     [[nodiscard]] Value toValue() const;

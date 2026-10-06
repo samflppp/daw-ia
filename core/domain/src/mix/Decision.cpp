@@ -484,6 +484,8 @@ Value Target::toValue() const
         members.emplace_back("crest", Value{std::round(*crestDb * 10.0) / 10.0});
     if (sideShare.has_value())
         members.emplace_back("side", Value{std::round(*sideShare * 100.0) / 100.0});
+    if (tilt.has_value())
+        members.emplace_back("amount", Value{std::round(amount * 100.0) / 100.0});
     return Value::object(std::move(members));
 }
 
@@ -1013,15 +1015,17 @@ Proposal baseMix(const Brief& brief)
     proposal.decidedBy = "règles";
     const auto& axes = brief.axes;
 
-    // From a reference: the low end and the top of its tilt, against ours.
+    // From a reference: the low end and the top of its tilt, against ours,
+    // as far as the direction's amount goes: at zero, nothing moves.
     double lowOffset = 0.0;
     double highOffset = 0.0;
     if (brief.target.tilt.has_value())
     {
         const auto ours = tiltOf(brief.master);
         const auto& theirs = *brief.target.tilt;
-        lowOffset = clampTo(((theirs[1] + theirs[2]) - (ours[1] + ours[2])) / 2.0, -3.0, 3.0);
-        highOffset = clampTo(((theirs[8] + theirs[9]) - (ours[8] + ours[9])) / 2.0, -3.0, 3.0);
+        const auto amount = clampTo(brief.target.amount, 0.0, 1.0);
+        lowOffset = amount * clampTo(((theirs[1] + theirs[2]) - (ours[1] + ours[2])) / 2.0, -3.0, 3.0);
+        highOffset = amount * clampTo(((theirs[8] + theirs[9]) - (ours[8] + ours[9])) / 2.0, -3.0, 3.0);
     }
 
     std::map<MixRole, int> seen;

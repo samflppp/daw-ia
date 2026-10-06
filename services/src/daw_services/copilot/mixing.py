@@ -44,7 +44,8 @@ Ce que tu reçois (JSON) :
   (band, index dans bandsHz).
 - axes : punch (-1 propre, +1 percutant), focus (-1 voix devant, +1 instru devant),
   width (-1 serré, +1 large). target : une cible (pente spectrale, crête, largeur),
-  d'après les axes ou un morceau de référence.
+  d'après les axes ou un morceau de référence ; son amount dit jusqu'où aller vers
+  elle (0 : la référence ne déplace rien, 1 : jusqu'à elle).
 - bounds : les bornes que tu ne peux pas franchir.
 
 Ce que tu rends : un seul appel à mix.propose. Chaque réglage :

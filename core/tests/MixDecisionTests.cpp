@@ -384,6 +384,35 @@ TEST_CASE("a reference becomes a target, and the axes lean towards it")
     CHECK(all.width > 0.5);
 }
 
+// Found in S23 (bilan §2.4): the rules moved the kick, bass and hats faders
+// towards a reference's colour whatever the direction's amount.
+TEST_CASE("a reference at amount zero moves nothing in the rules, at one it moves the faders")
+{
+    Session session;
+    const auto master = session.brief().master;
+    auto reference = master;
+    reference.bandsDb = {-20, -6, -10, -25, -28, -26, -22, -26, -18, -22}; // more low end, more top
+    auto target = targetOf(reference, "reference.wav");
+
+    const auto rules = [&](double amount)
+    {
+        target.amount = amount;
+        return baseMix(briefOf(session.state, session.measures, master, Axes{}, target));
+    };
+    const auto none = baseMix(session.brief());
+    const auto zero = rules(0.0);
+    const auto all = rules(1.0);
+
+    CHECK(json::write(zero.toValue()) == json::write(none.toValue()));
+    const auto fader = [](const Proposal& proposal, TrackId track)
+    {
+        const auto* change = find(proposal, track, Change::Kind::volume);
+        return change != nullptr ? change->value : 0.0;
+    };
+    CHECK(fader(all, session.kick) > fader(none, session.kick));
+    CHECK(fader(all, session.hats) > fader(none, session.hats));
+}
+
 TEST_CASE("the master is trimmed under -1 dBTP, and only when it is over")
 {
     ProjectState state;
