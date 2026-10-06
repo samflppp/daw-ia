@@ -89,6 +89,28 @@ public:
     // block, in seconds. Zero before the first block.
     [[nodiscard]] double wait() const noexcept { return wait_.load(std::memory_order_relaxed); }
 
+    // The last note-on it placed: when it was played, and when its first
+    // sample is rendered, both on the input clock — the latency from the key
+    // to the instrument, before the sound card adds its own. Zero until one.
+    // And its pitch.
+    struct Placed
+    {
+        double played{0.0};
+        double rendered{0.0};
+        int note{-1};
+    };
+    [[nodiscard]] Placed lastPlaced() const noexcept
+    {
+        return {placedPlayed_.load(std::memory_order_relaxed),
+                placedRendered_.load(std::memory_order_relaxed),
+                placedNote_.load(std::memory_order_relaxed)};
+    }
+
+    // How many notes it holds as played live and not released, at the end of
+    // its last block: what a verification reads when a track will not fall
+    // silent — this plugin's state, or the instrument's.
+    [[nodiscard]] int heldNow() const noexcept { return heldNow_.load(std::memory_order_relaxed); }
+
     // --- tracktion::Plugin
     juce::String getName() const override { return "DAW IA jeu"; }
     juce::String getPluginType() override { return xmlTypeName; }
@@ -134,6 +156,10 @@ private:
     double lastEditStart_{0.0};
 
     std::atomic<double> wait_{0.0};
+    std::atomic<double> placedPlayed_{0.0};
+    std::atomic<double> placedRendered_{0.0};
+    std::atomic<int> placedNote_{-1};
+    std::atomic<int> heldNow_{0};
 };
 
 } // namespace daw::engine

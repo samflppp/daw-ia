@@ -194,6 +194,13 @@ void LiveInputPlugin::applyToBuffer(const tracktion::PluginRenderContext& contex
             const auto time = static_cast<double>(context.bufferStartSample + offset) / sampleRate_;
             midi->addMidiMessage(juce::MidiMessage(next_.bytes[0], next_.bytes[1], next_.bytes[2], time),
                                  source_);
+            if ((next_.bytes[0] & 0xF0) == 0x90 && next_.bytes[2] > 0)
+            {
+                placedPlayed_.store(next_.seconds, std::memory_order_relaxed);
+                placedRendered_.store(start + static_cast<double>(offset) / sampleRate_,
+                                      std::memory_order_relaxed);
+                placedNote_.store(next_.bytes[1], std::memory_order_relaxed);
+            }
             remember(next_);
             added = true;
         }
@@ -202,6 +209,11 @@ void LiveInputPlugin::applyToBuffer(const tracktion::PluginRenderContext& contex
 
     if (added)
         midi->sortByTimestamp();
+
+    int held = 0;
+    for (const auto& channel : held_)
+        held += static_cast<int>(channel.count());
+    heldNow_.store(held, std::memory_order_relaxed);
 }
 
 } // namespace daw::engine

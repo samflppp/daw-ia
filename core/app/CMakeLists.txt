@@ -41,6 +41,7 @@ target_sources(daw_app PRIVATE
     src/VerificationMix.cpp
     src/VerificationStems.cpp
     src/VerificationPlayback.cpp
+    src/VerificationLive.cpp
     src/VerificationTiming.cpp
     src/VerificationWindows.cpp
     src/SampleLibrary.cpp

@@ -117,7 +117,12 @@ public:
             engineHost_->edit(), state_, &engineHost_->catalogue(), contentStore_.get());
         // Every track that plays notes can be played live (S23): its chain
         // starts with the live input, bound to the engine's router.
-        projector_->playLiveFrom(&engineHost_->live());
+        // --sans-jeu leaves it out: the graph of S22, to compare
+        // --verify-lecture with and without it on the same machine.
+        if (!commandLine.contains("--sans-jeu"))
+            projector_->playLiveFrom(&engineHost_->live());
+        else
+            juce::Logger::writeToLog("jeu: --sans-jeu, aucune entrée du jeu dans les chaînes");
         bus_.addObserver(*projector_);
 
         // The interface observes the bus like the projector does, and for the
@@ -256,6 +261,8 @@ public:
                 run = Verification::Run::mix;
             else if (tokens[index] == "--verify-lecture")
                 run = Verification::Run::playback;
+            else if (tokens[index] == "--verify-jeu")
+                run = Verification::Run::play;
             else if (tokens[index] == "--verify-stems")
                 run = Verification::Run::stems;
             else if (tokens[index] != "--verify")
@@ -309,7 +316,9 @@ public:
                 mixSession_.get(),
                 switch_.get(),
                 &engineHost_->output(),
-                stemSession_.get()});
+                stemSession_.get(),
+                livePlay_.get(),
+                &engineHost_->live()});
 
             // A verification mixes by the rules: never a key, never an API.
             if (mixSession_ != nullptr)

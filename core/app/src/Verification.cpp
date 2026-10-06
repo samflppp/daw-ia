@@ -75,6 +75,8 @@ Verification::Verification(Wiring wiring)
     , stems_(wiring.stems)
     , workspaces_(wiring.workspaces)
     , output_(wiring.output)
+    , live_(wiring.live)
+    , router_(wiring.router)
 {
     exporter_ = wiring.exporter;
 }
@@ -132,6 +134,9 @@ void Verification::start()
         break;
     case Run::stems:
         buildStems();
+        break;
+    case Run::play:
+        buildPlay();
         break;
     }
 

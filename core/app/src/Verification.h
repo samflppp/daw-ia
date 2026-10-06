@@ -5,6 +5,7 @@
 #include "SongExporter.h"
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/generation/Generator.h"
+#include "daw/domain/live/Router.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/engine/AudioOutputKeeper.h"
 #include "daw/ui/TitleBarView.h"
@@ -26,6 +27,11 @@
 #include <string>
 #include <vector>
 
+namespace daw::engine
+{
+class LiveInputPlugin;
+}
+
 namespace daw::ui
 {
 class GenerationPanel;
@@ -34,6 +40,7 @@ class GenerationPanel;
 namespace daw::app
 {
 
+class LivePlay;
 class MixSession;
 class StemSession;
 
@@ -78,7 +85,8 @@ public:
         fluidity,
         mix,
         playback,
-        stems
+        stems,
+        play
     };
 
     struct Wiring
@@ -139,6 +147,10 @@ public:
 
         // The stem separator (S22): --verify-stems drives it with the fast model.
         StemSession* stems{nullptr};
+
+        // Playing live and recording (S23): --verify-jeu presses the keys.
+        LivePlay* live{nullptr};
+        domain::live::Router* router{nullptr};
     };
 
     explicit Verification(Wiring wiring);
@@ -178,6 +190,12 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     void buildList();
+
+    // S23 (VerificationLive.cpp): playing live and recording, without a
+    // keyboard plugged in.
+    struct PlayRun;
+    void buildPlay();
+    [[nodiscard]] engine::LiveInputPlugin* liveInputOf(const domain::TrackId& track) const;
     void buildReopen();
     void buildLegacy();
     void buildFile();
@@ -467,6 +485,8 @@ private:
     StemSession* stems_{nullptr};
     ui::WorkspaceHost* workspaces_{nullptr};
     engine::AudioOutputKeeper* output_{nullptr};
+    LivePlay* live_{nullptr};
+    domain::live::Router* router_{nullptr};
 
     // S21: cycles run and silent ones, per action before the play.
     std::map<std::string, int> cyclesByAction_;
