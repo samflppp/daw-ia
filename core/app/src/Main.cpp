@@ -16,6 +16,7 @@
 #include "QuitWatchdog.h"
 #include "SampleLibrary.h"
 #include "SongExporter.h"
+#include "SoundCard.h"
 #include "StemSession.h"
 #include "TransportSync.h"
 #include "Verification.h"
@@ -49,6 +50,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <tracktion_engine/tracktion_engine.h>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 
@@ -94,8 +96,8 @@ public:
         juce::Logger::writeToLog("core domain " + juce::String(domainVersion.data(), domainVersion.size()));
 
         // A verification plays with the engine's settings in a folder of its
-        // own (S24): it must never rewrite this machine's, Tracktion's
-        // Settings.xml.
+        // own (S24): it may change the buffer, and must never rewrite this
+        // machine's — the « Audio » window's, Tracktion's Settings.xml.
         if (const auto settings = verificationSettingsFolder(commandLine); settings != juce::File{})
         {
             juce::Logger::writeToLog(juce::String::fromUTF8("verify: réglages de la machine copiés dans ") +
@@ -150,6 +152,9 @@ public:
             engineHost_->edit(),
             [this] { return engineHost_->engine().getDeviceManager().getOutputLatencySeconds(); });
         clock_ = std::make_unique<EditClock>(engineHost_->edit());
+        soundCard_ = std::make_unique<SoundCard>(
+            engineHost_->audio(), engineHost_->edit(), [this] { return state_.transport().playing; });
+        applyBufferFromCommandLine(commandLine);
         engineHost_->output().onChanged = [this](const juce::String& what)
         {
             if (clock_ != nullptr)
@@ -404,6 +409,7 @@ public:
         stemSession_.reset(); // a separation in flight: its process is ended, not waited for
         directionSession_.reset();
         copilot_.reset();
+        soundCard_.reset(); // after the window: the « Audio » window reads it
         clock_.reset();
         bridge_.reset();
         listening_.reset(); // it holds the projector
@@ -915,7 +921,8 @@ private:
                                          *mixSession_,
                                          *stemSession_,
                                          *directionSession_,
-                                         *livePlay_};
+                                         *livePlay_,
+                                         *soundCard_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();
@@ -1136,6 +1143,58 @@ private:
         return {};
     }
 
+    // --tampon <samples> and --pilote partage|basse-latence|exclusif, for a
+    // verification only: the card opened with that buffer, in that driver
+    // or, without --pilote, the first that offers it — the current one,
+    // Low Latency Mode, the exclusive mode. Said in daw.log.
+    void applyBufferFromCommandLine(const juce::String& commandLine)
+    {
+        const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+        const auto bufferAt = tokens.indexOf("--tampon");
+        const auto driverAt = tokens.indexOf("--pilote");
+        if ((bufferAt < 0 || bufferAt + 1 >= tokens.size()) &&
+            (driverAt < 0 || driverAt + 1 >= tokens.size()))
+            return;
+        if (verificationSettingsFolder(commandLine) == juce::File{})
+        {
+            juce::Logger::writeToLog(
+                juce::String::fromUTF8("audio: --tampon et --pilote refusés hors d'une vérification"));
+            return;
+        }
+        auto& audio = engineHost_->audio();
+        const auto now = audio.current();
+
+        juce::StringArray types{now.type,
+                                juce::String{domain::live::lowLatencyDriver.data()},
+                                juce::String{domain::live::exclusiveDriver.data()}};
+        if (driverAt >= 0 && driverAt + 1 < tokens.size())
+        {
+            const auto name = tokens[driverAt + 1];
+            const auto* type = name == "partage"         ? domain::live::sharedDriver.data()
+                               : name == "basse-latence" ? domain::live::lowLatencyDriver.data()
+                               : name == "exclusif"      ? domain::live::exclusiveDriver.data()
+                                                         : nullptr;
+            if (type == nullptr)
+            {
+                juce::Logger::writeToLog("audio: --pilote " + name + " : inconnu");
+                return;
+            }
+            types = juce::StringArray{juce::String{type}};
+        }
+        const auto wanted =
+            bufferAt >= 0 && bufferAt + 1 < tokens.size() ? tokens[bufferAt + 1].getIntValue() : 0;
+        for (const auto& type : types)
+        {
+            const auto sizes = audio.buffers(type, now.output);
+            const auto size = wanted > 0 ? wanted : domain::live::closestBuffer(sizes, now.buffer);
+            if (std::find(sizes.begin(), sizes.end(), size) == sizes.end())
+                continue;
+            audio.apply({type, now.output, size});
+            return;
+        }
+        juce::Logger::writeToLog(juce::String::fromUTF8("audio: aucun pilote n'offre ce réglage"));
+    }
+
     // --layout "<path to a .layout file>"
     [[nodiscard]] static juce::String layoutFromCommandLine(const juce::String& commandLine)
     {
@@ -1294,6 +1353,7 @@ private:
     ui::Selection selection_;
     ui::History history_;
     std::unique_ptr<LivePlay> livePlay_;
+    std::unique_ptr<SoundCard> soundCard_;
     std::unique_ptr<EditClock> clock_;
     std::unique_ptr<LevelMonitor> levels_;
     ui::Clipboard clipboard_;

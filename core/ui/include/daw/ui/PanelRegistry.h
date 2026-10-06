@@ -4,6 +4,7 @@
 #include "daw/domain/project/ProjectState.h"
 #include "daw/ui/DawLookAndFeel.h"
 #include "daw/ui/Tokens.h"
+#include "daw/ui/model/AudioHost.h"
 #include "daw/ui/model/CopilotHost.h"
 #include "daw/ui/model/DirectionHost.h"
 #include "daw/ui/model/History.h"
@@ -89,6 +90,8 @@ struct PanelServices
     DirectionHost& direction;
     // Playing live (S23): the computer's keyboard as a piano, the track played.
     LiveHost& live;
+    // The sound card (S24): a machine setting, the « Audio » window's.
+    AudioHost& audio;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

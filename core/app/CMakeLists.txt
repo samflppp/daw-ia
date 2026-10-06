@@ -20,6 +20,7 @@ target_sources(daw_app PRIVATE
     src/EditClock.cpp
     src/LevelMonitor.cpp
     src/LivePlay.cpp
+    src/SoundCard.cpp
     src/RawKeyboard.cpp
     src/TakeRecorder.cpp
     src/MidiKeyboards.cpp

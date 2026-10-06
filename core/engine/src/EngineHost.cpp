@@ -70,6 +70,9 @@ EngineHost::EngineHost(const juce::String& applicationName, const juce::File& se
     engine_->getDeviceManager().dispatchPendingUpdates();
     output_ = std::make_unique<AudioOutputKeeper>(engine_->getDeviceManager().deviceManager);
     output_->onLost = [this] { live_.silence(domain::live::now()); };
+    audio_ = std::make_unique<AudioSettings>(
+        engine_->getDeviceManager().deviceManager, *output_, settingsFolder.getChildFile("carte-audio.json"));
+    audio_->beforeReopen = [this] { live_.silence(domain::live::now()); };
 
     auto& pluginManager = engine_->getPluginManager();
 

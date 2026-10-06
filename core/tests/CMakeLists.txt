@@ -64,7 +64,8 @@ add_executable(daw_domain_tests
     LiveRouterTests.cpp
     TypingKeyboardTests.cpp
     TakeTests.cpp
-    LiveInputsTests.cpp)
+    LiveInputsTests.cpp
+    AudioAdviceTests.cpp)
 
 target_link_libraries(daw_domain_tests PRIVATE daw::domain daw::ui_workspace doctest::doctest)
 daw_set_warnings(daw_domain_tests)

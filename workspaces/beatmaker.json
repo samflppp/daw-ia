@@ -16,6 +16,7 @@
     "mixer",
     "history",
     "direction",
+    "audio",
     "copilot"
   ],
   "layout": {
@@ -111,6 +112,16 @@
         "y": 0.1,
         "width": 0.3,
         "height": 0.6
+      },
+      {
+        "panel": "audio",
+        "title": "Audio",
+        "shortcut": "F12",
+        "open": false,
+        "x": 0.35,
+        "y": 0.15,
+        "width": 0.32,
+        "height": 0.55
       },
       {
         "panel": "history",

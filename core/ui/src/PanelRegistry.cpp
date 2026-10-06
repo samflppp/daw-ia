@@ -1,5 +1,6 @@
 #include "daw/ui/PanelRegistry.h"
 
+#include "daw/ui/panels/AudioPanel.h"
 #include "daw/ui/panels/BrowserPanel.h"
 #include "daw/ui/panels/ChannelRackPanel.h"
 #include "daw/ui/panels/CopilotPanel.h"
@@ -47,6 +48,7 @@ PanelRegistry PanelRegistry::withBuiltinPanels()
     registry.add("mixer", [](const PanelContext& context) { return std::make_unique<MixerPanel>(context); });
     registry.add("history",
                  [](const PanelContext& context) { return std::make_unique<HistoryPanel>(context); });
+    registry.add("audio", [](const PanelContext& context) { return std::make_unique<AudioPanel>(context); });
     registry.add("direction",
                  [](const PanelContext& context) { return std::make_unique<DirectionPanel>(context); });
 

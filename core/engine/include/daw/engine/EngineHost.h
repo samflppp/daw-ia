@@ -2,6 +2,7 @@
 
 #include "daw/domain/live/Router.h"
 #include "daw/engine/AudioOutputKeeper.h"
+#include "daw/engine/AudioSettings.h"
 #include "daw/engine/PluginCatalogue.h"
 
 #include <tracktion_engine/tracktion_engine.h>
@@ -53,6 +54,10 @@ public:
     // back when it returns. See AudioOutputKeeper.h.
     [[nodiscard]] AudioOutputKeeper& output() noexcept { return *output_; }
 
+    // The driver, the output and the buffer, as the « Audio » window chooses
+    // them (S24). See AudioSettings.h.
+    [[nodiscard]] AudioSettings& audio() noexcept { return *audio_; }
+
     // Where the notes played live go (S23): the keys of the computer and of
     // a MIDI keyboard push into it, the projector binds each track's live
     // input to it. Made first and kept last: a track's plugin reads its
@@ -72,6 +77,9 @@ private:
 
     // Last, so the first to go: it listens to the engine's device manager.
     std::unique_ptr<AudioOutputKeeper> output_;
+
+    // After the keeper, so gone before it: it tells the keeper what to keep.
+    std::unique_ptr<AudioSettings> audio_;
 };
 
 } // namespace daw::engine
