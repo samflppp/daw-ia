@@ -17,10 +17,13 @@ namespace daw::engine
 // went on "playing" for minutes without a single block reaching the speakers.
 //
 // What it does instead, the way every other application of the machine does:
-//   - no device open: the one the session started on if it is there, the
-//     default output of Windows otherwise, tried again every second until one
-//     opens;
+//   - no device open: the first one if it is there, the default output of
+//     Windows in the same driver otherwise, the shared « Windows Audio »
+//     last — a headset lost in exclusive mode must not leave the machine
+//     silent —, tried again every second until one opens;
 //   - a fallback open and the first one back: back to the first one.
+// The first one is the output the session started on, until the « Audio »
+// window chooses another (S24): the person's choice is what it comes back to.
 // The song is not stopped: Tracktion restarts its playback on the new device.
 // Every change goes to the log and to onChanged, which the screen shows.
 //
@@ -39,8 +42,15 @@ public:
     // The output now open, empty when there is none.
     [[nodiscard]] juce::String outputName() const;
 
-    // The output the session started on, which it goes back to.
+    // The output it goes back to, and in which driver: the one the session
+    // started on, or the one the « Audio » window chose.
     [[nodiscard]] const juce::String& preferredName() const noexcept { return preferred_; }
+    [[nodiscard]] const juce::String& preferredType() const noexcept { return typeName_; }
+
+    // The « Audio » window's choice becomes the first one (S24). Said before
+    // the device is opened: a change message arriving after the opening must
+    // not take the card back to the old one.
+    void prefer(const juce::String& type, const juce::String& name);
 
     // How many times an output was reopened after being lost, or given back.
     [[nodiscard]] int reopenCount() const noexcept { return reopened_; }
@@ -65,9 +75,9 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void timerCallback() override;
 
-    [[nodiscard]] bool available(const juce::String& name) const;
-    [[nodiscard]] juce::String windowsDefault() const;
-    bool open(const juce::String& name);
+    [[nodiscard]] bool available(const juce::String& type, const juce::String& name) const;
+    [[nodiscard]] juce::String windowsDefault(const juce::String& type) const;
+    bool open(const juce::String& type, const juce::String& name);
     void say(const juce::String& what);
 
     juce::AudioDeviceManager& devices_;

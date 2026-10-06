@@ -1,11 +1,17 @@
 #include "daw/engine/AudioOutputKeeper.h"
 
+#include <utility>
+
 namespace daw::engine
 {
 namespace
 {
 
 constexpr int lookEveryMs = 1000;
+
+// The last resort when a card goes: the shared driver opens whatever the
+// exclusive one could not take.
+const juce::String sharedType{"Windows Audio"};
 
 } // namespace
 
@@ -35,6 +41,12 @@ juce::String AudioOutputKeeper::outputName() const
 {
     auto* device = devices_.getCurrentAudioDevice();
     return device != nullptr ? device->getName() : juce::String{};
+}
+
+void AudioOutputKeeper::prefer(const juce::String& type, const juce::String& name)
+{
+    typeName_ = type;
+    preferred_ = name;
 }
 
 void AudioOutputKeeper::loseOutputForTest()
@@ -69,14 +81,18 @@ void AudioOutputKeeper::check()
             say("sortie perdue");
         }
 
-        // The first one if it is there, the default of Windows otherwise.
-        for (const auto& candidate : {preferred_, windowsDefault()})
+        // The first one if it is there, the default of Windows in its driver
+        // otherwise, the shared driver's default last.
+        const std::pair<juce::String, juce::String> candidates[] = {{typeName_, preferred_},
+                                                                    {typeName_, windowsDefault(typeName_)},
+                                                                    {sharedType, windowsDefault(sharedType)}};
+        for (const auto& [type, name] : candidates)
         {
-            if (candidate.isNotEmpty() && available(candidate) && open(candidate))
+            if (name.isNotEmpty() && available(type, name) && open(type, name))
             {
                 lost_ = false;
                 ++reopened_;
-                say("sortie : " + candidate);
+                say("sortie : " + name);
                 return;
             }
         }
@@ -87,28 +103,30 @@ void AudioOutputKeeper::check()
         preferred_ = current;
 
     // On a fallback, and the first one is back.
-    if (current != preferred_ && available(preferred_) && open(preferred_))
+    const auto currentType = devices_.getCurrentAudioDeviceType();
+    if ((current != preferred_ || currentType != typeName_) && available(typeName_, preferred_) &&
+        open(typeName_, preferred_))
     {
         ++reopened_;
         say("sortie : " + preferred_);
     }
 }
 
-bool AudioOutputKeeper::available(const juce::String& name) const
+bool AudioOutputKeeper::available(const juce::String& typeName, const juce::String& name) const
 {
     for (auto* type : devices_.getAvailableDeviceTypes())
     {
-        if (type != nullptr && type->getTypeName() == typeName_)
+        if (type != nullptr && type->getTypeName() == typeName)
             return type->getDeviceNames(false).contains(name);
     }
     return false;
 }
 
-juce::String AudioOutputKeeper::windowsDefault() const
+juce::String AudioOutputKeeper::windowsDefault(const juce::String& typeName) const
 {
     for (auto* type : devices_.getAvailableDeviceTypes())
     {
-        if (type == nullptr || type->getTypeName() != typeName_)
+        if (type == nullptr || type->getTypeName() != typeName)
             continue;
         const auto names = type->getDeviceNames(false);
         const auto index = type->getDefaultDeviceIndex(false);
@@ -117,12 +135,12 @@ juce::String AudioOutputKeeper::windowsDefault() const
     return {};
 }
 
-bool AudioOutputKeeper::open(const juce::String& name)
+bool AudioOutputKeeper::open(const juce::String& typeName, const juce::String& name)
 {
     const juce::ScopedValueSetter<bool> guard{opening_, true};
 
-    if (devices_.getCurrentAudioDeviceType() != typeName_)
-        devices_.setCurrentAudioDeviceType(typeName_, false);
+    if (devices_.getCurrentAudioDeviceType() != typeName)
+        devices_.setCurrentAudioDeviceType(typeName, false);
 
     auto setup = devices_.getAudioDeviceSetup();
     setup.outputDeviceName = name;
@@ -130,7 +148,7 @@ bool AudioOutputKeeper::open(const juce::String& name)
     // there any more would fail the whole setup.
     for (auto* type : devices_.getAvailableDeviceTypes())
     {
-        if (type != nullptr && type->getTypeName() == typeName_ &&
+        if (type != nullptr && type->getTypeName() == typeName &&
             !type->getDeviceNames(true).contains(setup.inputDeviceName))
             setup.inputDeviceName = {};
     }
