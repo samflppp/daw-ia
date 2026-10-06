@@ -93,7 +93,19 @@ public:
         const auto domainVersion = domain::versionString();
         juce::Logger::writeToLog("core domain " + juce::String(domainVersion.data(), domainVersion.size()));
 
-        engineHost_ = std::make_unique<engine::EngineHost>(getApplicationName());
+        // A verification plays with the engine's settings in a folder of its
+        // own (S24): it must never rewrite this machine's, Tracktion's
+        // Settings.xml.
+        if (const auto settings = verificationSettingsFolder(commandLine); settings != juce::File{})
+        {
+            juce::Logger::writeToLog(juce::String::fromUTF8("verify: réglages de la machine copiés dans ") +
+                                     settings.getFullPathName());
+            engineHost_ = std::make_unique<engine::EngineHost>(getApplicationName(), settings);
+        }
+        else
+        {
+            engineHost_ = std::make_unique<engine::EngineHost>(getApplicationName());
+        }
 
         // The history panel is fed by the bus like everything else, and it is
         // listening before the journal is replayed: a project reopened must
@@ -1094,6 +1106,34 @@ private:
             juce::Logger::writeToLog("project not saved: " + juce::String(closed.error().message));
 
         store_.reset();
+    }
+
+    // --verify… "<folder>": the engine's settings in <folder>/reglages-machine,
+    // a copy of this machine's taken once, so the verification plays on the
+    // same card with the same plugins and writes nothing back. Nothing when
+    // the process is not a verification.
+    [[nodiscard]] juce::File verificationSettingsFolder(const juce::String& commandLine)
+    {
+        const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+        for (int index = 0; index < tokens.size() - 1; ++index)
+        {
+            if (!tokens[index].startsWith("--verify"))
+                continue;
+            const auto folder = juce::File::getCurrentWorkingDirectory()
+                                    .getChildFile(tokens[index + 1].unquoted())
+                                    .getChildFile("reglages-machine");
+            folder.createDirectory();
+            const auto personal = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                      .getChildFile(getApplicationName());
+            for (const auto* name : {"Settings.xml", "plugins.xml"})
+            {
+                const auto copy = folder.getChildFile(name);
+                if (!copy.existsAsFile() && personal.getChildFile(name).existsAsFile())
+                    personal.getChildFile(name).copyFileTo(copy);
+            }
+            return folder;
+        }
+        return {};
     }
 
     // --layout "<path to a .layout file>"
