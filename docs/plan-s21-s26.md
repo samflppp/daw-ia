@@ -145,11 +145,14 @@ mixer.
   d'annulation.
 - **Les effets depuis la tranche du mixer** : poser, retirer, réordonner et contourner un effet, sans quitter le
   mixer.
-- **La chaîne d'effets vue comme un flux** (demandé le 6 octobre 2026) : les plugins d'une piste alignés sur une
-  même ligne, dans l'ordre où le son les traverse, et entre chacun la forme d'onde du son à cet endroit, en
-  direct. On voit le signal entrer, ce que chaque effet en fait, et sortir : la forme d'onde passe d'un état à
-  l'autre. C'est le même chantier que le point précédent, pas un cinquième : la ligne est l'endroit où l'on pose,
-  retire, réordonne et contourne.
+- **Le flux audio** (demandé le 6 octobre 2026, précisé le même jour) : une vue en graphe du trajet du son,
+  analogue au Flow de Dataiku. Là-bas, des jeux de données reliés par des recettes ; ici, **des états du son**
+  reliés par **des effets**. Chaque état est un nœud qui montre la forme d'onde du son à cet endroit, en direct ;
+  chaque plugin est un nœud entre deux états ; les liens suivent le routage réel : la source d'une piste, ses
+  effets l'un après l'autre, son fader, ses envois qui partent en branche vers un bus, les bus où plusieurs
+  pistes se rejoignent, le master au bout. On lit d'un coup d'œil par où passe le son de tout le morceau, et ce
+  que chaque étape en fait. Ce n'est pas une ligne par piste : c'est un graphe, avec ses branches et ses
+  jonctions. C'est aussi l'endroit où l'on pose, retire, réordonne et contourne un effet (le point précédent).
 - **La création de bus intelligente** : proposer un bus et des envois quand un même plugin revient avec les mêmes
   réglages.
 - **La fenêtre « Audio »**, tombée en S23 (décidé le 6 octobre 2026) : le pilote, la sortie, le tampon, la
@@ -167,9 +170,10 @@ mixer.
   (808 à la tonalité à quelques cents près, pas de recouvrement kick / 808), et le poser est un seul Ctrl+Z.
 - Les effets : chaque geste de la tranche produit la commande attendue (`plugin.insert`, `plugin.remove`,
   `plugin.set_bypassed`, réordonner), vérifiée au rendu pour le contournement.
-- Le flux : sur une piste dont l'effet est connu (un creux de l'égaliseur interne, un compresseur), la forme
-  d'onde montrée après l'effet est celle du rendu à cet endroit, mesurée ; un effet contourné donne la même
-  forme avant et après ; la lecture n'en devient pas muette et aucun bloc audio n'attend l'écran.
+- Le flux : le graphe affiché est celui du projet (chaque piste, chaque effet, chaque envoi, chaque bus, le
+  master ; un projet construit donne les nœuds et les liens attendus) ; la forme d'onde d'un nœud est celle du
+  rendu à cet endroit, mesurée ; un effet contourné donne la même forme avant et après ; un geste dans le graphe
+  produit la commande attendue ; la lecture n'en devient pas muette et aucun bloc audio n'attend l'écran.
 - Les bus : sur un projet construit (la même réverbération sur six pistes), la proposition est faite, essayée à
   blanc, gardée en un seul groupe ; le rendu avant / après est mesuré.
 - La fenêtre « Audio » : un tampon changé est celui que la carte ouvre (relu au moteur), la latence affichée est
@@ -179,19 +183,24 @@ mixer.
 - Le kit : comment on choisit des samples qui « vont ensemble » sans recherche par le son — des descripteurs
   mesurés sur l'audio (attaque, brillance, longueur, hauteur) sont sans doute à construire d'abord.
 - Réordonner un effet : il n'y a pas de commande pour ça aujourd'hui.
-- Le flux : où il s'affiche (une tranche de mixer est étroite et verticale ; une ligne horizontale ouverte sous
-  le mixer pour la piste choisie, ou la page de la chaîne de plugins qui devient cette vue) ; comment le son est
-  prélevé entre deux effets (une prise par emplacement, sans allocation ni verrou sur le fil audio, comme
-  `MeterTap`) et ce que ça coûte en processeur par piste ouverte ; la forme d'onde seule, ou aussi le spectre ;
-  le retard qu'un plugin ajoute, pour que l'avant et l'après se lisent au même instant ; ça marche pour les
-  plugins de la personne, opaques, puisqu'on prélève le son et pas leurs réglages ; et ce que la proposition du
-  mixage par l'IA y montre (l'avant / après d'un réglage, vu et pas seulement dit).
+- Le flux : c'est un panneau neuf, un graphe. Sa disposition (calculée depuis le routage, jamais stockée dans
+  le projet : un état d'écran, comme la vue de la toile) ; sa navigation (la grammaire de la S18 : Ctrl+molette,
+  clic-molette, F) ; ce qu'un nœud d'état montre (la forme d'onde, peut-être le spectre et le niveau) et ce
+  qu'un clic sur lui fait (l'écouter seul à cet endroit ?) ; comment le son est prélevé entre deux effets (une
+  prise par emplacement, sans allocation ni verrou sur le fil audio, comme `MeterTap`), pour quels nœuds (tous,
+  ou seulement ceux qui sont à l'écran) et ce que ça coûte en processeur ; le retard qu'un plugin ajoute, pour
+  que l'avant et l'après se lisent au même instant ; ce qu'on peut faire dans le graphe (glisser un effet sur un
+  lien pour l'insérer, tirer un lien vers un bus pour créer un envoi) et par quelles commandes existantes ; ce
+  que le mixage par l'IA et les bus intelligents y montrent (une proposition vue dans le graphe avant d'être
+  gardée) ; et son rapport avec le mixer et la page de la chaîne de plugins : ce qui reste, ce qui fait double
+  emploi. Il marche pour les plugins de la personne, opaques, puisqu'on prélève le son et pas leurs réglages.
 - Ce que veut dire « les mêmes réglages » pour un plugin dont l'état est un blob opaque ; un effet d'insertion
   ne se mutualise pas comme un effet d'envoi.
 - La fenêtre « Audio » : ce qu'on fait quand le réglage choisi échoue à l'ouverture (revenir à l'ancien, le
   dire), et comment elle cohabite avec `AudioOutputKeeper`, qui revient à la première sortie quand la carte part.
-- La semaine porte quatre chantiers, et celui des effets a grossi avec le flux : si elle est trop chargée, dire
-  lequel tombe, plutôt que d'en bâcler un. Le fondateur n'a pas tranché lequel.
+- La semaine porte quatre chantiers, et le flux audio est un panneau neuf, pas un détail d'écran : elle est
+  trop chargée telle quelle. Dire lequel tombe et où il va, plutôt que d'en bâcler un. Le fondateur n'a pas
+  tranché lequel.
 
 ## S25 — Diriger le DAW à la voix
 
