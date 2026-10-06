@@ -64,6 +64,8 @@ void AudioOutputKeeper::check()
         if (!lost_)
         {
             lost_ = true;
+            if (onLost)
+                onLost();
             say("sortie perdue");
         }
 

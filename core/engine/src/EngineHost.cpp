@@ -1,6 +1,7 @@
 #include "daw/engine/EngineHost.h"
 
 #include "daw/engine/ClapPluginFormat.h"
+#include "daw/engine/LiveInput.h"
 #include "daw/engine/MeterTap.h"
 #include "daw/engine/MixTap.h"
 
@@ -68,6 +69,7 @@ EngineHost::EngineHost(const juce::String& applicationName, const juce::File& se
     // to ask.
     engine_->getDeviceManager().dispatchPendingUpdates();
     output_ = std::make_unique<AudioOutputKeeper>(engine_->getDeviceManager().deviceManager);
+    output_->onLost = [this] { live_.silence(domain::live::now()); };
 
     auto& pluginManager = engine_->getPluginManager();
 
@@ -79,6 +81,9 @@ EngineHost::EngineHost(const juce::String& applicationName, const juce::File& se
     // The level taps the projector places at the end of every chain. A type
     // Tracktion has to know before an Edit can hold one.
     pluginManager.createBuiltInType<MeterTapPlugin>();
+
+    // The notes played live (S23), first in the chain of every track.
+    pluginManager.createBuiltInType<LiveInputPlugin>();
 
     // The ear of the mix measurement (S20), only ever in a copy of the Edit.
     pluginManager.createBuiltInType<MixTap>();

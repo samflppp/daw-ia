@@ -19,6 +19,7 @@ target_sources(daw_app PRIVATE
     src/PluginRack.cpp
     src/EditClock.cpp
     src/LevelMonitor.cpp
+    src/LivePlay.cpp
     src/MixComparison.cpp
     src/MixOnce.cpp
     src/MixSession.cpp

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daw/domain/live/Router.h"
 #include "daw/engine/AudioOutputKeeper.h"
 #include "daw/engine/PluginCatalogue.h"
 
@@ -52,12 +53,19 @@ public:
     // back when it returns. See AudioOutputKeeper.h.
     [[nodiscard]] AudioOutputKeeper& output() noexcept { return *output_; }
 
+    // Where the notes played live go (S23): the keys of the computer and of
+    // a MIDI keyboard push into it, the projector binds each track's live
+    // input to it. Made first and kept last: a track's plugin reads its
+    // queue on the audio thread until the Edit is gone.
+    [[nodiscard]] domain::live::Router& live() noexcept { return live_; }
+
     // True when a command line asks this process to be a plugin scanner rather
     // than the application. Call it first in main(): the child process must not
     // build an Engine, an Edit or a window.
     [[nodiscard]] static bool runAsPluginScannerIfAsked(const juce::String& commandLine);
 
 private:
+    domain::live::Router live_;
     std::unique_ptr<tracktion::Engine> engine_;
     std::unique_ptr<tracktion::Edit> edit_;
     std::unique_ptr<PluginCatalogue> catalogue_;

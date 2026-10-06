@@ -3,6 +3,7 @@
 #include "HostedParameters.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/project/InternalEffects.h"
+#include "daw/engine/LiveInput.h"
 #include "daw/engine/MeterTap.h"
 
 #include <algorithm>
@@ -543,6 +544,40 @@ void ProjectProjector::ensureMeterTap(tracktion::PluginList& list, const juce::S
             tap->setAudible(audible);
         list.insertPlugin(plugin, -1, nullptr);
     }
+}
+
+int ProjectProjector::ensureLiveInput(tracktion::PluginList& list, const domain::TrackId& track)
+{
+    if (live_ == nullptr)
+        return 0;
+
+    const auto wanted = toJuce(track.toString());
+    auto* queue = live_->queueFor(track.toString());
+    const auto inputs = list.getPluginsOfType<LiveInputPlugin>();
+    const auto plugins = list.getPlugins();
+
+    // First, so that what it adds reaches the instrument, whichever it is.
+    if (inputs.size() == 1 && inputs.getFirst() != nullptr && inputs.getFirst()->track() == wanted &&
+        plugins.getFirst() == inputs.getFirst())
+    {
+        inputs.getFirst()->bind(queue);
+        return 1;
+    }
+
+    for (auto* input : inputs)
+    {
+        if (input != nullptr)
+            input->deleteFromParent();
+    }
+
+    if (auto plugin = edit_.getPluginCache().createNewPlugin(LiveInputPlugin::create(wanted));
+        plugin != nullptr)
+    {
+        if (auto* input = dynamic_cast<LiveInputPlugin*>(plugin.get()); input != nullptr)
+            input->bind(queue);
+        list.insertPlugin(plugin, 0, nullptr);
+    }
+    return 1;
 }
 
 void ProjectProjector::ensureInstrument(tracktion::AudioTrack& track, const domain::Track& source)
@@ -1508,16 +1543,18 @@ void ProjectProjector::reconcile()
             applyMix(*target, source);
             ensureInstrument(*target, source);
 
-            // The fallback synth or the sampler, when there is one, stays in
-            // front of the chain: the user's own plugins are placed after it.
-            // Before S20 the sampler was not counted, and an effect on a
-            // sampler channel sat in front of the instrument that replaces
-            // what reaches it: it was never heard.
+            // The live input first (S23), then the fallback synth or the
+            // sampler, when there is one: the user's own plugins are placed
+            // after them. Before S20 the sampler was not counted, and an
+            // effect on a sampler channel sat in front of the instrument that
+            // replaces what reaches it: it was never heard.
+            const auto live = ensureLiveInput(target->pluginList, source.id);
             reconcilePlugins(target->pluginList,
                              source,
-                             target->pluginList.getPluginsOfType<tracktion::FourOscPlugin>().size() +
+                             live + target->pluginList.getPluginsOfType<tracktion::FourOscPlugin>().size() +
                                  target->pluginList.getPluginsOfType<tracktion::SamplerPlugin>().size());
         }
+        static_cast<void>(ensureLiveInput(target->pluginList, source.id));
         if (trackChanged || routeChanged)
             applyRoute(*target, source);
 

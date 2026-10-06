@@ -2,6 +2,7 @@
 
 #include "daw/domain/Value.h"
 #include "daw/domain/command/BusObserver.h"
+#include "daw/domain/live/Router.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/engine/ContentStore.h"
 #include "daw/engine/PluginCatalogue.h"
@@ -93,6 +94,13 @@ public:
     // than guessed: loading another plugin in its place would silently change
     // the sound of a project.
     [[nodiscard]] const std::vector<std::string>& missingPlugins() const noexcept { return missing_; }
+
+    // Where the notes played live come from (S23). Given, every track that
+    // plays notes gets a LiveInputPlugin first in its chain, bound to its
+    // queue in the router; not given (a test that plays nothing live, a copy
+    // of the Edit), none. Set it before the first reconcile(); the router
+    // outlives the Edit.
+    void playLiveFrom(domain::live::Router* router) noexcept { live_ = router; }
 
     // Idempotent: calling it twice in a row changes nothing the second time.
     void reconcile();
@@ -210,6 +218,12 @@ private:
     // projection decided about the strip — see MeterTapPlugin::setAudible.
     void ensureMeterTap(tracktion::PluginList& list, const juce::String& strip, bool audible);
 
+    // The live input of a track, first in its chain and bound to the track's
+    // queue: placed when missing, put back first when something landed in
+    // front of it, never duplicated. The number of plugins it adds in front
+    // of the chain: 1, or 0 without a router.
+    int ensureLiveInput(tracktion::PluginList& list, const domain::TrackId& track);
+
     // The master leaves the Edit at unity. Tracktion's own master fader does
     // not start at 0 dB, and nothing in the domain asked it to be anything
     // else: a mix 3 dB quieter than its meters, measured at S11, is the
@@ -312,6 +326,7 @@ private:
     const domain::ProjectState& state_;
     PluginCatalogue* catalogue_{nullptr};
     ContentStore* contentStore_{nullptr};
+    domain::live::Router* live_{nullptr};
     TransportController transport_;
     bool projecting_{false};
     std::vector<std::string> missing_;

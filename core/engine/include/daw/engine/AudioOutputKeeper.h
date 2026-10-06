@@ -48,6 +48,11 @@ public:
     // Said once per change: « sortie perdue », « sortie : Haut-parleurs ».
     std::function<void(const juce::String& what)> onChanged;
 
+    // Told once when the output is lost, before onChanged: what plays live
+    // is silenced there (S23), so that no note is left sounding when a card
+    // opens again.
+    std::function<void()> onLost;
+
     // What a lost card leaves behind, made on purpose: the device closed the
     // way JUCE closes one that has gone. For --verify-lecture; the next look,
     // within a second, must reopen it.

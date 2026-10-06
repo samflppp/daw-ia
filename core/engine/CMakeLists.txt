@@ -17,6 +17,7 @@ target_sources(daw_engine INTERFACE
     src/Export.cpp
     src/HostedParameters.cpp
     src/LevelMeters.cpp
+    src/LiveInput.cpp
     src/MediaFoundation.cpp
     src/MeterTap.cpp
     src/MixRender.cpp

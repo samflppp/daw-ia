@@ -5,6 +5,7 @@
 #include "EditClock.h"
 #include "LevelMonitor.h"
 #include "Listening.h"
+#include "LivePlay.h"
 #include "MainWindow.h"
 #include "MixOnce.h"
 #include "MixSession.h"
@@ -114,12 +115,16 @@ public:
 
         projector_ = std::make_unique<engine::ProjectProjector>(
             engineHost_->edit(), state_, &engineHost_->catalogue(), contentStore_.get());
+        // Every track that plays notes can be played live (S23): its chain
+        // starts with the live input, bound to the engine's router.
+        projector_->playLiveFrom(&engineHost_->live());
         bus_.addObserver(*projector_);
 
         // The interface observes the bus like the projector does, and for the
         // same reason: it is told that something changed, then reads the whole
         // state. No panel is notified of what a command did.
         bus_.addObserver(projectObserver_);
+        livePlay_ = std::make_unique<LivePlay>(engineHost_->live(), state_, selection_, projectObserver_);
         clock_ = std::make_unique<EditClock>(engineHost_->edit());
         engineHost_->output().onChanged = [this](const juce::String& what)
         {
@@ -344,6 +349,7 @@ public:
         // draw: an editor outliving its plugin by one line is a crash.
         QuitWatchdog::step("plugin windows");
         probe_.reset();
+        livePlay_.reset();
         transportSync_.reset();
         rack_.reset();
         QuitWatchdog::step("main window");
@@ -1230,6 +1236,7 @@ private:
     ui::ProjectObserver projectObserver_;
     ui::Selection selection_;
     ui::History history_;
+    std::unique_ptr<LivePlay> livePlay_;
     std::unique_ptr<EditClock> clock_;
     std::unique_ptr<LevelMonitor> levels_;
     ui::Clipboard clipboard_;
