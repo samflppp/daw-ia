@@ -43,6 +43,7 @@ le suivant (§12).
 | 5 octobre 2026 | On garde HTDemucs pour le séparateur, sans chercher d'autre modèle pour l'instant. Rien à faire cette semaine. La dette reste telle qu'elle est écrite dans CLAUDE.md §6 (le code est sous MIT, les poids sont donnés pour la recherche). |
 | 6 octobre 2026 | « Je valide tout, Raw Input et régulière, go » : le modèle du jeu exposé en début de semaine, validé en bloc, avec deux choix tranchés. |
 | 6 octobre 2026, après le bilan | La fenêtre « Audio » tombée cette semaine va à la S24. |
+| 6 octobre 2026, après le bilan | La règle du dernier 1/32 de temps au tour de boucle est gardée telle quelle (§5). |
 
 Ce que « je valide tout » couvre, tel qu'exposé :
 
@@ -446,7 +447,7 @@ honnêtement.
   `--verify-lecture`).
 - **La règle du dernier 1/32 de temps** dans une prise en boucle : une décision de comportement prise en cours de
   semaine, pour réparer ce que la vérification a trouvé, sans te l'exposer avant. Elle est petite et se défait
-  d'une constante (`wrapBeats`). Dis-moi si tu la veux autrement.
+  d'une constante (`wrapBeats`). Exposée après coup, **gardée telle quelle le 6 octobre 2026**.
 - **Ctrl+T et Ctrl+R** sont pris ; ils étaient libres.
 
 ## 14. À essayer, dans l'ordre
