@@ -77,6 +77,7 @@ Verification::Verification(Wiring wiring)
     , output_(wiring.output)
     , live_(wiring.live)
     , router_(wiring.router)
+    , audio_(wiring.audio)
 {
     exporter_ = wiring.exporter;
 }
@@ -137,6 +138,9 @@ void Verification::start()
         break;
     case Run::play:
         buildPlay();
+        break;
+    case Run::audio:
+        buildAudio();
         break;
     }
 

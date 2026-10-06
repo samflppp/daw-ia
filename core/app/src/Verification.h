@@ -8,6 +8,7 @@
 #include "daw/domain/live/Router.h"
 #include "daw/domain/project/ProjectState.h"
 #include "daw/engine/AudioOutputKeeper.h"
+#include "daw/engine/AudioSettings.h"
 #include "daw/ui/TitleBarView.h"
 #include "daw/ui/Tokens.h"
 #include "daw/ui/WorkspaceView.h"
@@ -86,7 +87,8 @@ public:
         mix,
         playback,
         stems,
-        play
+        play,
+        audio
     };
 
     struct Wiring
@@ -151,6 +153,9 @@ public:
         // Playing live and recording (S23): --verify-jeu presses the keys.
         LivePlay* live{nullptr};
         domain::live::Router* router{nullptr};
+
+        // The sound card's settings (S24): --verify-audio drives the window.
+        engine::AudioSettings* audio{nullptr};
     };
 
     explicit Verification(Wiring wiring);
@@ -195,6 +200,10 @@ private:
     // keyboard plugged in.
     struct PlayRun;
     void buildPlay();
+
+    // S24 (VerificationAudio.cpp): the « Audio » window on this card.
+    struct AudioRun;
+    void buildAudio();
     [[nodiscard]] engine::LiveInputPlugin* liveInputOf(const domain::TrackId& track) const;
     void buildReopen();
     void buildLegacy();
@@ -487,6 +496,7 @@ private:
     engine::AudioOutputKeeper* output_{nullptr};
     LivePlay* live_{nullptr};
     domain::live::Router* router_{nullptr};
+    engine::AudioSettings* audio_{nullptr};
 
     // S21: cycles run and silent ones, per action before the play.
     std::map<std::string, int> cyclesByAction_;

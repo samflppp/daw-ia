@@ -281,6 +281,8 @@ public:
                 run = Verification::Run::playback;
             else if (tokens[index] == "--verify-jeu")
                 run = Verification::Run::play;
+            else if (tokens[index] == "--verify-audio")
+                run = Verification::Run::audio;
             else if (tokens[index] == "--verify-stems")
                 run = Verification::Run::stems;
             else if (tokens[index] != "--verify")
@@ -336,7 +338,8 @@ public:
                 &engineHost_->output(),
                 stemSession_.get(),
                 livePlay_.get(),
-                &engineHost_->live()});
+                &engineHost_->live(),
+                &engineHost_->audio()});
 
             // A verification mixes by the rules: never a key, never an API.
             if (mixSession_ != nullptr)
