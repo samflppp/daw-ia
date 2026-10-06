@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MidiKeyboards.h"
 #include "TakeRecorder.h"
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/live/Router.h"
@@ -74,6 +75,7 @@ public:
     [[nodiscard]] int velocity() const override { return keys_.velocity(); }
     void setVelocity(int velocity) override { keys_.setVelocity(velocity); }
     [[nodiscard]] std::string targetName() const override;
+    [[nodiscard]] std::vector<std::string> midiInputs() const override { return midi_.names(); }
     [[nodiscard]] Recording recording() const override;
     void toggleRecording() override { recorder_.toggle(); }
     [[nodiscard]] std::vector<domain::live::TakeNote> takeNotes() const override { return recorder_.notes(); }
@@ -97,6 +99,7 @@ private:
     domain::live::TypingKeyboard keys_;
     std::unique_ptr<RawKeyboard> raw_;
     TakeRecorder recorder_;
+    MidiKeyboards midi_;
 };
 
 } // namespace daw::app

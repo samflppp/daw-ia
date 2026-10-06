@@ -20,6 +20,7 @@ add_library(daw_domain STATIC
     src/live/Timeline.cpp
     src/live/TypingKeyboard.cpp
     src/live/Take.cpp
+    src/live/Inputs.cpp
     src/direction/Reading.cpp
     src/direction/Direction.cpp
     src/commands/DirectionCommands.cpp

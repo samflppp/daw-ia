@@ -28,6 +28,7 @@ LivePlay::LivePlay(domain::live::Router& router,
     , keys_(router)
     , raw_(std::make_unique<RawKeyboard>(keys_))
     , recorder_({router, bus, state, edit, std::move(outputLatency)})
+    , midi_(edit.engine, router)
 {
     selection_.addChangeListener(this);
     project_.addChangeListener(this);

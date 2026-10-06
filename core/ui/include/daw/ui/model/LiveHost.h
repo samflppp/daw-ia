@@ -42,6 +42,9 @@ public:
     // The name of the track the keys play, empty when none is chosen.
     [[nodiscard]] virtual std::string targetName() const = 0;
 
+    // The MIDI keyboards listened to, by name; all of them play.
+    [[nodiscard]] virtual std::vector<std::string> midiInputs() const = 0;
+
     // --- the take
 
     enum class Recording
