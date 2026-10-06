@@ -31,6 +31,8 @@ namespace daw::ui
 // decides and verifies, and while its proposal waits for the person, the
 // proposal takes the place of the strips; the same button cancels a run, and
 // keeping or refusing puts the strips back.
+class InsertSlots;
+
 class MixerPanel final : public juce::Component, private juce::ChangeListener
 {
 public:
@@ -47,6 +49,10 @@ public:
     // The strips on screen, channels and buses then the master: for the
     // verification, which clicks their controls.
     [[nodiscard]] std::vector<juce::Component*> strips() const;
+
+    // The effects of a strip as its slots show them, and their gestures (S24):
+    // for the verification. Null for a strip not on screen.
+    [[nodiscard]] InsertSlots* insertsOf(domain::TrackId strip) const;
 
 private:
     class Strip;
@@ -66,6 +72,7 @@ private:
     Selection& selection_;
     const TransportClock& clock_;
     MixHost& mix_;
+    PluginHost& plugins_;
     LevelSource& levels_;
     bool titled_{false};
 

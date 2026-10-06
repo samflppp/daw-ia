@@ -109,6 +109,7 @@ target_sources(daw_ui INTERFACE
     src/panels/PlaylistCanvas.cpp
     src/panels/PlaylistBandGeneration.cpp
     src/panels/PianoRollVelocityLane.cpp
+    src/panels/InsertSlots.cpp
     src/panels/MixerPanel.cpp
     src/panels/MixProposalView.cpp
     src/panels/BrowserPanel.cpp

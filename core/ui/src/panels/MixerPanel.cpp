@@ -3,9 +3,11 @@
 #include "daw/domain/commands/MixCommands.h"
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/commands/TrackCommands.h"
+#include "daw/domain/serialization/Json.h"
 #include "daw/ui/AutomatableSlider.h"
 #include "daw/ui/model/AutomationEditing.h"
 #include "daw/ui/model/Motion.h"
+#include "daw/ui/panels/InsertSlots.h"
 
 #include <algorithm>
 #include <cmath>
@@ -239,12 +241,17 @@ public:
         addAndMakeVisible(meter_);
         meter_.onClick = [&owner] { owner.levels_.clearOvers(); };
 
+        inserts_ = std::make_unique<InsertSlots>(
+            owner.tokens_, owner.lookAndFeel_, owner.bus_, owner.state_, owner.plugins_, id_);
+        addAndMakeVisible(*inserts_);
+
         refresh();
     }
 
     ~Strip() override { setLookAndFeel(nullptr); }
 
     [[nodiscard]] domain::TrackId id() const noexcept { return id_; }
+    [[nodiscard]] InsertSlots& inserts() const noexcept { return *inserts_; }
 
     void showMeter(const StripMeter& meter) { meter_.show(meter); }
     void advanceMeter(double nowMs) { meter_.advance(nowMs); }
@@ -285,9 +292,7 @@ public:
         follow();
         mute_.setToggleState(strip->muted, juce::dontSendNotification);
 
-        inserts_.clear();
-        for (const auto& plugin : strip->plugins)
-            inserts_.add(text(plugin.ref.name));
+        inserts_->refresh();
 
         if (kind_ == Kind::master)
         {
@@ -355,19 +360,6 @@ public:
         g.setColour(tokens_.colour(kind_ == Kind::channel ? "color.surface.panel" : "color.surface.raised"));
         g.fillRect(getLocalBounds());
 
-        g.setColour(tokens_.colour("color.text.tertiary"));
-        g.setFont(owner_.lookAndFeel_.typography().sans("font.size.micro", "font.weight.regular"));
-        auto area = insertsArea_;
-        const auto line = tokens_.integer("metric.mixer.insertHeight");
-        const auto lines = tokens_.integer("metric.mixer.insertLines");
-        for (int index = 0; index < std::min(inserts_.size(), lines); ++index)
-            g.drawText(inserts_[index], area.removeFromTop(line), juce::Justification::centredLeft, true);
-        if (inserts_.isEmpty())
-            g.drawText(juce::String::fromUTF8("aucun effet"),
-                       area.removeFromTop(line),
-                       juce::Justification::centredLeft,
-                       true);
-
         g.setColour(tokens_.colour("color.text.secondary"));
         g.setFont(owner_.lookAndFeel_.typography().mono("font.size.micro", "font.weight.regular"));
         g.drawText(
@@ -384,8 +376,8 @@ public:
     {
         auto area = getLocalBounds().reduced(tokens_.integer("space.xs"));
         name_.setBounds(area.removeFromTop(tokens_.integer("metric.mixer.nameHeight")));
-        insertsArea_ = area.removeFromTop(tokens_.integer("metric.mixer.insertHeight") *
-                                          tokens_.integer("metric.mixer.insertLines"));
+        inserts_->setBounds(area.removeFromTop(tokens_.integer("metric.mixer.insertHeight") *
+                                               tokens_.integer("metric.mixer.insertLines")));
 
         const auto row = tokens_.integer("metric.mixer.rowHeight");
         if (kind_ != Kind::master)
@@ -496,8 +488,11 @@ private:
     {
         juce::String key = text(strip.name);
         key << '|' << (state_.isAudible(id_) ? 1 : 0) << (strip.muted ? 1 : 0) << (strip.soloed ? 1 : 0);
+        // The inserts as the slots show them: a bypass or a setting changes
+        // what a slot says.
         for (const auto& plugin : strip.plugins)
-            key << '|' << text(plugin.ref.name);
+            key << '|' << juce::String{plugin.id.toString()} << (plugin.bypassed ? 'o' : 'x')
+                << juce::String::fromUTF8(domain::json::write(plugin.toValue()).c_str()).hashCode64();
         key << '|' << juce::String{strip.output.toString()};
         for (const auto& bus : state_.buses())
             key << '|' << juce::String{bus.id.toString()} << ':' << text(bus.name);
@@ -523,8 +518,7 @@ private:
     juce::ComboBox send_;
     AutomatableSlider sendLevel_;
     Meter meter_;
-    juce::StringArray inserts_;
-    juce::Rectangle<int> insertsArea_;
+    std::unique_ptr<InsertSlots> inserts_;
     juce::Rectangle<int> readoutArea_;
     std::optional<domain::GestureId> gesture_;
 };
@@ -562,6 +556,7 @@ MixerPanel::MixerPanel(const PanelContext& context)
     , selection_(context.selection)
     , clock_(context.clock)
     , mix_(context.mix)
+    , plugins_(context.plugins)
     , levels_(context.levels)
     , titled_(context.titled)
     , content_(std::make_unique<Content>(context.tokens))
@@ -614,6 +609,16 @@ MixerPanel::~MixerPanel()
     levels_.removeChangeListener(this);
     project_.removeChangeListener(this);
     setLookAndFeel(nullptr);
+}
+
+InsertSlots* MixerPanel::insertsOf(domain::TrackId strip) const
+{
+    for (const auto& shown : strips_)
+        if (shown->id() == strip)
+            return &shown->inserts();
+    if (master_ != nullptr && master_->id() == strip)
+        return &master_->inserts();
+    return nullptr;
 }
 
 std::vector<juce::Component*> MixerPanel::strips() const
