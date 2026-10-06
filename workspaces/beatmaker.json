@@ -160,6 +160,7 @@
     "note.resize",
     "plugin.insert",
     "plugin.remove",
+    "plugin.move",
     "plugin.set_bypassed",
     "track.set_pan",
     "track.rename",

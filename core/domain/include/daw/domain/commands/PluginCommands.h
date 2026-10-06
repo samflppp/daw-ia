@@ -65,6 +65,37 @@ private:
     PluginId pluginId_;
 };
 
+// plugin.move — moves a plugin within its own chain (S24, decided on
+// 6 October 2026). Removing and inserting again would give back the same
+// project, but the engine would load the plugin anew: a heavy instrument or
+// effect silent for seconds, its tails cut, whatever was turned in its own
+// window since the last capture lost, and two entries in the journal where
+// the person did one thing. This one keeps the instance: the engine moves the
+// plugin it already holds. Between two tracks it is still a removal and an
+// insertion, in one group.
+//
+// `index` is where it ends, in the chain without it counted again: 0 is first.
+// The undo record is the index it was at.
+class MovePlugin final : public Command
+{
+public:
+    static constexpr std::string_view commandType = "plugin.move";
+
+    MovePlugin(PluginId pluginId, std::size_t index);
+
+    [[nodiscard]] static Result<std::unique_ptr<Command>> fromPayload(const Value& payload);
+
+    [[nodiscard]] std::string_view type() const noexcept override { return commandType; }
+    [[nodiscard]] Reach reach() const noexcept override { return Reach::mix; }
+    [[nodiscard]] Value payload() const override;
+    [[nodiscard]] Result<Value> apply(ProjectState& state) const override;
+    [[nodiscard]] Result<void> revert(ProjectState& state, const Value& undoRecord) const override;
+
+private:
+    PluginId pluginId_;
+    std::size_t index_;
+};
+
 // plugin.set_bypassed — kept apart from set_parameter on purpose: bypass is a
 // property of the chain, not a parameter of the plugin. Not coalescable: a
 // bypass is a switch, not a movement.

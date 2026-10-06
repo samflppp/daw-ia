@@ -109,8 +109,10 @@ TEST_CASE("The transport commands survive the round-trip and are registered")
     // placement, three audio, five transport, five plugin, four tempo, and
     // since S11 five of the mixer, since S12 the time signature, since S13
     // seven of automation, since S17 four of the playlist lines, and since
-    // S20 the role of a track in the mix, and since S22 the direction.
-    CHECK(registry.types().size() == 61);
+    // S20 the role of a track in the mix, since S22 the direction, and since
+    // S24 the move of a plugin in its chain.
+    CHECK(registry.types().size() == 62);
+    CHECK(registry.contains("plugin.move"));
     CHECK(registry.contains("direction.set"));
     CHECK(registry.contains("track.set_role"));
     CHECK(registry.contains("lane.create"));

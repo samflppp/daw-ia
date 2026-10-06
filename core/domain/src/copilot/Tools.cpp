@@ -603,6 +603,13 @@ std::vector<Tool> builtinTools()
         "plugin.remove", "Retire un plugin de la chaîne.", schema({{"pluginId", pluginId}}, {"pluginId"})));
 
     tools.push_back(
+        make("plugin.move",
+             "Déplace un plugin dans la chaîne de sa piste, sans le recharger : son état et ses réglages "
+             "restent. Pour le mettre sur une autre piste, plugin.remove puis plugin.insert.",
+             schema({{"pluginId", pluginId}, {"index", integer("Sa place à l'arrivée, 0 en tête.", 0, 4096)}},
+                    {"pluginId", "index"})));
+
+    tools.push_back(
         make("plugin.set_bypassed",
              "Contourne un plugin sans le retirer. Différent de couper la piste.",
              schema({{"pluginId", pluginId}, {"bypassed", field("boolean", "Vrai pour contourner.")}},

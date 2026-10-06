@@ -813,6 +813,12 @@ public:
     // a replayed payload cannot fail on a chain that grew differently.
     Result<void> insertPlugin(TrackId trackId, PluginInstance plugin, std::size_t index);
     Result<void> removePlugin(PluginId id);
+
+    // Moves a plugin to `index` in its own chain (S24): the same instance,
+    // its identifier, state, parameters and the automation lines that drive
+    // them untouched. Past the end means last, like insertPlugin. Returns the
+    // index it was at.
+    Result<std::size_t> movePlugin(PluginId id, std::size_t index);
     Result<void> setPluginBypassed(PluginId id, bool bypassed);
 
     // Adds the parameter if this is the first time it is touched, updates it

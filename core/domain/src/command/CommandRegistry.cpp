@@ -53,6 +53,7 @@ CommandRegistry CommandRegistry::withBuiltinCommands()
     static_cast<void>(registry.add<TransportSetMode>());
     static_cast<void>(registry.add<InsertPlugin>());
     static_cast<void>(registry.add<RemovePlugin>());
+    static_cast<void>(registry.add<MovePlugin>());
     static_cast<void>(registry.add<SetPluginBypassed>());
     static_cast<void>(registry.add<SetPluginParameter>());
     static_cast<void>(registry.add<InsertTempoPoint>());

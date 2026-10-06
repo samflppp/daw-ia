@@ -289,3 +289,86 @@ TEST_CASE("The compressor of the DAW lowers the crest factor of what it renders"
     MESSAGE("crest factor at 1.5:1: " << gentle << " dB");
     CHECK(gentle > after + 1.0);
 }
+
+// plugin.move (S24): the engine moves the plugins it holds, it does not make
+// them again; and what is heard is the chain in its new order.
+TEST_CASE(
+    "A plugin moved in its chain is the same plugin in the engine, and the render follows its new place")
+{
+    // A track that plays a recording carries its chain twice, on itself and
+    // on its companion: each one is looked at.
+    const auto partsIn = [](tracktion::AudioTrack& track, PluginId id)
+    {
+        std::vector<tracktion::Plugin*> parts;
+        for (auto* plugin : track.pluginList.getPlugins())
+            if (plugin->state.getProperty("dawDomainPluginId").toString() == juce::String(id.toString()))
+                parts.push_back(plugin);
+        return parts;
+    };
+
+    // A high shelf of +12 dB and a hard compressor: before the compressor the
+    // boost is squeezed, after it the boost is heard whole.
+    EffectHarness moved{noise()};
+    const auto eq = moved.insert(internal::equaliser);
+    moved.set(eq, internal::highFrequency, 1000.0);
+    moved.set(eq, internal::highGain, 12.0);
+    const auto comp = moved.insert(internal::compressor); // inserted at 0: in front of the equaliser
+    moved.set(comp, internal::threshold, -30.0);
+    moved.set(comp, internal::ratio, 8.0);
+    const auto before = moved.render();
+
+    struct Held
+    {
+        tracktion::AudioTrack* track;
+        std::vector<tracktion::Plugin*> eq;
+        std::vector<tracktion::Plugin*> comp;
+    };
+    std::vector<Held> held;
+    for (auto* track : tracktion::getAudioTracks(moved.host.edit()))
+    {
+        auto eqParts = partsIn(*track, eq);
+        auto compParts = partsIn(*track, comp);
+        if (eqParts.empty() && compParts.empty())
+            continue;
+        REQUIRE(eqParts.size() == 2); // the high-pass and the four bands
+        REQUIRE(compParts.size() == 1);
+        CHECK(track->pluginList.indexOf(compParts.front()) < track->pluginList.indexOf(eqParts.front()));
+        held.push_back({track, eqParts, compParts});
+    }
+    REQUIRE_FALSE(held.empty());
+
+    REQUIRE(moved.bus.execute(std::make_unique<MovePlugin>(comp, 1)).ok());
+    for (const auto& chain : held)
+    {
+        const auto& list = chain.track->pluginList;
+        CHECK(partsIn(*chain.track, eq) == chain.eq);
+        CHECK(partsIn(*chain.track, comp) == chain.comp);
+        CHECK(list.indexOf(chain.eq.back()) < list.indexOf(chain.comp.front()));
+        CHECK(list.indexOf(chain.eq.front()) + 1 == list.indexOf(chain.eq.back()));
+    }
+    const auto after = moved.render();
+
+    // The same chain, made directly in the new order.
+    EffectHarness made{noise()};
+    const auto comp2 = made.insert(internal::compressor);
+    made.set(comp2, internal::threshold, -30.0);
+    made.set(comp2, internal::ratio, 8.0);
+    const auto eq2 = made.insert(internal::equaliser); // at 0: in front
+    made.set(eq2, internal::highFrequency, 1000.0);
+    made.set(eq2, internal::highGain, 12.0);
+    const auto expected = made.render();
+
+    const auto rms = [](const juce::AudioBuffer<float>& buffer)
+    { return buffer.getRMSLevel(0, 0, buffer.getNumSamples()); };
+    REQUIRE(after.getNumSamples() == expected.getNumSamples());
+    juce::AudioBuffer<float> difference{after};
+    difference.addFrom(0, 0, expected, 0, 0, expected.getNumSamples(), -1.0f);
+    const auto apart = 20.0 * std::log10(rms(difference) / rms(expected) + 1e-12);
+    juce::AudioBuffer<float> reordered{after};
+    reordered.addFrom(0, 0, before, 0, 0, before.getNumSamples(), -1.0f);
+    const auto orders = 20.0 * std::log10(rms(reordered) / rms(after) + 1e-12);
+    MESSAGE("moved against made in that order: " << apart << " dB ; the two orders differ by " << orders
+                                                 << " dB");
+    CHECK(apart < -60.0);
+    CHECK(orders > -20.0);
+}

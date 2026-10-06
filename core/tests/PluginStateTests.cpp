@@ -1,5 +1,6 @@
 #include "TestSupport.h"
 #include "daw/domain/command/CommandEnvelope.h"
+#include "daw/domain/commands/AutomationCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/serialization/Json.h"
 
@@ -337,4 +338,79 @@ TEST_CASE("A plugin chain survives a serialisation round trip through text")
     const auto restored = ProjectState::fromValue(parsed.value());
     REQUIRE(restored.ok());
     CHECK(restored.value() == harness.state);
+}
+
+// plugin.move (S24): the same instance, elsewhere in its chain.
+TEST_CASE(
+    "A plugin moved in its chain keeps its identity, settings, state and lines, and one undo puts it back")
+{
+    Harness harness;
+    const auto a = PluginId::generate();
+    const auto b = PluginId::generate();
+    const auto c = PluginId::generate();
+    REQUIRE(harness.bus.execute(insert(harness.trackId, makeInstance(a, "Réverb"), 0)).ok());
+    REQUIRE(harness.bus.execute(insert(harness.trackId, makeInstance(b, "EQ"), 1)).ok());
+    REQUIRE(harness.bus.execute(insert(harness.trackId, makeInstance(c, "Comp"), 2)).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<SetPluginParameter>(a, "mix", 0.3)).ok());
+    StateBlobRef blob{};
+    blob.digest = digestOf('a');
+    blob.byteCount = 1024;
+    REQUIRE(harness.bus.execute(std::make_unique<CapturePluginState>(a, blob)).ok());
+    REQUIRE(harness.bus
+                .execute(std::make_unique<CreateAutomationLine>(AutomationLineId::generate(),
+                                                                AutomationTarget::parameterOf(a, "mix")))
+                .ok());
+
+    const auto before = json::write(harness.state.toValue());
+    const auto original = *harness.state.findPlugin(a);
+
+    REQUIRE(harness.bus.execute(std::make_unique<MovePlugin>(a, 2)).ok());
+    const auto* track = harness.state.findTrack(harness.trackId);
+    REQUIRE(track->plugins.size() == 3);
+    CHECK(track->plugins[0].id == b);
+    CHECK(track->plugins[1].id == c);
+    CHECK(track->plugins[2] == original);
+    CHECK(harness.state.automationOfPlugin(a).size() == 1);
+
+    REQUIRE(harness.bus.undo().ok());
+    CHECK(json::write(harness.state.toValue()) == before);
+}
+
+TEST_CASE("A move past the end goes last, and an unknown plugin is refused")
+{
+    Harness harness;
+    const auto a = PluginId::generate();
+    const auto b = PluginId::generate();
+    REQUIRE(harness.bus.execute(insert(harness.trackId, makeInstance(a), 0)).ok());
+    REQUIRE(harness.bus.execute(insert(harness.trackId, makeInstance(b), 1)).ok());
+
+    REQUIRE(harness.bus.execute(std::make_unique<MovePlugin>(a, 99)).ok());
+    CHECK(harness.state.findTrack(harness.trackId)->plugins.back().id == a);
+
+    const auto refused = harness.bus.execute(std::make_unique<MovePlugin>(PluginId::generate(), 0));
+    REQUIRE_FALSE(refused.ok());
+    CHECK(refused.error().code == ErrorCode::notFound);
+}
+
+TEST_CASE("A move replays from its envelope to the same chain")
+{
+    Harness harness;
+    const auto a = PluginId::generate();
+    const auto b = PluginId::generate();
+    REQUIRE(harness.bus.execute(insert(harness.trackId, makeInstance(a, "Un"), 0)).ok());
+    REQUIRE(harness.bus.execute(insert(harness.trackId, makeInstance(b, "Deux"), 1)).ok());
+    REQUIRE(harness.bus.execute(std::make_unique<MovePlugin>(b, 0)).ok());
+
+    const auto journal = harness.bus.journal();
+    const auto expected = harness.state.toValue();
+
+    Harness replayed;
+    REQUIRE(replayed.state.removeTrack(replayed.trackId).ok());
+    Track track{};
+    track.id = harness.trackId;
+    track.name = "Piste 1";
+    REQUIRE(replayed.state.addTrack(track).ok());
+    for (const auto& envelope : journal)
+        REQUIRE(replayed.bus.executeSerialized(envelope).ok());
+    CHECK(replayed.state.toValue() == expected);
 }

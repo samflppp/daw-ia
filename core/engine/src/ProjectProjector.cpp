@@ -852,6 +852,23 @@ void ProjectProjector::reconcilePlugins(tracktion::PluginList& list, const domai
         if (parts.empty())
             continue;
 
+        // An instance already here but not where the domain puts it: moved
+        // (plugin.move, S24), never made again. The plugin's tree moves among
+        // the track's children, and Tracktion's list follows: the same
+        // plugin, its state and its tails, at its new place.
+        for (std::size_t part = 0; part < parts.size(); ++part)
+        {
+            const auto wanted = next + static_cast<int>(part);
+            const auto at = list.indexOf(parts[part]);
+            if (at == wanted || wanted >= list.size())
+                continue;
+            auto tree = parts[part]->state;
+            auto parent = tree.getParent();
+            const auto occupant = list[wanted];
+            if (parent.isValid() && occupant != nullptr)
+                parent.moveChild(parent.indexOf(tree), parent.indexOf(occupant->state), nullptr);
+        }
+
         if (internal)
         {
             applyInternal(parts, instance);

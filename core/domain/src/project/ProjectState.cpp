@@ -2779,6 +2779,26 @@ Result<void> ProjectState::removePlugin(PluginId id)
     return fail(ErrorCode::notFound, "no such plugin: " + id.toString());
 }
 
+Result<std::size_t> ProjectState::movePlugin(PluginId id, std::size_t index)
+{
+    for (auto* track : stripsMutable())
+    {
+        auto& plugins = track->plugins;
+        const auto position = std::find_if(
+            plugins.begin(), plugins.end(), [id](const PluginInstance& plugin) { return plugin.id == id; });
+        if (position == plugins.end())
+            continue;
+
+        const auto from = static_cast<std::size_t>(position - plugins.begin());
+        const auto to = std::min(index, plugins.size() - 1);
+        auto moved = std::move(*position);
+        plugins.erase(position);
+        plugins.insert(plugins.begin() + static_cast<std::ptrdiff_t>(to), std::move(moved));
+        return from;
+    }
+    return fail(ErrorCode::notFound, "no such plugin: " + id.toString());
+}
+
 Result<void> ProjectState::setPluginBypassed(PluginId id, bool bypassed)
 {
     auto* plugin = findPluginMutable(id);

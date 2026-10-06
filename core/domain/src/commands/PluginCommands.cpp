@@ -224,6 +224,63 @@ Result<void> SetPluginBypassed::revert(ProjectState& state, const Value& undoRec
 }
 
 // ---------------------------------------------------------------------------
+// MovePlugin
+// ---------------------------------------------------------------------------
+
+MovePlugin::MovePlugin(PluginId pluginId, std::size_t index)
+    : pluginId_{pluginId}
+    , index_{index}
+{
+}
+
+Result<std::unique_ptr<Command>> MovePlugin::fromPayload(const Value& payload)
+{
+    auto pluginId = pluginIdAt(payload, "pluginId");
+    if (!pluginId)
+        return pluginId.error();
+
+    auto index = payload.intAt("index");
+    if (!index)
+        return index.error();
+
+    if (index.value() < 0)
+        return fail(ErrorCode::invalidPayload, "index is negative");
+
+    return std::unique_ptr<Command>{
+        new MovePlugin{pluginId.value(), static_cast<std::size_t>(index.value())}};
+}
+
+Value MovePlugin::payload() const
+{
+    return Value::object(
+        {{"pluginId", Value{pluginId_.toString()}}, {"index", Value{static_cast<std::int64_t>(index_)}}});
+}
+
+Result<Value> MovePlugin::apply(ProjectState& state) const
+{
+    auto from = state.movePlugin(pluginId_, index_);
+    if (!from)
+        return from.error();
+
+    return Value::object({{"index", Value{static_cast<std::int64_t>(from.value())}}});
+}
+
+Result<void> MovePlugin::revert(ProjectState& state, const Value& undoRecord) const
+{
+    auto index = undoRecord.intAt("index");
+    if (!index)
+        return index.error();
+
+    if (index.value() < 0)
+        return fail(ErrorCode::invalidPayload, "index is negative");
+
+    auto moved = state.movePlugin(pluginId_, static_cast<std::size_t>(index.value()));
+    if (!moved)
+        return moved.error();
+    return {};
+}
+
+// ---------------------------------------------------------------------------
 // SetPluginParameter
 // ---------------------------------------------------------------------------
 
