@@ -66,7 +66,11 @@ public:
     // Where its messages come from. Set by the projector on the message
     // thread; a plugin in a copy of the Edit (a render of the mix, a stem)
     // has none and does nothing.
-    void bind(domain::live::TrackQueue* queue) noexcept { queue_.store(queue, std::memory_order_release); }
+    void bind(domain::live::TrackQueue* queue, domain::live::Router* router) noexcept
+    {
+        router_.store(router, std::memory_order_release);
+        queue_.store(queue, std::memory_order_release);
+    }
     [[nodiscard]] bool bound() const noexcept { return queue_.load(std::memory_order_acquire) != nullptr; }
 
     static void setClock(Clock clock) noexcept { clock_.store(clock, std::memory_order_relaxed); }
@@ -99,6 +103,8 @@ private:
     void remember(const domain::live::Event& event) noexcept;
 
     std::atomic<domain::live::TrackQueue*> queue_{nullptr};
+    // Told where the song is, at each block, for a take (S23).
+    std::atomic<domain::live::Router*> router_{nullptr};
     inline static std::atomic<Clock> clock_{Clock::input};
 
     // The audio thread's own.

@@ -21,6 +21,7 @@ target_sources(daw_app PRIVATE
     src/LevelMonitor.cpp
     src/LivePlay.cpp
     src/RawKeyboard.cpp
+    src/TakeRecorder.cpp
     src/MixComparison.cpp
     src/MixOnce.cpp
     src/MixSession.cpp

@@ -468,6 +468,13 @@ bool WorkspaceView::keyPressed(const juce::KeyPress& key)
         return true;
     }
 
+    // Ctrl+R: a take starts, or ends and is written (S23).
+    if (key == juce::KeyPress{'r', juce::ModifierKeys::ctrlModifier, 0})
+    {
+        services_.live.toggleRecording();
+        return true;
+    }
+
     // A page key opens its page, brings it to the front, or closes it when it
     // is already the one in front — the way F5, F6 and F7 behave in FL.
     for (auto& slot : pages_)

@@ -1,6 +1,10 @@
 #pragma once
 
+#include "daw/domain/Ids.h"
+#include "daw/domain/live/Take.h"
+
 #include <string>
+#include <vector>
 
 namespace daw::ui
 {
@@ -37,6 +41,35 @@ public:
 
     // The name of the track the keys play, empty when none is chosen.
     [[nodiscard]] virtual std::string targetName() const = 0;
+
+    // --- the take
+
+    enum class Recording
+    {
+        idle,
+        counting, // the bar of count-in: heard, not written
+        recording
+    };
+
+    [[nodiscard]] virtual Recording recording() const = 0;
+
+    // ● and Ctrl+R: starts a take, or ends it and writes it, one Ctrl+Z.
+    virtual void toggleRecording() = 0;
+
+    // The notes of the take so far, not in the project yet: the canvas draws
+    // them where they will be written — in the beats of takePattern() in
+    // pattern mode, of the song in song mode.
+    [[nodiscard]] virtual std::vector<domain::live::TakeNote> takeNotes() const = 0;
+    [[nodiscard]] virtual bool takeInSong() const = 0;
+    [[nodiscard]] virtual domain::PatternId takePattern() const = 0;
+
+    // What the last take did, or why it did nothing, in French.
+    [[nodiscard]] virtual std::string recordingSaid() const = 0;
+
+    [[nodiscard]] virtual bool metronome() const = 0;
+    virtual void setMetronome(bool on) = 0;
+    [[nodiscard]] virtual bool countIn() const = 0;
+    virtual void setCountIn(bool on) = 0;
 };
 
 } // namespace daw::ui

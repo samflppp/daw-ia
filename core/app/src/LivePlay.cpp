@@ -15,15 +15,19 @@ constexpr int foregroundLookMs = 100;
 } // namespace
 
 LivePlay::LivePlay(domain::live::Router& router,
+                   domain::CommandBus& bus,
                    const domain::ProjectState& state,
                    ui::Selection& selection,
-                   ui::ProjectObserver& project)
+                   ui::ProjectObserver& project,
+                   tracktion::Edit& edit,
+                   std::function<double()> outputLatency)
     : router_(router)
     , state_(state)
     , selection_(selection)
     , project_(project)
     , keys_(router)
     , raw_(std::make_unique<RawKeyboard>(keys_))
+    , recorder_({router, bus, state, edit, std::move(outputLatency)})
 {
     selection_.addChangeListener(this);
     project_.addChangeListener(this);
@@ -72,6 +76,20 @@ std::string LivePlay::targetName() const
             return track.name;
     }
     return {};
+}
+
+ui::LiveHost::Recording LivePlay::recording() const
+{
+    switch (recorder_.stage())
+    {
+    case TakeRecorder::Stage::counting:
+        return Recording::counting;
+    case TakeRecorder::Stage::recording:
+        return Recording::recording;
+    case TakeRecorder::Stage::idle:
+        break;
+    }
+    return Recording::idle;
 }
 
 void LivePlay::changeListenerCallback(juce::ChangeBroadcaster*)

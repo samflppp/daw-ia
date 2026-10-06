@@ -37,7 +37,18 @@ struct Event
 {
     std::array<std::uint8_t, 3> bytes{};
     std::uint8_t size{0};
+    std::int16_t slot{-1}; // in a take: the track it went to (Router::trackOf)
     double seconds{0.0};
+};
+
+// Where the song was at an instant of the input clock, as the audio thread
+// last saw it (S23): the start of its last block on the input clock, and the
+// Edit's time there. What a take reads to write a note where it was heard.
+struct Position
+{
+    double clock{0.0};
+    double editSeconds{0.0};
+    bool playing{false};
 };
 
 // The input clock: a monotonic count of seconds, the same on every thread.
@@ -216,6 +227,25 @@ public:
     // Messages a full queue refused since the start.
     [[nodiscard]] std::uint64_t refused() const noexcept { return refused_.load(std::memory_order_relaxed); }
 
+    // --- the take (S23)
+
+    // While recording, every note and pedal message that reaches a track is
+    // also pushed, with its track, into the take's queue, which the message
+    // thread empties. Turned on and off by the message thread.
+    void setRecording(bool recording) noexcept { recording_.store(recording, std::memory_order_release); }
+    [[nodiscard]] bool recording() const noexcept { return recording_.load(std::memory_order_acquire); }
+    [[nodiscard]] bool popTake(Event& event) noexcept { return take_.pop(event); }
+
+    // The track of a slot named in a take's event, empty when unknown. The
+    // message thread's.
+    [[nodiscard]] std::string trackOf(int slot) const;
+
+    // The song's position, published at each block by the live inputs (the
+    // audio thread), read by the take (any thread). A block whose writer
+    // finds another one writing skips: the next block publishes.
+    void publish(const Position& position) noexcept;
+    [[nodiscard]] bool position(Position& position) const noexcept;
+
 private:
     struct Slot
     {
@@ -243,6 +273,15 @@ private:
     std::array<std::atomic<std::int16_t>, static_cast<std::size_t>(sourceCount) * 16> pedal_{};
 
     std::atomic<std::uint64_t> refused_{0};
+
+    std::atomic<bool> recording_{false};
+    Queue<4096> take_;
+
+    // A sequence lock: odd while written.
+    std::atomic<std::uint32_t> sequence_{0};
+    std::atomic<double> clock_{0.0};
+    std::atomic<double> editSeconds_{0.0};
+    std::atomic<bool> playing_{false};
 };
 
 } // namespace daw::domain::live

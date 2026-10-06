@@ -120,9 +120,62 @@ bool Router::send(
     event.bytes = {status, first, second};
     event.size = 3;
     event.seconds = seconds;
-    if (target->queue.push(event))
-        return true;
-    refused_.fetch_add(1, std::memory_order_relaxed);
+    if (!target->queue.push(event))
+    {
+        refused_.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+
+    // A take keeps the notes and the pedal, nothing else: the modulation and
+    // the bend are played, not written (S23).
+    const auto kind = status & 0xF0;
+    if (recording_.load(std::memory_order_acquire) &&
+        (kind == noteOnStatus || kind == noteOffStatus ||
+         (kind == controllerStatus && first == sustainController)))
+    {
+        event.slot = static_cast<std::int16_t>(slot);
+        if (!take_.push(event))
+            refused_.fetch_add(1, std::memory_order_relaxed);
+    }
+    return true;
+}
+
+std::string Router::trackOf(int slot) const
+{
+    if (slot < 0 || slot >= slotCount_.load(std::memory_order_acquire))
+        return {};
+    const auto* found = slots_[static_cast<std::size_t>(slot)].load(std::memory_order_acquire);
+    return found != nullptr ? found->track : std::string{};
+}
+
+void Router::publish(const Position& position) noexcept
+{
+    auto sequence = sequence_.load(std::memory_order_relaxed);
+    if ((sequence & 1U) != 0 ||
+        !sequence_.compare_exchange_strong(sequence, sequence + 1, std::memory_order_acquire))
+        return;
+    clock_.store(position.clock, std::memory_order_relaxed);
+    editSeconds_.store(position.editSeconds, std::memory_order_relaxed);
+    playing_.store(position.playing, std::memory_order_relaxed);
+    sequence_.store(sequence + 2, std::memory_order_release);
+}
+
+bool Router::position(Position& position) const noexcept
+{
+    for (int attempt = 0; attempt < 64; ++attempt)
+    {
+        const auto before = sequence_.load(std::memory_order_acquire);
+        if (before == 0)
+            return false; // nothing published yet
+        if ((before & 1U) != 0)
+            continue;
+        position.clock = clock_.load(std::memory_order_relaxed);
+        position.editSeconds = editSeconds_.load(std::memory_order_relaxed);
+        position.playing = playing_.load(std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (sequence_.load(std::memory_order_relaxed) == before)
+            return true;
+    }
     return false;
 }
 

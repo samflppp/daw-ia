@@ -124,7 +124,14 @@ public:
         // same reason: it is told that something changed, then reads the whole
         // state. No panel is notified of what a command did.
         bus_.addObserver(projectObserver_);
-        livePlay_ = std::make_unique<LivePlay>(engineHost_->live(), state_, selection_, projectObserver_);
+        livePlay_ = std::make_unique<LivePlay>(
+            engineHost_->live(),
+            bus_,
+            state_,
+            selection_,
+            projectObserver_,
+            engineHost_->edit(),
+            [this] { return engineHost_->engine().getDeviceManager().getOutputLatencySeconds(); });
         clock_ = std::make_unique<EditClock>(engineHost_->edit());
         engineHost_->output().onChanged = [this](const juce::String& what)
         {

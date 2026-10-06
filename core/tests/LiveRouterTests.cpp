@@ -287,3 +287,40 @@ TEST_CASE("Live: the timeline starts again from the clock when it is far off")
     // A note played before the stop plays at once, never in the past.
     CHECK(timeline.offsetOf(10.2) == 0);
 }
+
+TEST_CASE("Live: while recording, the notes and the pedal go to the take with their track, nothing else")
+{
+    Router router;
+    static_cast<void>(router.queueFor("A"));
+    router.setTarget("A", 0.0);
+
+    REQUIRE(router.noteOn(midi, 1, 60, 100, 0.0));
+    Event event;
+    CHECK_FALSE(router.popTake(event)); // not recording
+
+    router.setRecording(true);
+    REQUIRE(router.noteOff(midi, 1, 60, 0.5));
+    REQUIRE(router.controller(midi, 1, 64, 127, 0.6));
+    REQUIRE(router.controller(midi, 1, 1, 90, 0.7)); // the modulation is played, not written
+    REQUIRE(router.pitchBend(midi, 1, 9000, 0.8));   // the bend too
+
+    REQUIRE(router.popTake(event));
+    CHECK(isNoteOff(event, 60));
+    CHECK(router.trackOf(event.slot) == "A");
+    CHECK(event.seconds == doctest::Approx(0.5));
+    REQUIRE(router.popTake(event));
+    CHECK(event.bytes[1] == 64);
+    CHECK_FALSE(router.popTake(event));
+}
+
+TEST_CASE("Live: the song's position is read back as it was published")
+{
+    Router router;
+    Position read;
+    CHECK_FALSE(router.position(read)); // nothing yet
+    router.publish({12.5, 3.25, true});
+    REQUIRE(router.position(read));
+    CHECK(read.clock == doctest::Approx(12.5));
+    CHECK(read.editSeconds == doctest::Approx(3.25));
+    CHECK(read.playing);
+}

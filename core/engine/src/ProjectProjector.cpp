@@ -560,7 +560,7 @@ int ProjectProjector::ensureLiveInput(tracktion::PluginList& list, const domain:
     if (inputs.size() == 1 && inputs.getFirst() != nullptr && inputs.getFirst()->track() == wanted &&
         plugins.getFirst() == inputs.getFirst())
     {
-        inputs.getFirst()->bind(queue);
+        inputs.getFirst()->bind(queue, live_);
         return 1;
     }
 
@@ -574,7 +574,7 @@ int ProjectProjector::ensureLiveInput(tracktion::PluginList& list, const domain:
         plugin != nullptr)
     {
         if (auto* input = dynamic_cast<LiveInputPlugin*>(plugin.get()); input != nullptr)
-            input->bind(queue);
+            input->bind(queue, live_);
         list.insertPlugin(plugin, 0, nullptr);
     }
     return 1;

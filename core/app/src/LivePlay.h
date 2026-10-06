@@ -1,5 +1,7 @@
 #pragma once
 
+#include "TakeRecorder.h"
+#include "daw/domain/command/CommandBus.h"
 #include "daw/domain/live/Router.h"
 #include "daw/domain/live/TypingKeyboard.h"
 #include "daw/domain/project/ProjectState.h"
@@ -9,6 +11,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -36,9 +39,12 @@ class LivePlay final : public ui::LiveHost,
 {
 public:
     LivePlay(domain::live::Router& router,
+             domain::CommandBus& bus,
              const domain::ProjectState& state,
              ui::Selection& selection,
-             ui::ProjectObserver& project);
+             ui::ProjectObserver& project,
+             tracktion::Edit& edit,
+             std::function<double()> outputLatency);
     ~LivePlay() override;
 
     LivePlay(const LivePlay&) = delete;
@@ -57,6 +63,9 @@ public:
     // scan code without a keyboard: the same entry the keyboard thread uses.
     [[nodiscard]] domain::live::TypingKeyboard& keys() noexcept { return keys_; }
 
+    // The take, for a verification that reads it as it goes.
+    [[nodiscard]] TakeRecorder& recorder() noexcept { return recorder_; }
+
     // --- ui::LiveHost
     [[nodiscard]] bool keyboardPlaying() const override { return keys_.playing(); }
     void setKeyboardPlaying(bool playing) override;
@@ -65,6 +74,16 @@ public:
     [[nodiscard]] int velocity() const override { return keys_.velocity(); }
     void setVelocity(int velocity) override { keys_.setVelocity(velocity); }
     [[nodiscard]] std::string targetName() const override;
+    [[nodiscard]] Recording recording() const override;
+    void toggleRecording() override { recorder_.toggle(); }
+    [[nodiscard]] std::vector<domain::live::TakeNote> takeNotes() const override { return recorder_.notes(); }
+    [[nodiscard]] bool takeInSong() const override { return recorder_.mode() == domain::PlayMode::song; }
+    [[nodiscard]] domain::PatternId takePattern() const override { return recorder_.pattern(); }
+    [[nodiscard]] std::string recordingSaid() const override { return recorder_.said(); }
+    [[nodiscard]] bool metronome() const override { return recorder_.metronome(); }
+    void setMetronome(bool on) override { recorder_.setMetronome(on); }
+    [[nodiscard]] bool countIn() const override { return recorder_.countIn(); }
+    void setCountIn(bool on) override { recorder_.setCountIn(on); }
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -77,6 +96,7 @@ private:
     ui::ProjectObserver& project_;
     domain::live::TypingKeyboard keys_;
     std::unique_ptr<RawKeyboard> raw_;
+    TakeRecorder recorder_;
 };
 
 } // namespace daw::app

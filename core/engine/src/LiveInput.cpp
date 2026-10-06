@@ -118,6 +118,8 @@ void LiveInputPlugin::applyToBuffer(const tracktion::PluginRenderContext& contex
         start = timeline_.begin(domain::live::now(), samples, sampleRate_);
         delay = timeline_.delay();
         wait_.store(delay, std::memory_order_relaxed);
+        if (auto* router = router_.load(std::memory_order_acquire); router != nullptr)
+            router->publish({start, context.editTime.getStart().inSeconds(), context.isPlaying});
     }
 
     bool added = false;
