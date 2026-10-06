@@ -182,6 +182,13 @@ Demandés par le fondateur, non construits, hors du périmètre de la S20 tant q
   pour ajouter, retirer, réordonner et contourner un effet, sans quitter le mixer. Les commandes existent
   (`plugin.insert`, `plugin.remove`, `plugin.set_bypassed`) : c'est de l'écran, pas du domaine.
   **Prise en S24** (`docs/plan-s21-s26.md`).
+- **La chaîne d'effets vue comme un flux** (noté le 6 octobre 2026, demandé par le fondateur). Les plugins
+  d'une piste sur une même ligne, dans l'ordre du signal, et entre chacun la forme d'onde du son à cet endroit,
+  en direct : on voit la forme d'onde passer d'un état à l'autre, effet après effet. Ce qu'un égaliseur ou un
+  compresseur fait au son se voit, pour les effets internes comme pour les plugins de la personne. Sert le
+  positionnement (le débutant comprend ce que fait un effet) et le mixage par l'IA (un réglage proposé se voit,
+  il n'est pas seulement expliqué). **Prise en S24**, avec les effets depuis la tranche
+  (`docs/plan-s21-s26.md`).
 - **La création de bus intelligente.** Le logiciel remarque qu'un même plugin est posé plusieurs fois avec les
   mêmes réglages (la même réverbération sur six pistes, par exemple) et propose de le remplacer par un bus et
   des envois. À trancher avant d'y toucher : ce que veut dire « les mêmes réglages » pour un plugin dont l'état
