@@ -112,6 +112,7 @@ Mécanismes :
   `docs/bilan-s7bis.md`. Chaque bilan documente les écarts à l'acquis, les tests cassés une fois, et le
   reste à faire.
 - **Plan des semaines S21 à S26** : `docs/plan-s21-s26.md` — base des briefs, pas un brief.
+- **Briefs** : `docs/brief-sN.md`, rangés depuis la S24 (les précédents n'ont été donnés qu'en session).
 - **Essais du fondateur, après la S26** : `docs/essais-apres-s26.md` — les sections « À essayer » des
   bilans depuis la S17, dans l'ordre ; chaque bilan y ajoute la sienne.
 - **Roadmap non engagée** : `IDEES.md` — couche décision du copilote, couche générative, recherche de
