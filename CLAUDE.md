@@ -164,7 +164,7 @@ Mécanismes :
 | L'arrangement ne lit la direction qu'à travers le copilote (sections de la référence, en secondes) | S22 | aucun code n'arrange d'après les sections ; un modèle à exposer avant d'écrire |
 | `--verify` complet pas relancé après les stems et la direction | S22 | 674 sur 674 à `c91ac5e` ; S23, sans copilote sous Linux seulement (36 échecs attendus, les mêmes avant et après) |
 | `--verify-lecture` avec le jeu : à 0 sur 75 ? | S23 | non mesurable sous Linux (`main` lui-même y fait 9 à 12 muettes) ; à lancer sur Windows avec et sans `--sans-jeu` |
-| La fenêtre « Audio » (pilote, tampon, latence) | S23 | tombée ; S24 ou S26 au choix du fondateur, avant l'installeur |
+| La fenêtre « Audio » (pilote, tampon, latence) | S23 | tombée ; **à la S24**, décidé le 6 octobre 2026 |
 | 4OSC garde une voix au-delà de 32 (voix volée, relâché pendant la coupure) | S23 | défaut de Tracktion prouvé au rendu ; non contourné |
 | Une note tenue coupée quand la tête est déplacée pendant la lecture | S23 | indiscernable d'un tour de boucle pour le plugin du jeu |
 | Les décalages de couleur des règles du mixage ignorent `direction.amount` | S23 | vu en lisant, pas corrigé |

@@ -42,6 +42,7 @@ le suivant (§12).
 |---|---|
 | 5 octobre 2026 | On garde HTDemucs pour le séparateur, sans chercher d'autre modèle pour l'instant. Rien à faire cette semaine. La dette reste telle qu'elle est écrite dans CLAUDE.md §6 (le code est sous MIT, les poids sont donnés pour la recherche). |
 | 6 octobre 2026 | « Je valide tout, Raw Input et régulière, go » : le modèle du jeu exposé en début de semaine, validé en bloc, avec deux choix tranchés. |
+| 6 octobre 2026, après le bilan | La fenêtre « Audio » tombée cette semaine va à la S24. |
 
 Ce que « je valide tout » couvre, tel qu'exposé :
 
@@ -398,8 +399,8 @@ honnêtement.
 
 - **La fenêtre « Audio »** : pilote, sortie, tampon, latence affichée et recommandation (« Windows Audio (Low
   Latency) » si elle est là, sinon le mode exclusif, en prévenant que les autres logiciels se taisent ; 256
-  échantillons au plus). Elle ira à la S24 ou à la S26, à toi de dire ; avant l'installeur en tout cas, puisque
-  le réglage par défaut de Windows donne au jeu 12,5 ms d'attente et sa latence.
+  échantillons au plus). **Elle va à la S24**, décidé le 6 octobre 2026 après ce bilan : le réglage par défaut
+  de Windows donne au jeu 12,5 ms d'attente et sa latence.
 - **ASIO** : le SDK de Steinberg et sa licence, après la S26.
 - **Le bend et la modulation enregistrés** : un ajout au domaine, à exposer.
 - **Le choix d'une entrée MIDI par piste** : non demandé pour un débutant, hors des 26 semaines.
@@ -475,7 +476,7 @@ Sur `main`, Release recompilé par `scripts/build.cmd`.
 ## 15. Reste à faire
 
 - **`--verify-lecture` avec et sans le jeu, sur ta machine** (§7).
-- **La fenêtre « Audio »** (§11).
+- **La fenêtre « Audio »**, à la S24 (§11).
 - **Le `--verify` complet avec copilote**, toujours pas relancé depuis la S22.
 - **La piste compagne**, toujours sur sa branche.
 - **4OSC au-delà de 32 voix** (§9.3).

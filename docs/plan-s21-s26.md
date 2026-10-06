@@ -131,8 +131,7 @@ qu'on joue dans le pattern en cours.
 - Quelle piste joue quand aucune n'est choisie.
 
 **Ce que la semaine a déplacé** (`docs/bilan-s23.md` §11).
-- **La fenêtre « Audio »** (pilote, tampon, latence affichée) est tombée : à la S24 ou à la S26, au choix du
-  fondateur, avant l'installeur en tout cas.
+- **La fenêtre « Audio »** (pilote, tampon, latence affichée) est tombée : **à la S24**, décidé le 6 octobre 2026.
 - **Le choix d'une entrée MIDI** n'est pas fait : toutes les entrées jouent la piste choisie, validé le 6 octobre.
 
 ## S24 — IA : le kit et le mixer
@@ -148,8 +147,13 @@ mixer.
   mixer.
 - **La création de bus intelligente** : proposer un bus et des envois quand un même plugin revient avec les mêmes
   réglages.
+- **La fenêtre « Audio »**, tombée en S23 (décidé le 6 octobre 2026) : le pilote, la sortie, le tampon, la
+  latence affichée, et une recommandation (« Windows Audio (Low Latency) » s'il est là, sinon le mode exclusif
+  en prévenant que les autres logiciels se taisent ; 256 échantillons au plus). Un réglage de la machine, pas du
+  projet.
 
 **Hors périmètre.**
+- ASIO (le SDK de Steinberg et sa licence), après la S26.
 - La synthèse de sons neufs par un modèle (la version « synthétiser » du kit).
 - Les fiches des VST connus (la liste n'est pas donnée).
 
@@ -160,6 +164,8 @@ mixer.
   `plugin.set_bypassed`, réordonner), vérifiée au rendu pour le contournement.
 - Les bus : sur un projet construit (la même réverbération sur six pistes), la proposition est faite, essayée à
   blanc, gardée en un seul groupe ; le rendu avant / après est mesuré.
+- La fenêtre « Audio » : un tampon changé est celui que la carte ouvre (relu au moteur), la latence affichée est
+  celle que `--verify-jeu` mesure, et la lecture n'en devient pas muette (`--verify-lecture` après le changement).
 
 **Questions de modèle à exposer avant de coder.**
 - Le kit : comment on choisit des samples qui « vont ensemble » sans recherche par le son — des descripteurs
@@ -167,6 +173,9 @@ mixer.
 - Réordonner un effet : il n'y a pas de commande pour ça aujourd'hui.
 - Ce que veut dire « les mêmes réglages » pour un plugin dont l'état est un blob opaque ; un effet d'insertion
   ne se mutualise pas comme un effet d'envoi.
+- La fenêtre « Audio » : ce qu'on fait quand le réglage choisi échoue à l'ouverture (revenir à l'ancien, le
+  dire), et comment elle cohabite avec `AudioOutputKeeper`, qui revient à la première sortie quand la carte part.
+- La semaine porte quatre chantiers : si elle est trop chargée, dire lequel tombe, plutôt que d'en bâcler un.
 
 ## S25 — Diriger le DAW à la voix
 
