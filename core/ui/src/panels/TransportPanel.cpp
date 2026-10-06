@@ -151,6 +151,7 @@ TransportPanel::TransportPanel(const PanelContext& context)
     , project_(context.project)
     , clock_(context.clock)
     , selection_(context.selection)
+    , live_(context.live)
 {
     setLookAndFeel(&lookAndFeel_);
     setOpaque(true); // paint() fills the whole rectangle: what is behind is never painted
@@ -235,6 +236,52 @@ TransportPanel::TransportPanel(const PanelContext& context)
     };
     addPattern_.onClick = [this] { createPattern(); };
 
+    // Playing live (S23). None of these takes the focus: Space stays play.
+    for (auto* control : std::initializer_list<juce::Component*>{
+             &record_, &keyboard_, &metronome_, &countIn_, &velocity_, &liveLine_})
+    {
+        control->setWantsKeyboardFocus(false);
+        addAndMakeVisible(*control);
+    }
+    for (auto* button : {&record_, &keyboard_, &metronome_, &countIn_})
+        button->setClickingTogglesState(false);
+    record_.setColour(juce::TextButton::buttonOnColourId, tokens_.colour("color.accent.record"));
+    record_.setColour(juce::TextButton::textColourOnId, tokens_.colour("color.text.primary"));
+    record_.setTooltip(u8"Enregistrer ce que tu joues dans le pattern en cours (Ctrl+R)");
+    keyboard_.setTooltip(u8"Le clavier de l'ordinateur joue la piste choisie, comme un piano (Ctrl+T)");
+    metronome_.setTooltip(u8"Le clic du métronome");
+    countIn_.setTooltip(u8"Une mesure de décompte avant l'enregistrement");
+    velocity_.setSliderStyle(juce::Slider::LinearBar);
+    velocity_.setRange(1.0, 127.0, 1.0);
+    velocity_.setTextValueSuffix(u8" vél.");
+    velocity_.setTooltip(u8"La vélocité des touches du clavier de l'ordinateur");
+    velocity_.setValue(live_.velocity(), juce::dontSendNotification);
+    velocity_.onValueChange = [this] { live_.setVelocity(static_cast<int>(velocity_.getValue())); };
+    liveLine_.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.regular"));
+    liveLine_.setColour(juce::Label::textColourId, tokens_.colour("color.text.secondary"));
+
+    record_.onClick = [this]
+    {
+        live_.toggleRecording();
+        refreshLive();
+    };
+    keyboard_.onClick = [this]
+    {
+        live_.setKeyboardPlaying(!live_.keyboardPlaying());
+        refreshLive();
+    };
+    metronome_.onClick = [this]
+    {
+        live_.setMetronome(!live_.metronome());
+        refreshLive();
+    };
+    countIn_.onClick = [this]
+    {
+        live_.setCountIn(!live_.countIn());
+        refreshLive();
+    };
+    refreshLive();
+
     project_.addChangeListener(this);
     selection_.addChangeListener(this);
     refresh();
@@ -315,6 +362,8 @@ void TransportPanel::frame()
     if (wheelGesture_.has_value() && juce::Time::getMillisecondCounter() - lastWheelMs_ > wheelRestMs)
         closeWheelGesture();
 
+    refreshLive();
+
     const auto position = positionText();
     const auto notice = juce::String::fromUTF8(clock_.outputNotice().c_str());
     if (position == lastPosition_ && notice == lastNotice_)
@@ -347,6 +396,47 @@ void TransportPanel::refresh()
     songMode_.setToggleState(!patternMode, juce::dontSendNotification);
 
     lastPosition_ = positionText();
+}
+
+void TransportPanel::refreshLive()
+{
+    // What the keys play, and the take. Built as one string, so that an
+    // image that changes nothing repaints nothing.
+    std::string line;
+    const auto recording = live_.recording();
+    if (recording == LiveHost::Recording::counting)
+        line = "Décompte…";
+    else if (recording == LiveHost::Recording::recording)
+        line = "Enregistrement : " + std::to_string(live_.takeNotes().size()) + " notes";
+    else if (!live_.recordingSaid().empty())
+        line = live_.recordingSaid();
+
+    const auto target = live_.targetName();
+    std::string keys = target.empty() ? "aucune piste choisie" : "joue « " + target + " »";
+    if (live_.keyboardPlaying())
+        keys += " · clavier, do" + std::to_string(live_.octave() - 1) + " en bas";
+    const auto midi = live_.midiInputs();
+    if (!midi.empty())
+        keys += " · MIDI : " + midi.front() + (midi.size() > 1 ? " +" + std::to_string(midi.size() - 1) : "");
+    line = line.empty() ? keys : keys + " · " + line;
+
+    const auto text = juce::String::fromUTF8(line.c_str());
+    const auto state = text + (live_.keyboardPlaying() ? "1" : "0") + (live_.metronome() ? "1" : "0") +
+                       (live_.countIn() ? "1" : "0") + juce::String(static_cast<int>(recording)) +
+                       (live_.keyboardAvailable() ? "1" : "0");
+    if (state == lastLive_)
+        return;
+    lastLive_ = state;
+
+    liveLine_.setText(text, juce::dontSendNotification);
+    record_.setToggleState(recording != LiveHost::Recording::idle, juce::dontSendNotification);
+    keyboard_.setToggleState(live_.keyboardPlaying(), juce::dontSendNotification);
+    keyboard_.setEnabled(live_.keyboardAvailable());
+    if (!live_.keyboardAvailable())
+        keyboard_.setTooltip(
+            "Le clavier de l'ordinateur ne se lit par la place des touches que sous Windows");
+    metronome_.setToggleState(live_.metronome(), juce::dontSendNotification);
+    countIn_.setToggleState(live_.countIn(), juce::dontSendNotification);
 }
 
 juce::String TransportPanel::positionText() const
@@ -628,6 +718,20 @@ void TransportPanel::resized()
         patternChooser_.setBounds(modes.removeFromLeft(size * 5));
         modes.removeFromLeft(gap);
         addPattern_.setBounds(modes.removeFromLeft(size * 3));
+
+        // Playing live, after the pattern.
+        modes.removeFromLeft(tokens_.integer("space.lg"));
+        record_.setBounds(modes.removeFromLeft(size));
+        modes.removeFromLeft(gap);
+        keyboard_.setBounds(modes.removeFromLeft(size * 3));
+        modes.removeFromLeft(gap);
+        velocity_.setBounds(modes.removeFromLeft(size * 3));
+        modes.removeFromLeft(gap);
+        metronome_.setBounds(modes.removeFromLeft(size * 2));
+        modes.removeFromLeft(gap);
+        countIn_.setBounds(modes.removeFromLeft(size * 3));
+        modes.removeFromLeft(gap);
+        liveLine_.setBounds(modes);
     }
 }
 

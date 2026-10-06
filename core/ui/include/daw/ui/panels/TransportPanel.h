@@ -67,6 +67,12 @@ public:
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
 
+    // What the live line says: the track the keys play, the octave, the
+    // take. Read by the verification.
+    [[nodiscard]] juce::String liveLine() const { return liveLine_.getText(); }
+    [[nodiscard]] bool keyboardButtonLit() const { return keyboard_.getToggleState(); }
+    [[nodiscard]] bool recordButtonLit() const { return record_.getToggleState(); }
+
     // Where the two readouts are drawn. The verification aims at them.
     [[nodiscard]] juce::Rectangle<int> tempoArea() const { return readoutArea(1); }
     [[nodiscard]] juce::Rectangle<int> signatureArea() const { return readoutArea(2); }
@@ -134,6 +140,19 @@ private:
 
     juce::ComboBox patternChooser_;
     juce::TextButton addPattern_{"+ Pattern"};
+
+    // Playing live (S23): the take, the computer's keyboard as a piano, the
+    // click, the count-in, the keys' velocity, and a line that says which
+    // track the keys play and what the last take did.
+    LiveHost& live_;
+    juce::TextButton record_{u8"\u25CF"};
+    juce::TextButton keyboard_{"Clavier"};
+    juce::TextButton metronome_{"Clic"};
+    juce::TextButton countIn_{u8"Décompte"};
+    juce::Slider velocity_;
+    juce::Label liveLine_;
+    juce::String lastLive_;
+    void refreshLive();
 
     // What the last refresh drew, so a tick that changes nothing repaints
     // nothing. The readout is redrawn thirty times a second and the rest of the

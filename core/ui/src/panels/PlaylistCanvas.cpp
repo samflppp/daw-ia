@@ -594,6 +594,9 @@ void PlaylistPanel::paintCanvasBlock(juce::Graphics& g,
             // The zone of a generation, and its grey notes.
             paintBandGeneration(g, placement, pattern, areas, content);
 
+            // A take being recorded, its notes not in the project yet.
+            paintTake(g, placement, pattern, areas, content);
+
             // What the hand picked or points at, over the picture.
             g.saveState();
             g.reduceClipRegion(content);
@@ -783,6 +786,42 @@ void PlaylistPanel::renderCanvasBlock(juce::Graphics& g,
         if (!area.velocity.isEmpty())
             paintVelocityStrip(g, placement, pattern, area, content, false);
     }
+}
+
+void PlaylistPanel::paintTake(juce::Graphics& g,
+                              const domain::Placement& placement,
+                              const domain::Pattern& pattern,
+                              const std::vector<BandArea>& areas,
+                              juce::Rectangle<int> content) const
+{
+    // In pattern mode the take is written into the auditioned pattern: drawn
+    // in each of its blocks. In song mode it becomes a pattern of its own at
+    // the end, which no block shows yet: the transport counts its notes.
+    if (live_.recording() != LiveHost::Recording::recording || live_.takeInSong() ||
+        live_.takePattern() != pattern.id)
+        return;
+
+    g.saveState();
+    g.reduceClipRegion(content);
+    for (const auto& played : live_.takeNotes())
+    {
+        for (const auto& area : areas)
+        {
+            if (area.band.track != played.track || played.pitch < area.band.low ||
+                played.pitch > area.band.high)
+                continue;
+            domain::Note shown{};
+            shown.pitch = played.pitch;
+            shown.startBeats = played.startBeats;
+            shown.lengthBeats = played.lengthBeats;
+            const auto rect = noteRect(area, placement.startBeats, pattern.lengthBeats, shown);
+            g.setColour(tokens_.colour("color.note.take"));
+            g.fillRect(rect);
+            g.setColour(tokens_.colour("color.note.takeOutline"));
+            g.drawRect(rect, tokens_.integer("stroke.hairline"));
+        }
+    }
+    g.restoreState();
 }
 
 void PlaylistPanel::paintBandNames(juce::Graphics& g, int lane, juce::Rectangle<int> name) const

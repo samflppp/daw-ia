@@ -73,6 +73,7 @@ PlaylistPanel::PlaylistPanel(const PanelContext& context, bool canvas)
     , selection_(context.selection)
     , clock_(context.clock)
     , samples_(context.samples)
+    , live_(context.live)
     , reader_(context.prompts)
     , listening_(context.listening)
     , stems_(context.stems)
@@ -1248,6 +1249,26 @@ void PlaylistPanel::frame()
     closeVelocityWheel(true);
     glide();
     followPlayhead();
+
+    // A take: the grid again whenever its notes moved — a note came, or one
+    // held grew. Nothing while no take is recorded.
+    if (canvas_)
+    {
+        std::size_t signature = 0;
+        if (live_.recording() == LiveHost::Recording::recording)
+        {
+            for (const auto& note : live_.takeNotes())
+                signature =
+                    signature * 31U + static_cast<std::size_t>(note.pitch) * 7U +
+                    static_cast<std::size_t>(std::lround((note.startBeats + note.lengthBeats) * 64.0));
+            signature += 1;
+        }
+        if (signature != takeSignature_)
+        {
+            takeSignature_ = signature;
+            repaint();
+        }
+    }
 
     // Only the two columns the playhead leaves and reaches are repainted.
     const auto wanted = playheadX();

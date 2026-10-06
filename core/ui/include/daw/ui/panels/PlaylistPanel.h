@@ -596,6 +596,10 @@ private:
     Selection& selection_;
     const TransportClock& clock_;
     SampleHost& samples_;
+    // A take being recorded (S23): its notes, drawn where they will be
+    // written, in the colour of recording, before they are in the project.
+    LiveHost& live_;
+    std::size_t takeSignature_{0};
 
     std::vector<Item> selected_;
 
@@ -858,6 +862,11 @@ private:
                              const domain::Pattern& pattern,
                              const std::vector<BandArea>& areas,
                              juce::Rectangle<int> content) const;
+    void paintTake(juce::Graphics& g,
+                   const domain::Placement& placement,
+                   const domain::Pattern& pattern,
+                   const std::vector<BandArea>& areas,
+                   juce::Rectangle<int> content) const;
 
     // Where the hand was last seen over the panel: where Ctrl+V pastes.
     juce::Point<int> pointer_;
