@@ -142,6 +142,9 @@ void Verification::start()
     case Run::audio:
         buildAudio();
         break;
+    case Run::flux:
+        buildFlux();
+        break;
     }
 
     report_.add(juce::String::fromUTF8("# Vérification S11 — ") +

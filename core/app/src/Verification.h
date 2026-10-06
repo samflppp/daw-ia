@@ -88,7 +88,8 @@ public:
         playback,
         stems,
         play,
-        audio
+        audio,
+        flux
     };
 
     struct Wiring
@@ -204,6 +205,15 @@ private:
     // S24 (VerificationAudio.cpp): the « Audio » window on this card.
     struct AudioRun;
     void buildAudio();
+
+    // S24 (VerificationFlux.cpp): the effects from the mixer's strip, and
+    // the audio flux.
+    struct FluxRun;
+    void buildFlux();
+    // An offline render of the Edit as it plays, read back; and the type of
+    // the last command the journal holds.
+    [[nodiscard]] juce::AudioBuffer<float> renderNamed(const std::string& name);
+    [[nodiscard]] std::string lastCommandType() const;
     [[nodiscard]] engine::LiveInputPlugin* liveInputOf(const domain::TrackId& track) const;
     void buildReopen();
     void buildLegacy();

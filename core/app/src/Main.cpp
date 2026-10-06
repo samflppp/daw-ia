@@ -283,6 +283,8 @@ public:
                 run = Verification::Run::play;
             else if (tokens[index] == "--verify-audio")
                 run = Verification::Run::audio;
+            else if (tokens[index] == "--verify-flux")
+                run = Verification::Run::flux;
             else if (tokens[index] == "--verify-stems")
                 run = Verification::Run::stems;
             else if (tokens[index] != "--verify")
