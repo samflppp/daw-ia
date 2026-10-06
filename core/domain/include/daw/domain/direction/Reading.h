@@ -83,8 +83,10 @@ struct Reading
 
 // The thresholds under which a value is left out.
 inline constexpr double tempoTrusted = 0.35; // normalised autocorrelation of the onsets at the beat
-inline constexpr double keyFitFloor = 0.5;   // correlation of the best key: under it, no harmony is read
-inline constexpr double keyTrusted = 0.10;   // margin of the best key over the next
+inline constexpr double attackContrast =
+    12.0;                                  // the onsets' 99th percentile over their mean: struck, not held
+inline constexpr double keyFitFloor = 0.5; // correlation of the best key: under it, no harmony is read
+inline constexpr double keyTrusted = 0.10; // margin of the best key over the next
 
 // Reads a reference from its stems. All four the same length, at `rate`.
 [[nodiscard]] Reading

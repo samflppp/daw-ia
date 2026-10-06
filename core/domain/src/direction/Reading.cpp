@@ -189,7 +189,18 @@ TempoEstimate estimateTempo(const std::vector<float>& mono, double rate)
 
     // How periodic the onsets are at that period: their normalised
     // autocorrelation, near 1 for a steady beat, near 0 for noise.
-    const auto confidence = std::clamp(score[best], 0.0, 1.0);
+    auto confidence = std::clamp(score[best], 0.0, 1.0);
+
+    // And whether anything is struck. A held low chord makes the spectrum
+    // waver (two partials leak into the same bins) and its flux is periodic
+    // too, without one attack: the strongest onsets of a beat stand thirty
+    // times over their mean, a held chord's seven, noise's six.
+    std::vector<double> sorted(onsets);
+    const auto top = sorted.begin() + static_cast<std::ptrdiff_t>(sorted.size() * 99 / 100);
+    std::nth_element(sorted.begin(), top, sorted.end());
+    const auto mean = std::accumulate(onsets.begin(), onsets.end(), 0.0) / static_cast<double>(onsets.size());
+    if (mean <= 0.0 || *top / mean < attackContrast)
+        confidence = 0.0;
     return {60.0 * hopsPerSecond / lag, confidence};
 }
 

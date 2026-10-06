@@ -250,6 +250,29 @@ TEST_CASE("Noise has no key and no tempo: nothing is guessed")
     CHECK_FALSE(reading.bpm.has_value());
 }
 
+// Found by --verify-mix (S22): the dark reference of the verification, two
+// steady sines, was read at 114 BPM. Nothing in it starts: no tempo.
+TEST_CASE("A steady chord has no tempo: nothing starts, nothing is guessed")
+{
+    for (const auto chordRate : {44100.0, 48000.0})
+    {
+        const auto samples = static_cast<std::size_t>(20 * chordRate);
+        direction::Stereo chord{std::vector<float>(samples), std::vector<float>(samples)};
+        for (std::size_t i = 0; i < samples; ++i)
+        {
+            const auto t = static_cast<double>(i) / chordRate;
+            chord.left[i] = chord.right[i] =
+                static_cast<float>(0.5 * std::sin(2.0 * std::numbers::pi * 60.0 * t) +
+                                   0.3 * std::sin(2.0 * std::numbers::pi * 125.0 * t) +
+                                   0.01 * std::sin(2.0 * std::numbers::pi * 4000.0 * t));
+        }
+        const auto reading =
+            direction::read({{"other", chord}}, chordRate, "accord.wav", std::string(64, 'd'));
+        MESSAGE(chordRate << " Hz : confiance du tempo " << reading.bpmConfidence);
+        CHECK_FALSE(reading.bpm.has_value());
+    }
+}
+
 TEST_CASE("A reading goes to JSON and back unchanged")
 {
     const auto a = direction::read(render(referenceA()), rate, "a.wav", std::string(64, 'a'));
