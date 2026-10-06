@@ -195,6 +195,7 @@ public:
         // The engine stops on its own at the end of the material; without this
         // the domain would go on saying "playing" over a silent engine.
         transportSync_ = std::make_unique<TransportSync>(bus_, state_, engineHost_->edit());
+        transportSync_->watchCard([this] { return engineHost_->audio().cardChangedAtMs(); });
 
         // Every refused action goes to the log with the transport and the bus
         // as they were: the S12 and S13 "no effect during playback" is

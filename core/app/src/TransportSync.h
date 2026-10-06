@@ -7,6 +7,7 @@
 #include <juce_events/juce_events.h>
 #include <tracktion_engine/tracktion_engine.h>
 
+#include <functional>
 #include <string>
 
 namespace daw::app
@@ -57,6 +58,10 @@ public:
 
     [[nodiscard]] const Event& lastEvent() const noexcept { return last_; }
 
+    // When the sound card last stopped or started, on the millisecond
+    // counter (S24): see the tick.
+    void watchCard(std::function<double()> changedAtMs) { cardChangedAtMs_ = std::move(changedAtMs); }
+
 private:
     // Ten times a second is enough to notice a stop. While a start is being
     // waited for, the tick is short instead, because that is the number being
@@ -68,6 +73,11 @@ private:
     // than tick at four milliseconds forever.
     static constexpr double startTimeoutMs = 3000.0;
 
+    // How long a card reopening may keep the engine stopped, and how long a
+    // card started again plays before the engine is started on it.
+    static constexpr double cardGraceMs = 1500.0;
+    static constexpr double cardStartedMs = 200.0;
+
     void timerCallback() override;
 
     void onExecuted(const domain::Receipt& receipt) override;
@@ -77,6 +87,8 @@ private:
 
     void remember(std::string what);
 
+    std::function<double()> cardChangedAtMs_;
+    double restartedFor_{0.0};
     domain::CommandBus& bus_;
     const domain::ProjectState& state_;
     tracktion::Edit& edit_;

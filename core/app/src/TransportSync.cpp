@@ -91,6 +91,28 @@ void TransportSync::timerCallback()
     if (enginePlaying || !state_.transport().playing)
         return;
 
+    // A sound card reopened (S24) — chosen in the « Audio » window, lost,
+    // given back — stops the engine for the moment it takes; that is not
+    // the song ending, and the domain is not told. Once the card has played
+    // for a moment, the engine is started again where it was, once; if it
+    // still will not play when the grace is over, the stop is real and goes
+    // to the domain as before.
+    if (cardChangedAtMs_)
+    {
+        const auto changed = cardChangedAtMs_();
+        const auto since = juce::Time::getMillisecondCounterHiRes() - changed;
+        if (changed > 0.0 && changed != restartedFor_ && since >= cardStartedMs && since < cardGraceMs)
+        {
+            restartedFor_ = changed;
+            edit_.getTransport().play(false);
+            remember("carte rouverte : moteur relancé");
+            juce::Logger::writeToLog("transport: card reopened, engine started again");
+            return;
+        }
+        if (changed > 0.0 && since < cardGraceMs)
+            return;
+    }
+
     // Written down every time: this is the one command the application
     // issues that no hand asked for, and it lands in the middle of whatever
     // the user is doing while the song plays.
