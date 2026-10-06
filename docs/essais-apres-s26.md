@@ -189,3 +189,28 @@ Sur `main`, Release recompilé par `scripts/build.cmd`. Ta clé dans `DAW_IA_ANT
 8. **Demander au copilote** de « suivre la structure de la référence » : dis-moi ce qu'il fait des sections.
    C'est la question du §5 du bilan S22.
 
+## S23 — jouer au clavier, enregistrer
+
+### À essayer, dans l'ordre
+
+Sur `main`, Release recompilé par `scripts/build.cmd`.
+
+1. **`--verify-lecture`, puis `--verify-lecture --sans-jeu`**, dossier et disposition jetables. C'est une
+   vérification, pas un essai, mais elle ne tourne que sur ta carte : si le jeu fait des lectures muettes et
+   `--sans-jeu` non, dis-le-moi avant tout le reste.
+2. **`--verify-jeu`** sur ta carte. Note la latence que le rapport donne (carte, tampon, de la touche à l'oreille).
+3. **Le clavier de l'ordinateur.** Choisis un canal dans le rack, Ctrl+T, joue W S X D C… Les notes tombent-elles
+   sous les doigts comme dans FL ? Change d'octave avec ← et →. Essaie un accord de trois notes : ton clavier les
+   passe-t-il toutes ?
+4. **Ctrl+T allumé, tape dans le copilote** : du texte, aucune note.
+5. **Change de canal en tenant une touche**, puis relâche : la première piste doit se taire.
+6. **Un clavier MIDI.** Branche-le pendant que le logiciel tourne : la ligne du transport doit le nommer dans la
+   seconde. Joue, pédale comprise. Débranche-le en tenant un accord : silence, et le logiciel ne plante pas.
+   Rebranche : il rejoue.
+7. **Enregistre en PAT.** Ctrl+R, la mesure de décompte, joue quatre noires sur un pattern d'une mesure, plusieurs
+   passes. Les notes doivent arriver en rouge, s'ajouter à chaque passe, et être écrites à ● ; un Ctrl+Z retire
+   toute la prise. Sont-elles sur le temps, à l'oreille ? Si elles sont en retard ou en avance d'une même
+   quantité, dis-le : c'est la latence que ta carte déclare qui ment.
+8. **Enregistre en SONG**, au milieu du morceau : un pattern neuf doit apparaître là où tu as commencé.
+9. **La sensation.** Joue vite, une gamme : la latence se sent-elle ? Si oui, le tampon par défaut de Windows est à
+   baisser, et la fenêtre « Audio » tombée cette semaine devient la priorité.

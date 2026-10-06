@@ -130,6 +130,11 @@ qu'on joue dans le pattern en cours.
 - Quantification à l'enregistrement ou non.
 - Quelle piste joue quand aucune n'est choisie.
 
+**Ce que la semaine a déplacé** (`docs/bilan-s23.md` §11).
+- **La fenêtre « Audio »** (pilote, tampon, latence affichée) est tombée : à la S24 ou à la S26, au choix du
+  fondateur, avant l'installeur en tout cas.
+- **Le choix d'une entrée MIDI** n'est pas fait : toutes les entrées jouent la piste choisie, validé le 6 octobre.
+
 ## S24 — IA : le kit et le mixer
 
 **But.** Composer un kit cohérent depuis les samples de la personne, et régler les effets et les bus depuis le

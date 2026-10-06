@@ -20,7 +20,9 @@ gardée ouverte), fenêtres qui se posent, rack et historique qui défilent, pre
 (0,074 $) ; la piste compagne reste sur la branche `s21-piste-compagne`. S22 : un clip audio séparé en quatre
 stems sur leurs pistes (HTDemucs, local) ; une direction tirée de références (tempo, tonalité, sections,
 équilibre, couleur — des nombres), gardée dans le projet (`direction.set`, schéma 7), lue par le mixage, la
-génération et le copilote, corrigeable au panneau Direction (F11). Plan des six dernières semaines (`docs/plan-s21-s26.md`) :
+génération et le copilote, corrigeable au panneau Direction (F11). S23 : on joue l'instrument de la piste choisie au clavier MIDI et au
+clavier de l'ordinateur (Ctrl+T, lu par la place des touches, Raw Input), sans rien écrire ; ● ou Ctrl+R enregistre
+dans le pattern en cours, décompte et clic, en un groupe d'historique ; la fenêtre « Audio » est tombée. Plan des six dernières semaines (`docs/plan-s21-s26.md`) :
 S21 solidité (lecture muette d'abord) et fin de l'ergonomie ; S22 séparateur de stems et direction par
 références ; S23 jouer au clavier MIDI et au clavier AZERTY ; S24 le kit et le mixer ; S25 le DAW à la voix ;
 S26 le prototype emballé. Le piano-roll reste jusqu'à la phase d'essais, après la S26 ; le fine-tune pendant
@@ -41,6 +43,8 @@ l'incubation. Plus aucun verbe ajouté au domaine sans une raison de démonstrat
 | Effets internes (`PluginRef` format `internal`, `daw.eq`/`daw.compressor`, paramètres en unités du domaine) : seuls effets que le mixage par l'IA règle ; les plugins de la personne restent opaques, jamais retirés ni contournés | S20 | un plugin tiers est une boîte noire ; on ne règle que ce dont on connaît le sens |
 | Le mixage gardé est un seul groupe d'historique par le copilote, sa mesure et ses phrases rangées par empreinte (`Provenance.context`) | S20 | un Ctrl+Z défait tout, à l'octet ; l'historique sait redire pourquoi |
 | Une référence ne laisse dans le projet que des nombres (jamais son audio, ses notes ni son chemin) ; la direction vit dans `ProjectState`, un tempo ou une tonalité ne se moyenne jamais entre références | S22 | elle se rouvre et s'annule avec le projet ; un désaccord se dit au lieu d'être deviné |
+| Le jeu en direct n'écrit rien : file sans verrou par piste (`domain::live`), plugin interne en tête de chaîne (`LiveInputPlugin`), placement régulier (un bloc + une marge) ; une prise devient des commandes existantes en un groupe, à la fin, identifiants de l'appelant, sans quantification | S23 | le jeu ne passe pas par le bus ni n'attend le fil des messages ; un Ctrl+Z retire la prise à l'octet |
+| Le clavier de l'ordinateur se lit par scan code (Raw Input, `RIDEV_INPUTSINK`, sur un fil à lui), disposition de FL ; avec Ctrl, Alt ou Windows, aucune touche ne joue | S23 | une lettre change de place entre AZERTY et QWERTY, la place non |
 | Windows seule cible | S1 (annoncé), acté S5 | support Linux/Ubuntu reporté post-MVP ; `setup-ubuntu.sh` reste pour la CI, jamais lancé en cible produit |
 
 Rouvrir une de ces lignes veut dire que quelque chose de nouveau la contredit réellement — c'est couvert
@@ -102,7 +106,7 @@ Mécanismes :
 
 ## 5. Où trouver quoi
 
-- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S22 au 05/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
+- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S23 au 06/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
   `docs/bilan-s7bis.md`. Chaque bilan documente les écarts à l'acquis, les tests cassés une fois, et le
   reste à faire.
 - **Plan des semaines S21 à S26** : `docs/plan-s21-s26.md` — base des briefs, pas un brief.
@@ -123,7 +127,8 @@ Mécanismes :
   règles, sans clé), `--verify-lecture` (75 lectures de la première mesure après cinq actions, dont la carte
   son perdue ; le chemin audio écrit à chaque silence), `--verify-stems` (une séparation réelle par le modèle
   rapide sur des sources connues mélangées ; toute autre vérification sépare par `--stems-model fake`, les filtres
-  de la CI). `scripts/verify-quit.ps1 -Repeat N` : la fermeture
+  de la CI), `--verify-jeu` (jouer et enregistrer par une entrée simulée, latence comprise). `--sans-jeu` retire le
+  plugin du jeu des chaînes, pour comparer `--verify-lecture`. `scripts/verify-quit.ps1 -Repeat N` : la fermeture
   finit le processus, avec et sans copilote, en lecture, sans passer par la garde. `--mix-once` n'est **pas**
   une vérification : un mixage réel par le modèle sur le projet donné, écrit dans `daw.log`, refusé, puis
   quitter (appel payant, hors CI). Toujours avec
@@ -157,6 +162,11 @@ Mécanismes :
 | Les tests du moteur partagent les réglages persistés de l'engine de test (l'identité CLAP retient `C:\dawS9\…`) | S21 | **fermé S22** : un dossier de réglages jetable par processus |
 | Les poids HTDemucs sont donnés « for research purpose », pas sous MIT | S22 | choix du fondateur de bâtir le prototype dessus ; téléchargés au premier usage, jamais livrés ; une licence à chercher avant l'installeur de la S26, SCNet XL IHF à trancher |
 | L'arrangement ne lit la direction qu'à travers le copilote (sections de la référence, en secondes) | S22 | aucun code n'arrange d'après les sections ; un modèle à exposer avant d'écrire |
-| `--verify` complet pas relancé après les stems et la direction | S22 | 674 sur 674 à `c91ac5e` |
+| `--verify` complet pas relancé après les stems et la direction | S22 | 674 sur 674 à `c91ac5e` ; S23, sans copilote sous Linux seulement (36 échecs attendus, les mêmes avant et après) |
+| `--verify-lecture` avec le jeu : à 0 sur 75 ? | S23 | non mesurable sous Linux (`main` lui-même y fait 9 à 12 muettes) ; à lancer sur Windows avec et sans `--sans-jeu` |
+| La fenêtre « Audio » (pilote, tampon, latence) | S23 | tombée ; S24 ou S26 au choix du fondateur, avant l'installeur |
+| 4OSC garde une voix au-delà de 32 (voix volée, relâché pendant la coupure) | S23 | défaut de Tracktion prouvé au rendu ; non contourné |
+| Une note tenue coupée quand la tête est déplacée pendant la lecture | S23 | indiscernable d'un tour de boucle pour le plugin du jeu |
+| Les décalages de couleur des règles du mixage ignorent `direction.amount` | S23 | vu en lisant, pas corrigé |
 | La ligne de génération lue un geste en retard, par intermittence | S19 | l'étape attend maintenant la fin de la lecture ; la cause de la variante n'est pas trouvée |
 | Support Ubuntu en cible produit | reporté S1/S5 | scripts gardés pour la CI seulement |
