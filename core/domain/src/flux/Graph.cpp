@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdio>
 #include <map>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -49,6 +50,7 @@ struct Chain
     const Track* strip{nullptr};
     bool channel{false};
     bool master{false};
+    bool branch{false}; // a channel's recordings, joining it at its fader
     std::vector<Node> nodes;
 };
 
@@ -77,6 +79,21 @@ std::string effectNode(PluginId plugin)
 std::string faderNode(TrackId strip)
 {
     return "f:" + strip.toString();
+}
+
+std::string recordingsOf(TrackId strip)
+{
+    return "s:" + strip.toString() + ":recordings";
+}
+
+std::string effectOnRecordings(PluginId plugin)
+{
+    return "e:" + plugin.toString() + ":recordings";
+}
+
+std::string afterEffectOnRecordings(TrackId strip, PluginId plugin)
+{
+    return "s:" + strip.toString() + ":recordings:after:" + plugin.toString();
 }
 
 const Node* Graph::find(const std::string& id) const noexcept
@@ -182,8 +199,74 @@ Graph graphOf(const ProjectState& state, const IsInstrument& isInstrument)
         return chain;
     };
 
+    // A channel whose recordings skip a plugin of the person's: two ways,
+    // the instrument's and the recordings', joined at the fader.
+    const auto branchOf = [&](const Track& track) -> std::optional<Chain>
+    {
+        const bool recorded = std::any_of(state.audioClips().begin(),
+                                          state.audioClips().end(),
+                                          [&](const AudioClip& clip) { return clip.trackId == track.id; });
+        std::size_t first = 0;
+        while (isInstrument && first < track.plugins.size() && isInstrument(track.plugins[first].ref))
+            ++first;
+        const bool skipped = std::any_of(track.plugins.begin() + static_cast<std::ptrdiff_t>(first),
+                                         track.plugins.end(),
+                                         [](const PluginInstance& plugin)
+                                         { return plugin.ref.format != PluginRef::internalFormat; });
+        if (!recorded || !skipped)
+            return std::nullopt;
+
+        Chain branch;
+        branch.strip = &track;
+        branch.channel = true;
+        branch.branch = true;
+        Node head;
+        head.id = recordingsOf(track.id);
+        head.kind = NodeKind::state;
+        head.state = StateKind::source;
+        head.strip = track.id;
+        head.label = track.name + " · enregistrements";
+        head.path = Path::recordings;
+        branch.nodes.push_back(head);
+        for (const auto& plugin : track.plugins)
+        {
+            if (plugin.ref.format != PluginRef::internalFormat)
+                continue;
+            Node effect;
+            effect.id = effectOnRecordings(plugin.id);
+            effect.kind = NodeKind::effect;
+            effect.strip = track.id;
+            effect.plugin = plugin.id;
+            effect.label = nameOf(plugin);
+            effect.bypassed = plugin.bypassed;
+            effect.path = Path::recordings;
+            branch.nodes.push_back(effect);
+
+            Node after;
+            after.id = afterEffectOnRecordings(track.id, plugin.id);
+            after.kind = NodeKind::state;
+            after.state = StateKind::afterEffect;
+            after.strip = track.id;
+            after.plugin = plugin.id;
+            after.label = "après " + nameOf(plugin);
+            after.path = Path::recordings;
+            branch.nodes.push_back(after);
+        }
+        return branch;
+    };
+
     for (const auto& track : state.tracks())
+    {
         chains.push_back(chainOf(track, true, false));
+        if (auto branch = branchOf(track); branch)
+        {
+            // The first way is now the instrument's alone, up to the fader.
+            for (auto& node : chains.back().nodes)
+                if (node.kind != NodeKind::fader && node.state != StateKind::afterFader)
+                    node.path = Path::instrument;
+            chains.push_back(std::move(*branch));
+        }
+    }
     for (const auto& bus : state.buses())
         chains.push_back(chainOf(bus, false, false));
     chains.push_back(chainOf(state.master(), false, true));
@@ -192,7 +275,7 @@ Graph graphOf(const ProjectState& state, const IsInstrument& isInstrument)
     const auto headOf = [&](TrackId strip) -> std::string
     {
         for (const auto& chain : chains)
-            if (chain.strip->id == strip)
+            if (chain.strip->id == strip && !chain.branch)
                 return chain.nodes.front().id;
         return {};
     };
@@ -203,6 +286,23 @@ Graph graphOf(const ProjectState& state, const IsInstrument& isInstrument)
     for (const auto& chain : chains)
     {
         const auto& nodes = chain.nodes;
+
+        // The recordings' way: its links, then into the channel's fader.
+        // Nothing is dropped on it — an effect goes in the channel's chain.
+        if (chain.branch)
+        {
+            for (std::size_t index = 0; index < nodes.size(); ++index)
+            {
+                Link link;
+                link.from = nodes[index].id;
+                link.to = index + 1 < nodes.size() ? nodes[index + 1].id : faderNode(chain.strip->id);
+                link.kind = LinkKind::chain;
+                link.strip = chain.strip->id;
+                graph.links.push_back(link);
+            }
+            continue;
+        }
+
         // Effects are counted in the chain of the domain, instruments
         // included: an index there is what plugin.insert takes.
         std::size_t effects = 0;

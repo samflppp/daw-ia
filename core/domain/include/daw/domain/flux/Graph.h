@@ -30,6 +30,14 @@ namespace daw::domain::flux
 // fader is what leaves the machine. A state is where the sound can be seen
 // and heard (the taps of the engine are at those places); an effect is one
 // plugin, the DAW's or the person's, the same node for both.
+//
+// A channel's recordings do not go through the person's plugins: they play
+// on a track of their own in the engine, which carries the DAW's effects only
+// (S20; the person's would be a second instance, its state drifting from the
+// first). When a channel has recordings and a plugin of the person's, the
+// flux says so: a second branch, « enregistrements », from the recordings
+// through the DAW's effects alone, joins the channel at its fader; the first
+// is then the instrument's alone.
 enum class NodeKind
 {
     state,
@@ -43,6 +51,14 @@ enum class StateKind
     sum,         // a bus or the master: what reaches it, added
     afterEffect, // after the effect `plugin`
     afterFader,  // after the strip's fader and pan; for the master, the way out
+};
+
+// Which of a channel's two ways a node is on, when it has two.
+enum class Path
+{
+    both,       // one way: a channel without that split, a bus, the master
+    instrument, // what the instrument plays, through every plugin
+    recordings  // what the recordings play, through the DAW's effects alone
 };
 
 struct Node
@@ -59,6 +75,7 @@ struct Node
     bool bypassed{false}; // an effect that does nothing
     bool opaque{false};   // a plugin of the person's: its sound is seen, never its settings
     bool silent{false};   // a fader whose strip is not heard (muted, or another soloed)
+    Path path{Path::both};
 
     // Where it is drawn: a column from the left, a row from the top. Integers,
     // in a grid; the screen turns them into pixels.
@@ -104,6 +121,10 @@ struct Graph
 [[nodiscard]] std::string afterFader(TrackId strip);
 [[nodiscard]] std::string effectNode(PluginId plugin);
 [[nodiscard]] std::string faderNode(TrackId strip);
+// The recordings' branch: its source, an effect on it, the state after it.
+[[nodiscard]] std::string recordingsOf(TrackId strip);
+[[nodiscard]] std::string effectOnRecordings(PluginId plugin);
+[[nodiscard]] std::string afterEffectOnRecordings(TrackId strip, PluginId plugin);
 
 // Whether a plugin is an instrument: the domain cannot tell a VST3 synth
 // from a VST3 effect, the catalogue of the machine can. An instrument at the

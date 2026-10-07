@@ -27,6 +27,9 @@ public:
     {
         std::string strip;
         std::string slot;
+        // One of a channel's two ways only: its track (false), its recordings'
+        // companion (true); nothing, both added.
+        std::optional<bool> companion;
     };
 
     explicit FluxTaps(tracktion::Edit& edit);

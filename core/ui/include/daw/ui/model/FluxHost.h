@@ -18,10 +18,20 @@ namespace daw::ui
 class FluxHost
 {
 public:
+    // A channel whose recordings skip a plugin of the person's has two ways
+    // (flux::Path): a place on one of them reads that one alone.
+    enum class Way
+    {
+        both,
+        instrument,
+        recordings
+    };
+
     struct Place
     {
         std::string strip;
         std::string slot;
+        Way way{Way::both};
 
         friend bool operator==(const Place&, const Place&) = default;
     };

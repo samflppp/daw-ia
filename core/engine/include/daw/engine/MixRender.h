@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace daw::engine
@@ -79,11 +80,12 @@ public:
 
     // The flux of what is rendered (S24): `seconds` of every flux tap of the
     // copy from `fromSeconds`, captured while run() renders. Message thread,
-    // before run(). Afterwards, per place — the strip as the domain's TrackId
-    // text, the master's included, and the slot —, the taps of the place
-    // added; and the rate of their samples.
+    // before run(). Afterwards, per tap — the strip as the domain's TrackId
+    // text, the master's included, the slot, and whether it is a companion's
+    // —, what it heard; and the rate of their samples.
     void captureFlux(double fromSeconds, double seconds);
-    [[nodiscard]] std::map<std::pair<std::string, std::string>, std::vector<float>> fluxCaptured() const;
+    [[nodiscard]] std::map<std::tuple<std::string, std::string, bool>, std::vector<float>>
+    fluxCaptured() const;
     [[nodiscard]] double fluxRate() const noexcept { return fluxRate_; }
 
     // Must be destroyed on the message thread: the copy unloads plugins.

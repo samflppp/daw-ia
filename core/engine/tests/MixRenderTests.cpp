@@ -328,7 +328,7 @@ TEST_CASE("The flux of a proposal is captured on its copy: each place, a second 
     auto proposed = harness.state;
     REQUIRE(proposed.setTrackVolume(harness.lows, -6.0).ok());
 
-    std::map<std::pair<std::string, std::string>, std::vector<float>> captured;
+    std::map<std::tuple<std::string, std::string, bool>, std::vector<float>> captured;
     double rate = 0.0;
     static_cast<void>(harness.measure(
         &proposed,
@@ -344,7 +344,8 @@ TEST_CASE("The flux of a proposal is captured on its copy: each place, a second 
 
     const auto peakDb = [&](TrackId track, const std::string& slot)
     {
-        const auto found = captured.find({track.toString(), slot});
+        // The tones are recordings: the companion's taps.
+        const auto found = captured.find({track.toString(), slot, true});
         REQUIRE(found != captured.end());
         CHECK(found->second.size() == static_cast<std::size_t>(std::llround(rate)));
         float peak = 0.0f;
@@ -361,9 +362,9 @@ TEST_CASE("The flux of a proposal is captured on its copy: each place, a second 
     CHECK(peakDb(harness.lows, "source") == doctest::Approx(-12.0).epsilon(0.02));
     CHECK(bass == doctest::Approx(9.0).epsilon(0.05));
     CHECK(lead == doctest::Approx(3.0).epsilon(0.1));
-    CHECK(captured.contains({ProjectState::masterTrackId().toString(), "fader"}));
+    CHECK(captured.contains({ProjectState::masterTrackId().toString(), "fader", false}));
 
-    const auto& source = captured.at({harness.lows.toString(), "source"});
+    const auto& source = captured.at({harness.lows.toString(), "source", true});
     const auto half = source.size() / 2;
     const auto loudest = [&](std::size_t from, std::size_t to)
     {

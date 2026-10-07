@@ -539,10 +539,23 @@ void MixSession::clearProposal()
     proposedFlux_.clear();
 }
 
-std::vector<float> MixSession::proposedSound(const std::string& strip, const std::string& slot) const
+std::vector<float> MixSession::proposedSound(const ui::FluxHost::Place& place) const
 {
-    const auto found = proposedFlux_.find({strip, slot});
-    return found != proposedFlux_.end() ? found->second : std::vector<float>{};
+    // A channel's track and its companion added, or one of them.
+    std::vector<float> samples;
+    for (const bool companion : {false, true})
+    {
+        if ((place.way == ui::FluxHost::Way::instrument && companion) ||
+            (place.way == ui::FluxHost::Way::recordings && !companion))
+            continue;
+        const auto found = proposedFlux_.find({place.strip, place.slot, companion});
+        if (found == proposedFlux_.end())
+            continue;
+        samples.resize(std::max(samples.size(), found->second.size()), 0.0f);
+        for (std::size_t index = 0; index < found->second.size(); ++index)
+            samples[index] += found->second[index];
+    }
+    return samples;
 }
 
 void MixSession::listen(bool after)

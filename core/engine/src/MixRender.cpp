@@ -160,9 +160,9 @@ void MixRender::captureFlux(double fromSeconds, double seconds)
         tap->startCapture(samples, from);
 }
 
-std::map<std::pair<std::string, std::string>, std::vector<float>> MixRender::fluxCaptured() const
+std::map<std::tuple<std::string, std::string, bool>, std::vector<float>> MixRender::fluxCaptured() const
 {
-    std::map<std::pair<std::string, std::string>, std::vector<float>> places;
+    std::map<std::tuple<std::string, std::string, bool>, std::vector<float>> places;
     if (copy_ == nullptr)
         return places;
     for (const auto* tap : FluxTaps{*copy_}.all())
@@ -173,7 +173,7 @@ std::map<std::pair<std::string, std::string>, std::vector<float>> MixRender::flu
         auto strip = tap->strip().toStdString();
         if (tap->strip() == MeterTapPlugin::masterStrip)
             strip = domain::ProjectState::masterTrackId().toString();
-        auto& samples = places[{strip, tap->slot().toStdString()}];
+        auto& samples = places[{strip, tap->slot().toStdString(), tap->companion()}];
         samples.resize(std::max(samples.size(), captured.size()), 0.0f);
         for (std::size_t index = 0; index < captured.size(); ++index)
             samples[index] += captured[index];

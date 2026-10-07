@@ -150,7 +150,7 @@ void FluxPanel::markProposal()
         {
             // A still picture: its level is the whole window's, not its end's,
             // which may fall past the song.
-            auto samples = mix_.proposedSound(place->strip, place->slot);
+            auto samples = mix_.proposedSound(*place);
             const auto level = domain::flux::peakDbOf(samples.data(), samples.size());
             shown_.push_back(Shown{node.id, std::move(samples), level});
         }
@@ -247,15 +247,19 @@ std::optional<FluxHost::Place> FluxPanel::placeOf(const Node& node) const
     if (node.kind != NodeKind::state)
         return std::nullopt;
     const auto strip = node.strip.toString();
+    // A channel with two ways reads the one the node is on.
+    const auto way = node.path == domain::flux::Path::instrument   ? FluxHost::Way::instrument
+                     : node.path == domain::flux::Path::recordings ? FluxHost::Way::recordings
+                                                                   : FluxHost::Way::both;
     switch (node.state)
     {
     case StateKind::source:
     case StateKind::sum:
-        return FluxHost::Place{strip, FluxHost::sourceSlot};
+        return FluxHost::Place{strip, FluxHost::sourceSlot, way};
     case StateKind::afterEffect:
-        return FluxHost::Place{strip, node.plugin.toString()};
+        return FluxHost::Place{strip, node.plugin.toString(), way};
     case StateKind::afterFader:
-        return FluxHost::Place{strip, FluxHost::faderSlot};
+        return FluxHost::Place{strip, FluxHost::faderSlot, way};
     }
     return std::nullopt;
 }

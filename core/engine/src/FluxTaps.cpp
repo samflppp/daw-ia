@@ -40,7 +40,10 @@ std::vector<FluxTapPlugin*> FluxTaps::tapsAt(const Place& place) const
     taps.erase(std::remove_if(taps.begin(),
                               taps.end(),
                               [&](const FluxTapPlugin* tap)
-                              { return tap == nullptr || tap->strip() != strip || tap->slot() != slot; }),
+                              {
+                                  return tap == nullptr || tap->strip() != strip || tap->slot() != slot ||
+                                         (place.companion && tap->companion() != *place.companion);
+                              }),
                taps.end());
     return taps;
 }

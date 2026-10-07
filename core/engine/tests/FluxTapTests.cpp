@@ -510,3 +510,34 @@ TEST_CASE("Listening alone at a place: the master plays that place, mono, in pla
                 filtered)
               .first < -60.0);
 }
+
+TEST_CASE("One way of a channel read alone: its track, or its recordings' companion")
+{
+    Harness harness{noiseBuffer()};
+    daw::engine::FluxTaps taps{harness.host.edit()};
+    // The recording plays on the companion; the track's own instrument plays
+    // no note.
+    daw::engine::FluxTaps::Place track{harness.trackId.toString(), "source", false};
+    daw::engine::FluxTaps::Place recordings{harness.trackId.toString(), "source", true};
+    CHECK(taps.tapsAt(track).size() == 1);
+    CHECK(taps.tapsAt(recordings).size() == 1);
+    taps.arm({track, recordings});
+    static_cast<void>(harness.render());
+    const auto last = taps.latest();
+    REQUIRE(last > 48000);
+
+    constexpr int count = 4800;
+    std::vector<float> fromTrack(count);
+    std::vector<float> fromRecordings(count);
+    taps.read(track, last - count + 1, count, fromTrack.data());
+    taps.read(recordings, last - count + 1, count, fromRecordings.data());
+    float trackPeak = 0.0f;
+    float recordingsPeak = 0.0f;
+    for (int index = 0; index < count; ++index)
+    {
+        trackPeak = std::max(trackPeak, std::abs(fromTrack[static_cast<std::size_t>(index)]));
+        recordingsPeak = std::max(recordingsPeak, std::abs(fromRecordings[static_cast<std::size_t>(index)]));
+    }
+    CHECK(trackPeak == 0.0f);
+    CHECK(recordingsPeak > 0.1f);
+}

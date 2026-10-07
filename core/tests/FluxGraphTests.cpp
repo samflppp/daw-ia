@@ -1,6 +1,7 @@
 #include "TestSupport.h"
 #include "daw/domain/commands/MixCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
+#include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/flux/Graph.h"
 #include "daw/domain/project/InternalEffects.h"
@@ -255,4 +256,51 @@ TEST_CASE("No bus sits on the line of an output or a send that runs past it")
         for (const auto& node : graph.nodes)
             CHECK_FALSE((node.row == from.row && node.column > from.column && node.column < to.column));
     }
+}
+
+TEST_CASE("Recordings skip the person's plugins: a second way, through the DAW's effects, joins at the fader")
+{
+    Song song;
+    SampleRef take{};
+    take.blob.digest = std::string(BlobRef::digestLength, 'c');
+    take.blob.byteCount = 88200;
+    take.name = "Prise.wav";
+    take.format = "wav";
+    take.seconds = 1.0;
+
+    // The lead plays Serum, then Valhalla (theirs): recorded, it gets an
+    // equaliser of the DAW's after them.
+    const auto eq = effect(internal::equaliser, "EQ");
+    song.ok(std::make_unique<InsertPlugin>(song.lead, eq, 2));
+    const auto before = song.graph();
+    CHECK(before.find(flux::recordingsOf(song.lead)) == nullptr); // nothing recorded yet
+    song.ok(std::make_unique<PlaceAudio>(AudioClipId::generate(), song.lead, take, 0.0));
+    const auto graph = song.graph();
+
+    // The recordings' way: its source, the equaliser alone, into the fader.
+    const auto head = flux::recordingsOf(song.lead);
+    REQUIRE(graph.find(head) != nullptr);
+    CHECK(nodeOf(graph, head).path == flux::Path::recordings);
+    CHECK(graph.link(head, flux::effectOnRecordings(eq.id)) != nullptr);
+    CHECK(graph.link(flux::effectOnRecordings(eq.id), flux::afterEffectOnRecordings(song.lead, eq.id)) !=
+          nullptr);
+    CHECK(graph.link(flux::afterEffectOnRecordings(song.lead, eq.id), flux::faderNode(song.lead)) != nullptr);
+    CHECK(graph.find(flux::effectOnRecordings(song.valhalla.id)) == nullptr);
+
+    // The first way is the instrument's, Valhalla on it; the fader and its
+    // way out are both ways'.
+    CHECK(nodeOf(graph, flux::effectNode(song.valhalla.id)).path == flux::Path::instrument);
+    CHECK(nodeOf(graph, flux::sourceOf(song.lead)).path == flux::Path::instrument);
+    CHECK(nodeOf(graph, flux::faderNode(song.lead)).path == flux::Path::both);
+    CHECK(nodeOf(graph, flux::afterFader(song.lead)).path == flux::Path::both);
+    CHECK(graph.nodes.size() == before.nodes.size() + 3);
+
+    // Its own row, under the lead; every link still runs to the right.
+    CHECK(nodeOf(graph, head).row == nodeOf(graph, flux::sourceOf(song.lead)).row + 1);
+    for (const auto& link : graph.links)
+        CHECK(nodeOf(graph, link.from).column < nodeOf(graph, link.to).column);
+
+    // A recorded channel with the DAW's effects alone keeps one way.
+    song.ok(std::make_unique<PlaceAudio>(AudioClipId::generate(), song.kick, take, 0.0));
+    CHECK(song.graph().find(flux::recordingsOf(song.kick)) == nullptr);
 }

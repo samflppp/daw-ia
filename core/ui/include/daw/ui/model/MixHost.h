@@ -4,6 +4,7 @@
 #include "daw/domain/Ids.h"
 #include "daw/domain/mix/Decision.h"
 #include "daw/domain/project/ProjectState.h"
+#include "daw/ui/model/FluxHost.h"
 
 #include <juce_events/juce_events.h>
 
@@ -58,15 +59,14 @@ public:
 
     // The proposal in the audio flux (S24): the project as it would leave it,
     // and what the taps of the proposal's copy heard at one place — a strip's
-    // TrackId text, the master's included, and a slot as FluxHost names it —
+    // TrackId text, the master's included, a slot and a way as FluxHost
+    // names them —
     // over the window rendered from where the playhead stood. Measured, never
     // simulated. Nothing before a proposal is ready.
     [[nodiscard]] virtual const domain::ProjectState* proposedState() const { return nullptr; }
-    [[nodiscard]] virtual std::vector<float> proposedSound(const std::string& strip,
-                                                           const std::string& slot) const
+    [[nodiscard]] virtual std::vector<float> proposedSound(const FluxHost::Place& place) const
     {
-        static_cast<void>(strip);
-        static_cast<void>(slot);
+        static_cast<void>(place);
         return {};
     }
 
