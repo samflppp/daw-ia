@@ -37,6 +37,10 @@ namespace daw::ui
 //   - the end of an output dragged onto a bus or the master: track.set_output;
 //   - the dot of an effect: plugin.set_bypassed; Del: plugin.remove;
 //   - a right click in the empty: a new bus (bus.add).
+//
+// A click on a state listens to it alone, mono, in place of the mix; a
+// second click, Escape, or the window hidden gives the song back. Nothing of
+// it is written in the project.
 class FluxPanel final : public juce::Component, private juce::ChangeListener
 {
 public:
@@ -87,6 +91,10 @@ public:
     [[nodiscard]] const std::vector<double>& spectrumAfter() const noexcept { return spectrumAfter_; }
 
     void select(const std::string& node);
+
+    // The state listened to alone, or none (empty).
+    void listenAt(const std::string& node);
+    [[nodiscard]] const std::string& listened() const noexcept { return listened_; }
 
     // The gestures, as the mouse ends them; each says whether a command ran.
     // A link is named by its two ends.
@@ -155,6 +163,8 @@ private:
     std::vector<FluxHost::Place> armed_;
     std::vector<Shown> shown_;
     std::string selected_;
+    std::string listened_;
+    std::string pressedState_; // a state pressed: a click on it listens
     std::vector<double> spectrumBefore_;
     std::vector<double> spectrumAfter_;
 

@@ -55,6 +55,29 @@ void FluxTaps::arm(const std::vector<Place>& places)
         tap->arm(std::find(wanted.begin(), wanted.end(), tap) != wanted.end());
 }
 
+void FluxTaps::listen(const std::optional<Place>& place, bool alsoRendering)
+{
+    auto& monitor = FluxMonitor::instance();
+    for (auto* tap : all())
+        tap->monitor(-1);
+    listening_ = place;
+    if (!place)
+    {
+        monitor.playOutThrough(nullptr);
+        return;
+    }
+
+    // The master's way out plays it; the place's taps write it, the
+    // channel's track and its companion each into a ring of its own.
+    const FluxTapPlugin* out = nullptr;
+    for (auto* tap : edit_.getMasterPluginList().getPluginsOfType<FluxTapPlugin>())
+        if (tap->slot() == FluxTapPlugin::faderSlot)
+            out = tap;
+    monitor.playOutThrough(out, alsoRendering);
+    for (auto* tap : tapsAt(*place))
+        tap->monitor(tap->companion() ? 1 : 0);
+}
+
 std::int64_t FluxTaps::latest() const
 {
     std::int64_t last = -1;

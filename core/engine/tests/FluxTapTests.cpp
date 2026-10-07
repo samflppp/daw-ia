@@ -455,3 +455,58 @@ TEST_CASE("The flux reads a place by position: what its armed ring holds is what
     taps.read(afterEq, last - count + 1, count, read.data());
     CHECK(std::all_of(read.begin(), read.end(), [](float sample) { return sample == 0.0f; }));
 }
+
+TEST_CASE("Listening alone at a place: the master plays that place, mono, in place of the mix")
+{
+    Harness harness{noiseBuffer()};
+    const auto eq = harness.insert(internal::equaliser, 0);
+    harness.set(eq, internal::highPassFrequency, 1000.0);
+    daw::engine::FluxTaps taps{harness.host.edit()};
+    const daw::engine::FluxTaps::Place source{harness.trackId.toString(), "source"};
+
+    // An offline render plays the song, never the place: a test asks for it.
+    taps.listen(source, true);
+    const auto heard = monoOf(harness.render());
+    taps.listen(std::nullopt);
+    const auto length = static_cast<std::size_t>(sourceSeconds * harness.renderedRate) - 64;
+    const auto& captured = harness.tap(FluxTapPlugin::sourceSlot).captured();
+    // A render stops at full scale: the source, resampled, goes past it once.
+    std::vector<float> fromSource(captured.begin(), captured.begin() + static_cast<std::ptrdiff_t>(length));
+    for (auto& sample : fromSource)
+        sample = std::clamp(sample, -1.0f, 1.0f);
+    const auto& afterEq = harness.tap(juce::String(eq.toString())).captured();
+    const std::vector<float> filtered(afterEq.begin(), afterEq.begin() + static_cast<std::ptrdiff_t>(length));
+
+    const auto [apartSource, gain] = apart(
+        std::vector<float>(heard.begin(), heard.begin() + static_cast<std::ptrdiff_t>(length)), fromSource);
+    MESSAGE("listened at the source, against its tap: " << apartSource << " dB, gain " << gain);
+    CHECK(apartSource < -100.0);
+    CHECK(gain == doctest::Approx(1.0).epsilon(0.001));
+    const auto apartFiltered =
+        apart(std::vector<float>(heard.begin(), heard.begin() + static_cast<std::ptrdiff_t>(length)),
+              filtered)
+            .first;
+    CHECK(apartFiltered > -10.0); // not the equaliser's sound
+
+    // Stopped: the song again, the equaliser in it; and an offline render
+    // while listening, without the test's leave, is the song too.
+    const auto loudest = [](const std::vector<float>& samples)
+    {
+        float peak = 0.0f;
+        for (const auto sample : samples)
+            peak = std::max(peak, std::abs(sample));
+        return peak;
+    };
+    const auto song = monoOf(harness.render());
+    CHECK(loudest(song) > 0.1f);
+    CHECK(
+        apart(std::vector<float>(song.begin(), song.begin() + static_cast<std::ptrdiff_t>(length)), filtered)
+            .first < -60.0);
+    taps.listen(source);
+    const auto exported = monoOf(harness.render());
+    CHECK(loudest(exported) > 0.1f);
+    taps.listen(std::nullopt);
+    CHECK(apart(std::vector<float>(exported.begin(), exported.begin() + static_cast<std::ptrdiff_t>(length)),
+                filtered)
+              .first < -60.0);
+}

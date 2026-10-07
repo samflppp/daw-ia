@@ -9,6 +9,54 @@
 namespace daw::engine
 {
 
+// Listening alone at one place of the flux (S24): what the person hears is
+// the sound of that place, mono, in place of the mix — a state of the
+// screen, nothing written in the project.
+//
+// The tap of the place writes what passes into a ring here, one ring per
+// writer (a channel's track, its companion: two tracks the graph may play on
+// two threads); the master's tap after its fader reads them at the same
+// positions and puts their sum on its output, in every channel. Taps are
+// made and deleted by the projection while the audio plays, so no tap ever
+// holds another: the rings live as long as the process, and the master's
+// tap only compares its own address to the one it is told.
+class FluxMonitor
+{
+public:
+    static constexpr int writers = 2;
+    static constexpr int ringSize = 1 << 16;
+
+    [[nodiscard]] static FluxMonitor& instance();
+
+    // The audio thread of a monitored tap.
+    void write(int writer, std::int64_t first, const float* mono, int count) noexcept;
+    // The audio thread of the master's tap: the writers added, zeros where a
+    // ring does not hold a position.
+    void read(std::int64_t first, int count, float* out) const noexcept;
+
+    // The message thread: who plays out (the master's tap), or nobody. Never
+    // in an offline render — an export while a place is listened to is the
+    // song —, unless a test asks for it to prove what is heard.
+    void playOutThrough(const void* tap, bool alsoRendering = false) noexcept;
+    [[nodiscard]] bool alsoRendering() const noexcept
+    {
+        return alsoRendering_.load(std::memory_order_acquire);
+    }
+    [[nodiscard]] bool playsOutThrough(const void* tap) const noexcept
+    {
+        return tap != nullptr && target_.load(std::memory_order_acquire) == tap;
+    }
+
+private:
+    FluxMonitor() = default;
+
+    std::vector<float> rings_[writers] = {std::vector<float>(ringSize, 0.0f),
+                                          std::vector<float>(ringSize, 0.0f)};
+    std::atomic<std::int64_t> latest_[writers] = {-1, -1};
+    std::atomic<const void*> target_{nullptr};
+    std::atomic<bool> alsoRendering_{false};
+};
+
 // The sound at one place of a chain, for the audio flux (S24): a tap placed
 // by the projector at every state of the graph — after a channel's
 // instrument, after each effect, after the fader, at a bus's sum.
@@ -78,6 +126,11 @@ public:
     // --- the reader, on the message thread
 
     void arm(bool armed) noexcept { armed_.store(armed, std::memory_order_relaxed); }
+
+    // Listened to alone (FluxMonitor): what passes here is written for the
+    // master's tap, as writer `writer`; -1 stops.
+    void monitor(int writer) noexcept { monitorWriter_.store(writer, std::memory_order_release); }
+    [[nodiscard]] int monitored() const noexcept { return monitorWriter_.load(std::memory_order_acquire); }
     [[nodiscard]] bool armed() const noexcept { return armed_.load(std::memory_order_relaxed); }
 
     static constexpr int ringSize = 1 << 16; // 1.37 s at 48 kHz
@@ -106,6 +159,9 @@ private:
     std::vector<float> ring_ = std::vector<float>(ringSize, 0.0f);
     std::atomic<std::int64_t> latest_{-1};
     std::atomic<bool> armed_{false};
+    std::atomic<int> monitorWriter_{-1};
+    std::vector<float> scratch_ = std::vector<float>(maxBlock, 0.0f);
+    static constexpr int maxBlock = 8192;
     std::atomic<bool> audible_{true};
     std::atomic<double> sampleRate_{48000.0};
 

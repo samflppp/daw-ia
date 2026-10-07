@@ -6,6 +6,48 @@
 namespace daw::engine
 {
 
+FluxMonitor& FluxMonitor::instance()
+{
+    static FluxMonitor monitor;
+    return monitor;
+}
+
+void FluxMonitor::write(int writer, std::int64_t first, const float* mono, int count) noexcept
+{
+    if (writer < 0 || writer >= writers || count <= 0)
+        return;
+    auto& ring = rings_[writer];
+    for (int index = 0; index < count; ++index)
+        ring[static_cast<std::size_t>((first + index) & (ringSize - 1))] = mono[index];
+    latest_[writer].store(first + count - 1, std::memory_order_release);
+}
+
+void FluxMonitor::read(std::int64_t first, int count, float* out) const noexcept
+{
+    for (int index = 0; index < count; ++index)
+        out[index] = 0.0f;
+    for (int writer = 0; writer < writers; ++writer)
+    {
+        const auto last = latest_[writer].load(std::memory_order_acquire);
+        const auto& ring = rings_[writer];
+        for (int index = 0; index < count; ++index)
+        {
+            const auto position = first + index;
+            if (position <= last && position > last - ringSize && position >= 0)
+                out[index] += ring[static_cast<std::size_t>(position & (ringSize - 1))];
+        }
+    }
+}
+
+void FluxMonitor::playOutThrough(const void* tap, bool alsoRendering) noexcept
+{
+    alsoRendering_.store(alsoRendering, std::memory_order_release);
+    // What the rings held belongs to the place listened to before.
+    for (auto& latest : latest_)
+        latest.store(-1, std::memory_order_release);
+    target_.store(tap, std::memory_order_release);
+}
+
 const char* FluxTapPlugin::xmlTypeName = "dawFluxTap";
 const juce::Identifier FluxTapPlugin::stripProperty{"dawFluxStrip"};
 const juce::Identifier FluxTapPlugin::slotProperty{"dawFluxSlot"};
@@ -61,7 +103,12 @@ void FluxTapPlugin::applyToBuffer(const tracktion::PluginRenderContext& context)
 
     const bool armed = armed_.load(std::memory_order_relaxed);
     const bool capturing = capturing_.load(std::memory_order_acquire);
-    if ((armed || capturing) && context.destBuffer != nullptr && context.bufferNumSamples > 0)
+    const auto writer = monitorWriter_.load(std::memory_order_acquire);
+    auto& monitor = FluxMonitor::instance();
+    const bool heard = !context.isRendering || monitor.alsoRendering();
+    const bool playsOut = heard && monitor.playsOutThrough(this);
+    const bool monitoring = heard && writer >= 0 && context.bufferNumSamples <= maxBlock;
+    if ((armed || capturing || monitoring) && context.destBuffer != nullptr && context.bufferNumSamples > 0)
     {
         const auto& buffer = *context.destBuffer;
         const auto channels = std::max(1, buffer.getNumChannels());
@@ -84,9 +131,27 @@ void FluxTapPlugin::applyToBuffer(const tracktion::PluginRenderContext& context)
                 ring_[static_cast<std::size_t>(position & (ringSize - 1))] = mono;
             if (capturing && position >= 0 && position < captureSize)
                 capture_[static_cast<std::size_t>(position)] = mono;
+            if (monitoring)
+                scratch_[static_cast<std::size_t>(index)] = mono;
         }
         if (armed)
             latest_.store(first + context.bufferNumSamples - 1, std::memory_order_release);
+        if (monitoring)
+            monitor.write(writer, first, scratch_.data(), context.bufferNumSamples);
+    }
+
+    // The way out of the master, while a place is listened to alone: that
+    // place in every channel, in place of the mix.
+    if (playsOut && context.destBuffer != nullptr && context.bufferNumSamples > 0 &&
+        context.bufferNumSamples <= maxBlock)
+    {
+        auto& buffer = *context.destBuffer;
+        const auto rate = sampleRate_.load(std::memory_order_relaxed);
+        const auto first =
+            static_cast<std::int64_t>(std::llround(context.editTime.getStart().inSeconds() * rate));
+        monitor.read(first, context.bufferNumSamples, scratch_.data());
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+            buffer.copyFrom(channel, context.bufferStartSample, scratch_.data(), context.bufferNumSamples);
     }
 
     busyTicks_.store(busyTicks_.load(std::memory_order_relaxed) +

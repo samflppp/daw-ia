@@ -52,6 +52,7 @@ FluxPanel::FluxPanel(const PanelContext& context)
 FluxPanel::~FluxPanel()
 {
     project_.removeChangeListener(this);
+    listenAt({});
     disarm();
 }
 
@@ -70,6 +71,11 @@ void FluxPanel::rebuild()
         state_, [this](const domain::PluginRef& ref) { return plugins_.isInstrument(ref); });
     if (!selected_.empty() && graph_.find(selected_) == nullptr)
         selected_.clear();
+
+    // The place listened to may have been made again by the projection, or
+    // be gone: told again, or the song given back.
+    if (!listened_.empty())
+        listenAt(graph_.find(listened_) != nullptr ? listened_ : std::string{});
     shown_.erase(std::remove_if(shown_.begin(),
                                 shown_.end(),
                                 [this](const Shown& shown) { return graph_.find(shown.node) == nullptr; }),
@@ -306,6 +312,7 @@ void FluxPanel::mouseDown(const juce::MouseEvent& event)
     grabKeyboardFocus();
     pulling_ = Pulling::nothing;
     pullMoved_ = false;
+    pressedState_.clear();
     if (event.mods.isMiddleButtonDown())
     {
         dragging_ = true;
@@ -343,6 +350,8 @@ void FluxPanel::mouseDown(const juce::MouseEvent& event)
         pulled_ = node->id;
         return;
     }
+    if (node != nullptr && node->kind == NodeKind::state)
+        pressedState_ = node->id;
     if (node != nullptr && node->kind == NodeKind::state && node->state == StateKind::afterFader &&
         node->strip != domain::ProjectState::masterTrackId())
     {
@@ -387,6 +396,14 @@ void FluxPanel::mouseUp(const juce::MouseEvent& event)
 {
     dragging_ = false;
     const auto pulling = std::exchange(pulling_, Pulling::nothing);
+    const auto pressed = std::exchange(pressedState_, std::string{});
+
+    // A state clicked, not pulled: listened to alone, or no longer.
+    if (!pressed.empty() && !pullMoved_ && nodeAt(event.position) == graph_.find(pressed))
+    {
+        listenAt(listened_ == pressed ? std::string{} : pressed);
+        return;
+    }
     if (pulling == Pulling::nothing || !pullMoved_)
         return;
     repaint();
@@ -582,8 +599,23 @@ void FluxPanel::mouseDoubleClick(const juce::MouseEvent& event)
         plugins_.openEditor(node->plugin);
 }
 
+void FluxPanel::listenAt(const std::string& node)
+{
+    const auto* found = graph_.find(node);
+    const auto place = found != nullptr ? placeOf(*found) : std::nullopt;
+    listened_ = place ? node : std::string{};
+    if (place || flux_.listening())
+        flux_.listen(place);
+    repaint();
+}
+
 bool FluxPanel::keyPressed(const juce::KeyPress& key)
 {
+    if (key.getKeyCode() == juce::KeyPress::escapeKey && !listened_.empty())
+    {
+        listenAt({});
+        return true;
+    }
     if ((key.getKeyCode() == 'F' || key.getKeyCode() == 'f') && !key.getModifiers().isAnyModifierKeyDown())
     {
         frameAll();
@@ -619,13 +651,19 @@ void FluxPanel::resized()
 void FluxPanel::visibilityChanged()
 {
     if (!isShowing())
+    {
+        listenAt({});
         disarm();
+    }
 }
 
 void FluxPanel::parentHierarchyChanged()
 {
     if (!isShowing())
+    {
+        listenAt({});
         disarm();
+    }
     else if (!framed_)
         frameAll();
 }
@@ -684,6 +722,7 @@ void FluxPanel::frame()
 {
     if (!isShowing())
     {
+        listenAt({});
         disarm();
         return;
     }
@@ -760,6 +799,23 @@ void FluxPanel::paint(juce::Graphics& g)
         paintLinks(g);
         for (const auto& node : graph_.nodes)
             paintNode(g, node);
+
+        // The state listened to alone, and what the person hears said.
+        if (const auto bounds = boundsOf(listened_); !bounds.isEmpty())
+        {
+            g.setColour(tokens_.colour("color.accent.live"));
+            g.drawRoundedRectangle(bounds.expanded(static_cast<float>(tokens_.integer("stroke.focus"))),
+                                   tokens_.number("radius.md") * zoom_,
+                                   static_cast<float>(tokens_.integer("stroke.focus")));
+            auto banner = graphArea()
+                              .reduced(tokens_.integer("space.sm"))
+                              .removeFromTop(tokens_.integer("metric.flux.faderHeight"));
+            g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
+            g.drawText(juce::String::fromUTF8("écoute seule : ") + text(graph_.find(listened_)->label) +
+                           juce::String::fromUTF8(" · Échap : le morceau"),
+                       banner,
+                       juce::Justification::centredLeft);
+        }
 
         // What is being pulled: a line from where it started to the mouse.
         if (pulling_ != Pulling::nothing && pullMoved_)

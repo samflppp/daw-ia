@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -44,6 +45,11 @@ public:
     [[nodiscard]] virtual std::int64_t latest() const = 0;
     [[nodiscard]] virtual double sampleRate() const = 0;
     virtual void read(const Place& place, std::int64_t from, int count, float* out) const = 0;
+
+    // Listening alone at one place, mono, in place of the mix — or no longer.
+    // A state of the screen: nothing of it is written in the project.
+    virtual void listen(const std::optional<Place>& place) = 0;
+    [[nodiscard]] virtual std::optional<Place> listening() const = 0;
 };
 
 } // namespace daw::ui

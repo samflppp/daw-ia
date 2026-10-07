@@ -6,6 +6,7 @@
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/flux/Graph.h"
 #include "daw/domain/project/InternalEffects.h"
+#include "daw/engine/MeterTap.h"
 #include "daw/engine/Rendering.h"
 #include "daw/ui/panels/FluxPanel.h"
 #include "daw/ui/panels/InsertSlots.h"
@@ -71,6 +72,8 @@ struct Verification::FluxRun
     domain::TrackId second;
     domain::PluginId flowEqualiser;
     domain::PluginId flowCompressor;
+    float sourceHeardDb{-100.0f};
+    float sumHeardDb{-100.0f};
     domain::PluginId equaliser;
     domain::PluginId compressor;
     juce::AudioBuffer<float> playing;
@@ -746,6 +749,80 @@ void Verification::addFluxWindow(const std::shared_ptr<FluxRun>& run)
         },
         3000.0);
 
+    // --- listening alone at one place: the master's meter hears it
+
+    const auto master = engine::MeterTapPlugin::masterStrip.toStdString();
+    const auto settle = [this] { return juce::Time::getMillisecondCounterHiRes() - stepStartedMs_ > 800.0; };
+
+    // After the source's fader, where its sends leave: the fader, centred,
+    // takes 3 dB (the pan law), the send 12 more.
+    add(
+        "un clic sur la sortie de la source, après son fader : elle s'écoute seule",
+        [this, run, flux]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            click(*window, window->boundsOf(domain::flux::afterFader(run->synth)).getCentre().toInt());
+            check(window->listened() == domain::flux::afterFader(run->synth), "la sortie est écoutée");
+            stepStartedMs_ = juce::Time::getMillisecondCounterHiRes();
+        },
+        settle,
+        3000.0);
+
+    add(
+        "un clic sur la somme de « Réverb », qui reçoit la source à -12 dB",
+        [this, run, flux, master]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            run->sourceHeardDb = levelOf(master).peakDb;
+            click(*window, window->boundsOf("s:" + run->reverb.toString() + ":sum").getCentre().toInt());
+            check(window->listened() == "s:" + run->reverb.toString() + ":sum", "la somme est écoutée");
+            stepStartedMs_ = juce::Time::getMillisecondCounterHiRes();
+        },
+        settle,
+        3000.0);
+
+    add(
+        "au master : la somme 12 dB sous la sortie de la source ; Échap rend le morceau",
+        [this, run, flux, master]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            run->sumHeardDb = levelOf(master).peakDb;
+            note("master : la sortie de la source seule " + fixed(run->sourceHeardDb, 1) +
+                 " dBFS, la somme seule " + fixed(run->sumHeardDb, 1) + " dBFS");
+            const auto drop = run->sourceHeardDb - run->sumHeardDb;
+            check(drop > 9.0 && drop < 15.0, "12 dB plus bas, à 3 dB près : " + fixed(drop, 1) + " dB");
+            check(window->keyPressed(juce::KeyPress{juce::KeyPress::escapeKey}), "Échap est pris");
+            check(window->listened().empty(), "plus rien n'est écouté seul");
+            stepStartedMs_ = juce::Time::getMillisecondCounterHiRes();
+        },
+        settle,
+        3000.0);
+
+    add("le morceau : au moins la sortie de la source, plus ses envois",
+        [this, run, master]
+        {
+            const auto song = levelOf(master).peakDb;
+            note("master : le morceau " + fixed(song, 1) + " dBFS");
+            check(song > run->sourceHeardDb - 1.0,
+                  "le morceau n'est pas plus bas que la sortie de la source seule");
+        });
+
+    add("la source écoutée seule de nouveau, avant de fermer la fenêtre",
+        [this, run, flux]
+        {
+            if (auto* window = flux(); window != nullptr)
+            {
+                click(*window, window->boundsOf(domain::flux::sourceOf(run->synth)).getCentre().toInt());
+                check(window->listened() == domain::flux::sourceOf(run->synth), "la source est écoutée");
+            }
+        });
+
     add(
         "F3 referme le flux",
         [this] { key(juce::KeyPress{juce::KeyPress::F3Key}); },
@@ -756,7 +833,10 @@ void Verification::addFluxWindow(const std::shared_ptr<FluxRun>& run)
         [this, flux]
         {
             if (auto* window = flux(); window != nullptr)
+            {
                 check(window->armed().empty(), "la fenêtre cachée n'arme rien");
+                check(window->listened().empty(), "ni n'écoute rien seul : le morceau revient");
+            }
             if (clock_.isPlaying())
                 key(juce::KeyPress{juce::KeyPress::spaceKey});
         });

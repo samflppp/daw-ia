@@ -35,6 +35,21 @@ public:
         taps_.read({place.strip, place.slot}, from, count, out);
     }
 
+    void listen(const std::optional<Place>& place) override
+    {
+        if (place)
+            taps_.listen(engine::FluxTaps::Place{place->strip, place->slot});
+        else
+            taps_.listen(std::nullopt);
+    }
+
+    [[nodiscard]] std::optional<Place> listening() const override
+    {
+        if (const auto& place = taps_.listening(); place)
+            return Place{place->strip, place->slot};
+        return std::nullopt;
+    }
+
 private:
     engine::FluxTaps taps_;
 };
