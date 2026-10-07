@@ -7,7 +7,7 @@
 #include "daw/domain/generation/Phrase.h"
 #include "daw/domain/generation/Transform.h"
 #include "daw/domain/serialization/Json.h"
-#include "daw/engine/PitchDetection.h"
+#include "daw/domain/sound/Pitch.h"
 #include "daw/engine/Rendering.h"
 #include "daw/ui/panels/PianoRollPanel.h"
 
@@ -471,13 +471,13 @@ void Verification::addGenerationSteps()
                 levels.push_back(audio.getRMSLevel(0, start, end - start));
                 const auto skip = static_cast<int>(0.012 * heard.sampleRate);
                 const auto hertz = end - start > skip * 2
-                                       ? engine::fundamentalOf(audio.getReadPointer(0, start + skip),
-                                                               end - start - skip,
-                                                               heard.sampleRate,
-                                                               30.0,
-                                                               1500.0)
+                                       ? domain::sound::fundamentalOf(audio.getReadPointer(0, start + skip),
+                                                                      end - start - skip,
+                                                                      heard.sampleRate,
+                                                                      30.0,
+                                                                      1500.0)
                                        : 0.0;
-                pitches.push_back(hertz > 0.0 ? engine::midiPitchOf(hertz) : -1);
+                pitches.push_back(hertz > 0.0 ? domain::sound::midiPitchOf(hertz) : -1);
             }
 
             std::vector<int> onsets;

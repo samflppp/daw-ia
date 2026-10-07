@@ -2,7 +2,7 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/generation/Harmony.h"
 #include "daw/domain/serialization/Json.h"
-#include "daw/engine/PitchDetection.h"
+#include "daw/domain/sound/Pitch.h"
 #include "daw/ui/model/GhostProposal.h"
 
 #include <tracktion_engine/utilities/tracktion_TestUtilities.h>
@@ -60,12 +60,13 @@ Heard listen(tracktion::Edit& edit, const std::vector<Note>& written)
     for (int step = 0; step < steps; ++step)
     {
         levels.push_back(audio.getRMSLevel(0, step * samplesPerStep, samplesPerStep));
-        const auto hertz = daw::engine::fundamentalOf(audio.getReadPointer(0, step * samplesPerStep + skip),
-                                                      samplesPerStep - skip,
-                                                      rendered.sampleRate,
-                                                      30.0,
-                                                      1500.0);
-        stepPitches.push_back(hertz > 0.0 ? daw::engine::midiPitchOf(hertz) : -1);
+        const auto hertz =
+            daw::domain::sound::fundamentalOf(audio.getReadPointer(0, step * samplesPerStep + skip),
+                                              samplesPerStep - skip,
+                                              rendered.sampleRate,
+                                              30.0,
+                                              1500.0);
+        stepPitches.push_back(hertz > 0.0 ? daw::domain::sound::midiPitchOf(hertz) : -1);
     }
 
     // An attack is a sixteenth much louder than the one before it, or a
@@ -98,9 +99,9 @@ Heard listen(tracktion::Edit& edit, const std::vector<Note>& written)
             continue;
         }
 
-        const auto hertz = daw::engine::fundamentalOf(
+        const auto hertz = daw::domain::sound::fundamentalOf(
             audio.getReadPointer(0, start + skip), length, rendered.sampleRate, 30.0, 1500.0);
-        heard.pitches.push_back(hertz > 0.0 ? daw::engine::midiPitchOf(hertz) : -1);
+        heard.pitches.push_back(hertz > 0.0 ? daw::domain::sound::midiPitchOf(hertz) : -1);
     }
     return heard;
 }

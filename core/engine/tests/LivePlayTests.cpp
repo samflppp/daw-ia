@@ -2,8 +2,8 @@
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/live/Router.h"
 #include "daw/domain/serialization/Json.h"
+#include "daw/domain/sound/Pitch.h"
 #include "daw/engine/LiveInput.h"
-#include "daw/engine/PitchDetection.h"
 
 #include <tracktion_engine/utilities/tracktion_TestUtilities.h>
 
@@ -134,9 +134,9 @@ double onset(const juce::AudioBuffer<float>& audio)
 int pitchOver(const juce::AudioBuffer<float>& audio, double from, double to)
 {
     const auto start = sampleAt(from);
-    const auto hertz =
-        daw::engine::fundamentalOf(audio.getReadPointer(0, start), sampleAt(to) - start, rate, 30.0, 2000.0);
-    return hertz > 0.0 ? daw::engine::midiPitchOf(hertz) : -1;
+    const auto hertz = daw::domain::sound::fundamentalOf(
+        audio.getReadPointer(0, start), sampleAt(to) - start, rate, 30.0, 2000.0);
+    return hertz > 0.0 ? daw::domain::sound::midiPitchOf(hertz) : -1;
 }
 
 constexpr double silentDb = -90.0;

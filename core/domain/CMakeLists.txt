@@ -24,6 +24,7 @@ add_library(daw_domain STATIC
     src/live/AudioAdvice.cpp
     src/flux/Graph.cpp
     src/flux/Picture.cpp
+    src/sound/Pitch.cpp
     src/direction/Reading.cpp
     src/direction/Direction.cpp
     src/commands/DirectionCommands.cpp

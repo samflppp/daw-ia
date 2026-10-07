@@ -26,7 +26,6 @@ target_sources(daw_engine INTERFACE
     src/MixRender.cpp
     src/MixTap.cpp
     src/ParameterBridge.cpp
-    src/PitchDetection.cpp
     src/PluginCatalogue.cpp
     src/ContentStore.cpp
     src/ProjectProjector.cpp

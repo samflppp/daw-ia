@@ -1,11 +1,11 @@
-#include "daw/engine/PitchDetection.h"
+#include "daw/domain/sound/Pitch.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <vector>
 
-namespace daw::engine
+namespace daw::domain::sound
 {
 
 double fundamentalOf(const float* samples, int count, double sampleRate, double lowest, double highest)
@@ -71,4 +71,4 @@ int midiPitchOf(double hertz)
     return static_cast<int>(std::lround(69.0 + 12.0 * std::log2(hertz / 440.0)));
 }
 
-} // namespace daw::engine
+} // namespace daw::domain::sound
