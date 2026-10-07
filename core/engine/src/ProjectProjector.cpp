@@ -507,8 +507,8 @@ void ProjectProjector::reconcileMaster()
 
     if (auto volume = edit_.getMasterVolumePlugin(); volume != nullptr)
     {
-        if (volume->getVolumeDb() != 0.0f)
-            volume->setVolumeDb(0.0f);
+        if (volume->getVolumeDb() != duckDb_)
+            volume->setVolumeDb(duckDb_);
 
         // A master pan is a balance, not a placement: unity at the centre,
         // which only the linear law gives. Written, never left to the global.
@@ -522,6 +522,13 @@ void ProjectProjector::reconcileMaster()
     // fader, before Tracktion's master volume, which stays at unity.
     ensureFaderTap(list, fader, MeterTapPlugin::masterStrip, false, !master.muted);
     ensureMeterTap(list, MeterTapPlugin::masterStrip, !master.muted);
+}
+
+void ProjectProjector::setDucking(float db)
+{
+    duckDb_ = db;
+    if (auto volume = edit_.getMasterVolumePlugin(); volume != nullptr && volume->getVolumeDb() != db)
+        volume->setVolumeDb(db);
 }
 
 void ProjectProjector::ensureMeterTap(tracktion::PluginList& list, const juce::String& strip, bool audible)

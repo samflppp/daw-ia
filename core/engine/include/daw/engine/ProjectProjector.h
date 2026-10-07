@@ -105,6 +105,13 @@ public:
     // Idempotent: calling it twice in a row changes nothing the second time.
     void reconcile();
 
+    // The song lowered while the push-to-talk listens (S25): Tracktion's own
+    // master volume, which the projection otherwise holds at unity, set to
+    // `db` (0 gives it back). Never in the project, never in a render: a
+    // render's copy has a projector of its own, at unity.
+    void setDucking(float db);
+    [[nodiscard]] float ducking() const noexcept { return duckDb_; }
+
     // What the clip reconciliation did since the projector was built. Read by
     // the engine tests, which have to prove that an unchanged clip is not
     // rebuilt; nothing else depends on it.
@@ -388,6 +395,7 @@ private:
 
     // The master's last projected form, like a track's.
     domain::Value projectedMaster_;
+    float duckDb_{0.0f};
 
     // The parameters a curve was written on, so a line that goes away leaves
     // its parameter at its static value instead of on a curve nothing owns.

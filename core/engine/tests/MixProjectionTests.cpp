@@ -210,3 +210,26 @@ TEST_CASE("The master's fader and mute are heard in the file, and its tap reads 
     CHECK(muted.filePeakDb < -90.0f);
     CHECK(muted.master() < -90.0f);
 }
+
+TEST_CASE(
+    "The song lowered while the push-to-talk listens: heard 20 dB down, kept through a reconcile, given back")
+{
+    EngineHarness harness;
+    fill(harness, harness.trackId, 60);
+    const auto unity = render(harness);
+
+    harness.projector.setDucking(-20.0f);
+    // A command meanwhile reconciles the master: the ducking holds.
+    REQUIRE(harness.bus.execute(std::make_unique<SetTrackVolume>(ProjectState::masterTrackId(), 0.0)).ok());
+    const auto ducked = render(harness);
+    MESSAGE("ducked: file " << ducked.filePeakDb << " dB (unity " << unity.filePeakDb << "), tap "
+                            << ducked.master() << " dB");
+    CHECK(std::abs(ducked.filePeakDb - (unity.filePeakDb - 20.0f)) < toleranceDb);
+    // The master's tap reads before Tracktion's master volume: the meters show
+    // the song, not the ducking.
+    CHECK(std::abs(ducked.master() - unity.master()) < toleranceDb);
+
+    harness.projector.setDucking(0.0f);
+    const auto back = render(harness);
+    CHECK(std::abs(back.filePeakDb - unity.filePeakDb) < toleranceDb);
+}
