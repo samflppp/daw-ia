@@ -45,6 +45,10 @@ def main(argv: list[str] | None = None) -> int:
     # a command line is readable by every process on the machine.
     copilot = subcommands.add_parser("copilot", help="Connect to a running DAW and answer its requests.")
     copilot.add_argument("--port", type=int, required=True)
+    # A check's copilot (S25): answers from a table, no model, no key.
+    copilot.add_argument(
+        "--table", type=Path, default=None, help="Answer from this table instead of a model."
+    )
 
     # The corpus pipeline: the user's MIDI files in, the style model out. Both
     # stay outside the repository: the corpus is published work.
@@ -72,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     voix.add_argument("--models", type=Path, default=None, help="Where the weights are kept.")
     voix.add_argument("--replay", type=Path, default=None, help="Replay what the model heard (the CI).")
     voix.add_argument("--install", action="store_true", help="Download the weights, and stop.")
+    voix.add_argument("--port", type=int, default=None, help="The DAW's port; stdin and stdout without it.")
 
     arguments = parser.parse_args(argv)
 
@@ -80,6 +85,8 @@ def main(argv: list[str] | None = None) -> int:
 
         if arguments.install:
             return service.install(arguments.models)
+        if arguments.port is not None:
+            return service.serve(arguments.port, arguments.models, arguments.replay)
         return service.run(arguments.models, arguments.replay)
 
     if arguments.service == "separate":

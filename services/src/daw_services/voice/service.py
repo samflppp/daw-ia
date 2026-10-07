@@ -15,6 +15,10 @@ object per line, both ways:
 
   out  {"id": n, "event": "error", "code": "absent" | "failed", "message": "<French>"}
 
+The DAW listens on 127.0.0.1 and passes its port (`--port`), as for the
+copilot: juce::ChildProcess reads a child's output and cannot write its
+input. Without --port, stdin and stdout (the tests).
+
 `daw-services voix --install` downloads the weights, its progress on stdout:
   {"event": "progress", "value": 0.42} … {"event": "installed"}
 
@@ -145,3 +149,14 @@ def install(models: Path | None, stdout: IO[str] = sys.stdout) -> int:
     except Exception as failure:
         _failed(stdout, None, "failed", f"Le téléchargement de la reconnaissance vocale a échoué : {failure}")
         return 1
+
+
+def serve(port: int, models: Path | None, replay: Path | None) -> int:
+    """Connects to the DAW and answers on the socket until the DAW closes it."""
+    import socket
+
+    with socket.create_connection(("127.0.0.1", port), timeout=10) as link:
+        link.settimeout(None)
+        reader = link.makefile("r", encoding="utf-8", newline="\n")
+        writer = link.makefile("w", encoding="utf-8", newline="\n")
+        return run(models, replay, reader, writer)
