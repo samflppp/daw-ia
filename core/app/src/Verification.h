@@ -212,6 +212,7 @@ private:
     // the audio flux.
     struct FluxRun;
     void buildFlux();
+    void addFluxWindow(const std::shared_ptr<FluxRun>& run);
     // An offline render of the Edit as it plays, read back; and the type of
     // the last command the journal holds.
     [[nodiscard]] juce::AudioBuffer<float> renderNamed(const std::string& name);

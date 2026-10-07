@@ -1,10 +1,13 @@
 #include "Verification.h"
+#include "daw/domain/commands/MixCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/commands/TransportCommands.h"
+#include "daw/domain/flux/Graph.h"
 #include "daw/domain/project/InternalEffects.h"
 #include "daw/engine/Rendering.h"
+#include "daw/ui/panels/FluxPanel.h"
 #include "daw/ui/panels/InsertSlots.h"
 #include "daw/ui/panels/MixerPanel.h"
 
@@ -14,9 +17,11 @@
 #include <vector>
 
 // --verify-flux (S24): the effects from the mixer's strip, then the audio
-// flux. Here the strip: each gesture of its slots makes the command it
-// should, and a bypass is proved in the render — an effect bypassed sounds
-// as if it were not there, and the same effect playing does not.
+// flux. The strip: each gesture of its slots makes the command it should,
+// and a bypass is proved in the render — an effect bypassed sounds as if it
+// were not there, and the same effect playing does not. The flux window: the
+// graph of the project, its navigation, the states on the screen armed and
+// no other, and the before and the after of an effect, measured live.
 
 namespace daw::app
 {
@@ -62,6 +67,8 @@ double apartDb(const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>
 struct Verification::FluxRun
 {
     domain::TrackId synth;
+    domain::TrackId reverb;
+    domain::PluginId flowEqualiser;
     domain::PluginId equaliser;
     domain::PluginId compressor;
     juce::AudioBuffer<float> playing;
@@ -290,6 +297,237 @@ void Verification::buildFlux()
             check(rmsDb(run->without) > -40.0, "le rendu sans effet s'entend");
             check(bypassed < -90.0, "contourné, le rendu est celui sans effet, échantillon par échantillon");
             check(playing > -20.0, "jouant, le coupe-bas change le rendu");
+        });
+
+    addFluxWindow(run);
+}
+
+void Verification::addFluxWindow(const std::shared_ptr<FluxRun>& run)
+{
+    const auto flux = [this]() -> ui::FluxPanel* { return dynamic_cast<ui::FluxPanel*>(panel("flux")); };
+    // Only the DAW's own effects here: no plugin is an instrument.
+    const auto isInstrument = [](const domain::PluginRef&) { return false; };
+
+    add("un bus « Réverb », un envoi de la source à -12 dB, l'égaliseur remis, coupe-bas à 1 kHz",
+        [this, run]
+        {
+            run->reverb = domain::TrackId::generate();
+            check(bus_.execute(std::make_unique<domain::AddBus>(run->reverb, "Réverb")).ok(), "le bus");
+            check(bus_.execute(std::make_unique<domain::SetTrackSend>(run->synth, run->reverb, -12.0)).ok(),
+                  "l'envoi");
+            domain::PluginInstance equaliser{};
+            equaliser.id = domain::PluginId::generate();
+            equaliser.ref = domain::PluginRef{std::string{domain::PluginRef::internalFormat},
+                                              std::string{domain::internal::equaliser},
+                                              "Égaliseur"};
+            run->flowEqualiser = equaliser.id;
+            check(bus_.execute(std::make_unique<domain::InsertPlugin>(run->synth, equaliser, 0)).ok(),
+                  "l'égaliseur");
+            check(bus_.execute(std::make_unique<domain::SetPluginParameter>(
+                                   equaliser.id, std::string{domain::internal::highPassFrequency}, 1000.0))
+                      .ok(),
+                  "le coupe-bas");
+        });
+
+    add(
+        "F3 ouvre le flux audio",
+        [this] { key(juce::KeyPress{juce::KeyPress::F3Key}); },
+        [flux] { return flux() != nullptr && flux()->isShowing(); },
+        3000.0);
+
+    add("le graphe est celui du projet : la source, l'égaliseur, le fader, l'envoi, le bus, le master",
+        [this, run, flux, isInstrument]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            const auto expected = domain::flux::graphOf(state_, isInstrument);
+            const auto& graph = window->graph();
+            note(std::to_string(graph.nodes.size()) + " nœuds, " + std::to_string(graph.links.size()) +
+                 " liens");
+            check(graph.nodes.size() == expected.nodes.size() && graph.links.size() == expected.links.size(),
+                  "autant de nœuds et de liens que le graphe du projet");
+            const auto afterEq = domain::flux::afterEffect(run->synth, run->flowEqualiser);
+            check(graph.link(domain::flux::sourceOf(run->synth),
+                             domain::flux::effectNode(run->flowEqualiser)) != nullptr,
+                  "la source entre dans l'égaliseur");
+            check(graph.link(afterEq, domain::flux::faderNode(run->synth)) != nullptr,
+                  "l'égaliseur va au fader");
+            const auto* send =
+                graph.link(domain::flux::afterFader(run->synth), "s:" + run->reverb.toString() + ":sum");
+            check(send != nullptr && send->kind == domain::flux::LinkKind::send && send->levelDb == -12.0,
+                  "l'envoi à -12 dB vers « Réverb »");
+        });
+
+    add("F cadre tout le graphe dans la fenêtre",
+        [this, flux]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            check(window->keyPressed(juce::KeyPress{'f'}), "F est pris par la fenêtre");
+            const auto inside = window->getLocalBounds().toFloat();
+            bool all = true;
+            for (const auto& node : window->graph().nodes)
+                all = all && inside.contains(window->boundsOf(node.id));
+            note("zoom " + std::to_string(std::lround(window->zoom() * 100.0)) + " %");
+            check(all, "chaque nœud est dans la fenêtre");
+        });
+
+    add("Ctrl+molette zoome autour de la souris : le nœud sous elle ne bouge pas",
+        [this, run, flux]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            const auto node = domain::flux::effectNode(run->flowEqualiser);
+            const auto before = window->boundsOf(node);
+            const auto zoom = window->zoom();
+            wheel(*window, before.getCentre().toInt(), 0.5f, false, true);
+            const auto after = window->boundsOf(node);
+            note("zoom " + std::to_string(std::lround(zoom * 100.0)) + " % puis " +
+                 std::to_string(std::lround(window->zoom() * 100.0)) + " %");
+            check(window->zoom() > zoom, "le zoom grandit");
+            check(after.getCentre().getDistanceFrom(before.getCentre()) < 2.0f,
+                  "l'égaliseur reste sous la souris");
+            check(window->keyPressed(juce::KeyPress{'f'}), "F recadre");
+        });
+
+    add(
+        "la lecture en boucle : la source se voit et s'entend dans le flux",
+        [this]
+        {
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(true, 0.0, 8.0)));
+            static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.0)));
+            key(juce::KeyPress{juce::KeyPress::spaceKey});
+        },
+        [this, run, flux]
+        {
+            auto* window = flux();
+            return clock_.isPlaying() && window != nullptr &&
+                   window->levelAt(domain::flux::sourceOf(run->synth)) > -30.0;
+        },
+        5000.0);
+
+    add("ce qui est armé : les états de la fenêtre, et eux seuls",
+        [this, run, flux]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            std::size_t states = 0;
+            for (const auto& node : window->graph().nodes)
+                states += window->placeOf(node).has_value() ? 1 : 0;
+            note(std::to_string(window->armed().size()) + " places armées sur " + std::to_string(states) +
+                 " états");
+            check(window->armed().size() == states, "tout le graphe est à l'écran, chaque état est armé");
+            const auto level = window->levelAt(domain::flux::sourceOf(run->synth));
+            check(level > -30.0, "la source : " + fixed(level, 1) + " dBFS");
+            check(!window->shownAt(domain::flux::sourceOf(run->synth)).empty(), "sa forme d'onde est lue");
+        });
+
+    const auto bandAt = [](double hz)
+    {
+        const auto bands = static_cast<double>(ui::Tokens::builtIn().integer("metric.flux.spectrumBands"));
+        return static_cast<std::size_t>(std::log(hz / 30.0) / std::log(16000.0 / 30.0) * bands);
+    };
+
+    add(
+        "un clic sur l'égaliseur : son avant et son après",
+        [this, run, flux]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            click(*window,
+                  window->boundsOf(domain::flux::effectNode(run->flowEqualiser)).getCentre().toInt());
+            check(window->selected() == domain::flux::effectNode(run->flowEqualiser),
+                  "l'égaliseur est choisi");
+        },
+        [flux, bandAt]
+        {
+            auto* window = flux();
+            return window != nullptr && !window->spectrumBefore().empty() &&
+                   window->spectrumBefore()[bandAt(100.0)] > -80.0;
+        },
+        3000.0);
+
+    add("au spectre : 100 Hz coupés de plus de 20 dB, 5 kHz pareils à 3 dB près",
+        [this, flux, bandAt]
+        {
+            auto* window = flux();
+            if (window == nullptr || window->spectrumBefore().empty() || window->spectrumAfter().empty())
+            {
+                check(false, "les deux spectres sont là");
+                return;
+            }
+            const auto low = bandAt(100.0);
+            const auto high = bandAt(5000.0);
+            const auto& before = window->spectrumBefore();
+            const auto& after = window->spectrumAfter();
+            note("100 Hz : " + fixed(before[low], 1) + " puis " + fixed(after[low], 1) +
+                 " dB ; 5 kHz : " + fixed(before[high], 1) + " puis " + fixed(after[high], 1) + " dB");
+            check(before[low] - after[low] > 20.0, "le grave est coupé");
+            check(std::abs(before[high] - after[high]) < 3.0, "l'aigu passe");
+        });
+
+    add(
+        "l'égaliseur contourné : l'avant et l'après se rejoignent",
+        [this, run]
+        {
+            check(bus_.execute(std::make_unique<domain::SetPluginBypassed>(run->flowEqualiser, true)).ok(),
+                  "contourné");
+            stepStartedMs_ = juce::Time::getMillisecondCounterHiRes();
+        },
+        [this] { return juce::Time::getMillisecondCounterHiRes() - stepStartedMs_ > 1500.0; },
+        3000.0);
+
+    add("au spectre, contourné : chaque bande audible à 1 dB près",
+        [this, flux]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            const auto& before = window->spectrumBefore();
+            const auto& after = window->spectrumAfter();
+            double widest = 0.0;
+            for (std::size_t band = 0; band < before.size() && band < after.size(); ++band)
+                if (before[band] > -70.0)
+                    widest = std::max(widest, std::abs(before[band] - after[band]));
+            note("le plus grand écart : " + fixed(widest, 2) + " dB");
+            check(!before.empty() && widest < 1.0, "l'après est l'avant");
+        });
+
+    add("la vue déplacée loin du graphe : rien d'armé que l'avant et l'après de l'égaliseur",
+        [this, flux]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            for (int notch = 0; notch < 40; ++notch)
+                wheel(*window, window->getLocalBounds().getCentre(), -1.0f);
+            window->frame();
+            note(std::to_string(window->armed().size()) + " places armées");
+            check(window->armed().size() == 2, "deux : l'avant et l'après de l'effet regardé");
+            static_cast<void>(window->keyPressed(juce::KeyPress{juce::KeyPress::escapeKey}));
+            window->frame();
+            check(window->armed().empty(), "Échap : aucune");
+            check(window->keyPressed(juce::KeyPress{'f'}), "F ramène le graphe");
+        });
+
+    add(
+        "F3 referme le flux",
+        [this] { key(juce::KeyPress{juce::KeyPress::F3Key}); },
+        [flux] { return flux() == nullptr || !flux()->isShowing(); },
+        3000.0);
+
+    add("fermé, il n'arme rien ; la lecture arrêtée",
+        [this, flux]
+        {
+            if (auto* window = flux(); window != nullptr)
+                check(window->armed().empty(), "la fenêtre cachée n'arme rien");
+            if (clock_.isPlaying())
+                key(juce::KeyPress{juce::KeyPress::spaceKey});
         });
 }
 

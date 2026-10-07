@@ -3,6 +3,7 @@
 #include "DirectionSession.h"
 #include "DisplayMode.h"
 #include "EditClock.h"
+#include "FluxSource.h"
 #include "LevelMonitor.h"
 #include "Listening.h"
 #include "LivePlay.h"
@@ -155,6 +156,7 @@ public:
         soundCard_ = std::make_unique<SoundCard>(
             engineHost_->audio(), engineHost_->edit(), [this] { return state_.transport().playing; });
         applyBufferFromCommandLine(commandLine);
+        flux_ = std::make_unique<FluxSource>(engineHost_->edit());
         engineHost_->output().onChanged = [this](const juce::String& what)
         {
             if (clock_ != nullptr)
@@ -416,6 +418,7 @@ public:
         directionSession_.reset();
         copilot_.reset();
         soundCard_.reset(); // after the window: the « Audio » window reads it
+        flux_.reset();      // after the window too: the flux window reads the taps
         clock_.reset();
         bridge_.reset();
         listening_.reset(); // it holds the projector
@@ -928,7 +931,8 @@ private:
                                          *stemSession_,
                                          *directionSession_,
                                          *livePlay_,
-                                         *soundCard_};
+                                         *soundCard_,
+                                         *flux_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();
@@ -1360,6 +1364,7 @@ private:
     ui::History history_;
     std::unique_ptr<LivePlay> livePlay_;
     std::unique_ptr<SoundCard> soundCard_;
+    std::unique_ptr<FluxSource> flux_;
     std::unique_ptr<EditClock> clock_;
     std::unique_ptr<LevelMonitor> levels_;
     ui::Clipboard clipboard_;

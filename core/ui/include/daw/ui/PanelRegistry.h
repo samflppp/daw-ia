@@ -7,6 +7,7 @@
 #include "daw/ui/model/AudioHost.h"
 #include "daw/ui/model/CopilotHost.h"
 #include "daw/ui/model/DirectionHost.h"
+#include "daw/ui/model/FluxHost.h"
 #include "daw/ui/model/History.h"
 #include "daw/ui/model/LevelSource.h"
 #include "daw/ui/model/ListeningHost.h"
@@ -92,6 +93,8 @@ struct PanelServices
     LiveHost& live;
     // The sound card (S24): a machine setting, the « Audio » window's.
     AudioHost& audio;
+    // The sound at each place of the audio flux (S24), read from its taps.
+    FluxHost& flux;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

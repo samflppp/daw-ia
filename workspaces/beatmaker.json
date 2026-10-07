@@ -17,6 +17,7 @@
     "history",
     "direction",
     "audio",
+    "flux",
     "copilot"
   ],
   "layout": {
@@ -112,6 +113,16 @@
         "y": 0.1,
         "width": 0.3,
         "height": 0.6
+      },
+      {
+        "panel": "flux",
+        "title": "Flux audio",
+        "shortcut": "F3",
+        "open": false,
+        "x": 0.05,
+        "y": 0.08,
+        "width": 0.9,
+        "height": 0.84
       },
       {
         "panel": "audio",
