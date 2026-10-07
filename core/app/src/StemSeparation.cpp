@@ -201,7 +201,8 @@ void StemSeparation::run()
         if (cancelled_.load())
             return;
         stage_.store(Stage::installing);
-        juce::StringArray sync{uv, "sync", "--project", project};
+        // --inexact: the voice's extra (S25), when it is there, stays.
+        juce::StringArray sync{uv, "sync", "--inexact", "--project", project};
         if (real)
             sync.addArray(juce::StringArray{"--extra", "stems"});
         if (runProcess(sync, [](const auto&) {}) != 0)
