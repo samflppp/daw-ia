@@ -1,3 +1,4 @@
+#include "BusSession.h"
 #include "MixSession.h"
 #include "Verification.h"
 #include "daw/domain/commands/MixCommands.h"
@@ -7,6 +8,7 @@
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/flux/Graph.h"
 #include "daw/domain/project/InternalEffects.h"
+#include "daw/domain/serialization/Json.h"
 #include "daw/engine/FluxTaps.h"
 #include "daw/engine/MeterTap.h"
 #include "daw/engine/Rendering.h"
@@ -76,6 +78,8 @@ struct Verification::FluxRun
     domain::PluginId flowEqualiser;
     domain::PluginId flowCompressor;
     float sourceHeardDb{-100.0f};
+    std::vector<domain::TrackId> grouped;
+    std::string busBefore;
     double costSince{0.0};
     double armedShare{0.0};
     float sumHeardDb{-100.0f};
@@ -956,6 +960,166 @@ void Verification::addFluxWindow(const std::shared_ptr<FluxRun>& run)
             check(window->added().empty() && window->changed().empty(), "plus rien de marqué");
         });
 
+    // --- the smart buses: the same effect on several tracks, shared
+
+    const auto busesReady = [this]
+    { return busSession_ != nullptr && busSession_->stage() != ui::BusHost::Stage::trying; };
+
+    add("six pistes du même bruit sous le même égaliseur, deux sous le même compresseur",
+        [this, run]
+        {
+            const auto sample = samples_.import(folder_.getChildFile("flux-source.wav"));
+            check(sample.ok(), "la source");
+            if (!sample.ok())
+                return;
+            const auto add = [&](const std::string& name, const domain::PluginInstance& effect)
+            {
+                const auto id = domain::TrackId::generate();
+                check(bus_.execute(std::make_unique<domain::AddTrack>(id, name)).ok(), name);
+                check(bus_.execute(std::make_unique<domain::PlaceAudio>(
+                                       domain::AudioClipId::generate(), id, sample.value(), 0.0))
+                          .ok(),
+                      name + " joue");
+                auto instance = effect;
+                instance.id = domain::PluginId::generate();
+                check(bus_.execute(std::make_unique<domain::InsertPlugin>(id, instance, 0)).ok(),
+                      name + " porte l'effet");
+                return id;
+            };
+            domain::PluginInstance equaliser{};
+            equaliser.ref = domain::PluginRef{std::string{domain::PluginRef::internalFormat},
+                                              std::string{domain::internal::equaliser},
+                                              "Égaliseur"};
+            equaliser.params = {{std::string{domain::internal::highPassFrequency}, 300.0}};
+            domain::PluginInstance compressor{};
+            compressor.ref = domain::PluginRef{std::string{domain::PluginRef::internalFormat},
+                                               std::string{domain::internal::compressor},
+                                               "Compresseur"};
+            compressor.params = {{std::string{domain::internal::ratio}, 4.0},
+                                 {std::string{domain::internal::threshold}, -30.0}};
+            run->grouped.clear();
+            for (int index = 0; index < 6; ++index)
+                run->grouped.push_back(add("Voix " + std::to_string(index + 1), equaliser));
+            add("Perc 1", compressor);
+            add("Perc 2", compressor);
+        });
+
+    add(
+        "la page « Bus » : « Chercher »",
+        [this]
+        {
+            press("Bus");
+            press("Chercher");
+        },
+        [this] { return busSession_ != nullptr && !busSession_->proposals().empty(); },
+        3000.0);
+
+    add("deux propositions : l'égaliseur sur six pistes, le compresseur sur deux",
+        [this]
+        {
+            if (busSession_ == nullptr)
+                return;
+            for (const auto& proposal : busSession_->proposals())
+                note(proposal.sentence);
+            check(busSession_->proposals().size() == 2, "deux propositions");
+            check(busSession_->proposals().front().tracks.size() == 6, "six pistes sous l'égaliseur");
+        });
+
+    add(
+        "l'égaliseur essayé à blanc",
+        [this] { press(juce::String::fromUTF8("Essayer à blanc")); },
+        busesReady,
+        300000.0);
+
+    add("au rendu : le même son ; dans le flux : le bus proposé",
+        [this, flux]
+        {
+            const auto* result = busSession_ != nullptr ? busSession_->result() : nullptr;
+            if (result == nullptr)
+            {
+                check(false,
+                      "un essai : " + (busSession_ != nullptr ? busSession_->status() : std::string{}));
+                return;
+            }
+            for (const auto& said : result->said)
+                note(said);
+            check(result->differenceDb < -90.0,
+                  "l'après s'écarte de l'avant de " + fixed(result->differenceDb) + " dB, sous -90");
+            if (auto* window = flux(); window != nullptr)
+            {
+                window->frame();
+                check(window->showingProposal(), "le flux montre le bus proposé");
+                note(std::to_string(window->added().size()) + " nœuds ajoutés");
+                check(!window->added().empty(), "le bus y est, en pointillé");
+            }
+        });
+
+    add("gardé : un seul pas d'historique, les six pistes sortent dans le bus, qui porte l'égaliseur",
+        [this, run]
+        {
+            if (busSession_ == nullptr)
+                return;
+            run->busBefore = domain::json::write(state_.toValue());
+            const auto depthBefore = depth();
+            check(busSession_->keep(), "gardé");
+            check(depth() == depthBefore + 1, "un seul pas");
+            const auto* first = state_.findTrack(run->grouped.front());
+            const auto busId = first != nullptr ? first->output : domain::TrackId{};
+            const auto* bus = state_.findStrip(busId);
+            check(bus != nullptr && bus->plugins.size() == 1 &&
+                      bus->plugins.front().ref.identifier == domain::internal::equaliser,
+                  "le bus porte l'égaliseur");
+            bool all = true;
+            for (const auto id : run->grouped)
+                if (const auto* track = state_.findTrack(id);
+                    track == nullptr || track->output != busId || !track->plugins.empty())
+                    all = false;
+            check(all, "chaque voix sort dans le bus, sans son égaliseur");
+        });
+
+    add("un Ctrl+Z : comme avant, à l'octet",
+        [this, run]
+        {
+            check(bus_.undo().ok(), "défait");
+            check(domain::json::write(state_.toValue()) == run->busBefore, "le même projet");
+        });
+
+    add(
+        "le compresseur essayé à blanc",
+        [this]
+        {
+            if (busSession_ == nullptr)
+                return;
+            busSession_->propose();
+            const auto& proposals = busSession_->proposals();
+            for (std::size_t index = 0; index < proposals.size(); ++index)
+                if (proposals[index].tracks.size() == 2)
+                    busSession_->tryOut(index);
+        },
+        busesReady,
+        300000.0);
+
+    add("au rendu : le son change, de combien, dit ; refusé, rien n'est écrit",
+        [this]
+        {
+            const auto* result = busSession_ != nullptr ? busSession_->result() : nullptr;
+            if (result == nullptr)
+            {
+                check(false,
+                      "un essai : " + (busSession_ != nullptr ? busSession_->status() : std::string{}));
+                return;
+            }
+            for (const auto& said : result->said)
+                note(said);
+            check(result->said.front().find("compression de groupe, le son change") != std::string::npos,
+                  "la phrase le dit");
+            check(result->differenceDb > -60.0,
+                  "l'écart est mesuré : " + fixed(result->differenceDb) + " dB");
+            const auto before = domain::json::write(state_.toValue());
+            busSession_->refuse();
+            check(domain::json::write(state_.toValue()) == before, "rien n'est écrit");
+        });
+
     add("la source écoutée seule de nouveau, avant de fermer la fenêtre",
         [this, run, flux]
         {
@@ -968,7 +1132,14 @@ void Verification::addFluxWindow(const std::shared_ptr<FluxRun>& run)
 
     add(
         "F3 referme le flux",
-        [this] { key(juce::KeyPress{juce::KeyPress::F3Key}); },
+        [this, flux]
+        {
+            // Behind another page — the « Bus » one —, F3 brings it to the
+            // front first, as F5 to F7 do in FL; in front, it closes it.
+            key(juce::KeyPress{juce::KeyPress::F3Key});
+            if (flux() != nullptr && flux()->isShowing())
+                key(juce::KeyPress{juce::KeyPress::F3Key});
+        },
         [flux] { return flux() == nullptr || !flux()->isShowing(); },
         3000.0);
 

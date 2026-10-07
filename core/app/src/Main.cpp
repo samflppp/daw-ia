@@ -1,4 +1,5 @@
 #include "AppShellView.h"
+#include "BusSession.h"
 #include "CopilotBridge.h"
 #include "DirectionSession.h"
 #include "DisplayMode.h"
@@ -347,7 +348,8 @@ public:
                 livePlay_.get(),
                 &engineHost_->live(),
                 &engineHost_->audio(),
-                kitSession_.get()});
+                kitSession_.get(),
+                busSession_.get()});
 
             // A verification mixes by the rules: never a key, never an API.
             if (mixSession_ != nullptr)
@@ -419,6 +421,7 @@ public:
         lookAndFeel_.reset();
         switch_.reset();
         mixSession_.reset();  // it asks the copilot, and plays through the device
+        busSession_.reset();  // its renders run on a thread of their own; it plays through the device
         stemSession_.reset(); // a separation in flight: its process is ended, not waited for
         directionSession_.reset();
         copilot_.reset();
@@ -889,6 +892,16 @@ private:
             std::make_unique<SampleLibrary>([this] { return contentStore_.get(); }, layoutSettings_.get());
         sampleLibrary_->attachPreview(engineHost_->engine().getDeviceManager().deviceManager);
 
+        // The smart buses (S24): tried on copies of the session, like a mix.
+        busSession_ = std::make_unique<BusSession>(
+            BusSession::Wiring{bus_,
+                               state_,
+                               engineHost_->edit(),
+                               &engineHost_->catalogue(),
+                               [this] { return contentStore_.get(); },
+                               clock_.get(),
+                               &engineHost_->engine().getDeviceManager().deviceManager});
+
         // The kit (S24): its index of the samples lives with this machine's
         // settings — a verification's are thrown away.
         kitSession_ = std::make_unique<KitSession>(
@@ -943,7 +956,8 @@ private:
                                          *livePlay_,
                                          *soundCard_,
                                          *flux_,
-                                         *kitSession_};
+                                         *kitSession_,
+                                         *busSession_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();
@@ -1393,6 +1407,7 @@ private:
     std::unique_ptr<juce::PropertiesFile> layoutSettings_;
     std::unique_ptr<SampleLibrary> sampleLibrary_;
     std::unique_ptr<KitSession> kitSession_;
+    std::unique_ptr<BusSession> busSession_;
     ui::WorkspaceView* view_{nullptr};
     std::unique_ptr<Verification> verification_;
     std::unique_ptr<MixOnce> mixOnce_;

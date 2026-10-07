@@ -79,6 +79,7 @@ Verification::Verification(Wiring wiring)
     , router_(wiring.router)
     , audio_(wiring.audio)
     , kitSession_(wiring.kit)
+    , busSession_(wiring.buses)
 {
     exporter_ = wiring.exporter;
 }

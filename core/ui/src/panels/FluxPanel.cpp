@@ -40,6 +40,7 @@ FluxPanel::FluxPanel(const PanelContext& context)
     , state_(context.state)
     , project_(context.project)
     , mix_(context.mix)
+    , buses_(context.buses)
     , plugins_(context.plugins)
     , flux_(context.flux)
     , titled_(context.titled)
@@ -48,6 +49,7 @@ FluxPanel::FluxPanel(const PanelContext& context)
     setWantsKeyboardFocus(true);
     project_.addChangeListener(this);
     mix_.addChangeListener(this);
+    buses_.addChangeListener(this);
     rebuild();
 }
 
@@ -55,13 +57,14 @@ FluxPanel::~FluxPanel()
 {
     project_.removeChangeListener(this);
     mix_.removeChangeListener(this);
+    buses_.removeChangeListener(this);
     listenAt({});
     disarm();
 }
 
 void FluxPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
-    if (source == &project_ || source == &mix_)
+    if (source == &project_ || source == &mix_ || source == &buses_)
     {
         rebuild();
         repaint();
@@ -71,7 +74,7 @@ void FluxPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 void FluxPanel::rebuild()
 {
     const auto isInstrument = [this](const domain::PluginRef& ref) { return plugins_.isInstrument(ref); };
-    const auto* proposed = mix_.stage() == MixHost::Stage::ready ? mix_.proposedState() : nullptr;
+    const auto* proposed = proposedState();
     const bool wasProposal = std::exchange(proposal_, proposed != nullptr);
     graph_ = domain::flux::graphOf(proposed != nullptr ? *proposed : state_, isInstrument);
     if (proposal_ != wasProposal)
@@ -97,15 +100,25 @@ void FluxPanel::rebuild()
 // What the proposal adds and changes, against the graph of the project now,
 // and the sentences of its changes, on the node each one moves: a level or a
 // pan on the fader, a setting on the DAW's equaliser or compressor.
+const domain::ProjectState* FluxPanel::proposedState() const
+{
+    if (mix_.stage() == MixHost::Stage::ready && mix_.proposedState() != nullptr)
+        return mix_.proposedState();
+    if (buses_.stage() == BusHost::Stage::tried)
+        return buses_.proposedState();
+    return nullptr;
+}
+
 void FluxPanel::markProposal()
 {
     added_.clear();
     changed_.clear();
     sentences_.clear();
-    const auto* proposed = mix_.proposedState();
-    const auto* proposal = mix_.proposal();
-    if (!proposal_ || proposed == nullptr || proposal == nullptr)
+    const auto* proposed = proposedState();
+    if (!proposal_ || proposed == nullptr)
         return;
+    const bool fromMix = proposed == mix_.proposedState();
+    const auto* proposal = fromMix ? mix_.proposal() : nullptr;
 
     const auto live = domain::flux::graphOf(
         state_, [this](const domain::PluginRef& ref) { return plugins_.isInstrument(ref); });
@@ -125,7 +138,19 @@ void FluxPanel::markProposal()
         }
     }
 
-    for (const auto& change : proposal->changes)
+    // A bus: what the dry run said, on the sum of the bus it adds.
+    if (!fromMix)
+        if (const auto* result = buses_.result(); result != nullptr)
+            for (const auto& node : added_)
+                if (const auto* added = graph_.find(node);
+                    added != nullptr && added->kind == NodeKind::state && added->state == StateKind::sum)
+                {
+                    for (const auto& said : result->said)
+                        sentences_.emplace_back(node, said);
+                    break;
+                }
+
+    for (const auto& change : proposal != nullptr ? proposal->changes : std::vector<domain::mix::Change>{})
     {
         std::string node = domain::flux::faderNode(change.track);
         if (change.kind == domain::mix::Change::Kind::equaliser ||
@@ -150,7 +175,7 @@ void FluxPanel::markProposal()
         {
             // A still picture: its level is the whole window's, not its end's,
             // which may fall past the song.
-            auto samples = mix_.proposedSound(*place);
+            auto samples = fromMix ? mix_.proposedSound(*place) : buses_.proposedSound(*place);
             const auto level = domain::flux::peakDbOf(samples.data(), samples.size());
             shown_.push_back(Shown{node.id, std::move(samples), level});
         }
@@ -934,12 +959,16 @@ void FluxPanel::paint(juce::Graphics& g)
                               .removeFromTop(tokens_.integer("metric.flux.faderHeight"));
             g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
             const auto count = sentences_.size();
-            g.drawText(
-                juce::String::fromUTF8("proposition du mixage : ") + juce::String(static_cast<int>(count)) +
-                    juce::String::fromUTF8(count > 1 ? " réglages" : " réglage") +
-                    juce::String::fromUTF8(" · le son de l'essai à blanc · garder ou refuser dans le mixer"),
-                banner,
-                juce::Justification::centredLeft);
+            const bool fromMix = proposedState() == mix_.proposedState();
+            const auto said = fromMix
+                                  ? juce::String::fromUTF8("proposition du mixage : ") +
+                                        juce::String(static_cast<int>(count)) +
+                                        juce::String::fromUTF8(count > 1 ? " réglages" : " réglage") +
+                                        juce::String::fromUTF8(
+                                            " · le son de l'essai à blanc · garder ou refuser dans le mixer")
+                                  : juce::String::fromUTF8("bus proposé · le son de l'essai à blanc · garder "
+                                                           "ou refuser dans la fenêtre « Bus »");
+            g.drawText(said, banner, juce::Justification::centredLeft);
         }
 
         // The state listened to alone, and what the person hears said.

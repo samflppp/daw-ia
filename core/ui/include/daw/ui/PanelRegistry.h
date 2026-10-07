@@ -5,6 +5,7 @@
 #include "daw/ui/DawLookAndFeel.h"
 #include "daw/ui/Tokens.h"
 #include "daw/ui/model/AudioHost.h"
+#include "daw/ui/model/BusHost.h"
 #include "daw/ui/model/CopilotHost.h"
 #include "daw/ui/model/DirectionHost.h"
 #include "daw/ui/model/FluxHost.h"
@@ -98,6 +99,8 @@ struct PanelServices
     FluxHost& flux;
     // The kit chosen from the person's samples (S24).
     KitHost& kit;
+    // The smart buses (S24).
+    BusHost& buses;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

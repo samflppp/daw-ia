@@ -42,6 +42,7 @@ namespace daw::app
 {
 
 class LivePlay;
+class BusSession;
 class KitSession;
 class MixSession;
 class StemSession;
@@ -162,6 +163,8 @@ public:
 
         // The kit (S24): --verify-kit indexes a library it builds.
         KitSession* kit{nullptr};
+        // The smart buses (S24): --verify-flux tries and keeps one.
+        BusSession* buses{nullptr};
     };
 
     explicit Verification(Wiring wiring);
@@ -522,6 +525,7 @@ private:
     domain::live::Router* router_{nullptr};
     engine::AudioSettings* audio_{nullptr};
     KitSession* kitSession_{nullptr};
+    BusSession* busSession_{nullptr};
 
     // S21: cycles run and silent ones, per action before the play.
     std::map<std::string, int> cyclesByAction_;

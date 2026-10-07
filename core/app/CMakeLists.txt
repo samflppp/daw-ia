@@ -22,6 +22,7 @@ target_sources(daw_app PRIVATE
     src/LivePlay.cpp
     src/SoundCard.cpp
     src/KitSession.cpp
+    src/BusSession.cpp
     src/RawKeyboard.cpp
     src/TakeRecorder.cpp
     src/MidiKeyboards.cpp

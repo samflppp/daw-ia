@@ -42,7 +42,8 @@ namespace daw::ui
 // the graph of the project as the proposal would leave it, what it adds
 // drawn dashed, what it changes outlined with its sentences, and the sound
 // at each state as the taps of the proposal's copy heard it — measured, not
-// simulated. Keeping or refusing stays the mixer's.
+// simulated. Keeping or refusing stays the mixer's. A smart bus tried in its
+// window (BusHost) is shown the same way.
 //
 // A click on a state listens to it alone, mono, in place of the mix; a
 // second click, Escape, or the window hidden gives the song back. Nothing of
@@ -134,6 +135,8 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void rebuild();
     void markProposal();
+    // The proposal shown, the mix's or a bus's: nothing when neither is.
+    [[nodiscard]] const domain::ProjectState* proposedState() const;
     void armVisible();
     void disarm();
     [[nodiscard]] juce::Rectangle<int> graphArea() const;
@@ -170,6 +173,7 @@ private:
     const domain::ProjectState& state_;
     ProjectObserver& project_;
     MixHost& mix_;
+    BusHost& buses_;
     PluginHost& plugins_;
     FluxHost& flux_;
     bool titled_{false};

@@ -264,7 +264,7 @@ TEST_CASE("the beatmaker manifest shipped with the application is windowed and p
     REQUIRE(manifest.value().windows.has_value());
     CHECK(manifest.value().windows->bar == std::vector<std::string>{"transport"});
     CHECK(manifest.value().windows->pages.size() ==
-          14); // since S24: the audio window (F12), the flux (F3), the kit
+          15); // since S24: the audio window (F12), the flux (F3), the kit, the buses
 }
 
 TEST_CASE("the discovery workspace is reserved for workshops, and the shipped beatmaker is not")
