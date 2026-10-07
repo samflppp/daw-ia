@@ -28,6 +28,7 @@ target_sources(daw_engine_tests PRIVATE
     GenerationRenderTests.cpp
     InternalEffectsRenderTests.cpp
     MixRenderTests.cpp
+    SmartBusSendTests.cpp
     FluxTapTests.cpp
     SampleIndexTests.cpp
     LivePlayTests.cpp)
