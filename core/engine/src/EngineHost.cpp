@@ -1,6 +1,7 @@
 #include "daw/engine/EngineHost.h"
 
 #include "daw/engine/ClapPluginFormat.h"
+#include "daw/engine/FluxTap.h"
 #include "daw/engine/LiveInput.h"
 #include "daw/engine/MeterTap.h"
 #include "daw/engine/MixTap.h"
@@ -39,6 +40,23 @@ private:
     juce::File folder_;
 };
 
+// What Tracktion lets an Edit hold. Its defaults — four plugins on the
+// master, sixteen on a track — were met before S24 already (the master's
+// fader and meter left room for two effects), and the taps of the audio flux
+// (S24) put one more after every effect. A chain is limited by what the
+// machine plays in time, not by a count.
+class Behaviour final : public tracktion::EngineBehaviour
+{
+public:
+    tracktion::EditLimits getEditLimits() override
+    {
+        tracktion::EditLimits limits;
+        limits.maxPluginsOnTrack = 128;
+        limits.maxNumMasterPlugins = 128;
+        return limits;
+    }
+};
+
 juce::File personalFolder(const juce::String& applicationName)
 {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
@@ -54,7 +72,9 @@ EngineHost::EngineHost(const juce::String& applicationName)
 
 EngineHost::EngineHost(const juce::String& applicationName, const juce::File& settingsFolder)
     : engine_{std::make_unique<tracktion::Engine>(
-          std::make_unique<FolderPropertyStorage>(applicationName, settingsFolder), nullptr, nullptr)}
+          std::make_unique<FolderPropertyStorage>(applicationName, settingsFolder),
+          nullptr,
+          std::make_unique<Behaviour>())}
 {
     // Tracktion opens the audio device while the Engine is being constructed,
     // but it builds its list of wave devices from an async update, so the list
@@ -90,6 +110,9 @@ EngineHost::EngineHost(const juce::String& applicationName, const juce::File& se
 
     // The ear of the mix measurement (S20), only ever in a copy of the Edit.
     pluginManager.createBuiltInType<MixTap>();
+
+    // The taps of the audio flux (S24), at every state of every chain.
+    pluginManager.createBuiltInType<FluxTapPlugin>();
 
     // A plugin that crashes must take a scanner process down, never the DAW.
     pluginManager.setUsesSeparateProcessForScanning(true);

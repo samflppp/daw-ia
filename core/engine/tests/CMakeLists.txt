@@ -28,6 +28,7 @@ target_sources(daw_engine_tests PRIVATE
     GenerationRenderTests.cpp
     InternalEffectsRenderTests.cpp
     MixRenderTests.cpp
+    FluxTapTests.cpp
     LivePlayTests.cpp)
 
 target_compile_definitions(daw_engine_tests PRIVATE

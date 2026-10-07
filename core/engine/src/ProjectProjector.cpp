@@ -3,6 +3,7 @@
 #include "HostedParameters.h"
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/project/InternalEffects.h"
+#include "daw/engine/FluxTap.h"
 #include "daw/engine/LiveInput.h"
 #include "daw/engine/MeterTap.h"
 
@@ -422,10 +423,15 @@ void ProjectProjector::reconcileBus(const domain::Track& bus,
     {
         applyMix(*target, bus);
         ensureAuxReturn(*target, busNumber(bus.id));
-        reconcilePlugins(target->pluginList, bus, 1);
+        reconcilePlugins(target->pluginList, bus, 1, toJuce(bus.id.toString()), false);
         applyRoute(*target, bus);
     }
 
+    ensureFaderTap(target->pluginList,
+                   target->getVolumePlugin(),
+                   toJuce(bus.id.toString()),
+                   false,
+                   state_.isAudible(bus.id));
     ensureMeterTap(target->pluginList, toJuce(bus.id.toString()), state_.isAudible(bus.id));
     projected.emplace_back(bus.id, snapshot);
 }
@@ -476,18 +482,18 @@ void ProjectProjector::reconcileMaster()
     const auto snapshot = master.toValue();
     if (!(snapshot == projectedMaster_))
     {
-        reconcilePlugins(list, master, 0);
+        const auto afterChain = reconcilePlugins(list, master, 0, MeterTapPlugin::masterStrip, false);
 
         if (fader != nullptr)
         {
-            // The fader after the inserts: a limiter on the master sees the
-            // mix, and the fader sets what leaves it.
+            // The fader after the inserts and their taps: a limiter on the
+            // master sees the mix, and the fader sets what leaves it.
             const auto plugins = list.getPlugins();
-            if (plugins.indexOf(fader) != static_cast<int>(master.plugins.size()))
+            if (const auto at = plugins.indexOf(fader); at != afterChain)
             {
                 const tracktion::Plugin::Ptr keep{fader};
                 fader->removeFromParent();
-                list.insertPlugin(keep, static_cast<int>(master.plugins.size()), nullptr);
+                list.insertPlugin(keep, at < afterChain ? afterChain - 1 : afterChain, nullptr);
             }
 
             // A master pan is a balance: unity at the centre, the linear law.
@@ -514,6 +520,7 @@ void ProjectProjector::reconcileMaster()
 
     // The master measures what leaves the Edit: after its inserts and its
     // fader, before Tracktion's master volume, which stays at unity.
+    ensureFaderTap(list, fader, MeterTapPlugin::masterStrip, false, !master.muted);
     ensureMeterTap(list, MeterTapPlugin::masterStrip, !master.muted);
 }
 
@@ -823,17 +830,35 @@ void ProjectProjector::applyPluginParameters(tracktion::Plugin& target, const do
     }
 }
 
-void ProjectProjector::reconcilePlugins(tracktion::PluginList& list, const domain::Track& source, int offset)
+int ProjectProjector::reconcilePlugins(tracktion::PluginList& list,
+                                       const domain::Track& source,
+                                       int offset,
+                                       const juce::String& strip,
+                                       bool companion)
 {
     removeUnknownPlugins(list, source);
+    removeStaleTaps(list, source);
 
     // Where the next instance's first plugin goes: right after the previous
-    // instance's last one. An internal equaliser is two plugins of the list,
-    // so a domain index is not a list index.
+    // instance's last one, and its tap. An internal equaliser is two plugins
+    // of the list, so a domain index is not a list index.
     auto next = offset;
+
+    // The source's tap comes after the instruments that lead the chain:
+    // what a channel plays is what its instrument makes.
+    bool leading = true;
+    const auto tapSource = [&]
+    {
+        next = ensureFluxTap(list, strip, FluxTapPlugin::sourceSlot, companion, next) + 1;
+        leading = false;
+    };
+
     for (const auto& instance : source.plugins)
     {
         const bool internal = instance.ref.format == domain::PluginRef::internalFormat;
+        const bool instrument = leading && !internal && isInstrument(instance.ref);
+        if (leading && !instrument)
+            tapSource();
         auto parts = partsOf(list, instance.id);
         if (parts.empty())
         {
@@ -880,6 +905,90 @@ void ProjectProjector::reconcilePlugins(tracktion::PluginList& list, const domai
             applyPluginParameters(*parts.front(), instance);
         }
         next = list.indexOf(parts.back()) + 1;
+        if (!instrument)
+            next = ensureFluxTap(list, strip, toJuce(instance.id.toString()), companion, next) + 1;
+    }
+    if (leading)
+        tapSource();
+    return next;
+}
+
+int ProjectProjector::ensureFluxTap(tracktion::PluginList& list,
+                                    const juce::String& strip,
+                                    const juce::String& slot,
+                                    bool companion,
+                                    int index)
+{
+    FluxTapPlugin* found = nullptr;
+    for (auto* tap : list.getPluginsOfType<FluxTapPlugin>())
+    {
+        if (tap == nullptr || tap->strip() != strip || tap->slot() != slot || tap->companion() != companion)
+            continue;
+        if (found == nullptr)
+            found = tap;
+        else
+            tap->deleteFromParent();
+    }
+
+    if (found != nullptr)
+    {
+        const auto at = list.indexOf(found);
+        if (at == index)
+            return at;
+        // Further down: moved up to its place. Above it: made again there,
+        // which a tap can be, it holds nothing a person set.
+        if (at > index && index < list.size())
+        {
+            auto tree = found->state;
+            auto parent = tree.getParent();
+            if (const auto occupant = list[index]; parent.isValid() && occupant != nullptr)
+            {
+                parent.moveChild(parent.indexOf(tree), parent.indexOf(occupant->state), nullptr);
+                return list.indexOf(found);
+            }
+        }
+        found->deleteFromParent();
+        if (at < index)
+            --index;
+    }
+
+    if (auto plugin = edit_.getPluginCache().createNewPlugin(FluxTapPlugin::create(strip, slot, companion));
+        plugin != nullptr)
+    {
+        list.insertPlugin(plugin, index, nullptr);
+        return list.indexOf(plugin.get());
+    }
+    return index;
+}
+
+void ProjectProjector::ensureFaderTap(tracktion::PluginList& list,
+                                      tracktion::Plugin* fader,
+                                      const juce::String& strip,
+                                      bool companion,
+                                      bool audible)
+{
+    if (fader == nullptr || list.indexOf(fader) < 0)
+        return;
+    const auto at = ensureFluxTap(list, strip, FluxTapPlugin::faderSlot, companion, list.indexOf(fader) + 1);
+    if (auto* tap = dynamic_cast<FluxTapPlugin*>(list[at]); tap != nullptr)
+        tap->setAudible(audible);
+}
+
+void ProjectProjector::removeStaleTaps(tracktion::PluginList& list, const domain::Track& source)
+{
+    for (auto* tap : list.getPluginsOfType<FluxTapPlugin>())
+    {
+        if (tap == nullptr)
+            continue;
+        const auto slot = tap->slot();
+        if (slot == FluxTapPlugin::sourceSlot || slot == FluxTapPlugin::faderSlot)
+            continue;
+        const bool known = std::any_of(source.plugins.begin(),
+                                       source.plugins.end(),
+                                       [&slot](const domain::PluginInstance& instance)
+                                       { return toJuce(instance.id.toString()) == slot; });
+        if (!known)
+            tap->deleteFromParent();
     }
 }
 
@@ -1569,12 +1678,19 @@ void ProjectProjector::reconcile()
             reconcilePlugins(target->pluginList,
                              source,
                              live + target->pluginList.getPluginsOfType<tracktion::FourOscPlugin>().size() +
-                                 target->pluginList.getPluginsOfType<tracktion::SamplerPlugin>().size());
+                                 target->pluginList.getPluginsOfType<tracktion::SamplerPlugin>().size(),
+                             toJuce(source.id.toString()),
+                             false);
         }
         static_cast<void>(ensureLiveInput(target->pluginList, source.id));
         if (trackChanged || routeChanged)
             applyRoute(*target, source);
 
+        ensureFaderTap(target->pluginList,
+                       target->getVolumePlugin(),
+                       toJuce(source.id.toString()),
+                       false,
+                       state_.isAudible(source.id));
         ensureMeterTap(target->pluginList, toJuce(source.id.toString()), state_.isAudible(source.id));
 
         // Clips are the expensive part, so they are looked at only when what
@@ -1611,12 +1727,17 @@ void ProjectProjector::reconcile()
                                    [](const domain::PluginInstance& plugin)
                                    { return plugin.ref.format != domain::PluginRef::internalFormat; }),
                     effects.plugins.end());
-                reconcilePlugins(companion->pluginList, effects, 0);
+                reconcilePlugins(companion->pluginList, effects, 0, toJuce(source.id.toString()), true);
             }
             if (trackChanged || routeChanged || needsCompanion)
                 applyRoute(*companion, source);
             if (playedChanged || retimed || needsCompanion)
                 reconcileAudioTrack(*companion, source.id, retimed);
+            ensureFaderTap(companion->pluginList,
+                           companion->getVolumePlugin(),
+                           toJuce(source.id.toString()),
+                           true,
+                           state_.isAudible(source.id));
             ensureMeterTap(companion->pluginList, toJuce(source.id.toString()), state_.isAudible(source.id));
         }
 

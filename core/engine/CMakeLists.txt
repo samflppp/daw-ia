@@ -16,6 +16,7 @@ target_sources(daw_engine INTERFACE
     src/ClapPluginFormat.cpp
     src/EngineHost.cpp
     src/Export.cpp
+    src/FluxTap.cpp
     src/HostedParameters.cpp
     src/LevelMeters.cpp
     src/LiveInput.cpp

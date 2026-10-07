@@ -302,7 +302,36 @@ private:
     // A chain is a PluginList, on a track or on the master. The domain's
     // inserts go after `offset` plugins of the projection's own that lead the
     // chain: the fallback synth, a sampler, an AuxReturn.
-    void reconcilePlugins(tracktion::PluginList& list, const domain::Track& source, int offset);
+    //
+    // Each state of the audio flux gets its tap (S24): « source » after the
+    // projection's own plugins and the leading instruments of the domain's
+    // chain — for a bus or the master, their sum —, and one after each
+    // effect, keyed by the effect's domain id. `strip` and `companion` name
+    // the taps. Returns the index after the chain and its taps.
+    int reconcilePlugins(tracktion::PluginList& list,
+                         const domain::Track& source,
+                         int offset,
+                         const juce::String& strip,
+                         bool companion);
+
+    // The tap of one state, at `index` in the list: placed when missing,
+    // moved when elsewhere, never duplicated. Returns where it is.
+    int ensureFluxTap(tracktion::PluginList& list,
+                      const juce::String& strip,
+                      const juce::String& slot,
+                      bool companion,
+                      int index);
+
+    // The tap after the fader: right after the volume and pan, silent when
+    // the strip is not heard, like the meter's.
+    void ensureFaderTap(tracktion::PluginList& list,
+                        tracktion::Plugin* fader,
+                        const juce::String& strip,
+                        bool companion,
+                        bool audible);
+
+    // The taps of effects that left the chain.
+    static void removeStaleTaps(tracktion::PluginList& list, const domain::Track& source);
     [[nodiscard]] static tracktion::Plugin* findPlugin(tracktion::PluginList& list,
                                                        const domain::PluginId& id);
     [[nodiscard]] tracktion::Plugin::Ptr createPluginFor(const domain::PluginInstance& source);
