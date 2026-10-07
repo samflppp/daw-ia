@@ -54,6 +54,11 @@ void AudioOutputKeeper::loseOutputForTest()
     devices_.closeAudioDevice();
 }
 
+void AudioOutputKeeper::refuseTypeForTest(const juce::String& type)
+{
+    refusedType_ = type;
+}
+
 void AudioOutputKeeper::changeListenerCallback(juce::ChangeBroadcaster*)
 {
     check();
@@ -114,6 +119,8 @@ void AudioOutputKeeper::check()
 
 bool AudioOutputKeeper::available(const juce::String& typeName, const juce::String& name) const
 {
+    if (refusedType_.isNotEmpty() && typeName == refusedType_)
+        return false;
     for (auto* type : devices_.getAvailableDeviceTypes())
     {
         if (type != nullptr && type->getTypeName() == typeName)

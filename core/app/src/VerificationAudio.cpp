@@ -96,6 +96,7 @@ struct Verification::AudioRun
     double measuredFromMs{0.0};
     double restartWaitFrom{0.0};
     std::vector<engine::AudioSettings::Choice> regimes;
+    juce::String exclusive; // the exclusive driver, empty when none opened
 };
 
 void Verification::buildAudio()
@@ -453,6 +454,97 @@ void Verification::buildAudio()
         },
         [this] { return audio_->timing().blocks >= blocksToMeasure; },
         4000.0);
+
+    // --- an exclusive card lost, its driver gone: the shared one (S25)
+    // What a card that goes leaves, made on purpose: the device closed, and
+    // the exclusive driver refused to the keeper, as when nothing it knows is
+    // there any more. Never seen with a real card: said as a simulation.
+    const juce::String shared{"Windows Audio"};
+    add(
+        "la carte ouverte en mode exclusif",
+        [this, run]
+        {
+            for (const auto& type : audio_->types())
+                if (type.contains("Exclusive"))
+                {
+                    const auto sizes = audio_->buffers(type, run->first.output);
+                    if (sizes.empty())
+                        break;
+                    const auto size =
+                        std::find(sizes.begin(), sizes.end(), 480) != sizes.end() ? 480 : sizes.front();
+                    if (audio_->apply({type, run->first.output, size}))
+                    {
+                        run->exclusive = type;
+                        audio_->resetTiming();
+                    }
+                    else
+                        note("le mode exclusif ne s'ouvre pas : « " + audio_->said().toStdString() + " »");
+                    break;
+                }
+            if (run->exclusive.isEmpty())
+                note("pas de mode exclusif sur cette carte : le repli n'est pas éprouvé ici");
+        },
+        [this, run]
+        {
+            return run->exclusive.isEmpty() ||
+                   (audio_->current().type == run->exclusive && audio_->timing().blocks >= blocksToMeasure);
+        },
+        8000.0);
+
+    add(
+        "l'exclusif perdu, son pilote parti avec la carte : repli sur le partagé",
+        [this, run]
+        {
+            if (run->exclusive.isEmpty() || output_ == nullptr)
+                return;
+            check(audio_->current().type == run->exclusive, "au départ : " + describe(audio_->current()));
+            output_->refuseTypeForTest(run->exclusive);
+            output_->loseOutputForTest();
+            audio_->resetTiming();
+            output_->check();
+        },
+        [this, run, shared]
+        {
+            return run->exclusive.isEmpty() ||
+                   (audio_->current().type == shared && audio_->timing().blocks >= blocksToMeasure);
+        },
+        8000.0);
+
+    add(
+        "le pilote exclusif revenu : la carte y retourne",
+        [this, run, shared]
+        {
+            if (run->exclusive.isEmpty() || output_ == nullptr)
+                return;
+            const auto now = audio_->current();
+            check(now.type == shared && now.output.isNotEmpty(), "le repli : " + describe(now));
+            check(audio_->timing().blocks >= blocksToMeasure,
+                  "le partagé joue : " + std::to_string(audio_->timing().blocks) + " blocs");
+            output_->refuseTypeForTest({});
+            audio_->resetTiming();
+            output_->check();
+        },
+        [this, run]
+        {
+            return run->exclusive.isEmpty() ||
+                   (audio_->current().type == run->exclusive && audio_->timing().blocks >= blocksToMeasure);
+        },
+        8000.0);
+
+    add(
+        "la carte du départ rouverte",
+        [this, run]
+        {
+            if (run->exclusive.isEmpty())
+                return;
+            check(audio_->current().type == run->exclusive, "de retour : " + describe(audio_->current()));
+            const auto reopened = audio_->apply(run->first);
+            check(reopened && audio_->current() == run->first,
+                  "la carte du départ : " + describe(audio_->current()));
+            audio_->resetTiming();
+        },
+        [this] { return audio_->timing().blocks >= blocksToMeasure; },
+        8000.0);
 
     add("tes réglages audio, après : les mêmes, à l'octet",
         [this, run]

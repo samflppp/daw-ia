@@ -68,6 +68,12 @@ public:
     // within a second, must reopen it.
     void loseOutputForTest();
 
+    // A driver that no longer opens anything, made on purpose (S25): the
+    // keeper takes it for gone until it is given back with an empty name.
+    // For --verify-audio: an exclusive card lost, the exclusive driver gone
+    // with it, must fall back on the shared driver, and come back after.
+    void refuseTypeForTest(const juce::String& type);
+
     // Looks now rather than at the next tick.
     void check();
 
@@ -86,6 +92,7 @@ private:
     bool lost_{false};
     bool opening_{false};
     int reopened_{0};
+    juce::String refusedType_;
 };
 
 } // namespace daw::engine
