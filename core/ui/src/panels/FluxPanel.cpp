@@ -1,6 +1,9 @@
 #include "daw/ui/panels/FluxPanel.h"
 
+#include "daw/domain/commands/MixCommands.h"
+#include "daw/domain/commands/PluginCommands.h"
 #include "daw/domain/flux/Picture.h"
+#include "daw/domain/project/InternalEffects.h"
 
 #include <algorithm>
 #include <cmath>
@@ -20,11 +23,20 @@ juce::String text(const std::string& value)
     return juce::String::fromUTF8(value.c_str());
 }
 
+// A send drawn in the graph starts where the mixer's does.
+constexpr double firstSendDb = -12.0;
+
+constexpr int noneItem = 1;
+constexpr int newBusItem = 2;
+constexpr int firstInternalItem = 100;
+constexpr int firstInstalledItem = 1000;
+
 } // namespace
 
 FluxPanel::FluxPanel(const PanelContext& context)
     : tokens_(context.tokens)
     , lookAndFeel_(context.lookAndFeel)
+    , bus_(context.bus)
     , state_(context.state)
     , project_(context.project)
     , plugins_(context.plugins)
@@ -174,6 +186,60 @@ std::string FluxPanel::neighbour(const std::string& effect, bool before) const
     return {};
 }
 
+// A link as it is drawn: out of the right of a node, into the left of the
+// other. A long way stays on its row, kept free for it, up to the gap before
+// the node it reaches; there it bends down or up into it.
+juce::Path FluxPanel::pathOf(const domain::flux::Link& link) const
+{
+    juce::Path path;
+    const auto from = boundsOf(link.from);
+    const auto to = boundsOf(link.to);
+    if (from.isEmpty() || to.isEmpty())
+        return path;
+
+    const juce::Point<float> start{from.getRight(), from.getCentreY()};
+    const juce::Point<float> end{to.getX(), to.getCentreY()};
+    path.startNewSubPath(start);
+    const auto gap = static_cast<float>(tokens_.integer("metric.flux.columnWidth") -
+                                        tokens_.integer("metric.flux.stateWidth")) *
+                     zoom_;
+    const auto straight = std::max(start.x, end.x - gap);
+    if (straight > start.x)
+        path.lineTo(straight, start.y);
+    const auto bend = (end.x - straight) / 2.0f;
+    path.cubicTo({straight + bend, start.y}, end.translated(-bend, 0.0f), end);
+    return path;
+}
+
+const domain::flux::Link* FluxPanel::linkAt(juce::Point<float> at) const
+{
+    const auto reach = static_cast<float>(tokens_.integer("space.sm"));
+    const domain::flux::Link* nearest = nullptr;
+    auto best = reach;
+    for (const auto& link : graph_.links)
+    {
+        const auto path = pathOf(link);
+        if (path.isEmpty())
+            continue;
+        juce::Point<float> on;
+        path.getNearestPoint(at, on);
+        if (const auto distance = on.getDistanceFrom(at); distance <= best)
+        {
+            best = distance;
+            nearest = &link;
+        }
+    }
+    return nearest;
+}
+
+// Where an effect's dot is, in its node.
+juce::Rectangle<float> FluxPanel::dotOf(const juce::Rectangle<float>& bounds) const
+{
+    auto inner = bounds.reduced(static_cast<float>(tokens_.integer("space.xs")) * zoom_, 0.0f);
+    const auto dot = static_cast<float>(tokens_.integer("metric.flux.dotSize")) * zoom_;
+    return inner.removeFromLeft(dot).withSizeKeepingCentre(dot, dot);
+}
+
 // --- navigation ---------------------------------------------------------------
 
 void FluxPanel::frameAll()
@@ -238,6 +304,8 @@ void FluxPanel::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseW
 void FluxPanel::mouseDown(const juce::MouseEvent& event)
 {
     grabKeyboardFocus();
+    pulling_ = Pulling::nothing;
+    pullMoved_ = false;
     if (event.mods.isMiddleButtonDown())
     {
         dragging_ = true;
@@ -249,24 +317,261 @@ void FluxPanel::mouseDown(const juce::MouseEvent& event)
     if (!graphArea().toFloat().contains(event.position))
         return;
     const auto* node = nodeAt(event.position);
+
+    if (event.mods.isPopupMenu())
+    {
+        if (node != nullptr)
+            return;
+        if (const auto* link = linkAt(event.position); link != nullptr)
+            showLinkMenu(*link);
+        else
+            showEmptyMenu();
+        return;
+    }
+
     if (node != nullptr && node->kind == NodeKind::effect)
+    {
+        if (dotOf(boundsOf(node->id))
+                .expanded(static_cast<float>(tokens_.integer("space.xxs")))
+                .contains(event.position))
+        {
+            static_cast<void>(toggleBypass(node->id));
+            return;
+        }
         select(node->id);
-    else if (node == nullptr)
+        pulling_ = Pulling::effect;
+        pulled_ = node->id;
+        return;
+    }
+    if (node != nullptr && node->kind == NodeKind::state && node->state == StateKind::afterFader &&
+        node->strip != domain::ProjectState::masterTrackId())
+    {
+        pulling_ = Pulling::send;
+        pulled_ = node->id;
+        return;
+    }
+    if (node == nullptr)
+    {
+        // The end of an output, near where it arrives: taken to rewire it.
+        if (const auto* link = linkAt(event.position); link != nullptr && link->kind == LinkKind::output)
+        {
+            const auto end = boundsOf(link->to);
+            const auto reach = static_cast<float>(tokens_.integer("metric.flux.columnWidth")) * zoom_;
+            if (event.position.x > end.getX() - reach)
+            {
+                pulling_ = Pulling::output;
+                pulled_ = link->from;
+                return;
+            }
+        }
         select({});
+    }
 }
 
 void FluxPanel::mouseDrag(const juce::MouseEvent& event)
 {
-    if (!dragging_)
+    if (dragging_)
+    {
+        origin_ = originAtDrag_ - (event.position - dragStart_) / zoom_;
+        repaint();
         return;
-    origin_ = originAtDrag_ - (event.position - dragStart_) / zoom_;
+    }
+    if (pulling_ == Pulling::nothing)
+        return;
+    pullAt_ = event.position;
+    pullMoved_ = pullMoved_ || event.getDistanceFromDragStart() > tokens_.integer("space.xs");
     repaint();
 }
 
 void FluxPanel::mouseUp(const juce::MouseEvent& event)
 {
-    juce::ignoreUnused(event);
     dragging_ = false;
+    const auto pulling = std::exchange(pulling_, Pulling::nothing);
+    if (pulling == Pulling::nothing || !pullMoved_)
+        return;
+    repaint();
+
+    const auto* node = nodeAt(event.position);
+    switch (pulling)
+    {
+    case Pulling::effect:
+        if (const auto* link = linkAt(event.position); link != nullptr && node == nullptr)
+            static_cast<void>(dropEffect(pulled_, link->from, link->to));
+        break;
+    case Pulling::send:
+        if (node != nullptr)
+            static_cast<void>(sendTo(pulled_, node->id));
+        break;
+    case Pulling::output:
+        if (node != nullptr)
+            static_cast<void>(outputTo(pulled_, node->id));
+        break;
+    case Pulling::nothing:
+        break;
+    }
+}
+
+// --- the gestures -------------------------------------------------------------
+
+const Node* FluxPanel::stripNode(const std::string& id) const
+{
+    return graph_.find(id);
+}
+
+bool FluxPanel::insertOn(const std::string& from, const std::string& to, const domain::PluginRef& ref)
+{
+    const auto* link = graph_.link(from, to);
+    if (link == nullptr || link->kind != LinkKind::chain || !link->beforeFader)
+        return false;
+    // The identifier is made here and travels in the payload.
+    domain::PluginInstance instance{};
+    instance.id = domain::PluginId::generate();
+    instance.ref = ref;
+    return bus_.execute(std::make_unique<domain::InsertPlugin>(link->strip, instance, link->insertIndex))
+        .ok();
+}
+
+bool FluxPanel::dropEffect(const std::string& effect, const std::string& from, const std::string& to)
+{
+    const auto* node = graph_.find(effect);
+    const auto* link = graph_.link(from, to);
+    if (node == nullptr || node->kind != NodeKind::effect || link == nullptr ||
+        link->kind != LinkKind::chain || !link->beforeFader || from == effect || to == effect)
+        return false;
+    const auto* instance = state_.findPlugin(node->plugin);
+    const auto location = state_.pluginLocation(node->plugin);
+    if (instance == nullptr || !location.ok())
+        return false;
+
+    if (location.value().trackId == link->strip)
+    {
+        // The link's index counts the effect where it is: past it, one less.
+        auto index = link->insertIndex;
+        if (location.value().index < index)
+            --index;
+        if (index == location.value().index)
+            return false;
+        return bus_.execute(std::make_unique<domain::MovePlugin>(node->plugin, index)).ok();
+    }
+
+    // Into another chain: the same instance, its settings with it, one gesture.
+    std::vector<std::unique_ptr<domain::Command>> commands;
+    commands.push_back(std::make_unique<domain::RemovePlugin>(node->plugin));
+    commands.push_back(std::make_unique<domain::InsertPlugin>(link->strip, *instance, link->insertIndex));
+    domain::GroupOptions group{};
+    group.label = "déplacer l'effet";
+    return bus_.executeGroup(std::move(commands), group).ok();
+}
+
+bool FluxPanel::sendTo(const std::string& wayOut, const std::string& sum)
+{
+    const auto* from = graph_.find(wayOut);
+    const auto* to = graph_.find(sum);
+    if (from == nullptr || to == nullptr || from->kind != NodeKind::state ||
+        from->state != StateKind::afterFader || to->kind != NodeKind::state || to->state != StateKind::sum ||
+        to->strip == domain::ProjectState::masterTrackId() || to->strip == from->strip)
+        return false;
+    return bus_.execute(std::make_unique<domain::SetTrackSend>(from->strip, to->strip, firstSendDb)).ok();
+}
+
+bool FluxPanel::outputTo(const std::string& wayOut, const std::string& sum)
+{
+    const auto* from = graph_.find(wayOut);
+    const auto* to = graph_.find(sum);
+    if (from == nullptr || to == nullptr || from->kind != NodeKind::state ||
+        from->state != StateKind::afterFader || to->kind != NodeKind::state || to->state != StateKind::sum ||
+        to->strip == from->strip)
+        return false;
+    // The master is written as no bus at all.
+    const auto output = to->strip == domain::ProjectState::masterTrackId() ? domain::TrackId{} : to->strip;
+    return bus_.execute(std::make_unique<domain::SetTrackOutput>(from->strip, output)).ok();
+}
+
+bool FluxPanel::toggleBypass(const std::string& effect)
+{
+    const auto* node = graph_.find(effect);
+    if (node == nullptr || node->kind != NodeKind::effect)
+        return false;
+    return bus_.execute(std::make_unique<domain::SetPluginBypassed>(node->plugin, !node->bypassed)).ok();
+}
+
+bool FluxPanel::removeSelected()
+{
+    const auto* node = graph_.find(selected_);
+    if (node == nullptr || node->kind != NodeKind::effect)
+        return false;
+    const auto plugin = node->plugin;
+    select({});
+    return bus_.execute(std::make_unique<domain::RemovePlugin>(plugin)).ok();
+}
+
+bool FluxPanel::addBus()
+{
+    // The caller names what it creates, as the mixer's « + Bus ».
+    const auto name = "Bus " + std::to_string(state_.buses().size() + 1);
+    return bus_.execute(std::make_unique<domain::AddBus>(domain::TrackId::generate(), name)).ok();
+}
+
+void FluxPanel::showEmptyMenu()
+{
+    juce::PopupMenu menu;
+    menu.addItem(newBusItem, juce::String::fromUTF8("Nouveau bus"));
+    menu.showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(this),
+                       [safe = juce::Component::SafePointer<FluxPanel>{this}](int choice)
+                       {
+                           if (safe != nullptr && choice == newBusItem)
+                               static_cast<void>(safe->addBus());
+                       });
+}
+
+void FluxPanel::showLinkMenu(const domain::flux::Link& link)
+{
+    if (link.kind != LinkKind::chain || !link.beforeFader)
+        return;
+
+    // The menu of the mixer's « ＋ effet »: the DAW's effects, then the
+    // person's installed ones.
+    juce::PopupMenu menu;
+    std::vector<domain::PluginRef> refs;
+    menu.addSectionHeader(juce::String::fromUTF8("Insérer ici"));
+    for (const auto& effect : domain::internalEffects())
+    {
+        refs.push_back(domain::PluginRef{std::string{domain::PluginRef::internalFormat},
+                                         std::string{effect.identifier},
+                                         std::string{effect.name}});
+        menu.addItem(firstInternalItem + static_cast<int>(refs.size()) - 1, text(std::string{effect.name}));
+    }
+    std::vector<domain::PluginRef> installed;
+    for (const auto& ref : plugins_.available())
+        if (plugins_.isInstalled(ref) && !plugins_.isInstrument(ref))
+            installed.push_back(ref);
+    std::sort(
+        installed.begin(), installed.end(), [](const auto& a, const auto& b) { return a.name < b.name; });
+    menu.addSectionHeader(juce::String::fromUTF8("Tes effets"));
+    if (installed.empty())
+        menu.addItem(noneItem, juce::String::fromUTF8("Aucun effet installé trouvé"), false);
+    for (std::size_t index = 0; index < installed.size(); ++index)
+        menu.addItem(firstInstalledItem + static_cast<int>(index), text(installed[index].name));
+
+    menu.showMenuAsync(
+        juce::PopupMenu::Options{}.withTargetComponent(this),
+        [safe = juce::Component::SafePointer<FluxPanel>{this},
+         from = link.from,
+         to = link.to,
+         refs,
+         installed](int choice)
+        {
+            if (safe == nullptr)
+                return;
+            if (choice >= firstInstalledItem &&
+                choice < firstInstalledItem + static_cast<int>(installed.size()))
+                static_cast<void>(safe->insertOn(
+                    from, to, installed[static_cast<std::size_t>(choice - firstInstalledItem)]));
+            else if (choice >= firstInternalItem &&
+                     choice < firstInternalItem + static_cast<int>(refs.size()))
+                static_cast<void>(
+                    safe->insertOn(from, to, refs[static_cast<std::size_t>(choice - firstInternalItem)]));
+        });
 }
 
 void FluxPanel::mouseDoubleClick(const juce::MouseEvent& event)
@@ -289,6 +594,9 @@ bool FluxPanel::keyPressed(const juce::KeyPress& key)
         select({});
         return true;
     }
+    if ((key.getKeyCode() == juce::KeyPress::deleteKey || key.getKeyCode() == juce::KeyPress::backspaceKey) &&
+        !selected_.empty())
+        return removeSelected();
     return false;
 }
 
@@ -452,6 +760,17 @@ void FluxPanel::paint(juce::Graphics& g)
         paintLinks(g);
         for (const auto& node : graph_.nodes)
             paintNode(g, node);
+
+        // What is being pulled: a line from where it started to the mouse.
+        if (pulling_ != Pulling::nothing && pullMoved_)
+        {
+            const auto from = boundsOf(pulled_);
+            const auto start = pulling_ == Pulling::effect
+                                   ? from.getCentre()
+                                   : juce::Point<float>{from.getRight(), from.getCentreY()};
+            g.setColour(tokens_.colour("color.state.focus"));
+            g.drawLine({start, pullAt_}, static_cast<float>(tokens_.integer("stroke.focus")));
+        }
     }
 
     if (!selected_.empty())
@@ -466,25 +785,9 @@ void FluxPanel::paintLinks(juce::Graphics& g) const
 
     for (const auto& link : graph_.links)
     {
-        const auto from = boundsOf(link.from);
-        const auto to = boundsOf(link.to);
-        if (from.isEmpty() || to.isEmpty())
+        const auto path = pathOf(link);
+        if (path.isEmpty())
             continue;
-
-        const juce::Point<float> start{from.getRight(), from.getCentreY()};
-        const juce::Point<float> end{to.getX(), to.getCentreY()};
-        // A long way stays on its row, kept free for it, up to the gap before
-        // the node it reaches; there it bends down or up into it.
-        juce::Path path;
-        path.startNewSubPath(start);
-        const auto gap = static_cast<float>(tokens_.integer("metric.flux.columnWidth") -
-                                            tokens_.integer("metric.flux.stateWidth")) *
-                         zoom_;
-        const auto straight = std::max(start.x, end.x - gap);
-        if (straight > start.x)
-            path.lineTo(straight, start.y);
-        const auto bend = (end.x - straight) / 2.0f;
-        path.cubicTo({straight + bend, start.y}, end.translated(-bend, 0.0f), end);
 
         if (link.kind == LinkKind::send)
         {
@@ -593,10 +896,11 @@ void FluxPanel::paintNode(juce::Graphics& g, const Node& node) const
         g.setColour(selected ? tokens_.colour("color.state.focus") : tokens_.colour("color.border.strong"));
         g.drawRoundedRectangle(bounds, radius, static_cast<float>(tokens_.integer("stroke.hairline")));
 
-        // The dot says whether it works, as on the mixer's slot.
+        // The dot says whether it works, as on the mixer's slot; a click on
+        // it turns the effect on or off.
+        const auto dotArea = dotOf(bounds);
         auto inner = bounds.reduced(static_cast<float>(tokens_.integer("space.xs")) * zoom_, 0.0f);
-        const auto dot = static_cast<float>(tokens_.integer("metric.flux.dotSize")) * zoom_;
-        const auto dotArea = inner.removeFromLeft(dot).withSizeKeepingCentre(dot, dot);
+        inner.removeFromLeft(dotArea.getWidth());
         g.setColour(node.bypassed ? tokens_.colour("color.text.disabled")
                                   : tokens_.colour("color.accent.primary"));
         if (node.bypassed)

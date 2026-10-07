@@ -68,7 +68,9 @@ struct Verification::FluxRun
 {
     domain::TrackId synth;
     domain::TrackId reverb;
+    domain::TrackId second;
     domain::PluginId flowEqualiser;
+    domain::PluginId flowCompressor;
     domain::PluginId equaliser;
     domain::PluginId compressor;
     juce::AudioBuffer<float> playing;
@@ -514,6 +516,235 @@ void Verification::addFluxWindow(const std::shared_ptr<FluxRun>& run)
             check(window->armed().empty(), "Échap : aucune");
             check(window->keyPressed(juce::KeyPress{'f'}), "F ramène le graphe");
         });
+
+    // --- the gestures of the graph, through the commands that exist
+
+    const auto pluginsOf = [this](domain::TrackId strip)
+    {
+        std::vector<domain::PluginId> ids;
+        if (const auto* track = state_.findStrip(strip); track != nullptr)
+            for (const auto& plugin : track->plugins)
+                ids.push_back(plugin.id);
+        return ids;
+    };
+    // The window hears of a change on the next message: a gesture waits for
+    // its graph to have it.
+    const auto shows = [flux](const std::string& node)
+    { return flux() != nullptr && flux()->graph().find(node) != nullptr; };
+    // A point on a link, halfway between the two nodes it joins, on the row
+    // it leaves from.
+    const auto onLink = [flux](const std::string& from, const std::string& to)
+    {
+        auto* window = flux();
+        const auto a = window->boundsOf(from);
+        const auto b = window->boundsOf(to);
+        return juce::Point<float>{(a.getRight() + b.getX()) / 2.0f, a.getCentreY()}.toInt();
+    };
+
+    add(
+        "un clic droit sur le lien de la source à l'égaliseur : le compresseur inséré là (plugin.insert)",
+        [this, run, flux, pluginsOf]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            check(window->insertOn(domain::flux::sourceOf(run->synth),
+                                   domain::flux::effectNode(run->flowEqualiser),
+                                   domain::PluginRef{std::string{domain::PluginRef::internalFormat},
+                                                     std::string{domain::internal::compressor},
+                                                     "Compresseur"}),
+                  "le geste aboutit");
+            check(lastCommandType() == "plugin.insert", "la commande : " + lastCommandType());
+            const auto ids = pluginsOf(run->synth);
+            check(ids.size() == 2 && ids.back() == run->flowEqualiser,
+                  "le compresseur en tête, l'égaliseur après");
+            if (!ids.empty())
+                run->flowCompressor = ids.front();
+        },
+        [run, shows] { return shows(domain::flux::effectNode(run->flowCompressor)); },
+        3000.0);
+
+    add(
+        "l'égaliseur glissé sur le lien de la source au compresseur : plugin.move, en tête",
+        [this, run, flux, onLink, pluginsOf]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            const auto from =
+                window->boundsOf(domain::flux::effectNode(run->flowEqualiser)).getCentre().toInt();
+            const auto to =
+                onLink(domain::flux::sourceOf(run->synth), domain::flux::effectNode(run->flowCompressor));
+            drag(*window, from, to);
+            check(lastCommandType() == "plugin.move", "la commande : " + lastCommandType());
+            const auto ids = pluginsOf(run->synth);
+            check(ids.size() == 2 && ids.front() == run->flowEqualiser, "l'égaliseur en tête");
+        },
+        [run, flux]
+        {
+            return flux() != nullptr &&
+                   flux()->graph().link(domain::flux::sourceOf(run->synth),
+                                        domain::flux::effectNode(run->flowEqualiser)) != nullptr;
+        },
+        3000.0);
+
+    add(
+        "l'égaliseur glissé dans la chaîne de « Réverb » : retiré et posé, un seul Ctrl+Z",
+        [this, run, flux, onLink, pluginsOf]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            const auto depthBefore = depth();
+            const auto settings = state_.findPlugin(run->flowEqualiser) != nullptr
+                                      ? *state_.findPlugin(run->flowEqualiser)
+                                      : domain::PluginInstance{};
+            const auto from =
+                window->boundsOf(domain::flux::effectNode(run->flowEqualiser)).getCentre().toInt();
+            const auto sum = "s:" + run->reverb.toString() + ":sum";
+            drag(*window, from, onLink(sum, domain::flux::faderNode(run->reverb)));
+            const auto onBus = pluginsOf(run->reverb);
+            check(onBus.size() == 1 && onBus.front() == run->flowEqualiser, "l'égaliseur est sur « Réverb »");
+            check(pluginsOf(run->synth).size() == 1, "la source n'a plus que le compresseur");
+            check(state_.findPlugin(run->flowEqualiser) != nullptr &&
+                      *state_.findPlugin(run->flowEqualiser) == settings,
+                  "le même effet, réglages compris");
+            check(depth() == depthBefore + 1, "un seul pas d'historique");
+        },
+        [run, flux]
+        {
+            return flux() != nullptr &&
+                   flux()->graph().link("s:" + run->reverb.toString() + ":sum",
+                                        domain::flux::effectNode(run->flowEqualiser)) != nullptr;
+        },
+        3000.0);
+
+    add(
+        "un clic droit dans le vide : « Nouveau bus » (bus.add)",
+        [this, flux]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            const auto buses = state_.buses().size();
+            check(window->addBus(), "le geste aboutit");
+            check(lastCommandType() == "bus.add", "la commande : " + lastCommandType());
+            check(state_.buses().size() == buses + 1, "un bus de plus");
+        },
+        [this, flux]
+        {
+            return flux() != nullptr && !state_.buses().empty() &&
+                   flux()->graph().find("s:" + state_.buses().back().id.toString() + ":sum") != nullptr;
+        },
+        3000.0);
+
+    add(
+        "un trait tiré de la sortie de la source au nouveau bus : track.set_send, -12 dB",
+        [this, run, flux]
+        {
+            auto* window = flux();
+            if (window == nullptr || state_.buses().empty())
+                return;
+            run->second = state_.buses().back().id;
+            window->frameAll();
+            const auto from = window->boundsOf(domain::flux::afterFader(run->synth)).getCentre().toInt();
+            const auto to = window->boundsOf("s:" + run->second.toString() + ":sum").getCentre().toInt();
+            drag(*window, from, to);
+            check(lastCommandType() == "track.set_send", "la commande : " + lastCommandType());
+            const auto* track = state_.findTrack(run->synth);
+            const auto* send = track != nullptr ? track->findSend(run->second) : nullptr;
+            check(send != nullptr && send->levelDb == -12.0, "l'envoi à -12 dB");
+            check(track != nullptr && track->sends.size() == 2, "l'envoi vers « Réverb » reste");
+        },
+        [run, flux]
+        {
+            return flux() != nullptr &&
+                   flux()->graph().link(domain::flux::afterFader(run->synth),
+                                        "s:" + run->second.toString() + ":sum") != nullptr;
+        },
+        3000.0);
+
+    add(
+        "le bout de la sortie de la source glissé sur « Réverb » : track.set_output",
+        [this, run, flux]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            // On the source's own row, just before its output bends into the
+            // master: the end of that output and of no other.
+            const auto master = "s:" + domain::ProjectState::masterTrackId().toString() + ":sum";
+            const auto& tokens = ui::Tokens::builtIn();
+            const auto gap = static_cast<float>(tokens.integer("metric.flux.columnWidth") -
+                                                tokens.integer("metric.flux.stateWidth")) *
+                             window->zoom();
+            const auto row = window->boundsOf(domain::flux::afterFader(run->synth)).getCentreY();
+            const auto from = juce::Point<float>{window->boundsOf(master).getX() - gap - 6.0f, row}.toInt();
+            const auto to = window->boundsOf("s:" + run->reverb.toString() + ":sum").getCentre().toInt();
+            drag(*window, from, to);
+            check(lastCommandType() == "track.set_output", "la commande : " + lastCommandType());
+            const auto* track = state_.findTrack(run->synth);
+            check(track != nullptr && track->output == run->reverb, "la source sort dans « Réverb »");
+        },
+        [run, flux]
+        {
+            return flux() != nullptr &&
+                   flux()->graph().link(domain::flux::afterFader(run->synth),
+                                        "s:" + run->reverb.toString() + ":sum") != nullptr &&
+                   flux()->graph()
+                           .link(domain::flux::afterFader(run->synth), "s:" + run->reverb.toString() + ":sum")
+                           ->kind == domain::flux::LinkKind::output;
+        },
+        3000.0);
+
+    add("Ctrl+Z : la source sort de nouveau au master",
+        [this, run]
+        {
+            check(bus_.undo().ok(), "défait");
+            const auto* track = state_.findTrack(run->synth);
+            check(track != nullptr && track->output == domain::TrackId{}, "au master");
+        });
+
+    add(
+        "la pastille du compresseur : plugin.set_bypassed",
+        [this, run, flux]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            click(*window, window->dotOf(domain::flux::effectNode(run->flowCompressor)).getCentre().toInt());
+            check(lastCommandType() == "plugin.set_bypassed", "la commande : " + lastCommandType());
+            const auto* plugin = state_.findPlugin(run->flowCompressor);
+            check(plugin != nullptr && plugin->bypassed, "contourné");
+        },
+        [run, flux]
+        {
+            const auto* node = flux() != nullptr
+                                   ? flux()->graph().find(domain::flux::effectNode(run->flowCompressor))
+                                   : nullptr;
+            return node != nullptr && node->bypassed;
+        },
+        3000.0);
+
+    add(
+        "le compresseur choisi, Suppr : plugin.remove",
+        [this, run, flux, pluginsOf]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            click(*window,
+                  window->boundsOf(domain::flux::effectNode(run->flowCompressor)).getCentre().toInt());
+            check(window->keyPressed(juce::KeyPress{juce::KeyPress::deleteKey}), "Suppr est pris");
+            check(lastCommandType() == "plugin.remove", "la commande : " + lastCommandType());
+            check(pluginsOf(run->synth).empty(), "la source n'a plus d'effet");
+        },
+        [run, flux]
+        {
+            return flux() != nullptr &&
+                   flux()->graph().find(domain::flux::effectNode(run->flowCompressor)) == nullptr;
+        },
+        3000.0);
 
     add(
         "F3 referme le flux",

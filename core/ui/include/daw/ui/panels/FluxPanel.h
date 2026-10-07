@@ -28,6 +28,15 @@ namespace daw::ui
 // mouse, the wheel scrolls, the middle button drags, F frames everything.
 //
 // Only the states on the screen are armed; a hidden window arms nothing.
+//
+// What a person does in it goes through the commands that exist (S24):
+//   - an effect dropped on a link of a chain: plugin.move in its own chain,
+//     plugin.remove then plugin.insert, in one group, into another;
+//   - a right click on a link of a chain: an effect inserted there;
+//   - a line drawn from a strip's way out to a bus: track.set_send, -12 dB;
+//   - the end of an output dragged onto a bus or the master: track.set_output;
+//   - the dot of an effect: plugin.set_bypassed; Del: plugin.remove;
+//   - a right click in the empty: a new bus (bus.add).
 class FluxPanel final : public juce::Component, private juce::ChangeListener
 {
 public:
@@ -57,8 +66,13 @@ public:
     [[nodiscard]] const std::string& selected() const noexcept { return selected_; }
     [[nodiscard]] float zoom() const noexcept { return zoom_; }
 
-    // Where a node is drawn, in this component; empty when it is not.
+    // Where a node is drawn, in this component; empty when it is not. An
+    // effect's dot, inside it.
     [[nodiscard]] juce::Rectangle<float> boundsOf(const std::string& node) const;
+    [[nodiscard]] juce::Rectangle<float> dotOf(const std::string& effect) const
+    {
+        return dotOf(boundsOf(effect));
+    }
 
     // The place a state node reads, if it is a state.
     [[nodiscard]] std::optional<FluxHost::Place> placeOf(const domain::flux::Node& node) const;
@@ -73,6 +87,17 @@ public:
     [[nodiscard]] const std::vector<double>& spectrumAfter() const noexcept { return spectrumAfter_; }
 
     void select(const std::string& node);
+
+    // The gestures, as the mouse ends them; each says whether a command ran.
+    // A link is named by its two ends.
+    bool insertOn(const std::string& from, const std::string& to, const domain::PluginRef& ref);
+    bool dropEffect(const std::string& effect, const std::string& from, const std::string& to);
+    bool sendTo(const std::string& wayOut, const std::string& sum);
+    bool outputTo(const std::string& wayOut, const std::string& sum);
+    bool toggleBypass(const std::string& effect);
+    bool removeSelected();
+    bool addBus();
+
     void frameAll();
     void zoomAround(juce::Point<float> at, float factor);
     void frame(); // one image: what is armed, read, repainted
@@ -97,6 +122,12 @@ private:
     [[nodiscard]] juce::Rectangle<float> contentBounds() const;
     [[nodiscard]] const Shown* shownFor(const std::string& node) const;
     [[nodiscard]] std::string neighbour(const std::string& effect, bool before) const;
+    [[nodiscard]] juce::Path pathOf(const domain::flux::Link& link) const;
+    [[nodiscard]] const domain::flux::Link* linkAt(juce::Point<float> at) const;
+    [[nodiscard]] juce::Rectangle<float> dotOf(const juce::Rectangle<float>& bounds) const;
+    [[nodiscard]] const domain::flux::Node* stripNode(const std::string& id) const;
+    void showLinkMenu(const domain::flux::Link& link);
+    void showEmptyMenu();
 
     [[nodiscard]] juce::Font scaled(juce::Font font) const;
     void paintLinks(juce::Graphics& g) const;
@@ -113,6 +144,7 @@ private:
 
     const Tokens& tokens_;
     DawLookAndFeel& lookAndFeel_;
+    domain::CommandBus& bus_;
     const domain::ProjectState& state_;
     ProjectObserver& project_;
     PluginHost& plugins_;
@@ -132,6 +164,19 @@ private:
     bool dragging_{false};
     juce::Point<float> dragStart_;
     juce::Point<float> originAtDrag_;
+
+    // A gesture of the left button: what was pressed, and where the mouse is.
+    enum class Pulling
+    {
+        nothing,
+        effect, // an effect node, to a link
+        send,   // a strip's way out, to a bus
+        output  // the end of an output, to a bus or the master
+    };
+    Pulling pulling_{Pulling::nothing};
+    std::string pulled_; // the effect node, or the strip's way out
+    bool pullMoved_{false};
+    juce::Point<float> pullAt_;
 
     FrameTicker frames_{*this, [this] { frame(); }};
 };
