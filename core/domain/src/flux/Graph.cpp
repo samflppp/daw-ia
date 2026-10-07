@@ -288,7 +288,10 @@ Graph graphOf(const ProjectState& state, const IsInstrument& isInstrument)
     }
 
     // --- the rows: a channel each, in track order; a bus and the master at
-    // the mean row of what reaches them, below anything already in the way.
+    // the mean row of what reaches them, below anything already in the way —
+    // a node, or the way out of a strip placed before: an output or a send
+    // keeps its row free up to where it arrives, so that no bus sits on a
+    // line that runs past it.
     std::map<std::string, int> row;
     std::set<std::pair<int, int>> taken; // (column, row)
     const auto place = [&](const Chain& chain, int wanted)
@@ -309,6 +312,13 @@ Graph graphOf(const ProjectState& state, const IsInstrument& isInstrument)
         {
             row[node.id] = at;
             taken.insert({column[node.id], at});
+        }
+        for (const auto& link : graph.links)
+        {
+            if (link.kind == LinkKind::chain || link.from != chain.nodes.back().id)
+                continue;
+            for (auto each = last + 1; each < column[link.to]; ++each)
+                taken.insert({each, at});
         }
     };
 

@@ -239,3 +239,20 @@ TEST_CASE("The flux follows the project: an effect moved, a send removed, the sa
     CHECK(after.link(flux::afterFader(song.chords), sum(song.reverb)) == nullptr);
     CHECK(nodeOf(after, flux::effectNode(song.kickEq.id)).bypassed);
 }
+
+TEST_CASE("No bus sits on the line of an output or a send that runs past it")
+{
+    const Song song;
+    const auto graph = song.graph();
+    // Every link out of a strip: no node of another strip between its two
+    // ends, on the row it leaves from.
+    for (const auto& link : graph.links)
+    {
+        if (link.kind == flux::LinkKind::chain)
+            continue;
+        const auto& from = nodeOf(graph, link.from);
+        const auto& to = nodeOf(graph, link.to);
+        for (const auto& node : graph.nodes)
+            CHECK_FALSE((node.row == from.row && node.column > from.column && node.column < to.column));
+    }
+}
