@@ -38,6 +38,12 @@ namespace daw::ui
 //   - the dot of an effect: plugin.set_bypassed; Del: plugin.remove;
 //   - a right click in the empty: a new bus (bus.add).
 //
+// While the mix by the AI has a proposal ready, the window shows it (S24):
+// the graph of the project as the proposal would leave it, what it adds
+// drawn dashed, what it changes outlined with its sentences, and the sound
+// at each state as the taps of the proposal's copy heard it — measured, not
+// simulated. Keeping or refusing stays the mixer's.
+//
 // A click on a state listens to it alone, mono, in place of the mix; a
 // second click, Escape, or the window hidden gives the song back. Nothing of
 // it is written in the project.
@@ -92,6 +98,13 @@ public:
 
     void select(const std::string& node);
 
+    // The proposal shown, what it adds and what it changes (node ids), and
+    // the sentences that say why, for one node.
+    [[nodiscard]] bool showingProposal() const noexcept { return proposal_; }
+    [[nodiscard]] const std::vector<std::string>& added() const noexcept { return added_; }
+    [[nodiscard]] const std::vector<std::string>& changed() const noexcept { return changed_; }
+    [[nodiscard]] std::vector<std::string> sentencesAt(const std::string& node) const;
+
     // The state listened to alone, or none (empty).
     void listenAt(const std::string& node);
     [[nodiscard]] const std::string& listened() const noexcept { return listened_; }
@@ -120,6 +133,7 @@ private:
 
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void rebuild();
+    void markProposal();
     void armVisible();
     void disarm();
     [[nodiscard]] juce::Rectangle<int> graphArea() const;
@@ -155,6 +169,7 @@ private:
     domain::CommandBus& bus_;
     const domain::ProjectState& state_;
     ProjectObserver& project_;
+    MixHost& mix_;
     PluginHost& plugins_;
     FluxHost& flux_;
     bool titled_{false};
@@ -164,7 +179,12 @@ private:
     std::vector<Shown> shown_;
     std::string selected_;
     std::string listened_;
-    std::string pressedState_; // a state pressed: a click on it listens
+
+    bool proposal_{false};
+    std::vector<std::string> added_;
+    std::vector<std::string> changed_;
+    std::vector<std::pair<std::string, std::string>> sentences_; // node, sentence
+    std::string pressedState_;                                   // a state pressed: a click on it listens
     std::vector<double> spectrumBefore_;
     std::vector<double> spectrumAfter_;
 

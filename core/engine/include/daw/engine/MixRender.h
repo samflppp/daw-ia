@@ -77,6 +77,15 @@ public:
     // from these, never from the Edit that plays.
     [[nodiscard]] juce::File releaseFile();
 
+    // The flux of what is rendered (S24): `seconds` of every flux tap of the
+    // copy from `fromSeconds`, captured while run() renders. Message thread,
+    // before run(). Afterwards, per place — the strip as the domain's TrackId
+    // text, the master's included, and the slot —, the taps of the place
+    // added; and the rate of their samples.
+    void captureFlux(double fromSeconds, double seconds);
+    [[nodiscard]] std::map<std::pair<std::string, std::string>, std::vector<float>> fluxCaptured() const;
+    [[nodiscard]] double fluxRate() const noexcept { return fluxRate_; }
+
     // Must be destroyed on the message thread: the copy unloads plugins.
 private:
     MixRender() = default;
@@ -87,6 +96,7 @@ private:
     std::unique_ptr<class ProjectProjector> projector_;
     std::unique_ptr<Slots> slots_;
     double prepareMs_{0.0};
+    double fluxRate_{48000.0};
     std::atomic<bool> finished_{false};
 };
 

@@ -39,6 +39,7 @@ FluxPanel::FluxPanel(const PanelContext& context)
     , bus_(context.bus)
     , state_(context.state)
     , project_(context.project)
+    , mix_(context.mix)
     , plugins_(context.plugins)
     , flux_(context.flux)
     , titled_(context.titled)
@@ -46,19 +47,21 @@ FluxPanel::FluxPanel(const PanelContext& context)
     setOpaque(true);
     setWantsKeyboardFocus(true);
     project_.addChangeListener(this);
+    mix_.addChangeListener(this);
     rebuild();
 }
 
 FluxPanel::~FluxPanel()
 {
     project_.removeChangeListener(this);
+    mix_.removeChangeListener(this);
     listenAt({});
     disarm();
 }
 
 void FluxPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
-    if (source == &project_)
+    if (source == &project_ || source == &mix_)
     {
         rebuild();
         repaint();
@@ -67,8 +70,17 @@ void FluxPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 
 void FluxPanel::rebuild()
 {
-    graph_ = domain::flux::graphOf(
-        state_, [this](const domain::PluginRef& ref) { return plugins_.isInstrument(ref); });
+    const auto isInstrument = [this](const domain::PluginRef& ref) { return plugins_.isInstrument(ref); };
+    const auto* proposed = mix_.stage() == MixHost::Stage::ready ? mix_.proposedState() : nullptr;
+    const bool wasProposal = std::exchange(proposal_, proposed != nullptr);
+    graph_ = domain::flux::graphOf(proposed != nullptr ? *proposed : state_, isInstrument);
+    if (proposal_ != wasProposal)
+    {
+        shown_.clear();
+        if (proposal_)
+            listenAt({});
+    }
+    markProposal();
     if (!selected_.empty() && graph_.find(selected_) == nullptr)
         selected_.clear();
 
@@ -80,6 +92,79 @@ void FluxPanel::rebuild()
                                 shown_.end(),
                                 [this](const Shown& shown) { return graph_.find(shown.node) == nullptr; }),
                  shown_.end());
+}
+
+// What the proposal adds and changes, against the graph of the project now,
+// and the sentences of its changes, on the node each one moves: a level or a
+// pan on the fader, a setting on the DAW's equaliser or compressor.
+void FluxPanel::markProposal()
+{
+    added_.clear();
+    changed_.clear();
+    sentences_.clear();
+    const auto* proposed = mix_.proposedState();
+    const auto* proposal = mix_.proposal();
+    if (!proposal_ || proposed == nullptr || proposal == nullptr)
+        return;
+
+    const auto live = domain::flux::graphOf(
+        state_, [this](const domain::PluginRef& ref) { return plugins_.isInstrument(ref); });
+    for (const auto& node : graph_.nodes)
+    {
+        const auto* before = live.find(node.id);
+        if (before == nullptr)
+            added_.push_back(node.id);
+        else if (node.kind == NodeKind::fader && node.label != before->label)
+            changed_.push_back(node.id);
+        else if (node.kind == NodeKind::effect)
+        {
+            const auto* was = state_.findPlugin(node.plugin);
+            const auto* will = proposed->findPlugin(node.plugin);
+            if (was != nullptr && will != nullptr && !(*was == *will))
+                changed_.push_back(node.id);
+        }
+    }
+
+    for (const auto& change : proposal->changes)
+    {
+        std::string node = domain::flux::faderNode(change.track);
+        if (change.kind == domain::mix::Change::Kind::equaliser ||
+            change.kind == domain::mix::Change::Kind::compressor)
+        {
+            const auto identifier = change.kind == domain::mix::Change::Kind::equaliser
+                                        ? domain::internal::equaliser
+                                        : domain::internal::compressor;
+            if (const auto* strip = proposed->findStrip(change.track); strip != nullptr)
+                for (const auto& plugin : strip->plugins)
+                    if (plugin.ref.format == domain::PluginRef::internalFormat &&
+                        plugin.ref.identifier == identifier)
+                        node = domain::flux::effectNode(plugin.id);
+        }
+        sentences_.emplace_back(node, change.sentence);
+    }
+
+    // The sound of each state, as the copy heard it: drawn as it is.
+    shown_.clear();
+    for (const auto& node : graph_.nodes)
+        if (const auto place = placeOf(node); place)
+        {
+            auto samples = mix_.proposedSound(place->strip, place->slot);
+            const auto rate = flux_.sampleRate();
+            const auto tail =
+                std::min(samples.size(),
+                         static_cast<std::size_t>(rate * tokens_.integer("metric.flux.levelMs") / 1000.0));
+            const auto level = domain::flux::peakDbOf(samples.data() + (samples.size() - tail), tail);
+            shown_.push_back(Shown{node.id, std::move(samples), level});
+        }
+}
+
+std::vector<std::string> FluxPanel::sentencesAt(const std::string& node) const
+{
+    std::vector<std::string> said;
+    for (const auto& [at, sentence] : sentences_)
+        if (at == node)
+            said.push_back(sentence);
+    return said;
 }
 
 // --- geometry -----------------------------------------------------------------
@@ -399,7 +484,7 @@ void FluxPanel::mouseUp(const juce::MouseEvent& event)
     const auto pressed = std::exchange(pressedState_, std::string{});
 
     // A state clicked, not pulled: listened to alone, or no longer.
-    if (!pressed.empty() && !pullMoved_ && nodeAt(event.position) == graph_.find(pressed))
+    if (!proposal_ && !pressed.empty() && !pullMoved_ && nodeAt(event.position) == graph_.find(pressed))
     {
         listenAt(listened_ == pressed ? std::string{} : pressed);
         return;
@@ -726,6 +811,27 @@ void FluxPanel::frame()
         disarm();
         return;
     }
+    if (proposal_)
+    {
+        // The proposal's sound is the copy's, read once: nothing is armed.
+        disarm();
+        if (!selected_.empty() && spectrumBefore_.empty())
+        {
+            const auto bands = static_cast<std::size_t>(tokens_.integer("metric.flux.spectrumBands"));
+            const auto rate = flux_.sampleRate();
+            const auto spectrumOf = [&](const std::string& node)
+            {
+                const auto* shown = shownFor(node);
+                return shown != nullptr ? domain::flux::spectrumOf(
+                                              shown->samples.data(), shown->samples.size(), rate, bands)
+                                        : std::vector<double>(bands, -100.0);
+            };
+            spectrumBefore_ = spectrumOf(neighbour(selected_, true));
+            spectrumAfter_ = spectrumOf(neighbour(selected_, false));
+            repaint();
+        }
+        return;
+    }
     armVisible();
 
     const auto latest = flux_.latest();
@@ -799,6 +905,40 @@ void FluxPanel::paint(juce::Graphics& g)
         paintLinks(g);
         for (const auto& node : graph_.nodes)
             paintNode(g, node);
+
+        // The proposal: what it adds dashed, what it changes outlined, and
+        // what the window shows said.
+        if (proposal_)
+        {
+            const auto stroke = static_cast<float>(tokens_.integer("stroke.focus"));
+            const auto dash = static_cast<float>(tokens_.integer("metric.flux.dash"));
+            g.setColour(tokens_.colour("color.actor.copilot"));
+            for (const auto& node : added_)
+            {
+                juce::Path outline;
+                outline.addRoundedRectangle(boundsOf(node).expanded(stroke),
+                                            tokens_.number("radius.md") * zoom_);
+                const float pattern[] = {dash, dash};
+                juce::Path dashed;
+                juce::PathStrokeType{stroke}.createDashedStroke(dashed, outline, pattern, 2);
+                g.fillPath(dashed);
+            }
+            for (const auto& node : changed_)
+                g.drawRoundedRectangle(
+                    boundsOf(node).expanded(stroke), tokens_.number("radius.md") * zoom_, stroke);
+
+            auto banner = graphArea()
+                              .reduced(tokens_.integer("space.sm"))
+                              .removeFromTop(tokens_.integer("metric.flux.faderHeight"));
+            g.setFont(lookAndFeel_.typography().sans("font.size.caption", "font.weight.medium"));
+            const auto count = sentences_.size();
+            g.drawText(
+                juce::String::fromUTF8("proposition du mixage : ") + juce::String(static_cast<int>(count)) +
+                    juce::String::fromUTF8(count > 1 ? " réglages" : " réglage") +
+                    juce::String::fromUTF8(" · le son de l'essai à blanc · garder ou refuser dans le mixer"),
+                banner,
+                juce::Justification::centredLeft);
+        }
 
         // The state listened to alone, and what the person hears said.
         if (const auto bounds = boundsOf(listened_); !bounds.isEmpty())
@@ -1024,9 +1164,10 @@ void FluxPanel::paintDetail(juce::Graphics& g) const
                caption.removeFromLeft(caption.getWidth() / 2),
                juce::Justification::centredLeft);
     g.setColour(tokens_.colour("color.accent.primary"));
-    g.drawText(juce::String::fromUTF8("après ") + (effect != nullptr ? text(effect->label) : juce::String{}),
-               caption,
-               juce::Justification::centredLeft);
+    auto said = juce::String::fromUTF8("après ") + (effect != nullptr ? text(effect->label) : juce::String{});
+    for (const auto& sentence : sentencesAt(selected_))
+        said += juce::String::fromUTF8(" · ") + text(sentence);
+    g.drawText(said, caption, juce::Justification::centredLeft, true);
 
     // Left, the two waveforms one over the other; right, the two spectra.
     auto waves = area.removeFromLeft(area.getWidth() / 2).toFloat();

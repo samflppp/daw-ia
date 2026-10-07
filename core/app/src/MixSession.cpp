@@ -2,6 +2,7 @@
 
 #include "daw/domain/commands/SetTrackVolume.h"
 #include "daw/domain/serialization/Json.h"
+#include "daw/ui/Tokens.h"
 
 #include <algorithm>
 #include <cmath>
@@ -340,6 +341,15 @@ void MixSession::verify()
         setStage(Stage::failed, "La proposition n'a pas pu être essayée.");
         return;
     }
+    // The flux of the proposal, from where the playhead stands, the length
+    // of what the flux window draws.
+    double from = 0.0;
+    if (wiring_.clock != nullptr)
+        from = wiring_.edit.tempoSequence
+                   .toTime(tracktion::BeatPosition::fromBeats(wiring_.clock->positionBeats()))
+                   .inSeconds();
+    render_->captureFlux(from, ui::Tokens::builtIn().integer("metric.flux.waveMs") / 1000.0);
+
     auto* render = render_.get();
     auto measured = std::make_shared<std::unique_ptr<engine::MixRender::Measured>>();
     auto state = std::make_shared<domain::ProjectState>(std::move(proposed));
@@ -357,6 +367,8 @@ void MixSession::verify()
             }
             static_cast<void>(afterFile_.deleteFile());
             afterFile_ = render_->releaseFile();
+            proposedFlux_ = render_->fluxCaptured();
+            proposedState_ = state;
             render_.reset();
             after_ = std::move(*measured);
 
@@ -523,6 +535,14 @@ void MixSession::clearProposal()
     after_.reset();
     static_cast<void>(afterFile_.deleteFile());
     afterFile_ = juce::File{};
+    proposedState_.reset();
+    proposedFlux_.clear();
+}
+
+std::vector<float> MixSession::proposedSound(const std::string& strip, const std::string& slot) const
+{
+    const auto found = proposedFlux_.find({strip, slot});
+    return found != proposedFlux_.end() ? found->second : std::vector<float>{};
 }
 
 void MixSession::listen(bool after)

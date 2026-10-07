@@ -1,3 +1,4 @@
+#include "MixSession.h"
 #include "Verification.h"
 #include "daw/domain/commands/MixCommands.h"
 #include "daw/domain/commands/PluginCommands.h"
@@ -12,6 +13,7 @@
 #include "daw/ui/panels/InsertSlots.h"
 #include "daw/ui/panels/MixerPanel.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <string>
@@ -811,6 +813,83 @@ void Verification::addFluxWindow(const std::shared_ptr<FluxRun>& run)
             note("master : le morceau " + fixed(song, 1) + " dBFS");
             check(song > run->sourceHeardDb - 1.0,
                   "le morceau n'est pas plus bas que la sortie de la source seule");
+        });
+
+    // --- the mix by the AI, its proposal seen in the flux before it is kept
+
+    add(
+        "« Mixer », par les règles : la proposition se voit dans le flux",
+        [this] { mix_->start(); },
+        [this]
+        {
+            const auto stage = mix_->stage();
+            return stage == ui::MixHost::Stage::ready || stage == ui::MixHost::Stage::failed;
+        },
+        180000.0);
+
+    add("le graphe proposé, ce qu'il change marqué de sa phrase, le son de l'essai à blanc",
+        [this, run, flux]
+        {
+            auto* window = flux();
+            note("état : " + mix_->status());
+            const auto* proposed = mix_->proposedState();
+            const auto* proposal = mix_->proposal();
+            if (window == nullptr || proposed == nullptr || proposal == nullptr)
+            {
+                check(false, "une proposition est prête");
+                return;
+            }
+            window->frame();
+            check(window->showingProposal(), "la fenêtre montre la proposition");
+            const auto expected =
+                domain::flux::graphOf(*proposed, [](const domain::PluginRef&) { return false; });
+            check(window->graph().nodes.size() == expected.nodes.size() &&
+                      window->graph().links.size() == expected.links.size(),
+                  "le graphe est celui de l'état proposé");
+            note(std::to_string(proposal->changes.size()) + " réglages ; " +
+                 std::to_string(window->added().size()) + " nœuds ajoutés, " +
+                 std::to_string(window->changed().size()) + " changés");
+            check(!proposal->changes.empty(), "la proposition change quelque chose");
+
+            // Every change of the proposal on a node marked, with its sentence.
+            std::size_t placed = 0;
+            for (const auto& node : window->graph().nodes)
+            {
+                const auto said = window->sentencesAt(node.id);
+                if (said.empty())
+                    continue;
+                placed += said.size();
+                const bool marked = std::find(window->added().begin(), window->added().end(), node.id) !=
+                                        window->added().end() ||
+                                    std::find(window->changed().begin(), window->changed().end(), node.id) !=
+                                        window->changed().end();
+                for (const auto& sentence : said)
+                    note(node.label + " : « " + sentence + " »");
+                check(marked, "« " + node.label + " » est marqué");
+            }
+            check(placed == proposal->changes.size(), "chaque réglage sur son nœud");
+
+            const auto heard = window->levelAt(domain::flux::afterFader(run->synth));
+            check(heard > -60.0, "la sortie de la source, dans l'essai : " + fixed(heard, 1) + " dBFS");
+            check(window->armed().empty(), "rien n'est armé : le son est celui de la copie");
+        });
+
+    add(
+        "refusée : le flux revient au projet",
+        [this] { mix_->reject(); },
+        [flux] { return flux() != nullptr && !flux()->showingProposal(); },
+        3000.0);
+
+    add("le graphe est de nouveau celui du projet",
+        [this, flux]
+        {
+            auto* window = flux();
+            if (window == nullptr)
+                return;
+            const auto expected =
+                domain::flux::graphOf(state_, [](const domain::PluginRef&) { return false; });
+            check(window->graph().nodes.size() == expected.nodes.size(), "les nœuds du projet");
+            check(window->added().empty() && window->changed().empty(), "plus rien de marqué");
         });
 
     add("la source écoutée seule de nouveau, avant de fermer la fenêtre",

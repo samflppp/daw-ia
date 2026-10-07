@@ -129,8 +129,8 @@ void FluxTapPlugin::applyToBuffer(const tracktion::PluginRenderContext& context)
             const auto position = first + index;
             if (armed)
                 ring_[static_cast<std::size_t>(position & (ringSize - 1))] = mono;
-            if (capturing && position >= 0 && position < captureSize)
-                capture_[static_cast<std::size_t>(position)] = mono;
+            if (const auto at = position - captureFrom_; capturing && at >= 0 && at < captureSize)
+                capture_[static_cast<std::size_t>(at)] = mono;
             if (monitoring)
                 scratch_[static_cast<std::size_t>(index)] = mono;
         }
@@ -173,10 +173,11 @@ void FluxTapPlugin::read(std::int64_t from, int count, float* out) const noexcep
     }
 }
 
-void FluxTapPlugin::startCapture(int samples)
+void FluxTapPlugin::startCapture(int samples, std::int64_t from)
 {
     capturing_.store(false, std::memory_order_release);
     capture_.assign(static_cast<std::size_t>(std::max(0, samples)), 0.0f);
+    captureFrom_ = from;
     capturing_.store(true, std::memory_order_release);
 }
 

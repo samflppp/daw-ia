@@ -14,9 +14,14 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <functional>
+#include <map>
 #include <memory>
 #include <numbers>
+#include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #include <doctest/doctest.h>
 
@@ -86,10 +91,14 @@ struct MixHarness
     }
 
     std::unique_ptr<MixRender::Measured> measure(const ProjectState* proposed = nullptr,
-                                                 juce::File* released = nullptr)
+                                                 juce::File* released = nullptr,
+                                                 const std::function<void(MixRender&)>& before = {},
+                                                 const std::function<void(MixRender&)>& after = {})
     {
         auto render = MixRender::prepare(host.edit(), state, proposed, nullptr, &store);
         REQUIRE(render != nullptr);
+        if (before)
+            before(*render);
         std::unique_ptr<MixRender::Measured> measured;
         std::atomic<bool> cancelled{false};
 
@@ -110,6 +119,8 @@ struct MixHarness
         REQUIRE(measured != nullptr);
         if (released != nullptr)
             *released = render->releaseFile();
+        if (after)
+            after(*render);
         return measured;
     }
 
@@ -309,4 +320,62 @@ TEST_CASE("Timing: sixteen tracks of three minutes, twelve of them on 4OSC")
 TEST_CASE("Timing: sixteen tracks of three minutes, twelve of them sampler channels")
 {
     timeSixteenTracks(true);
+}
+
+TEST_CASE("The flux of a proposal is captured on its copy: each place, a second of it, the change heard")
+{
+    MixHarness harness;
+    auto proposed = harness.state;
+    REQUIRE(proposed.setTrackVolume(harness.lows, -6.0).ok());
+
+    std::map<std::pair<std::string, std::string>, std::vector<float>> captured;
+    double rate = 0.0;
+    static_cast<void>(harness.measure(
+        &proposed,
+        nullptr,
+        // The tones last six seconds: from 5.5 s, half a second of them,
+        // then silence.
+        [](MixRender& render) { render.captureFlux(5.5, 1.0); },
+        [&](MixRender& render)
+        {
+            captured = render.fluxCaptured();
+            rate = render.fluxRate();
+        }));
+
+    const auto peakDb = [&](TrackId track, const std::string& slot)
+    {
+        const auto found = captured.find({track.toString(), slot});
+        REQUIRE(found != captured.end());
+        CHECK(found->second.size() == static_cast<std::size_t>(std::llround(rate)));
+        float peak = 0.0f;
+        for (const auto sample : found->second)
+            peak = std::max(peak, std::abs(sample));
+        return 20.0 * std::log10(std::max(1e-9, static_cast<double>(peak)));
+    };
+
+    // The fader of the bass lowered 6 dB by the proposal, the lead's left
+    // alone: both take the pan law (3 dB), the bass 6 more.
+    const auto bass = peakDb(harness.lows, "source") - peakDb(harness.lows, "fader");
+    const auto lead = peakDb(harness.highs, "source") - peakDb(harness.highs, "fader");
+    MESSAGE("from the source to after the fader: bass " << bass << " dB, lead " << lead << " dB");
+    CHECK(peakDb(harness.lows, "source") == doctest::Approx(-12.0).epsilon(0.02));
+    CHECK(bass == doctest::Approx(9.0).epsilon(0.05));
+    CHECK(lead == doctest::Approx(3.0).epsilon(0.1));
+    CHECK(captured.contains({ProjectState::masterTrackId().toString(), "fader"}));
+
+    const auto& source = captured.at({harness.lows.toString(), "source"});
+    const auto half = source.size() / 2;
+    const auto loudest = [&](std::size_t from, std::size_t to)
+    {
+        float peak = 0.0f;
+        for (auto index = from; index < to; ++index)
+            peak = std::max(peak, std::abs(source[index]));
+        return peak;
+    };
+    // Away from the end of the tones by a tenth of a second on each side.
+    const auto margin = static_cast<std::size_t>(rate / 10.0);
+    const auto early = loudest(0, half - margin);
+    const auto late = loudest(half + margin, source.size());
+    CHECK(early > 0.2f);
+    CHECK(late < 1e-4f);
 }

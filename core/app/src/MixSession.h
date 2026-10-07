@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <functional>
+#include <map>
 #include <memory>
 #include <set>
 #include <thread>
@@ -76,6 +77,9 @@ public:
     void cancel() override;
     [[nodiscard]] const domain::mix::Proposal* proposal() const override;
     [[nodiscard]] const domain::mix::Brief* brief() const override;
+    [[nodiscard]] const domain::ProjectState* proposedState() const override { return proposedState_.get(); }
+    [[nodiscard]] std::vector<float> proposedSound(const std::string& strip,
+                                                   const std::string& slot) const override;
     [[nodiscard]] std::string masterSentence() const override { return masterSentence_; }
     [[nodiscard]] std::vector<std::string> sentencesOf(const domain::BlobRef& context) const override;
     void refuseTrack(domain::TrackId track, bool refused) override;
@@ -167,6 +171,10 @@ private:
 
     std::unique_ptr<domain::mix::Brief> brief_;
     std::unique_ptr<domain::mix::Proposal> proposal_;
+    // The proposal in the flux (S24): the state it reaches, and its sound per
+    // place, captured on the copy.
+    std::shared_ptr<domain::ProjectState> proposedState_;
+    std::map<std::pair<std::string, std::string>, std::vector<float>> proposedFlux_;
     std::vector<domain::mix::Refusal> refusals_;
     std::set<std::string> refusedTracks_;
     std::optional<double> masterTrim_;

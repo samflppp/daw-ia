@@ -141,11 +141,11 @@ public:
     void read(std::int64_t from, int count, float* out) const noexcept;
     [[nodiscard]] double sampleRate() const noexcept { return sampleRate_.load(std::memory_order_relaxed); }
 
-    // Every sample from position 0 to `samples`, kept whole: for a render
-    // read afterwards, where the ring would have turned many times. The
-    // buffer is made here, on the message thread; capturing() is then read
+    // Every sample from position `from` to `from + samples`, kept whole: for
+    // a render read afterwards, where the ring would have turned many times.
+    // The buffer is made here, on the message thread; captured() is then read
     // back once the render is over.
-    void startCapture(int samples);
+    void startCapture(int samples, std::int64_t from = 0);
     void stopCapture() noexcept { capturing_.store(false, std::memory_order_release); }
     [[nodiscard]] const std::vector<float>& captured() const noexcept { return capture_; }
 
@@ -166,6 +166,7 @@ private:
     std::atomic<double> sampleRate_{48000.0};
 
     std::vector<float> capture_;
+    std::int64_t captureFrom_{0}; // written before capturing_, read after it
     std::atomic<bool> capturing_{false};
 
     std::atomic<std::int64_t> busyTicks_{0};

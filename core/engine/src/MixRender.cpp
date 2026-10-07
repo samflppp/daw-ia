@@ -1,5 +1,7 @@
 #include "daw/engine/MixRender.h"
 
+#include "daw/engine/FluxTaps.h"
+#include "daw/engine/MeterTap.h"
 #include "daw/engine/MixTap.h"
 #include "daw/engine/ProjectProjector.h"
 
@@ -145,6 +147,38 @@ MixRender::~MixRender()
     }
     projector_.reset();
     copy_.reset();
+}
+
+void MixRender::captureFlux(double fromSeconds, double seconds)
+{
+    if (copy_ == nullptr)
+        return;
+    fluxRate_ = copy_->engine.getDeviceManager().getSampleRate();
+    const auto from = static_cast<std::int64_t>(std::llround(std::max(0.0, fromSeconds) * fluxRate_));
+    const auto samples = static_cast<int>(std::llround(std::max(0.0, seconds) * fluxRate_));
+    for (auto* tap : FluxTaps{*copy_}.all())
+        tap->startCapture(samples, from);
+}
+
+std::map<std::pair<std::string, std::string>, std::vector<float>> MixRender::fluxCaptured() const
+{
+    std::map<std::pair<std::string, std::string>, std::vector<float>> places;
+    if (copy_ == nullptr)
+        return places;
+    for (const auto* tap : FluxTaps{*copy_}.all())
+    {
+        const auto& captured = tap->captured();
+        if (captured.empty())
+            continue;
+        auto strip = tap->strip().toStdString();
+        if (tap->strip() == MeterTapPlugin::masterStrip)
+            strip = domain::ProjectState::masterTrackId().toString();
+        auto& samples = places[{strip, tap->slot().toStdString()}];
+        samples.resize(std::max(samples.size(), captured.size()), 0.0f);
+        for (std::size_t index = 0; index < captured.size(); ++index)
+            samples[index] += captured[index];
+    }
+    return places;
 }
 
 std::unique_ptr<MixRender::Measured> MixRender::run(const std::atomic<bool>& cancelled,
