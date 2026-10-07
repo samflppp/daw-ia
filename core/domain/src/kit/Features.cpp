@@ -119,6 +119,11 @@ std::string_view nameOf(Role role) noexcept
     return roleNames[static_cast<std::size_t>(role)];
 }
 
+std::string_view tokenOf(Role role) noexcept
+{
+    return roleTokens[static_cast<std::size_t>(role)];
+}
+
 std::optional<Role> roleFromName(std::string_view name) noexcept
 {
     for (std::size_t index = 0; index < roleTokens.size(); ++index)

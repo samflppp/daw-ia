@@ -18,6 +18,7 @@ target_sources(daw_engine INTERFACE
     src/Export.cpp
     src/FluxTap.cpp
     src/FluxTaps.cpp
+    src/SampleIndex.cpp
     src/HostedParameters.cpp
     src/LevelMeters.cpp
     src/LiveInput.cpp

@@ -58,6 +58,11 @@ public:
     // them (S24). See AudioSettings.h.
     [[nodiscard]] AudioSettings& audio() noexcept { return *audio_; }
 
+    // Where this machine's settings are kept: %APPDATA%\<applicationName>, or
+    // the folder a verification or a test gave. The index of the samples
+    // (S24) lives there too.
+    [[nodiscard]] const juce::File& settingsFolder() const noexcept { return settingsFolder_; }
+
     // Where the notes played live go (S23): the keys of the computer and of
     // a MIDI keyboard push into it, the projector binds each track's live
     // input to it. Made first and kept last: a track's plugin reads its
@@ -72,6 +77,7 @@ public:
 private:
     domain::live::Router live_;
     std::unique_ptr<tracktion::Engine> engine_;
+    juce::File settingsFolder_;
     std::unique_ptr<tracktion::Edit> edit_;
     std::unique_ptr<PluginCatalogue> catalogue_;
 

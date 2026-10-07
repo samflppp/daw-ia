@@ -29,8 +29,9 @@ enum class Role
     bass808,
 };
 
-[[nodiscard]] std::string_view nameOf(Role role) noexcept; // « kick », « charley ouvert »…
-[[nodiscard]] std::optional<Role> roleFromName(std::string_view name) noexcept; // the internal token
+[[nodiscard]] std::string_view nameOf(Role role) noexcept;  // « kick », « charley ouvert »…
+[[nodiscard]] std::string_view tokenOf(Role role) noexcept; // « kick », « openHat »…
+[[nodiscard]] std::optional<Role> roleFromName(std::string_view name) noexcept; // from tokenOf
 
 // The low end, from 20 to 160 Hz by sixths of an octave: where a kick and an
 // 808 meet, or not.

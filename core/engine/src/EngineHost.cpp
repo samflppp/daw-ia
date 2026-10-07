@@ -75,6 +75,7 @@ EngineHost::EngineHost(const juce::String& applicationName, const juce::File& se
           std::make_unique<FolderPropertyStorage>(applicationName, settingsFolder),
           nullptr,
           std::make_unique<Behaviour>())}
+    , settingsFolder_{settingsFolder}
 {
     // Tracktion opens the audio device while the Engine is being constructed,
     // but it builds its list of wave devices from an async update, so the list
