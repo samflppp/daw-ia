@@ -23,6 +23,7 @@
 #include "StemSession.h"
 #include "TransportSync.h"
 #include "Verification.h"
+#include "VoiceInput.h"
 #include "WorkspaceSwitch.h"
 #include "daw/domain/BuildInfo.h"
 #include "daw/domain/command/CommandBus.h"
@@ -397,6 +398,9 @@ public:
         // draw: an editor outliving its plugin by one line is a crash.
         QuitWatchdog::step("plugin windows");
         probe_.reset();
+        if (livePlay_ != nullptr && livePlay_->rawKeyboard() != nullptr)
+            livePlay_->rawKeyboard()->setListener(nullptr);
+        voiceInput_.reset(); // its microphone, its process; the song given back its level
         livePlay_.reset();
         transportSync_.reset();
         rack_.reset();
@@ -855,7 +859,42 @@ private:
                                       if (stemSession_ == nullptr)
                                           return domain::Value::object({{"started", domain::Value{false}}});
                                       return stemSession_->startFromCopilot(arguments);
+                                  },
+                                  [this](const std::string& text) -> std::optional<domain::BlobRef>
+                                  {
+                                      if (contentStore_ == nullptr)
+                                          return std::nullopt;
+                                      if (auto blob = contentStore_->put(text.data(), text.size()); blob)
+                                          return domain::BlobRef{blob.value()};
+                                      return std::nullopt;
+                                  },
+                                  [this](std::vector<std::string> removals, std::function<void(bool)> answer)
+                                  {
+                                      if (voiceInput_ == nullptr)
+                                      {
+                                          answer(false);
+                                          return;
+                                      }
+                                      voiceInput_->askToConfirm(std::move(removals), std::move(answer));
                                   }});
+
+        // The push-to-talk (S25): the right Ctrl or the button, the
+        // microphone, the transcriber's process, the phrase to the copilot.
+        // A verification replays what the model heard unless it is asked for
+        // the model (--voix-transcripteur parakeet).
+        voiceInput_ = std::make_unique<VoiceInput>(
+            VoiceInput::Wiring{state_,
+                               projector_.get(),
+                               engineHost_->settingsFolder(),
+                               CopilotBridge::servicesFolder(),
+                               voiceReplayFromCommandLine(commandLine),
+                               [this](const std::string& phrase, const domain::Value& spoken)
+                               {
+                                   if (copilot_ != nullptr)
+                                       copilot_->askSpoken(phrase, spoken);
+                               }});
+        if (livePlay_ != nullptr && livePlay_->rawKeyboard() != nullptr)
+            livePlay_->rawKeyboard()->setListener(voiceInput_.get());
         mixSession_ = std::make_unique<MixSession>(
             MixSession::Wiring{bus_,
                                state_,
@@ -958,7 +997,8 @@ private:
                                          *soundCard_,
                                          *flux_,
                                          *kitSession_,
-                                         *busSession_};
+                                         *busSession_,
+                                         *voiceInput_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();
@@ -1068,6 +1108,24 @@ private:
                 return juce::File{tokens[index + 1].unquoted()}.getChildFile("cache-stems");
         }
         return StemSession::defaultCache();
+    }
+
+    // The push-to-talk's transcriber: the model, or in a verification the
+    // table of what it heard on the test set (no weights), unless
+    // --voix-transcripteur parakeet asks for the model.
+    [[nodiscard]] static juce::File voiceReplayFromCommandLine(const juce::String& commandLine)
+    {
+        const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+        const auto asked = tokens.indexOf("--voix-transcripteur");
+        if (asked >= 0 && asked + 1 < tokens.size() && tokens[asked + 1].unquoted() == "parakeet")
+            return {};
+        for (const auto& token : tokens)
+            if (token.startsWith("--verify"))
+                return CopilotBridge::servicesFolder()
+                    .getChildFile("tests")
+                    .getChildFile("voix")
+                    .getChildFile("parakeet-entendu.json");
+        return {};
     }
 
     // --stems-model fake: the separator of the CI, band filters, no model. A
@@ -1417,6 +1475,7 @@ private:
     std::unique_ptr<Listening> listening_;
     std::unique_ptr<WorkspaceSwitch> switch_;
     std::unique_ptr<CopilotBridge> copilot_;
+    std::unique_ptr<VoiceInput> voiceInput_;
     std::unique_ptr<MixSession> mixSession_;
     std::unique_ptr<StemSession> stemSession_;
     std::unique_ptr<DirectionSession> directionSession_;

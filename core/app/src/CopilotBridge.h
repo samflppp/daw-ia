@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daw/domain/BlobRef.h"
 #include "daw/domain/command/CommandBus.h"
 #include "daw/domain/command/CommandQueue.h"
 #include "daw/domain/command/CommandRegistry.h"
@@ -16,6 +17,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -79,6 +81,13 @@ public:
         // it starts and says so; the stems are laid when it ends. Run on the
         // message thread.
         std::function<domain::Value(const domain::Value&)> separateStems;
+        // A phrase said aloud (S25): what was heard is kept in the project's
+        // store, its digest in the group's provenance. Run on the message thread.
+        std::function<std::optional<domain::BlobRef>(const std::string&)> keep;
+        // The commands of a phrase said aloud remove things: the person is
+        // asked, and `answer` told once, on the message thread.
+        std::function<void(std::vector<std::string> removals, std::function<void(bool)> answer)>
+            confirmRemovals;
     };
 
     // The services' folder (the one holding pyproject.toml): DAW_IA_SERVICES_DIR,
@@ -103,6 +112,10 @@ public:
     [[nodiscard]] std::string statusMessage() const override;
     [[nodiscard]] const std::vector<Line>& transcript() const override;
     void ask(std::string_view request) override;
+
+    // The same request, said aloud (S25): `spoken` is what the push-to-talk
+    // heard, kept with the group it makes; and what it removes is confirmed.
+    void askSpoken(std::string_view request, const domain::Value& spoken);
     void restart() override;
     [[nodiscard]] std::vector<std::string> capabilities() const override;
 
@@ -185,6 +198,8 @@ private:
     };
     std::map<std::int64_t, Read> reads_;
     std::map<std::int64_t, Decided> mixes_;
+    // The phrase said aloud in flight, until the copilot answers it.
+    std::optional<domain::Value> spoken_;
 
     std::mutex writeMutex_;
     std::atomic<std::int64_t> nextRequestId_{1};

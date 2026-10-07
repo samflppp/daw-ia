@@ -64,6 +64,9 @@ public:
     // scan code without a keyboard: the same entry the keyboard thread uses.
     [[nodiscard]] domain::live::TypingKeyboard& keys() noexcept { return keys_; }
 
+    // The keyboard's reader, which the push-to-talk listens to as well (S25).
+    [[nodiscard]] RawKeyboard* rawKeyboard() noexcept { return raw_.get(); }
+
     // The take, for a verification that reads it as it goes.
     [[nodiscard]] TakeRecorder& recorder() noexcept { return recorder_; }
 

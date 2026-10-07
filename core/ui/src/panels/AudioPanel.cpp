@@ -37,6 +37,7 @@ AudioPanel::AudioPanel(const PanelContext& context)
     : tokens_(context.tokens)
     , lookAndFeel_(context.lookAndFeel)
     , audio_(context.audio)
+    , voice_(context.voice)
     , titled_(context.titled)
 {
     setLookAndFeel(&lookAndFeel_);
@@ -45,7 +46,8 @@ AudioPanel::AudioPanel(const PanelContext& context)
     typeLabel_.setText(juce::String::fromUTF8("Pilote"), juce::dontSendNotification);
     outputLabel_.setText(juce::String::fromUTF8("Sortie"), juce::dontSendNotification);
     bufferLabel_.setText(juce::String::fromUTF8("Tampon"), juce::dontSendNotification);
-    for (auto* label : {&typeLabel_, &outputLabel_, &bufferLabel_})
+    microphoneLabel_.setText(juce::String::fromUTF8("Micro"), juce::dontSendNotification);
+    for (auto* label : {&typeLabel_, &outputLabel_, &bufferLabel_, &microphoneLabel_})
         label->setColour(juce::Label::textColourId, tokens_.colour("color.text.secondary"));
     for (auto* label : {&rate_, &latency_, &blocks_, &advice_})
     {
@@ -54,6 +56,15 @@ AudioPanel::AudioPanel(const PanelContext& context)
         label->setMinimumHorizontalScale(1.0f);
     }
     said_.setColour(juce::Label::textColourId, tokens_.colour("color.text.tertiary"));
+    microphoneSaid_.setColour(juce::Label::textColourId, tokens_.colour("color.text.tertiary"));
+    microphoneSaid_.setJustificationType(juce::Justification::topLeft);
+    microphoneSaid_.setMinimumHorizontalScale(1.0f);
+    microphone_.onChange = [this]
+    {
+        const auto index = microphone_.getSelectedItemIndex();
+        if (index >= 0 && index < static_cast<int>(microphones_.size()))
+            chooseMicrophone(microphones_[static_cast<std::size_t>(index)].name);
+    };
     said_.setJustificationType(juce::Justification::topLeft);
     said_.setMinimumHorizontalScale(1.0f);
 
@@ -103,8 +114,12 @@ AudioPanel::AudioPanel(const PanelContext& context)
                                                                    &advice_,
                                                                    &takeAdvice_,
                                                                    &trial_,
-                                                                   &said_})
+                                                                   &said_,
+                                                                   &microphoneLabel_,
+                                                                   &microphone_,
+                                                                   &microphoneSaid_})
         addAndMakeVisible(*component);
+    refreshMicrophones();
 
     audio_.addChangeListener(this);
     refresh();
@@ -121,6 +136,44 @@ AudioPanel::~AudioPanel()
 void AudioPanel::changeListenerCallback(juce::ChangeBroadcaster*)
 {
     refresh();
+}
+
+void AudioPanel::chooseMicrophone(const std::string& name)
+{
+    if (name != voice_.microphone())
+        voice_.chooseMicrophone(name);
+    refreshMicrophones();
+}
+
+void AudioPanel::refreshMicrophones()
+{
+    // Never a Bluetooth headset's microphone without saying what it costs:
+    // Windows then plays the headset in its telephone profile.
+    microphones_ = voice_.microphones();
+    const auto chosen = voice_.microphone();
+    microphone_.clear(juce::dontSendNotification);
+    bool bluetooth = false;
+    for (std::size_t index = 0; index < microphones_.size(); ++index)
+    {
+        const auto& input = microphones_[index];
+        microphone_.addItem(juce::String::fromUTF8(input.name.c_str()) +
+                                (input.bluetooth ? juce::String::fromUTF8(" (Bluetooth)") : juce::String{}),
+                            static_cast<int>(index) + 1);
+        if (input.name == chosen)
+        {
+            microphone_.setSelectedId(static_cast<int>(index) + 1, juce::dontSendNotification);
+            bluetooth = input.bluetooth;
+        }
+    }
+    microphoneSaid_.setText(
+        microphones_.empty()
+            ? juce::String::fromUTF8("Aucun micro : la voix ne peut pas écouter, le clavier marche.")
+        : bluetooth ? juce::String::fromUTF8(
+                          "Micro d'un casque Bluetooth : tant qu'il écoute, Windows fait passer le son "
+                          "de ce casque en qualité téléphone.")
+                    : juce::String::fromUTF8(
+                          "Pour parler au copilote : tenir Ctrl droit. Ce micro n'écoute que pendant."),
+        juce::dontSendNotification);
 }
 
 void AudioPanel::timerCallback()
@@ -298,6 +351,11 @@ void AudioPanel::resized()
     trial_.setBounds(buttons.removeFromLeft(button * 3 / 2));
     area.removeFromTop(gap);
     said_.setBounds(area.removeFromTop(row * 2));
+    area.removeFromTop(gap);
+    auto line = area.removeFromTop(row);
+    microphoneLabel_.setBounds(line.removeFromLeft(label));
+    microphone_.setBounds(line);
+    microphoneSaid_.setBounds(area.removeFromTop(row * 2));
 }
 
 } // namespace daw::ui

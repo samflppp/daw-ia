@@ -45,16 +45,23 @@ public:
     void startTrial();
     [[nodiscard]] bool trialRunning() const { return audio_.trialRunning(); }
 
+    // The push-to-talk's microphone (S25), a setting of this machine.
+    void chooseMicrophone(const std::string& name);
+    [[nodiscard]] juce::String microphoneShown() const { return microphone_.getText(); }
+    [[nodiscard]] juce::String microphoneLine() const { return microphoneSaid_.getText(); }
+
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void timerCallback() override;
     void refresh();
     void refreshMeasures();
     void applyFrom(const std::string& type, const std::string& output, int buffer);
+    void refreshMicrophones();
 
     const Tokens& tokens_;
     DawLookAndFeel& lookAndFeel_;
     AudioHost& audio_;
+    VoiceHost& voice_;
     bool titled_{false};
 
     std::vector<std::string> types_;
@@ -74,6 +81,10 @@ private:
     juce::TextButton takeAdvice_;
     juce::TextButton trial_;
     juce::Label said_;
+    std::vector<VoiceHost::Microphone> microphones_;
+    juce::Label microphoneLabel_;
+    juce::ComboBox microphone_;
+    juce::Label microphoneSaid_;
 };
 
 } // namespace daw::ui

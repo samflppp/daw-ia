@@ -2,6 +2,7 @@
 
 #include "daw/domain/copilot/Tools.h"
 #include "daw/domain/serialization/Json.h"
+#include "daw/domain/voice/Removals.h"
 #include "daw/ui/model/CopilotRequest.h"
 #include "daw/ui/model/StyleLearning.h"
 #include "daw/ui/model/StyleSource.h"
@@ -542,15 +543,56 @@ void CopilotBridge::handleRequest(const Value& message)
             request.origin.actor = domain::Actor::copilot;
             if (const auto label = arguments.stringAt("label"); label)
                 request.label = label.value();
+
+            // A phrase said aloud (S25): what it removes is confirmed first,
+            // and what was heard is kept with the group, by digest.
+            std::optional<Value> spoken;
+            {
+                const std::lock_guard<std::mutex> lock{mutex_};
+                spoken = spoken_;
+            }
+            bool refusedByPerson = false;
+            if (spoken.has_value())
+            {
+                std::vector<std::string_view> types;
+                for (const auto& step : expansion->steps)
+                    types.push_back(step.type);
+                if (auto removed = domain::voice::removals(types);
+                    !removed.empty() && wiring_.confirmRemovals)
+                {
+                    auto decision = std::make_shared<std::promise<bool>>();
+                    auto decided = decision->get_future();
+                    juce::MessageManager::callAsync(
+                        [this, removed = std::move(removed), decision]() mutable
+                        {
+                            wiring_.confirmRemovals(std::move(removed),
+                                                    [decision](bool accepted)
+                                                    { decision->set_value(accepted); });
+                        });
+                    // The socket thread waits, as it waits for the queue: the
+                    // interface stays alive, and the person answers there.
+                    refusedByPerson = !decided.get();
+                }
+                if (!refusedByPerson && wiring_.keep)
+                {
+                    const auto text = domain::json::write(*spoken);
+                    auto kept = onMessageThread(
+                        [this, text, &request]() -> domain::Result<Value>
+                        {
+                            if (auto blob = wiring_.keep(text); blob.has_value())
+                                request.origin.context = blob.value();
+                            return Value{};
+                        });
+                    static_cast<void>(kept);
+                }
+            }
             request.steps = std::move(expansion->steps);
 
-            auto answer = queue_->submit(std::move(request));
-
-            // Waiting here is right: this is the socket thread, and the
-            // message thread is the one doing the work. The interface stays
-            // alive throughout, which is the whole point of the queue.
-            const auto outcome = answer.get();
-            if (outcome.ok())
+            if (refusedByPerson)
+            {
+                failure = errorValue("refused", "la personne n'a pas confirmé ce que la phrase dite retire");
+            }
+            else if (const auto outcome = queue_->submit(std::move(request)).get(); outcome.ok())
             {
                 Value::Array ids;
                 ids.reserve(outcome.commandIds.size());
@@ -658,6 +700,10 @@ void CopilotBridge::handleAnswer(const Value& message)
     {
         const auto text = failure->stringAt("message");
         addLine(Line::From::failure, text ? text.value() : std::string{"Le copilote a échoué."});
+        {
+            const std::lock_guard<std::mutex> lock{mutex_};
+            spoken_.reset();
+        }
         setStatus(Status::ready, {});
         return;
     }
@@ -668,6 +714,10 @@ void CopilotBridge::handleAnswer(const Value& message)
 
     const auto text = result->stringAt("text");
     addLine(Line::From::copilot, text ? text.value() : std::string{});
+    {
+        const std::lock_guard<std::mutex> lock{mutex_};
+        spoken_.reset();
+    }
 
     if (const auto cost = result->find("usage"); cost != nullptr && !cost->isNull())
     {
@@ -791,6 +841,15 @@ void CopilotBridge::ask(std::string_view request)
                         {"id", Value{nextRequestId_++}},
                         {"method", Value{std::string{"copilot.ask"}}},
                         {"params", Value::object({{"request", Value{std::string{request}}}})}}));
+}
+
+void CopilotBridge::askSpoken(std::string_view request, const Value& spoken)
+{
+    {
+        const std::lock_guard<std::mutex> lock{mutex_};
+        spoken_ = spoken;
+    }
+    ask(request);
 }
 
 void CopilotBridge::interpret(std::uint64_t ticket,

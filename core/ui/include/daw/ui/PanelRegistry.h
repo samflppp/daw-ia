@@ -23,6 +23,7 @@
 #include "daw/ui/model/Selection.h"
 #include "daw/ui/model/StemHost.h"
 #include "daw/ui/model/TransportClock.h"
+#include "daw/ui/model/VoiceHost.h"
 #include "daw/ui/model/WorkspaceHost.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -101,6 +102,8 @@ struct PanelServices
     KitHost& kit;
     // The smart buses (S24).
     BusHost& buses;
+    // The push-to-talk (S25): the microphone heard, the phrase understood.
+    VoiceHost& voice;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

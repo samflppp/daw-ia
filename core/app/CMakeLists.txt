@@ -35,6 +35,7 @@ target_sources(daw_app PRIVATE
     src/NativeAudio.cpp
     src/Microphone.cpp
     src/VoiceService.cpp
+    src/VoiceInput.cpp
     src/QuitWatchdog.cpp
     src/Verification.cpp
     src/VerificationKit.cpp

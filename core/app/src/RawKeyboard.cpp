@@ -36,8 +36,8 @@ LRESULT CALLBACK receive(HWND window, UINT message, WPARAM wParam, LPARAM lParam
 {
     if (message == WM_INPUT)
     {
-        auto* keys =
-            reinterpret_cast<domain::live::TypingKeyboard*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+        auto* raw = reinterpret_cast<RawKeyboard*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+        auto* keys = raw != nullptr ? &raw->keys() : nullptr;
         RAWINPUT input{};
         UINT size = sizeof(input);
         if (keys != nullptr &&
@@ -54,9 +54,12 @@ LRESULT CALLBACK receive(HWND window, UINT message, WPARAM wParam, LPARAM lParam
                 const auto seconds = domain::live::now();
                 const bool down = (key.Flags & RI_KEY_BREAK) == 0;
                 const bool extended = (key.Flags & RI_KEY_E0) != 0;
+                const bool front = down ? inFront() : true;
                 if (down)
-                    keys->setForeground(inFront());
+                    keys->setForeground(front);
                 static_cast<void>(keys->key(static_cast<int>(key.MakeCode), extended, down, seconds));
+                if (auto* listener = raw->listener(); listener != nullptr)
+                    listener->keyEvent(static_cast<int>(key.MakeCode), extended, down, front, seconds);
             }
         }
         return DefWindowProcW(window, message, wParam, lParam);
@@ -114,7 +117,7 @@ void RawKeyboard::run()
                                  juce::String(static_cast<int>(GetLastError())));
         return;
     }
-    SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&keys_));
+    SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 
     // Usage page 1 (generic desktop), usage 6: the keyboards.
     RAWINPUTDEVICE device{};
