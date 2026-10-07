@@ -18,6 +18,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Protocol
 
 API_KEY_VARIABLE = "DAW_IA_ANTHROPIC_API_KEY"
@@ -244,6 +245,58 @@ def _turn_from(payload: dict[str, Any], known: dict[str, str] | None = None) -> 
     )
 
     return turn
+
+
+class TableProvider:
+    """Answers a request from a table written by a check (S25), no model.
+
+    The table, a JSON file read again at each request (the check writes it
+    once the project's identifiers are known):
+        {"<request>": [{"name": "<command type>", "arguments": {...}}, ...]}
+    A request found: its commands, then « C'est fait. ». Not found: nothing
+    done, said. What --verify-voix runs against, to prove that a phrase said
+    and the same phrase typed make the same project; never a model's answer.
+    """
+
+    def __init__(self, table: Path, model: str = "table") -> None:
+        self._table = table
+        self._model = model
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    def converse(
+        self,
+        system: str,
+        messages: Sequence[dict[str, Any]],
+        tools: Sequence[dict[str, Any]],
+        *,
+        max_tokens: int = MAX_TOKENS,
+        effort: str | None = None,
+    ) -> Turn:
+        del system, tools, max_tokens, effort
+        if len(messages) > 1:
+            return Turn(text="C'est fait.")
+        first = messages[0].get("content", "") if messages else ""
+        request = str(first).rsplit("Demande de l'utilisateur : ", 1)[-1].strip()
+        try:
+            table = json.loads(self._table.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            table = {}
+        commands = table.get(request)
+        if not commands:
+            return Turn(text=f"Pas de réponse écrite pour « {request} » : rien n'est fait.")
+        calls = [
+            ToolCall(f"t{rank}", c["name"], dict(c.get("arguments", {}))) for rank, c in enumerate(commands)
+        ]
+        return Turn(
+            tool_calls=calls,
+            raw_content=[
+                {"type": "tool_use", "id": c.call_id, "name": c.name, "input": c.arguments} for c in calls
+            ],
+            stop_reason="tool_use",
+        )
 
 
 class ScriptedProvider:

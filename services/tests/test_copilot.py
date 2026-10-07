@@ -519,3 +519,31 @@ def test_the_model_is_told_that_a_progression_needs_several_bars() -> None:
     assert "qu'un accord" in SYSTEM_PROMPT
     assert "pattern.set_length" in SYSTEM_PROMPT
     assert "lengthBeats 16" in SYSTEM_PROMPT
+
+
+def test_a_table_answers_a_request_it_holds_and_nothing_else(daw: FakeDaw, tmp_path) -> None:
+    from daw_services.ia_provider import TableProvider
+
+    table = tmp_path / "table.json"
+    table.write_text(
+        json.dumps(
+            {
+                "Ajoute une piste de basse.": [
+                    {
+                        "name": "track.add",
+                        "arguments": {"trackId": "$new:basse", "name": "Basse", "volumeDb": 0.0},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    agent = Agent(connected(daw), TableProvider(table))
+    done = agent.answer("Ajoute une piste de basse.")
+    assert not done.failed
+    assert [c["type"] for c in daw.executed[-1]["commands"]] == ["track.add"]
+
+    before = len(daw.executed)
+    nothing = agent.answer("Supprime tout.")
+    assert len(daw.executed) == before
+    assert "rien n'est fait" in nothing.text

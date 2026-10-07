@@ -107,6 +107,10 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.service == "copilot":
         from daw_services.copilot import run
 
+        if arguments.table is not None:
+            from daw_services.ia_provider import TableProvider
+
+            return run(arguments.port, TableProvider(arguments.table))
         return run(arguments.port)
 
     print(f"daw-services {__version__}: no service asked for.")
