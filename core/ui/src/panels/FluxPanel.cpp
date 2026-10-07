@@ -148,12 +148,10 @@ void FluxPanel::markProposal()
     for (const auto& node : graph_.nodes)
         if (const auto place = placeOf(node); place)
         {
+            // A still picture: its level is the whole window's, not its end's,
+            // which may fall past the song.
             auto samples = mix_.proposedSound(place->strip, place->slot);
-            const auto rate = flux_.sampleRate();
-            const auto tail =
-                std::min(samples.size(),
-                         static_cast<std::size_t>(rate * tokens_.integer("metric.flux.levelMs") / 1000.0));
-            const auto level = domain::flux::peakDbOf(samples.data() + (samples.size() - tail), tail);
+            const auto level = domain::flux::peakDbOf(samples.data(), samples.size());
             shown_.push_back(Shown{node.id, std::move(samples), level});
         }
 }
