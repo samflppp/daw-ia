@@ -100,8 +100,9 @@ public:
 
         // A verification plays with the engine's settings in a folder of its
         // own (S24): it may change the buffer, and must never rewrite this
-        // machine's — the « Audio » window's, Tracktion's Settings.xml.
-        if (const auto settings = verificationSettingsFolder(commandLine); settings != juce::File{})
+        // machine's — the « Audio » window's, Tracktion's Settings.xml. So
+        // does a script that drives the application (--reglages, S25).
+        if (const auto settings = throwawaySettingsFolder(commandLine); settings != juce::File{})
         {
             juce::Logger::writeToLog(juce::String::fromUTF8("verify: réglages de la machine copiés dans ") +
                                      settings.getFullPathName());
@@ -1161,21 +1162,40 @@ private:
         {
             if (!tokens[index].startsWith("--verify"))
                 continue;
-            const auto folder = juce::File::getCurrentWorkingDirectory()
-                                    .getChildFile(tokens[index + 1].unquoted())
-                                    .getChildFile("reglages-machine");
-            folder.createDirectory();
-            const auto personal = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                                      .getChildFile(getApplicationName());
-            for (const auto* name : {"Settings.xml", "plugins.xml"})
-            {
-                const auto copy = folder.getChildFile(name);
-                if (!copy.existsAsFile() && personal.getChildFile(name).existsAsFile())
-                    personal.getChildFile(name).copyFileTo(copy);
-            }
-            return folder;
+            return copiedSettings(juce::File::getCurrentWorkingDirectory()
+                                      .getChildFile(tokens[index + 1].unquoted())
+                                      .getChildFile("reglages-machine"));
         }
         return {};
+    }
+
+    // The verification's folder, or --reglages "<folder>" (S25): a script
+    // that drives the application without being a verification, such as
+    // scripts/verify-quit.ps1, keeps this machine's settings untouched too.
+    // --reglages alone does not make a verification: the buffer and the
+    // driver stay refused.
+    [[nodiscard]] juce::File throwawaySettingsFolder(const juce::String& commandLine)
+    {
+        const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+        if (const auto at = tokens.indexOf("--reglages"); at >= 0 && at + 1 < tokens.size())
+            return copiedSettings(
+                juce::File::getCurrentWorkingDirectory().getChildFile(tokens[at + 1].unquoted()));
+        return verificationSettingsFolder(commandLine);
+    }
+
+    // A copy of this machine's settings, taken once in `folder`.
+    [[nodiscard]] juce::File copiedSettings(const juce::File& folder)
+    {
+        folder.createDirectory();
+        const auto personal = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                  .getChildFile(getApplicationName());
+        for (const auto* name : {"Settings.xml", "plugins.xml"})
+        {
+            const auto copy = folder.getChildFile(name);
+            if (!copy.existsAsFile() && personal.getChildFile(name).existsAsFile())
+                personal.getChildFile(name).copyFileTo(copy);
+        }
+        return folder;
     }
 
     // --tampon <samples> and --pilote partage|basse-latence|exclusif, for a

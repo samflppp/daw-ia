@@ -15,8 +15,9 @@
 #
 #   powershell -File scripts/verify-quit.ps1 -Exe "build\windows-msvc-release\core\app\daw_app_artefacts\Release\DAW IA.exe" -Repeat 20
 #
-# Never on the person's own project or layout: every run gets its own folder in
-# %TEMP%, and --layout a file in it.
+# Never on the person's own project, layout or settings: every run gets its own
+# folder in %TEMP%, --layout a file in it, and --reglages a copy of this
+# machine's settings in it (S25), as every verification.
 param(
     [Parameter(Mandatory = $true)][string]$Exe,
     [int]$LimitMs = 3000,
@@ -43,6 +44,20 @@ function StuckCount {
     return @(Select-String -Path $log -SimpleMatch "quit: stuck").Count
 }
 
+# This machine's settings, which no run may rewrite (S25): their bytes before,
+# compared after every run.
+$personal = Join-Path $env:APPDATA "DAW IA"
+function SettingsDigest {
+    $digest = ""
+    foreach ($name in @("Settings.xml", "plugins.xml")) {
+        $file = Join-Path $personal $name
+        if (Test-Path $file) { $digest += (Get-FileHash -Algorithm SHA256 $file).Hash }
+        $digest += "|"
+    }
+    return $digest
+}
+$settingsBefore = SettingsDigest
+
 $hasKey = [bool]$env:DAW_IA_ANTHROPIC_API_KEY
 $root = Join-Path $env:TEMP ("daw-verify-quit-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
 New-Item -ItemType Directory -Force $root | Out-Null
@@ -65,7 +80,7 @@ foreach ($case in $runs) {
     $index++
     $folder = Join-Path $root ("run" + $index)
     New-Item -ItemType Directory -Force $folder | Out-Null
-    $arguments = "$($case.Extra) --project `"$(Join-Path $folder 'p.dawproj')`" --layout `"$(Join-Path $folder 'layout.xml')`""
+    $arguments = "$($case.Extra) --project `"$(Join-Path $folder 'p.dawproj')`" --layout `"$(Join-Path $folder 'layout.xml')`" --reglages `"$(Join-Path $folder 'reglages-machine')`""
 
     $stuckBefore = StuckCount
     $process = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru
@@ -101,6 +116,18 @@ foreach ($case in $runs) {
         $failed++
     } elseif ($stuck -eq 0 -and $case.Stall) {
         Write-Output "FAIL $($case.Name) #${index}: gone in $elapsed ms, and the watchdog did not say where it stalled"
+        $failed++
+    } elseif ((Test-Path (Join-Path $personal "plugins.xml")) -and
+              (-not (Test-Path (Join-Path $folder "reglages-machine\plugins.xml")) -or
+               (Get-FileHash (Join-Path $personal "plugins.xml")).Hash -ne
+               (Get-FileHash (Join-Path $folder "reglages-machine\plugins.xml")).Hash)) {
+        # plugins.xml, which a close does not rewrite: the copy proved by its
+        # bytes. Settings.xml would not prove it: the engine writes one there
+        # whether or not it was copied.
+        Write-Output "FAIL $($case.Name) #${index}: gone in $elapsed ms, but the settings were not copied in the run's folder"
+        $failed++
+    } elseif ((SettingsDigest) -ne $settingsBefore) {
+        Write-Output "FAIL $($case.Name) #${index}: gone in $elapsed ms, but this machine's settings were rewritten"
         $failed++
     } else {
         Write-Output "ok   $($case.Name) #${index}: process gone in $elapsed ms"
