@@ -68,7 +68,8 @@ add_executable(daw_domain_tests
     AudioAdviceTests.cpp
     FluxGraphTests.cpp
     FluxPictureTests.cpp
-    KitTests.cpp)
+    KitTests.cpp
+    SharedBusTests.cpp)
 
 target_link_libraries(daw_domain_tests PRIVATE daw::domain daw::ui_workspace doctest::doctest)
 daw_set_warnings(daw_domain_tests)
