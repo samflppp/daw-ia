@@ -31,6 +31,27 @@ namespace daw::app
 namespace
 {
 
+// The windows meant to be shown (visible, on the desktop) that Windows does
+// not show, each with what Windows says of it; empty when all are shown.
+juce::String windowsUnseen()
+{
+    juce::StringArray unseen;
+    auto& desktop = juce::Desktop::getInstance();
+    for (int index = 0; index < desktop.getNumComponents(); ++index)
+    {
+        auto* window = desktop.getComponent(index);
+        if (window == nullptr || !window->isVisible())
+            continue;
+        auto* peer = window->getPeer();
+        const auto state =
+            peer != nullptr ? native::windowState(*peer) : juce::String::fromUTF8("sans fenêtre native");
+        if (state != juce::String::fromUTF8("affichée"))
+            unseen.add(juce::String::fromUTF8("« ") + window->getName() + juce::String::fromUTF8(" » ") +
+                       state);
+    }
+    return unseen.joinIntoString(", ");
+}
+
 constexpr int tickMs = 120;
 
 // Ticks left after a step is ready, so the window has painted what the step
@@ -189,6 +210,16 @@ void Verification::timerCallback()
 
     auto& step = steps_[current_];
 
+    if (const auto unseen = windowsUnseen(); unseen != windowsUnseen_)
+    {
+        windowsUnseen_ = unseen;
+        if (unseen.isNotEmpty())
+            ++windowsUnseenTimes_;
+        note(unseen.isEmpty() ? std::string{"Windows affiche de nouveau toutes les fenêtres"}
+                              : "Windows n'affiche pas : " + unseen.toStdString() +
+                                    " ; au premier plan : " + native::foreground().toStdString());
+    }
+
     if (!acted_)
     {
         report_.add({});
@@ -248,6 +279,8 @@ void Verification::check(bool passed, const std::string& what)
         probed_ = true;
         note("état au premier échec : " + probe_->describe());
     }
+    if (!passed)
+        note("au premier plan : " + native::foreground().toStdString());
 }
 
 void Verification::note(const std::string& what)
@@ -336,6 +369,14 @@ void Verification::finish()
     report_.add(juce::String::fromUTF8("## Résultat"));
     report_.add("- " + juce::String(passed_) + juce::String::fromUTF8(" vérifications passées, ") +
                 juce::String(failed_) + juce::String::fromUTF8(" en échec"));
+    // A window Windows did not show during the run: what was checked on
+    // screen then proves nothing of the software (S25).
+    if (windowsUnseenTimes_ > 0)
+        report_.add(
+            juce::String::fromUTF8("- **Passage non probant à l'écran** : Windows n'a pas affiché une "
+                                   "fenêtre ") +
+            juce::String(windowsUnseenTimes_) +
+            juce::String::fromUTF8(" fois (réduite ou cachée, voir les étapes)"));
 
     static_cast<void>(folder_.getChildFile("rapport.md").replaceWithText(report_.joinIntoString("\n")));
 

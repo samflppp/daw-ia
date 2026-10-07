@@ -17,4 +17,11 @@ namespace daw::app::native
 // another system.
 bool doubleClickCaption(juce::ComponentPeer& peer, juce::Point<int> screen);
 
+// What Windows says of a window and of the screen, for a check that does not
+// see a window shown (S25): the window's own state (« réduite », « cachée »,
+// « affichée ») and the window in the foreground, its title and whether it is
+// this process's. "unsupported" on another system.
+[[nodiscard]] juce::String windowState(juce::ComponentPeer& peer);
+[[nodiscard]] juce::String foreground();
+
 } // namespace daw::app::native

@@ -468,6 +468,11 @@ private:
     // how many refusals the bus had made when the step began.
     bool probed_{false};
     std::size_t refusalsAtStart_{0};
+
+    // The windows meant to be shown that Windows does not show, as last said
+    // (S25: a check that does not see a window shown says what Windows says).
+    juce::String windowsUnseen_;
+    int windowsUnseenTimes_{0};
     double startedAtMs_{0.0};
     int settle_{0};
 
