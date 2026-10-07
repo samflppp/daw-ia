@@ -7,6 +7,7 @@
 #include "daw/domain/commands/TransportCommands.h"
 #include "daw/domain/flux/Graph.h"
 #include "daw/domain/project/InternalEffects.h"
+#include "daw/engine/FluxTaps.h"
 #include "daw/engine/MeterTap.h"
 #include "daw/engine/Rendering.h"
 #include "daw/ui/panels/FluxPanel.h"
@@ -75,6 +76,8 @@ struct Verification::FluxRun
     domain::PluginId flowEqualiser;
     domain::PluginId flowCompressor;
     float sourceHeardDb{-100.0f};
+    double costSince{0.0};
+    double armedShare{0.0};
     float sumHeardDb{-100.0f};
     domain::PluginId equaliser;
     domain::PluginId compressor;
@@ -432,6 +435,67 @@ void Verification::addFluxWindow(const std::shared_ptr<FluxRun>& run)
             check(level > -30.0, "la source : " + fixed(level, 1) + " dBFS");
             check(!window->shownAt(domain::flux::sourceOf(run->synth)).empty(), "sa forme d'onde est lue");
         });
+
+    // --- what the taps cost, measured where it is paid: 30 s every state
+    // armed, 30 s none, the audio thread's own time in each tap
+
+    const auto startCost = [this, run]
+    {
+        for (auto* tap : engine::FluxTaps{edit_}.all())
+            tap->resetCost();
+        run->costSince = juce::Time::getMillisecondCounterHiRes();
+    };
+    const auto costAfter = [this, run](const std::string& what) -> double
+    {
+        const auto wall = (juce::Time::getMillisecondCounterHiRes() - run->costSince) / 1000.0;
+        double busy = 0.0;
+        std::int64_t blocks = 0;
+        int armed = 0;
+        const auto taps = engine::FluxTaps{edit_}.all();
+        for (const auto* tap : taps)
+        {
+            busy += tap->busySeconds();
+            blocks += tap->blocks();
+            armed += tap->armed() ? 1 : 0;
+        }
+        const auto share = 100.0 * busy / std::max(wall, 1e-9);
+        note(what + " : " + std::to_string(taps.size()) + " prises dont " + std::to_string(armed) +
+             " armées, " + fixed(wall, 1) + " s ; " + fixed(busy * 1000.0, 2) + " ms sur le fil audio, " +
+             fixed(share, 3) + " % d'un cœur ; " +
+             fixed(blocks > 0 ? busy * 1e6 / static_cast<double>(blocks) : 0.0, 2) +
+             " µs par bloc et par prise ; charge Tracktion " +
+             fixed(edit_.engine.getDeviceManager().getCpuUsage(), 3));
+        return share;
+    };
+
+    add(
+        "30 s de lecture, chaque état armé : le coût des prises",
+        startCost,
+        [run] { return juce::Time::getMillisecondCounterHiRes() - run->costSince >= 30000.0; },
+        40000.0);
+
+    add(
+        "relevé, puis F3 ferme la fenêtre : 30 s, aucune prise armée",
+        [this, run, costAfter, startCost]
+        {
+            run->armedShare = costAfter("armées");
+            check(run->armedShare < 1.0, "moins d'un pour cent d'un cœur");
+            key(juce::KeyPress{juce::KeyPress::F3Key});
+            startCost();
+        },
+        [run] { return juce::Time::getMillisecondCounterHiRes() - run->costSince >= 30000.0; },
+        40000.0);
+
+    add(
+        "relevé, puis F3 rouvre la fenêtre",
+        [this, run, costAfter]
+        {
+            const auto idle = costAfter("aucune armée");
+            check(idle < run->armedShare, "désarmées, elles coûtent moins");
+            key(juce::KeyPress{juce::KeyPress::F3Key});
+        },
+        [flux] { return flux() != nullptr && flux()->isShowing(); },
+        3000.0);
 
     const auto bandAt = [](double hz)
     {
