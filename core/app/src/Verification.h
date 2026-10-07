@@ -42,6 +42,7 @@ namespace daw::app
 {
 
 class LivePlay;
+class KitSession;
 class MixSession;
 class StemSession;
 
@@ -89,7 +90,8 @@ public:
         stems,
         play,
         audio,
-        flux
+        flux,
+        kit
     };
 
     struct Wiring
@@ -157,6 +159,9 @@ public:
 
         // The sound card's settings (S24): --verify-audio drives the window.
         engine::AudioSettings* audio{nullptr};
+
+        // The kit (S24): --verify-kit indexes a library it builds.
+        KitSession* kit{nullptr};
     };
 
     explicit Verification(Wiring wiring);
@@ -213,6 +218,10 @@ private:
     struct FluxRun;
     void buildFlux();
     void addFluxWindow(const std::shared_ptr<FluxRun>& run);
+
+    // S24 (VerificationKit.cpp): the kit, on a library built here.
+    struct KitRun;
+    void buildKit();
     // An offline render of the Edit as it plays, read back; and the type of
     // the last command the journal holds.
     [[nodiscard]] juce::AudioBuffer<float> renderNamed(const std::string& name);
@@ -512,6 +521,7 @@ private:
     LivePlay* live_{nullptr};
     domain::live::Router* router_{nullptr};
     engine::AudioSettings* audio_{nullptr};
+    KitSession* kitSession_{nullptr};
 
     // S21: cycles run and silent ones, per action before the play.
     std::map<std::string, int> cyclesByAction_;

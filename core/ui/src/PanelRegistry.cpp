@@ -7,6 +7,7 @@
 #include "daw/ui/panels/DirectionPanel.h"
 #include "daw/ui/panels/FluxPanel.h"
 #include "daw/ui/panels/HistoryPanel.h"
+#include "daw/ui/panels/KitPanel.h"
 #include "daw/ui/panels/MixerPanel.h"
 #include "daw/ui/panels/PianoRollPanel.h"
 #include "daw/ui/panels/PlaceholderPanel.h"
@@ -51,6 +52,7 @@ PanelRegistry PanelRegistry::withBuiltinPanels()
                  [](const PanelContext& context) { return std::make_unique<HistoryPanel>(context); });
     registry.add("audio", [](const PanelContext& context) { return std::make_unique<AudioPanel>(context); });
     registry.add("flux", [](const PanelContext& context) { return std::make_unique<FluxPanel>(context); });
+    registry.add("kit", [](const PanelContext& context) { return std::make_unique<KitPanel>(context); });
     registry.add("direction",
                  [](const PanelContext& context) { return std::make_unique<DirectionPanel>(context); });
 

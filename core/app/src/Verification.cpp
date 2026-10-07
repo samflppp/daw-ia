@@ -78,6 +78,7 @@ Verification::Verification(Wiring wiring)
     , live_(wiring.live)
     , router_(wiring.router)
     , audio_(wiring.audio)
+    , kitSession_(wiring.kit)
 {
     exporter_ = wiring.exporter;
 }
@@ -147,6 +148,9 @@ void Verification::start()
         break;
     case Run::flux:
         buildFlux();
+        break;
+    case Run::kit:
+        buildKit();
         break;
     }
 

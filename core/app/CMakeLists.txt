@@ -21,6 +21,7 @@ target_sources(daw_app PRIVATE
     src/LevelMonitor.cpp
     src/LivePlay.cpp
     src/SoundCard.cpp
+    src/KitSession.cpp
     src/RawKeyboard.cpp
     src/TakeRecorder.cpp
     src/MidiKeyboards.cpp
@@ -32,6 +33,7 @@ target_sources(daw_app PRIVATE
     src/NativeWindow.cpp
     src/QuitWatchdog.cpp
     src/Verification.cpp
+    src/VerificationKit.cpp
     src/VerificationAutomation.cpp
     src/VerificationFluidity.cpp
     src/VerificationForm.cpp

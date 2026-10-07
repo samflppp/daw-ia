@@ -4,6 +4,7 @@
 #include "DisplayMode.h"
 #include "EditClock.h"
 #include "FluxSource.h"
+#include "KitSession.h"
 #include "LevelMonitor.h"
 #include "Listening.h"
 #include "LivePlay.h"
@@ -287,6 +288,8 @@ public:
                 run = Verification::Run::audio;
             else if (tokens[index] == "--verify-flux")
                 run = Verification::Run::flux;
+            else if (tokens[index] == "--verify-kit")
+                run = Verification::Run::kit;
             else if (tokens[index] == "--verify-stems")
                 run = Verification::Run::stems;
             else if (tokens[index] != "--verify")
@@ -343,7 +346,8 @@ public:
                 stemSession_.get(),
                 livePlay_.get(),
                 &engineHost_->live(),
-                &engineHost_->audio()});
+                &engineHost_->audio(),
+                kitSession_.get()});
 
             // A verification mixes by the rules: never a key, never an API.
             if (mixSession_ != nullptr)
@@ -401,6 +405,7 @@ public:
         if (layoutSettings_ != nullptr)
             static_cast<void>(layoutSettings_->saveIfNeeded());
         QuitWatchdog::step("sample library");
+        kitSession_.reset(); // its index thread is stopped; it plays through the library's preview
         sampleLibrary_.reset();
         layoutSettings_.reset();
 
@@ -884,6 +889,11 @@ private:
             std::make_unique<SampleLibrary>([this] { return contentStore_.get(); }, layoutSettings_.get());
         sampleLibrary_->attachPreview(engineHost_->engine().getDeviceManager().deviceManager);
 
+        // The kit (S24): its index of the samples lives with this machine's
+        // settings — a verification's are thrown away.
+        kitSession_ = std::make_unique<KitSession>(
+            bus_, state_, *sampleLibrary_, engineHost_->settingsFolder().getChildFile("samples-index.json"));
+
         // The stem separator (S22): another process per separation, its
         // stems kept under %LOCALAPPDATA%. --stems-model fake runs the band
         // filters of the CI instead of a model.
@@ -932,7 +942,8 @@ private:
                                          *directionSession_,
                                          *livePlay_,
                                          *soundCard_,
-                                         *flux_};
+                                         *flux_,
+                                         *kitSession_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();
@@ -1381,6 +1392,7 @@ private:
     std::unique_ptr<PlaybackProbe> probe_;
     std::unique_ptr<juce::PropertiesFile> layoutSettings_;
     std::unique_ptr<SampleLibrary> sampleLibrary_;
+    std::unique_ptr<KitSession> kitSession_;
     ui::WorkspaceView* view_{nullptr};
     std::unique_ptr<Verification> verification_;
     std::unique_ptr<MixOnce> mixOnce_;

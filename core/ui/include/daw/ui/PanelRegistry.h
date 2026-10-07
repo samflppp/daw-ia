@@ -9,6 +9,7 @@
 #include "daw/ui/model/DirectionHost.h"
 #include "daw/ui/model/FluxHost.h"
 #include "daw/ui/model/History.h"
+#include "daw/ui/model/KitHost.h"
 #include "daw/ui/model/LevelSource.h"
 #include "daw/ui/model/ListeningHost.h"
 #include "daw/ui/model/LiveHost.h"
@@ -95,6 +96,8 @@ struct PanelServices
     AudioHost& audio;
     // The sound at each place of the audio flux (S24), read from its taps.
     FluxHost& flux;
+    // The kit chosen from the person's samples (S24).
+    KitHost& kit;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

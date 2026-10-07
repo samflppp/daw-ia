@@ -117,6 +117,7 @@ target_sources(daw_ui INTERFACE
     src/panels/HistoryPanel.cpp
     src/panels/AudioPanel.cpp
     src/panels/FluxPanel.cpp
+    src/panels/KitPanel.cpp
     src/panels/DirectionPanel.cpp
     src/panels/CopilotPanel.cpp)
 
