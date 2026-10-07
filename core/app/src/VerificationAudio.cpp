@@ -87,6 +87,7 @@ std::string describe(const engine::AudioSettings::Choice& choice)
 struct Verification::AudioRun
 {
     juce::MemoryBlock settingsBefore;
+    juce::Time startedAt;
     engine::AudioSettings::Choice first;
     engine::AudioSettings::Choice chosen;
     domain::TrackId lead;
@@ -110,7 +111,17 @@ void Verification::buildAudio()
         [this, run]
         {
             run->settingsBefore = bytesOf(personalSettings());
+            run->startedAt = juce::Time::getCurrentTime();
             run->first = audio_->current();
+            // The copy, proved by its bytes: plugins.xml, which nothing here
+            // rewrites, is in the verification's folder as it is on the machine.
+            const auto plugins = personalSettings().getSiblingFile("plugins.xml");
+            if (plugins.existsAsFile())
+                check(bytesOf(folder_.getChildFile("reglages-machine").getChildFile("plugins.xml")) ==
+                          bytesOf(plugins),
+                      "plugins.xml copié à l'octet dans le dossier de la vérification");
+            else
+                note("pas de plugins.xml sur la machine : la copie n'est prouvée qu'à la fin");
             note("réglages de la machine : " + personalSettings().getFullPathName().toStdString() + ", " +
                  fingerprint(run->settingsBefore));
             note("la carte au départ : " + describe(run->first) + ", " + fixed(audio_->sampleRate(), 0) +
@@ -197,8 +208,15 @@ void Verification::buildAudio()
             const auto anyHeld = least < 1.0e9;
             if (anyHeld)
             {
-                check(chosen != nullptr && domain::live::held(*chosen),
-                      "le réglage conseillé a tenu sans décrocher");
+                // Read from the trial's own numbers, not by held(), which
+                // the advice uses: a held() gone wrong would agree with itself.
+                check(chosen != nullptr && chosen->timing.late == 0 &&
+                          chosen->timing.blocks >= blocksToMeasure,
+                      "le réglage conseillé a tenu sans décrocher" +
+                          (chosen != nullptr
+                               ? " : " + std::to_string(chosen->timing.late) + " décrochages en " +
+                                     std::to_string(chosen->timing.blocks) + " blocs"
+                               : std::string{}));
                 const auto wanted = leastSmall < 1.0e9 ? leastSmall : least;
                 check(chosen != nullptr && std::abs(domain::live::worstKeyToEar(*chosen) - wanted) < 1.0e-9,
                       "c'est celui qui attend le moins, au pire, parmi ceux qui tiennent");
@@ -442,8 +460,11 @@ void Verification::buildAudio()
             const auto after = bytesOf(personalSettings());
             check(after.getSize() > 0 && after == run->settingsBefore,
                   personalSettings().getFileName().toStdString() + " : " + fingerprint(after));
-            check(folder_.getChildFile("reglages-machine").getChildFile("Settings.xml").existsAsFile(),
-                  "le moteur a gardé ses réglages dans le dossier de la vérification");
+            // The buffers changed above are written by the engine where it
+            // keeps its settings: there, during this run.
+            const auto kept = folder_.getChildFile("reglages-machine").getChildFile("Settings.xml");
+            check(kept.existsAsFile() && kept.getLastModificationTime() >= run->startedAt,
+                  "le moteur a écrit ses réglages dans le dossier de la vérification, pendant ce passage");
             check(!personalSettings().getSiblingFile("carte-audio.json").existsAsFile() ||
                       personalSettings().getSiblingFile("carte-audio.json").getLastModificationTime() <
                           juce::Time::getCurrentTime() - juce::RelativeTime::minutes(30),
