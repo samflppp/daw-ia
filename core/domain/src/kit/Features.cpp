@@ -253,20 +253,34 @@ Features measure(const float* left, const float* right, std::size_t count, doubl
     }
 
     // The pitch: YIN every 10 ms over 85 ms, where it is within 30 dB of its
-    // peak.
-    const auto hop = std::max<std::size_t>(1, static_cast<std::size_t>(std::lround(0.01 * sampleRate)));
-    const auto window = static_cast<std::size_t>(std::lround(0.085 * sampleRate));
+    // peak — on the sound decimated to about 12 kHz: YIN's cost grows with
+    // the window times the longest period, and the pitches looked for (30 Hz
+    // to 1 kHz) need no more (S24: 32 ms a file at 48 kHz, measured on ten
+    // thousand files).
+    const auto factor = std::max<std::size_t>(1, static_cast<std::size_t>(sampleRate / 12000.0));
+    const auto pitchRate = sampleRate / static_cast<double>(factor);
+    std::vector<float> decimated(count / factor);
+    for (std::size_t index = 0; index < decimated.size(); ++index)
+    {
+        float sumOf = 0.0f;
+        for (std::size_t step = 0; step < factor; ++step)
+            sumOf += mono[index * factor + step];
+        decimated[index] = sumOf / static_cast<float>(factor);
+    }
+    const auto lengthDecimated = length / factor;
+    const auto hop = std::max<std::size_t>(1, static_cast<std::size_t>(std::lround(0.01 * pitchRate)));
+    const auto window = static_cast<std::size_t>(std::lround(0.085 * pitchRate));
     std::vector<double> heard; // MIDI, fractional; 0 for a hop without one
-    for (std::size_t start = 0; start + window <= count && start < length; start += hop)
+    for (std::size_t start = 0; start + window <= decimated.size() && start < lengthDecimated; start += hop)
     {
         double level = 0.0;
         for (auto index = start; index < start + hop; ++index)
-            level = std::max(level, static_cast<double>(std::abs(mono[index])));
+            level = std::max(level, static_cast<double>(std::abs(decimated[index])));
         double midi = 0.0;
         if (level >= peak * std::pow(10.0, -30.0 / 20.0))
         {
-            const auto hz =
-                sound::fundamentalOf(mono.data() + start, static_cast<int>(window), sampleRate, 30.0, 1000.0);
+            const auto hz = sound::fundamentalOf(
+                decimated.data() + start, static_cast<int>(window), pitchRate, 30.0, 1000.0);
             if (hz > 0.0)
                 midi = 69.0 + 12.0 * std::log2(hz / 440.0);
         }
