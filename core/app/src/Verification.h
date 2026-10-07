@@ -193,6 +193,8 @@ private:
 
     // Every reading of the master meter while recordingMaster_ is set, at the
     // rate the meters are refreshed: what the copilot reads is one of them.
+    // While recordingPlayback_ is set, each reading taken as the transport
+    // plays, with the position it was taken at (--verify-lecture).
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     void buildList();
@@ -493,6 +495,8 @@ private:
     double longestTickMs_{0.0};
     double measuringSince_{0.0};
     bool recordingMaster_{false};
+    std::vector<std::pair<double, float>> playbackSeen_;
+    bool recordingPlayback_{false};
     std::size_t droppedBefore_{0};
     std::function<bool(const juce::File&)> newProjectAt_;
     std::function<bool(const juce::File&)> openProjectAt_;

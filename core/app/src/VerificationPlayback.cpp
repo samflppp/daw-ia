@@ -5,6 +5,7 @@
 #include "daw/engine/Rendering.h"
 
 #include <array>
+#include <cmath>
 #include <memory>
 #include <string>
 
@@ -36,6 +37,16 @@ namespace
 constexpr int cyclesPerAction = 15;
 constexpr double heardDb = -60.0;
 constexpr double secondReadingMs = 500.0;
+
+// Where in a beat the bar is loud: its kick strikes on every beat and is
+// gone before the next — at 90 BPM, the master's 300 ms peak falls under
+// -60 dBFS from 0.75 of a beat to the next strike. A reading taken there is
+// the music, not a silent playback: in S24, all 114 silent readings of five
+// runs sat between 0.55 and 0.65 s, the end of the first beat. So the
+// reading is the last one taken between these two places of a beat,
+// whenever the step comes.
+constexpr double loudFromBeat = 0.2;
+constexpr double loudToBeat = 0.55;
 
 constexpr std::array<const char*, 5> actions{
     "rien", "rendu hors ligne", "commande", "écoute d'un sample", "carte son perdue"};
@@ -128,6 +139,9 @@ void Verification::addPlaybackCycles()
                 press("SONG");
                 static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(true, 0.0, 4.0)));
                 static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.0)));
+                playbackSeen_.clear();
+                recordingPlayback_ = true;
+                levels_.addChangeListener(this);
                 key(juce::KeyPress{juce::KeyPress::spaceKey});
             },
             [this, master] { return clock_.isPlaying() && levelOf(master).peakDb > heardDb; },
@@ -135,16 +149,31 @@ void Verification::addPlaybackCycles()
 
         add(
             name + " : relevé",
-            [this, master, action]
+            [this, action]
             {
-                const auto level = levelOf(master).peakDb;
+                recordingPlayback_ = false;
+                auto level = engine::StripLevel::floorDb;
+                double at = -1.0;
+                for (const auto& [beats, peakDb] : playbackSeen_)
+                {
+                    const auto inBeat = beats - std::floor(beats);
+                    if (inBeat >= loudFromBeat && inBeat <= loudToBeat)
+                    {
+                        level = peakDb;
+                        at = beats;
+                    }
+                }
                 cycleSilent_ = level <= heardDb;
                 ++cyclesByAction_[action];
                 if (!cycleSilent_)
                 {
-                    note("master : crête " + juce::String(level, 1).toStdString() + " dBFS");
+                    note("master : crête " + juce::String(level, 1).toStdString() + " dBFS à " +
+                         juce::String(at, 2).toStdString() + " temps");
                     return;
                 }
+                note(at < 0.0 ? std::string{"aucune lecture du master dans le temps fort d'un battement"}
+                              : "master : crête " + juce::String(level, 1).toStdString() + " dBFS à " +
+                                    juce::String(at, 2).toStdString() + " temps");
 
                 ++silentByAction_[action];
                 const auto path = probe_ != nullptr ? probe_->describeAudio() : std::string{"pas de sonde"};

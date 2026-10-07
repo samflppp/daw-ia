@@ -93,6 +93,9 @@ void Verification::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
     if (source == &levels_ && recordingMaster_)
         masterSeen_.push_back(levelOf(engine::MeterTapPlugin::masterStrip.toStdString()).peakDb);
+    if (source == &levels_ && recordingPlayback_ && clock_.isPlaying())
+        playbackSeen_.emplace_back(clock_.positionBeats(),
+                                   levelOf(engine::MeterTapPlugin::masterStrip.toStdString()).peakDb);
 }
 
 void Verification::start()
