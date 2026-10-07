@@ -214,3 +214,25 @@ Sur `main`, Release recompilé par `scripts/build.cmd`.
 8. **Enregistre en SONG**, au milieu du morceau : un pattern neuf doit apparaître là où tu as commencé.
 9. **La sensation.** Joue vite, une gamme : la latence se sent-elle ? Si oui, le tampon par défaut de Windows est à
    baisser, et la fenêtre « Audio » tombée cette semaine devient la priorité.
+
+## S24 — la fenêtre « Audio », le flux audio, le kit, les bus intelligents
+
+### À essayer, dans l'ordre
+
+Sur `main`, Release recompilé par `scripts/build.cmd`.
+
+1. **F12, « Tester ma carte ».** Ta Realtek, puis un casque Bluetooth et, si tu en as une, une autre carte. Le
+   conseil est-il un réglage où tu ne sens pas la latence en jouant ? Change de tampon pendant que le morceau joue :
+   rien ne doit s'arrêter.
+2. **Le mixer, les emplacements d'effets.** Pose un égaliseur, un de tes plugins, glisse-les, contourne-les.
+   Est-ce plus rapide que la page des plugins ? Garderais-tu les deux ?
+3. **F3, le flux audio**, sur un vrai morceau à toi. Comprends-tu le routage en le regardant ? Le graphe est-il
+   lisible à 15 pistes, ou faut-il replier ? Clique un égaliseur : l'avant et l'après font-ils comprendre ce qu'il
+   fait ?
+4. **Écoute seul** la sortie d'un bus, puis l'avant d'un effet : est-ce le geste qui fait comprendre ?
+5. **Glisse un effet sur un lien, tire un envoi vers un bus** : les gestes se trouvent-ils sans qu'on te les dise ?
+6. **« Mixer » avec F3 ouvert** : la proposition dans le graphe aide-t-elle à décider de garder ?
+7. **La page « Kit »** sur ta bibliothèque. Combien de temps prend la première mesure ? Les rôles sont-ils justes ?
+   Le kit sonne-t-il ensemble à l'écoute ? Bouge les axes : le kit change-t-il dans le sens attendu ?
+8. **La page « Bus »** sur un projet où plusieurs pistes portent ta réverbération : la proposition est-elle juste,
+   et la phrase sur le son sec, si elle vient ?

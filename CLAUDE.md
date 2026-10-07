@@ -22,7 +22,12 @@ stems sur leurs pistes (HTDemucs, local) ; une direction tirée de références 
 équilibre, couleur — des nombres), gardée dans le projet (`direction.set`, schéma 7), lue par le mixage, la
 génération et le copilote, corrigeable au panneau Direction (F11). S23 : on joue l'instrument de la piste choisie au clavier MIDI et au
 clavier de l'ordinateur (Ctrl+T, lu par la place des touches, Raw Input), sans rien écrire ; ● ou Ctrl+R enregistre
-dans le pattern en cours, décompte et clic, en un groupe d'historique ; la fenêtre « Audio » est tombée. Plan des six dernières semaines (`docs/plan-s21-s26.md`) :
+dans le pattern en cours, décompte et clic, en un groupe d'historique. S24 : la fenêtre « Audio » (F12), son conseil
+mesuré sur la carte ; les effets posés, déplacés (`plugin.move`) et contournés depuis la tranche du mixer ; le flux audio
+(F3), le routage réel en graphe calculé depuis `ProjectState`, le son à chaque endroit par des prises dans chaque
+chaîne, l'avant et l'après d'un effet, les gestes du graphe, l'écoute seule d'un état, la proposition du mixage vue
+dans le graphe ; le kit choisi par des règles dans les samples de la personne, mesurés une fois sur la machine
+(page « Kit ») ; les bus intelligents, essayés à blanc et gardés en un groupe (page « Bus »). Plan des six dernières semaines (`docs/plan-s21-s26.md`) :
 S21 solidité (lecture muette d'abord) et fin de l'ergonomie ; S22 séparateur de stems et direction par
 références ; S23 jouer au clavier MIDI et au clavier AZERTY ; S24 le kit et le mixer ; S25 le DAW à la voix ;
 S26 le prototype emballé. Le piano-roll reste jusqu'à la phase d'essais, après la S26 ; le fine-tune pendant
@@ -45,6 +50,8 @@ l'incubation. Plus aucun verbe ajouté au domaine sans une raison de démonstrat
 | Une référence ne laisse dans le projet que des nombres (jamais son audio, ses notes ni son chemin) ; la direction vit dans `ProjectState`, un tempo ou une tonalité ne se moyenne jamais entre références | S22 | elle se rouvre et s'annule avec le projet ; un désaccord se dit au lieu d'être deviné |
 | Le jeu en direct n'écrit rien : file sans verrou par piste (`domain::live`), plugin interne en tête de chaîne (`LiveInputPlugin`), placement régulier (un bloc + une marge) ; une prise devient des commandes existantes en un groupe, à la fin, identifiants de l'appelant, sans quantification ; au tour de boucle, un départ dans le dernier 1/32 de temps est écrit au début (`wrapBeats`, gardé le 6 octobre 2026) | S23 | le jeu ne passe pas par le bus ni n'attend le fil des messages ; un Ctrl+Z retire la prise à l'octet |
 | Le clavier de l'ordinateur se lit par scan code (Raw Input, `RIDEV_INPUTSINK`, sur un fil à lui), disposition de FL ; avec Ctrl, Alt ou Windows, aucune touche ne joue | S23 | une lettre change de place entre AZERTY et QWERTY, la place non |
+| Le flux audio est calculé depuis `ProjectState` (`flux::graphOf`), sa disposition et sa vue restent à l'écran ; le son s'y lit par des prises de la projection dans chaque chaîne (`FluxTapPlugin`), armées seulement quand leur nœud est à l'écran, jamais un verrou ni une allocation sur le fil audio | S24 | un graphe qui montre le vrai routage, jamais une illustration ; une prise posée seulement à l'ouverture rebâtirait le graphe du moteur |
+| Le kit est choisi par des règles sur des mesures locales (`domain::kit`), sans modèle ; l'index des samples vit sur la machine, jamais dans le projet | S24 | les contraintes (808 accordée, grave libre, couleur commune) se mesurent et se vérifient ; décidé le 6 octobre 2026 |
 | Windows seule cible | S1 (annoncé), acté S5 | support Linux/Ubuntu reporté post-MVP ; `setup-ubuntu.sh` reste pour la CI, jamais lancé en cible produit |
 
 Rouvrir une de ces lignes veut dire que quelque chose de nouveau la contredit réellement — c'est couvert
@@ -108,7 +115,7 @@ Mécanismes :
 
 ## 5. Où trouver quoi
 
-- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S23 au 06/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
+- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S24 au 07/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
   `docs/bilan-s7bis.md`. Chaque bilan documente les écarts à l'acquis, les tests cassés une fois, et le
   reste à faire.
 - **Plan des semaines S21 à S26** : `docs/plan-s21-s26.md` — base des briefs, pas un brief.
@@ -130,7 +137,13 @@ Mécanismes :
   règles, sans clé), `--verify-lecture` (75 lectures de la première mesure après cinq actions, dont la carte
   son perdue ; le chemin audio écrit à chaque silence), `--verify-stems` (une séparation réelle par le modèle
   rapide sur des sources connues mélangées ; toute autre vérification sépare par `--stems-model fake`, les filtres
-  de la CI), `--verify-jeu` (jouer et enregistrer par une entrée simulée, latence comprise). `--sans-jeu` retire le
+  de la CI), `--verify-jeu` (jouer et enregistrer par une entrée simulée, latence comprise), `--verify-audio` (la fenêtre
+« Audio » sur la carte de la machine : l'essai, le tampon relu au moteur, la latence), `--verify-flux` (les effets de
+la tranche, le flux audio, ses gestes, l'écoute seule, la proposition du mixage, le coût des prises, les bus
+intelligents), `--verify-kit` (le kit sur une bibliothèque construite, l'index de 10 000 fichiers). `--tampon N` et
+`--pilote partage|basse-latence|exclusif` ouvrent la carte ainsi, en vérification seulement. Toute vérification
+travaille avec un dossier de réglages de la machine à elle (`<dossier>/reglages-machine`, copie de `Settings.xml` et
+`plugins.xml`) : ni la carte, ni l'index des samples de la personne ne sont réécrits. `--sans-jeu` retire le
   plugin du jeu des chaînes, pour comparer `--verify-lecture`. `scripts/verify-quit.ps1 -Repeat N` : la fermeture
   finit le processus, avec et sans copilote, en lecture, sans passer par la garde. `--mix-once` n'est **pas**
   une vérification : un mixage réel par le modèle sur le projet donné, écrit dans `daw.log`, refusé, puis
@@ -165,11 +178,19 @@ Mécanismes :
 | Les tests du moteur partagent les réglages persistés de l'engine de test (l'identité CLAP retient `C:\dawS9\…`) | S21 | **fermé S22** : un dossier de réglages jetable par processus |
 | Les poids HTDemucs sont donnés « for research purpose », pas sous MIT | S22 | choix du fondateur de bâtir le prototype dessus ; téléchargés au premier usage, jamais livrés ; une licence à chercher avant l'installeur de la S26, SCNet XL IHF à trancher |
 | L'arrangement ne lit la direction qu'à travers le copilote (sections de la référence, en secondes) | S22 | aucun code n'arrange d'après les sections ; un modèle à exposer avant d'écrire |
-| `--verify` complet pas relancé après les stems et la direction | S22 | 674 sur 674 à `c91ac5e` ; S23, sans copilote sous Linux seulement (36 échecs attendus, les mêmes avant et après) |
-| `--verify-lecture` avec le jeu : à 0 sur 75 ? | S23 | non mesurable sous Linux (`main` lui-même y fait 9 à 12 muettes) ; à lancer sur Windows avec et sans `--sans-jeu` |
-| La fenêtre « Audio » (pilote, tampon, latence) | S23 | tombée ; **à la S24**, décidé le 6 octobre 2026 |
+| `--verify` complet pas relancé après les stems et la direction | S22 | **fermé S24** : 674 sur 674 avec copilote au chantier 0, et en fin de semaine au second passage (le premier : 667, des fenêtres non vues affichées pendant une minute, cause non trouvée) |
+| `--verify-lecture` avec le jeu : à 0 sur 75 ? | S23 | **fermé S24** : 0 sur 75 avec et sans `--sans-jeu`, et sur le code final de la S24, prises du flux comprises |
+| La fenêtre « Audio » (pilote, tampon, latence) | S23 | **fermé S24** (F12, conseil mesuré) |
+| Le mode exclusif décroche sur la Realtek du fondateur | S24 | une quarantaine de décrochages en 3 s à chaque tampon, au pire 75 ms ; le conseil reste le partagé ; `--verify-lecture` en exclusif 256 : 1 sur 75 |
+| Le repli de la carte sur « Windows Audio » partagé | S24 | jamais éprouvé : aucune vérification ne perd une carte en mode exclusif |
+| `scripts/verify-quit.ps1` utilise les réglages de la personne | S24 | il ne passe pas par `--verify` ni par son dossier de réglages |
+| Les prises du flux décalaient le relevé de `--verify-lecture` d'environ 50 ms | S24 | le relevé se lit maintenant par position (0 sur 75) ; la cause du décalage n'est pas trouvée |
+| « F3 rouvre la fenêtre » dans `--verify-flux` | S24 | deux fois sur une dizaine : la fenêtre dessinée, pas vue affichée en 3 s ; cause non trouvée |
+| `MeterTests`, « fader -6 dB », intermittent | S24 | 1 fois sur 4 ; probablement la phase de 4OSC, non prouvé |
+| La contrainte de couleur du kit sur une petite bibliothèque | S24 | à 0,75, quatre kicks laissaient le kit à trois éléments ; **à trancher** (bilan S24 §6.4) |
+| La réverbération par envoi (bus intelligents) non éprouvée au rendu | S24 | aucune réverbération sur une machine de vérification ; **à trancher** (bilan S24 §7.3) |
 | 4OSC garde une voix au-delà de 32 (voix volée, relâché pendant la coupure) | S23 | défaut de Tracktion prouvé au rendu ; non contourné |
 | Une note tenue coupée quand la tête est déplacée pendant la lecture | S23 | indiscernable d'un tour de boucle pour le plugin du jeu |
-| Les décalages de couleur des règles du mixage ignorent `direction.amount` | S23 | vu en lisant, pas corrigé |
+| Les décalages de couleur des règles du mixage ignorent `direction.amount` | S23 | **fermé S24** (`4fb3fbd`) |
 | La ligne de génération lue un geste en retard, par intermittence | S19 | l'étape attend maintenant la fin de la lecture ; la cause de la variante n'est pas trouvée |
 | Support Ubuntu en cible produit | reporté S1/S5 | scripts gardés pour la CI seulement |

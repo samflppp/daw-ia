@@ -202,6 +202,13 @@ mixer.
 - La semaine porte quatre chantiers, et le flux audio est un panneau neuf. **Tous sont faits dans la S24**,
   quitte à ce qu'elle dure plus qu'une semaine (décidé le 6 octobre 2026) : aucun ne tombe faute de temps.
 
+**Ce que la semaine laisse à trancher** (`docs/bilan-s24.md` §6.4, §7.3).
+- **La contrainte de couleur du kit sur une petite bibliothèque** : à 0,75, quatre kicks laissaient le kit à trois
+  éléments. Garder, ou relâcher sous dix samples par rôle (recommandé).
+- **La réverbération par envoi au rendu** : non éprouvée, faute de réverbération sur une machine de vérification.
+  Un test au label `audio` avec `DAW_TEST_VST3` (recommandé pour la S25), ou une réverbération interne (une
+  décision de modèle).
+
 ## S25 — Diriger le DAW à la voix
 
 **But.** On tient une touche, on parle, on relâche : la phrase part au copilote, sans geste déclenché sur une
