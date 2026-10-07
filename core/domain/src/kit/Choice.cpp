@@ -157,12 +157,40 @@ Kit choose(const std::vector<Sample>& library, std::optional<int> tonic, const A
     {
         return std::all_of(kit.picks.begin(),
                            kit.picks.end(),
-                           [&](const Pick& pick) { return closeEnough(axes[index], pick.axes); });
+                           [&](const Pick& pick)
+                           { return pick.outOfColour || closeEnough(axes[index], pick.axes); });
     };
     const auto take = [&](std::size_t index, std::vector<std::string> reasons)
     {
         reasons.push_back("couleur : " + axesSaid(axes[index]));
         kit.picks.push_back(Pick{library[index].role, library[index].path, axes[index], std::move(reasons)});
+    };
+    // The widest gap on an axis between a sample and the elements chosen in
+    // colour: one taken out of colour does not move the colour of the kit.
+    const auto gapOf = [&](std::size_t index)
+    {
+        double gap = 0.0;
+        for (const auto& pick : kit.picks)
+            if (!pick.outOfColour)
+                gap = std::max({gap,
+                                std::abs(axes[index].bright - pick.axes.bright),
+                                std::abs(axes[index].ample - pick.axes.ample),
+                                std::abs(axes[index].dirty - pick.axes.dirty)});
+        return gap;
+    };
+    // A small role, none of it in colour: its nearest in colour, the gap said.
+    const auto takeOutOfColour =
+        [&](const std::vector<std::size_t>& among, std::size_t roleSize, std::vector<std::string> reasons)
+    {
+        const auto nearest = *std::min_element(
+            among.begin(), among.end(), [&](std::size_t a, std::size_t b) { return gapOf(a) < gapOf(b); });
+        const auto gap = gapOf(nearest);
+        reasons.push_back("hors couleur : écart de " + french(gap, 2) + " sur un axe, au-delà de " +
+                          french(colourApart, 2) + " ; ta bibliothèque n'en compte que " +
+                          std::to_string(roleSize));
+        take(nearest, std::move(reasons));
+        kit.picks.back().outOfColour = true;
+        kit.picks.back().colourGap = gap;
     };
 
     // --- the 808: on the tonic, or its fifth, within 15 cents
@@ -229,13 +257,10 @@ Kit choose(const std::vector<Sample>& library, std::optional<int> tonic, const A
     {
         bool found = false;
         std::string refused;
-        for (const auto index : candidates(Role::kick))
+        const auto kicks = candidates(Role::kick);
+        // Why a kick leaves the 808 its low end, or nothing when it does not.
+        const auto lowEndKept = [&](std::size_t index) -> std::optional<std::vector<std::string>>
         {
-            if (!withChosen(index))
-            {
-                refused = "aucun kick assez proche de la couleur du kit";
-                continue;
-            }
             std::vector<std::string> reasons;
             if (eightOhEight)
             {
@@ -244,50 +269,85 @@ Kit choose(const std::vector<Sample>& library, std::optional<int> tonic, const A
                 const auto correlation = lowCorrelation(kick, bass);
                 const auto ratio = bass.pitchHz > 0.0 ? kick.lowPeakHz / bass.pitchHz : 0.0;
                 if (correlation >= overlapCorrelation || (ratio > 1.0 / lowApart && ratio < lowApart))
-                {
-                    refused = "aucun kick qui laisse la place à la 808 dans le grave";
-                    continue;
-                }
+                    return std::nullopt;
                 reasons.push_back("grave du kick à " + french(kick.lowPeakHz, 0) + " Hz, la 808 à " +
                                   french(bass.pitchHz, 0) + " Hz ; corrélation de leurs graves " +
                                   french(correlation, 2));
             }
-            take(index, std::move(reasons));
+            return reasons;
+        };
+        std::vector<std::size_t> outOfColourOnly; // the low end kept, the colour not
+        for (const auto index : kicks)
+        {
+            auto reasons = lowEndKept(index);
+            if (!reasons)
+            {
+                refused = "aucun kick qui laisse la place à la 808 dans le grave";
+                continue;
+            }
+            if (!withChosen(index))
+            {
+                refused = "aucun kick assez proche de la couleur du kit";
+                outOfColourOnly.push_back(index);
+                continue;
+            }
+            take(index, std::move(*reasons));
             found = true;
             break;
+        }
+        if (!found && !outOfColourOnly.empty() && kicks.size() < smallRole)
+        {
+            const auto nearest =
+                *std::min_element(outOfColourOnly.begin(),
+                                  outOfColourOnly.end(),
+                                  [&](std::size_t a, std::size_t b) { return gapOf(a) < gapOf(b); });
+            takeOutOfColour({nearest}, kicks.size(), std::move(*lowEndKept(nearest)));
+            found = true;
         }
         if (!found)
             kit.missing.push_back(refused.empty() ? "aucun kick dans ta bibliothèque" : refused);
     }
 
     // --- the others, the colour of the kit kept
-    const auto choosePlain = [&](Role role, const std::string& none, const std::string& apart) -> bool
+    const auto inColour = [&](Role role)
     {
-        const auto all = candidates(role);
-        for (const auto index : all)
+        for (const auto index : candidates(role))
             if (withChosen(index))
             {
                 take(index, {});
                 return true;
             }
-        if (!none.empty())
-            kit.missing.push_back(all.empty() ? none : apart);
         return false;
     };
-    if (!choosePlain(Role::snare, "", ""))
-        static_cast<void>(
-            choosePlain(Role::clap,
-                        "ni caisse claire ni clap dans ta bibliothèque",
-                        "aucune caisse claire ni aucun clap assez proche de la couleur du kit"));
-    static_cast<void>(choosePlain(Role::closedHat,
-                                  "pas de charley fermé dans ta bibliothèque",
-                                  "aucun charley fermé assez proche de la couleur du kit"));
-    static_cast<void>(choosePlain(Role::openHat,
-                                  "pas de charley ouvert dans ta bibliothèque",
-                                  "aucun charley ouvert assez proche de la couleur du kit"));
-    static_cast<void>(choosePlain(Role::percussion,
-                                  "pas de percussion dans ta bibliothèque",
-                                  "aucune percussion assez proche de la couleur du kit"));
+    const auto outOfColour = [&](Role role)
+    {
+        const auto all = candidates(role);
+        if (all.empty() || all.size() >= smallRole)
+            return false;
+        takeOutOfColour(all, all.size(), {});
+        return true;
+    };
+    const auto choosePlain = [&](Role role, const std::string& none, const std::string& apart)
+    {
+        if (!inColour(role) && !outOfColour(role))
+            kit.missing.push_back(candidates(role).empty() ? none : apart);
+    };
+    // A snare, else a clap, in colour; only then one of them out of colour.
+    if (!inColour(Role::snare) && !inColour(Role::clap) && !outOfColour(Role::snare) &&
+        !outOfColour(Role::clap))
+        kit.missing.emplace_back(
+            candidates(Role::snare).empty() && candidates(Role::clap).empty()
+                ? "ni caisse claire ni clap dans ta bibliothèque"
+                : "aucune caisse claire ni aucun clap assez proche de la couleur du kit");
+    choosePlain(Role::closedHat,
+                "pas de charley fermé dans ta bibliothèque",
+                "aucun charley fermé assez proche de la couleur du kit");
+    choosePlain(Role::openHat,
+                "pas de charley ouvert dans ta bibliothèque",
+                "aucun charley ouvert assez proche de la couleur du kit");
+    choosePlain(Role::percussion,
+                "pas de percussion dans ta bibliothèque",
+                "aucune percussion assez proche de la couleur du kit");
     return kit;
 }
 

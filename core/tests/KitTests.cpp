@@ -266,6 +266,8 @@ TEST_CASE("Every element within 0.75 of the others on each axis, and the same li
     for (const auto& a : kit.picks)
         for (const auto& b : kit.picks)
         {
+            if (a.outOfColour || b.outOfColour)
+                continue; // said out of colour, its gap tested below
             CHECK(std::abs(a.axes.bright - b.axes.bright) <= colourApart);
             CHECK(std::abs(a.axes.ample - b.axes.ample) <= colourApart);
             CHECK(std::abs(a.axes.dirty - b.axes.dirty) <= colourApart);
@@ -282,4 +284,61 @@ TEST_CASE("Every element within 0.75 of the others on each axis, and the same li
     const auto bright = choose(library(), 9, Axes{2.0, 0.0, 0.0});
     REQUIRE(pickOf(bright, Role::closedHat) != nullptr);
     MESSAGE("bright: " << pickOf(bright, Role::closedHat)->path);
+}
+
+namespace
+{
+
+// A library where no kick is near the 808's colour: one 808, the axes all 0;
+// the kicks in two groups whose centroids are a decade apart, at ±1 on the
+// brightness axis.
+std::vector<Sample> farKicks(std::size_t kicks)
+{
+    std::vector<Sample> made{bass("808/808 A.wav", 9, 0.0, 55.0, 8)};
+    for (std::size_t index = 0; index < kicks; ++index)
+        made.push_back(
+            kickOf("Kicks/Kick " + std::to_string(index) + ".wav", 14, index % 2 == 0 ? 100.0 : 1000.0));
+    made.push_back(sample("Snares/Snare.wav", Role::snare, 3000.0, 0.2, 12.0));
+    made.push_back(sample("Hats/HH.wav", Role::closedHat, 9000.0, 0.05, 12.0));
+    return made;
+}
+
+} // namespace
+
+TEST_CASE(
+    "A role of fewer than ten samples, none in colour: its nearest taken, said out of colour with its gap")
+{
+    const auto kit = choose(farKicks(4), 9, Axes{});
+    const auto* kick = pickOf(kit, Role::kick);
+    REQUIRE(kick != nullptr);
+    CHECK(kick->outOfColour);
+    CHECK(kick->colourGap > colourApart);
+    const auto said = std::any_of(kick->reasons.begin(),
+                                  kick->reasons.end(),
+                                  [](const std::string& reason)
+                                  { return reason.find("hors couleur") != std::string::npos; });
+    CHECK(said);
+    for (const auto& reason : kick->reasons)
+        MESSAGE(reason);
+    // The 808, the kick, the snare, the hat: nothing missing for colour.
+    CHECK(kit.picks.size() == 4);
+    for (const auto& missing : kit.missing)
+        CHECK(missing.find("couleur") == std::string::npos);
+    // The others, in colour.
+    for (const auto& pick : kit.picks)
+        if (pick.role != Role::kick)
+            CHECK_FALSE(pick.outOfColour);
+}
+
+TEST_CASE("A role of ten samples or more keeps the colour: the element missing, said")
+{
+    const auto kit = choose(farKicks(smallRole), 9, Axes{});
+    CHECK(pickOf(kit, Role::kick) == nullptr);
+    REQUIRE_FALSE(kit.missing.empty());
+    CHECK(std::any_of(kit.missing.begin(),
+                      kit.missing.end(),
+                      [](const std::string& missing) {
+                          return missing.find("aucun kick assez proche de la couleur du kit") !=
+                                 std::string::npos;
+                      }));
 }

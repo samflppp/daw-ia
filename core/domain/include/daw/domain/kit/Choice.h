@@ -2,6 +2,7 @@
 
 #include "daw/domain/kit/Features.h"
 
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
@@ -45,6 +46,11 @@ inline constexpr double tunedCents = 15.0;        // an 808 on the tonic, or its
 inline constexpr double overlapCorrelation = 0.5; // a kick's low end against the 808's, at most
 inline constexpr double lowApart = 1.25;    // the kick's low peak, a quarter off the 808's pitch at least
 inline constexpr double colourApart = 0.75; // two elements of the kit on each axis, at most
+// A role with fewer samples than this, none of them within colourApart: the
+// nearest in colour is taken and said « hors couleur », with its gap — a whole
+// kit whose gap is said is worth more than a missing element (decided with the
+// founder on 7 October 2026).
+inline constexpr std::size_t smallRole = 10;
 
 struct Pick
 {
@@ -52,6 +58,8 @@ struct Pick
     std::string path;
     Axes axes;
     std::vector<std::string> reasons; // French, each with the number it rests on
+    bool outOfColour{false};          // taken past colourApart, its role being small
+    double colourGap{0.0};            // the widest gap on an axis to the elements chosen before it
 };
 
 struct Kit
@@ -63,7 +71,9 @@ struct Kit
 // The kit: the 808 first, then the kick, the snare (a clap when there is
 // none), the closed and the open hats, a percussion. Each the nearest to the
 // axes wanted among the samples of its role that keep every constraint with
-// what is already chosen; a tie goes to the first path. `tonic` is the
+// what is already chosen; a tie goes to the first path. A role of fewer than
+// smallRole samples, none within the colour of the kit, gives its nearest in
+// colour, said out of colour; it does not move the colour the others keep. `tonic` is the
 // project's key (0 is C); without one, the 808 is not tuned, and it is said.
 [[nodiscard]] Kit choose(const std::vector<Sample>& library, std::optional<int> tonic, const Axes& wanted);
 
