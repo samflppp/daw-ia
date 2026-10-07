@@ -6,6 +6,7 @@
 #include "daw/domain/project/InternalEffects.h"
 #include "daw/engine/ContentStore.h"
 #include "daw/engine/FluxTap.h"
+#include "daw/engine/FluxTaps.h"
 #include "daw/engine/MeterTap.h"
 
 #include <tracktion_engine/utilities/tracktion_TestUtilities.h>
@@ -412,4 +413,45 @@ TEST_CASE("Reconciling again touches no plugin: the same objects in the same pla
     harness.projector.reconcile();
     harness.projector.reconcile();
     CHECK(snapshot() == before);
+}
+
+TEST_CASE("The flux reads a place by position: what its armed ring holds is what the render made there")
+{
+    Harness harness{noiseBuffer()};
+    const auto eq = harness.insert(internal::equaliser, 0);
+    daw::engine::FluxTaps taps{harness.host.edit()};
+    const daw::engine::FluxTaps::Place source{harness.trackId.toString(), "source"};
+    const daw::engine::FluxTaps::Place afterEq{harness.trackId.toString(), eq.toString()};
+
+    // The source armed — on the channel's track and on its companion —, the
+    // equaliser's place not.
+    taps.arm({source});
+    CHECK(taps.tapsAt(source).size() == 2);
+    for (auto* tap : taps.all())
+        CHECK(tap->armed() ==
+              (tap->slot() == "source" && tap->strip() == juce::String(harness.trackId.toString())));
+
+    static_cast<void>(harness.render());
+    const auto last = taps.latest();
+    REQUIRE(last > 48000);
+
+    // The last tenth of a second, read by position: the two taps added (the
+    // channel's instrument plays nothing here), equal to the capture.
+    constexpr int count = 4800;
+    std::vector<float> read(count);
+    taps.read(source, last - count + 1, count, read.data());
+    const auto& captured = harness.tap(FluxTapPlugin::sourceSlot).captured();
+    REQUIRE(static_cast<std::size_t>(last) < captured.size());
+    double heard = 0.0;
+    for (int index = 0; index < count; ++index)
+    {
+        const auto position = static_cast<std::size_t>(last - count + 1 + index);
+        CHECK(read[static_cast<std::size_t>(index)] == doctest::Approx(captured[position]).epsilon(1e-6));
+        heard = std::max(heard, static_cast<double>(std::abs(read[static_cast<std::size_t>(index)])));
+    }
+    CHECK(heard > 0.1);
+
+    // A place not armed holds nothing.
+    taps.read(afterEq, last - count + 1, count, read.data());
+    CHECK(std::all_of(read.begin(), read.end(), [](float sample) { return sample == 0.0f; }));
 }
