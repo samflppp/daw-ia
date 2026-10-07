@@ -32,6 +32,8 @@ target_sources(daw_app PRIVATE
     src/TransportSync.cpp
     src/PlaybackProbe.cpp
     src/NativeWindow.cpp
+    src/NativeAudio.cpp
+    src/Microphone.cpp
     src/QuitWatchdog.cpp
     src/Verification.cpp
     src/VerificationKit.cpp
