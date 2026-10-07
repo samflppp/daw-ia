@@ -16,6 +16,14 @@ stems = [
     "demucs>=4.1",
     "soundfile>=0.12",
 ]
+# The push-to-talk's transcriber (S25): installed by the DAW the first time
+# the key is held (`uv sync --extra voix`), never by the CI. No PyTorch.
+# sherpa-onnx declares its native core dynamically, which the lock does not
+# see: it is named here, at the same version.
+voix = [
+    "sherpa-onnx==1.13.8",
+    "sherpa-onnx-core==1.13.8",
+]
 
 [project.scripts]
 daw-services = "daw_services.__main__:main"
@@ -24,6 +32,11 @@ daw-services = "daw_services.__main__:main"
 dev = [
     "pytest>=8",
     "ruff>=0.6",
+]
+# The test set's error rates (tools/voix_essai.py), on this machine only.
+voix-essai = [
+    "jiwer>=4",
+    "text2num>=2.5",
 ]
 
 [build-system]

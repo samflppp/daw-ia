@@ -66,7 +66,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     separate.add_argument("--models", type=Path, default=None, help="Where the weights are kept.")
 
+    # The push-to-talk's transcriber (S25): one process kept alive between
+    # two phrases, a JSON object per line each way. The DAW ends it.
+    voix = subcommands.add_parser("voix", help="Transcribe the phrases the DAW sends, one per line.")
+    voix.add_argument("--models", type=Path, default=None, help="Where the weights are kept.")
+    voix.add_argument("--replay", type=Path, default=None, help="Replay what the model heard (the CI).")
+    voix.add_argument("--install", action="store_true", help="Download the weights, and stop.")
+
     arguments = parser.parse_args(argv)
+
+    if arguments.service == "voix":
+        from daw_services.voice import service
+
+        if arguments.install:
+            return service.install(arguments.models)
+        return service.run(arguments.models, arguments.replay)
 
     if arguments.service == "separate":
         from daw_services.stems import run as separate_file

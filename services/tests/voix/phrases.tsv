@@ -1,0 +1,74 @@
+# Le jeu d'essai du push-to-talk (S25). Une phrase par ligne :
+# identifiant	catégorie	voix	phrase
+# Catégories : commande, tonalite, nombre, anglais, nom, autre (pas une commande),
+# douteuse (construite pour l'être : silence, souffle, un mot, une autre langue).
+# Voix : Paul, Julie, Hortense (français, Windows), Zira (anglais, Windows), aucune
+# (pas de voix : le fichier est construit par scripts/voix/synthese.ps1).
+# Le projet du jeu d'essai, ses noms : voir noms.json.
+c01	commande	Paul	Mets un compresseur sur la 808.
+c02	commande	Julie	Duplique le pattern trois.
+c03	commande	Hortense	Baisse la caisse claire de trois décibels.
+c04	commande	Paul	Ajoute une piste de basse.
+c05	commande	Julie	Coupe le kick pendant les quatre premières mesures.
+c06	commande	Hortense	Monte le volume des charleys.
+c07	commande	Paul	Supprime la piste guitare.
+c08	commande	Julie	Vide le pattern deux.
+c09	commande	Hortense	Mets un égaliseur sur la basse et coupe sous cent hertz.
+c10	commande	Paul	Annule le dernier changement.
+c11	commande	Julie	Lance la lecture depuis le début.
+c12	commande	Hortense	Renomme la piste quatre en refrain.
+t01	tonalite	Paul	Passe en fa dièse mineur à 140 BPM.
+t02	tonalite	Julie	Mets le morceau en ré mineur.
+t03	tonalite	Hortense	Transpose la mélodie en si bémol majeur.
+t04	tonalite	Paul	Mets la 808 en sol.
+t05	tonalite	Julie	Joue un accord de la mineur sur le pad.
+t06	tonalite	Hortense	Passe le refrain en mi bémol.
+t07	tonalite	Paul	Transpose la basse d'une octave vers le bas.
+t08	tonalite	Julie	Change la tonalité en do dièse mineur.
+t09	tonalite	Hortense	Monte la mélodie de deux demi-tons.
+t10	tonalite	Paul	La tonique, c'est fa.
+n01	nombre	Paul	Règle le tempo à 92 BPM.
+n02	nombre	Julie	Baisse le master de six décibels.
+n03	nombre	Hortense	Mets le panoramique de la guitare à trente pour cent à gauche.
+n04	nombre	Paul	Mets le tempo à 128.
+n05	nombre	Julie	Boucle les mesures neuf à seize.
+n06	nombre	Hortense	Monte la réverbération à quarante pour cent.
+n07	nombre	Paul	Mets le volume du kick à moins quatre décibels.
+n08	nombre	Julie	Allonge le pattern à huit mesures.
+n09	nombre	Hortense	Règle le ratio du compresseur à quatre.
+n10	nombre	Paul	Décale le clap d'un seizième.
+e01	anglais	Paul	Mets un sidechain du kick sur la basse.
+e02	anglais	Julie	Ajoute de la reverb sur les vocals.
+e03	anglais	Hortense	Fais un fade out sur le dernier drop.
+e04	anglais	Paul	Ajoute un delay sur le lead.
+e05	anglais	Julie	Mets un low cut sur les charleys.
+e06	anglais	Hortense	Fais un build-up avant le drop.
+e07	anglais	Paul	Ajoute du swing sur les hi-hats.
+e08	anglais	Julie	Mets le kick en solo.
+e09	anglais	Hortense	Fais un mute sur le pad pendant le break.
+e10	anglais	Paul	Bounce la piste vocals.
+p01	nom	Paul	Mets Serum sur la piste Lead Pluck.
+p02	nom	Julie	Ajoute Valhalla Supermassive sur Pad Ambient.
+p03	nom	Hortense	Solo sur la piste Hi Hat Roll.
+p04	nom	Paul	Ouvre Kontakt sur la piste Cordes.
+p05	nom	Julie	Mets ShaperBox sur la 808.
+p06	nom	Hortense	Coupe la piste Vocals pendant le couplet.
+p07	nom	Paul	Ajoute Vital sur une nouvelle piste.
+p08	nom	Julie	Monte Pad Ambient de deux décibels.
+p09	nom	Hortense	Duplique le pattern Refrain.
+p10	nom	Paul	Envoie Lead Pluck sur le bus réverbération.
+x01	autre	Paul	Je crois que ça sonne bien comme ça.
+x02	autre	Julie	Attends, je réfléchis.
+x03	autre	Hortense	C'est quoi déjà le nom de ce plugin ?
+x04	autre	Paul	J'ai faim, on fait une pause ?
+x05	autre	Julie	Il fait beau aujourd'hui.
+x06	autre	Hortense	Tu peux me rappeler demain ?
+x07	autre	Paul	Bon, on verra plus tard.
+x08	autre	Julie	Ce morceau me fait penser à l'été dernier.
+d01	douteuse	aucune	(silence, une seconde et demie)
+d02	douteuse	aucune	(souffle, un bruit à moins trente décibels, deux secondes)
+d03	douteuse	Paul	Euh.
+d04	douteuse	Zira	Turn the bass up a little bit.
+d05	douteuse	Zira	Can you mute the drums please?
+d06	douteuse	Julie	Mets un compresseur sur la piste Zorglub.
+d07	douteuse	Hortense	Monte le volume de Trombone Fantôme.

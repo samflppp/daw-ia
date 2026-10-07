@@ -1,0 +1,7 @@
+{
+  "tracks": ["808", "Kick", "Caisse claire", "Charleys", "Lead Pluck", "Pad Ambient", "Hi Hat Roll", "Basse",
+             "Guitare", "Vocals", "Cordes", "Clap"],
+  "plugins": ["Serum", "Valhalla Supermassive", "Kontakt", "Vital", "ShaperBox", "Compresseur", "Égaliseur"],
+  "patterns": ["Pattern 1", "Pattern 2", "Pattern 3", "Couplet", "Refrain"],
+  "buses": ["Bus réverbération"]
+}

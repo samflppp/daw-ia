@@ -1,0 +1,10811 @@
+{
+ "transcriber": "parakeet-tdt-0.6b-v3-int8",
+ "load_seconds": 2.5,
+ "times": [
+  [
+   2.73,
+   0.39
+  ],
+  [
+   2.73,
+   0.33
+  ],
+  [
+   2.73,
+   0.316
+  ],
+  [
+   2.73,
+   0.286
+  ],
+  [
+   2.2,
+   0.259
+  ],
+  [
+   2.2,
+   0.275
+  ],
+  [
+   2.2,
+   0.264
+  ],
+  [
+   2.2,
+   0.296
+  ],
+  [
+   3.14,
+   0.438
+  ],
+  [
+   3.14,
+   0.509
+  ],
+  [
+   3.14,
+   0.48
+  ],
+  [
+   3.14,
+   0.518
+  ],
+  [
+   2.14,
+   0.392
+  ],
+  [
+   2.14,
+   0.416
+  ],
+  [
+   2.14,
+   0.429
+  ],
+  [
+   2.14,
+   0.377
+  ],
+  [
+   3.35,
+   0.52
+  ],
+  [
+   3.35,
+   0.567
+  ],
+  [
+   3.35,
+   0.56
+  ],
+  [
+   3.35,
+   0.539
+  ],
+  [
+   2.79,
+   0.468
+  ],
+  [
+   2.79,
+   0.474
+  ],
+  [
+   2.79,
+   0.454
+  ],
+  [
+   2.79,
+   0.474
+  ],
+  [
+   2.32,
+   0.374
+  ],
+  [
+   2.32,
+   0.384
+  ],
+  [
+   2.32,
+   0.402
+  ],
+  [
+   2.32,
+   0.396
+  ],
+  [
+   1.9,
+   0.378
+  ],
+  [
+   1.9,
+   0.346
+  ],
+  [
+   1.9,
+   0.341
+  ],
+  [
+   1.9,
+   0.385
+  ],
+  [
+   3.79,
+   0.658
+  ],
+  [
+   3.79,
+   0.65
+  ],
+  [
+   3.79,
+   0.625
+  ],
+  [
+   3.79,
+   0.72
+  ],
+  [
+   2.14,
+   0.416
+  ],
+  [
+   2.14,
+   0.327
+  ],
+  [
+   2.14,
+   0.405
+  ],
+  [
+   2.14,
+   0.386
+  ],
+  [
+   2.58,
+   0.483
+  ],
+  [
+   2.58,
+   0.46
+  ],
+  [
+   2.58,
+   0.452
+  ],
+  [
+   2.58,
+   0.5
+  ],
+  [
+   2.83,
+   0.508
+  ],
+  [
+   2.83,
+   0.512
+  ],
+  [
+   2.83,
+   0.524
+  ],
+  [
+   2.83,
+   0.475
+  ],
+  [
+   3.34,
+   0.573
+  ],
+  [
+   3.34,
+   0.544
+  ],
+  [
+   3.34,
+   0.53
+  ],
+  [
+   3.34,
+   0.577
+  ],
+  [
+   2.36,
+   0.473
+  ],
+  [
+   2.36,
+   0.43
+  ],
+  [
+   2.36,
+   0.389
+  ],
+  [
+   2.36,
+   0.373
+  ],
+  [
+   3.48,
+   0.568
+  ],
+  [
+   3.48,
+   0.603
+  ],
+  [
+   3.48,
+   0.562
+  ],
+  [
+   3.48,
+   0.535
+  ],
+  [
+   2.25,
+   0.439
+  ],
+  [
+   2.25,
+   0.39
+  ],
+  [
+   2.25,
+   0.412
+  ],
+  [
+   2.25,
+   0.486
+  ],
+  [
+   3.0,
+   0.535
+  ],
+  [
+   3.0,
+   0.668
+  ],
+  [
+   3.0,
+   0.513
+  ],
+  [
+   3.0,
+   0.533
+  ],
+  [
+   2.73,
+   0.507
+  ],
+  [
+   2.73,
+   0.443
+  ],
+  [
+   2.73,
+   0.46
+  ],
+  [
+   2.73,
+   0.447
+  ],
+  [
+   2.84,
+   0.501
+  ],
+  [
+   2.84,
+   0.478
+  ],
+  [
+   2.84,
+   0.475
+  ],
+  [
+   2.84,
+   0.46
+  ],
+  [
+   2.93,
+   0.465
+  ],
+  [
+   2.93,
+   0.464
+  ],
+  [
+   2.93,
+   0.522
+  ],
+  [
+   2.93,
+   0.457
+  ],
+  [
+   2.81,
+   0.492
+  ],
+  [
+   2.81,
+   0.49
+  ],
+  [
+   2.81,
+   0.492
+  ],
+  [
+   2.81,
+   0.487
+  ],
+  [
+   2.11,
+   0.359
+  ],
+  [
+   2.11,
+   0.36
+  ],
+  [
+   2.11,
+   0.394
+  ],
+  [
+   2.11,
+   0.423
+  ],
+  [
+   3.0,
+   0.499
+  ],
+  [
+   3.0,
+   0.494
+  ],
+  [
+   3.0,
+   0.46
+  ],
+  [
+   3.0,
+   0.547
+  ],
+  [
+   2.73,
+   0.456
+  ],
+  [
+   2.73,
+   0.518
+  ],
+  [
+   2.73,
+   0.494
+  ],
+  [
+   2.73,
+   0.461
+  ],
+  [
+   4.18,
+   0.623
+  ],
+  [
+   4.18,
+   0.681
+  ],
+  [
+   4.18,
+   0.724
+  ],
+  [
+   4.18,
+   0.62
+  ],
+  [
+   2.38,
+   0.43
+  ],
+  [
+   2.38,
+   0.417
+  ],
+  [
+   2.38,
+   0.426
+  ],
+  [
+   2.38,
+   0.413
+  ],
+  [
+   2.44,
+   0.445
+  ],
+  [
+   2.44,
+   0.487
+  ],
+  [
+   2.44,
+   0.443
+  ],
+  [
+   2.44,
+   0.46
+  ],
+  [
+   3.56,
+   0.571
+  ],
+  [
+   3.56,
+   0.633
+  ],
+  [
+   3.56,
+   0.604
+  ],
+  [
+   3.56,
+   0.687
+  ],
+  [
+   3.17,
+   0.566
+  ],
+  [
+   3.17,
+   0.576
+  ],
+  [
+   3.17,
+   0.645
+  ],
+  [
+   3.17,
+   0.567
+  ],
+  [
+   2.6,
+   0.525
+  ],
+  [
+   2.6,
+   0.49
+  ],
+  [
+   2.6,
+   0.501
+  ],
+  [
+   2.6,
+   0.499
+  ],
+  [
+   3.32,
+   0.586
+  ],
+  [
+   3.32,
+   0.585
+  ],
+  [
+   3.32,
+   0.602
+  ],
+  [
+   3.32,
+   0.605
+  ],
+  [
+   2.42,
+   0.499
+  ],
+  [
+   2.42,
+   0.663
+  ],
+  [
+   2.42,
+   0.512
+  ],
+  [
+   2.42,
+   0.566
+  ],
+  [
+   2.73,
+   0.467
+  ],
+  [
+   2.73,
+   0.496
+  ],
+  [
+   2.73,
+   0.503
+  ],
+  [
+   2.73,
+   0.496
+  ],
+  [
+   2.85,
+   0.522
+  ],
+  [
+   2.85,
+   0.463
+  ],
+  [
+   2.85,
+   0.484
+  ],
+  [
+   2.85,
+   0.504
+  ],
+  [
+   3.0,
+   0.535
+  ],
+  [
+   3.0,
+   0.505
+  ],
+  [
+   3.0,
+   0.557
+  ],
+  [
+   3.0,
+   0.56
+  ],
+  [
+   2.19,
+   0.406
+  ],
+  [
+   2.19,
+   0.402
+  ],
+  [
+   2.19,
+   0.424
+  ],
+  [
+   2.19,
+   0.384
+  ],
+  [
+   2.63,
+   0.481
+  ],
+  [
+   2.63,
+   0.481
+  ],
+  [
+   2.63,
+   0.475
+  ],
+  [
+   2.63,
+   0.459
+  ],
+  [
+   2.54,
+   0.417
+  ],
+  [
+   2.54,
+   0.425
+  ],
+  [
+   2.54,
+   0.496
+  ],
+  [
+   2.54,
+   0.424
+  ],
+  [
+   2.24,
+   0.464
+  ],
+  [
+   2.24,
+   0.428
+  ],
+  [
+   2.24,
+   0.396
+  ],
+  [
+   2.24,
+   0.399
+  ],
+  [
+   1.93,
+   0.374
+  ],
+  [
+   1.93,
+   0.384
+  ],
+  [
+   1.93,
+   0.372
+  ],
+  [
+   1.93,
+   0.429
+  ],
+  [
+   3.16,
+   0.543
+  ],
+  [
+   3.16,
+   0.558
+  ],
+  [
+   3.16,
+   0.522
+  ],
+  [
+   3.16,
+   0.555
+  ],
+  [
+   2.28,
+   0.412
+  ],
+  [
+   2.28,
+   0.394
+  ],
+  [
+   2.28,
+   0.394
+  ],
+  [
+   2.28,
+   0.394
+  ],
+  [
+   2.7,
+   0.493
+  ],
+  [
+   2.7,
+   0.485
+  ],
+  [
+   2.7,
+   0.447
+  ],
+  [
+   2.7,
+   0.493
+  ],
+  [
+   3.82,
+   0.654
+  ],
+  [
+   3.82,
+   0.58
+  ],
+  [
+   3.82,
+   0.577
+  ],
+  [
+   3.82,
+   0.664
+  ],
+  [
+   2.75,
+   0.471
+  ],
+  [
+   2.75,
+   0.412
+  ],
+  [
+   2.75,
+   0.5
+  ],
+  [
+   2.75,
+   0.479
+  ],
+  [
+   2.53,
+   0.449
+  ],
+  [
+   2.53,
+   0.458
+  ],
+  [
+   2.53,
+   0.446
+  ],
+  [
+   2.53,
+   0.489
+  ],
+  [
+   2.94,
+   0.483
+  ],
+  [
+   2.94,
+   0.494
+  ],
+  [
+   2.94,
+   0.498
+  ],
+  [
+   2.94,
+   0.559
+  ],
+  [
+   3.23,
+   0.72
+  ],
+  [
+   3.23,
+   0.591
+  ],
+  [
+   3.23,
+   0.518
+  ],
+  [
+   3.23,
+   0.51
+  ],
+  [
+   2.63,
+   0.466
+  ],
+  [
+   2.63,
+   0.459
+  ],
+  [
+   2.63,
+   0.462
+  ],
+  [
+   2.63,
+   0.461
+  ],
+  [
+   3.04,
+   0.475
+  ],
+  [
+   3.04,
+   0.522
+  ],
+  [
+   3.04,
+   0.476
+  ],
+  [
+   3.04,
+   0.495
+  ],
+  [
+   2.54,
+   0.459
+  ],
+  [
+   2.54,
+   0.43
+  ],
+  [
+   2.54,
+   0.43
+  ],
+  [
+   2.54,
+   0.461
+  ],
+  [
+   3.02,
+   0.495
+  ],
+  [
+   3.02,
+   0.591
+  ],
+  [
+   3.02,
+   0.539
+  ],
+  [
+   3.02,
+   0.494
+  ],
+  [
+   2.63,
+   0.428
+  ],
+  [
+   2.63,
+   0.442
+  ],
+  [
+   2.63,
+   0.461
+  ],
+  [
+   2.63,
+   0.479
+  ],
+  [
+   2.15,
+   0.365
+  ],
+  [
+   2.15,
+   0.409
+  ],
+  [
+   2.15,
+   0.448
+  ],
+  [
+   2.15,
+   0.383
+  ],
+  [
+   2.82,
+   0.474
+  ],
+  [
+   2.82,
+   0.491
+  ],
+  [
+   2.82,
+   0.472
+  ],
+  [
+   2.82,
+   0.533
+  ],
+  [
+   2.3,
+   0.406
+  ],
+  [
+   2.3,
+   0.445
+  ],
+  [
+   2.3,
+   0.487
+  ],
+  [
+   2.3,
+   0.503
+  ],
+  [
+   1.88,
+   0.366
+  ],
+  [
+   1.88,
+   0.377
+  ],
+  [
+   1.88,
+   0.599
+  ],
+  [
+   1.88,
+   0.457
+  ],
+  [
+   2.32,
+   0.429
+  ],
+  [
+   2.32,
+   0.372
+  ],
+  [
+   2.32,
+   0.408
+  ],
+  [
+   2.32,
+   0.457
+  ],
+  [
+   2.2,
+   0.391
+  ],
+  [
+   2.2,
+   0.44
+  ],
+  [
+   2.2,
+   0.491
+  ],
+  [
+   2.2,
+   0.464
+  ],
+  [
+   3.06,
+   0.536
+  ],
+  [
+   3.06,
+   0.474
+  ],
+  [
+   3.06,
+   0.541
+  ],
+  [
+   3.06,
+   0.547
+  ],
+  [
+   1.5,
+   0.393
+  ],
+  [
+   1.5,
+   0.282
+  ],
+  [
+   1.5,
+   0.329
+  ],
+  [
+   1.5,
+   0.309
+  ],
+  [
+   2.0,
+   0.389
+  ],
+  [
+   2.0,
+   0.403
+  ],
+  [
+   2.0,
+   0.345
+  ],
+  [
+   2.0,
+   0.379
+  ],
+  [
+   0.96,
+   0.249
+  ],
+  [
+   0.96,
+   0.261
+  ],
+  [
+   0.96,
+   0.227
+  ],
+  [
+   0.96,
+   0.233
+  ],
+  [
+   2.33,
+   0.43
+  ],
+  [
+   2.33,
+   0.394
+  ],
+  [
+   2.33,
+   0.403
+  ],
+  [
+   2.33,
+   0.444
+  ],
+  [
+   2.46,
+   0.414
+  ],
+  [
+   2.46,
+   0.527
+  ],
+  [
+   2.46,
+   0.569
+  ],
+  [
+   2.46,
+   0.438
+  ],
+  [
+   3.17,
+   0.572
+  ],
+  [
+   3.17,
+   0.563
+  ],
+  [
+   3.17,
+   0.519
+  ],
+  [
+   3.17,
+   0.505
+  ],
+  [
+   3.1,
+   0.495
+  ],
+  [
+   3.1,
+   0.533
+  ],
+  [
+   3.1,
+   0.545
+  ],
+  [
+   3.1,
+   0.583
+  ]
+ ],
+ "runs": {
+  "c01": {
+   "propre": "2fa7350cece539a6d5854bc3b33aa50c7314fbc2e9018a37f72eb95872c80444",
+   "morceau 0 dB": "0cb9698cd03f977f62d15877cc604cbec9b48a211287bf5e4cfe0308e3560ec8",
+   "morceau 10 dB": "464c6b60a960228faf248c9ce041d6aa17897fef11a787e17c4f84243d50abbe",
+   "morceau baissé, 20 dB": "a3dbe8df916208e1040cf67982a31111e3790ce4cb1092351b332311868e903d"
+  },
+  "c02": {
+   "propre": "4ec52007afebed17ef03c7a94bfb69b3f58153bf93ef0b64175c13fb16e84e0b",
+   "morceau 0 dB": "a410fa0b7a59e054f867271205d4ca92010ba23bef36042d2b2d5e61d8a69976",
+   "morceau 10 dB": "192b297c3db5455e0af6a653fc906c06e908e0a4763798df28dbcef65b24ef27",
+   "morceau baissé, 20 dB": "7df37d64786bf7ba05fa722eff9e929d124423ca1f2fae0b9618d56e83773ef1"
+  },
+  "c03": {
+   "propre": "858f168e07a0daa3ebac24fd1db29fcc335859e2cdb2fb8cbc7ab9b89ff61090",
+   "morceau 0 dB": "feaf4c4508b1c9384159301933d8916f967f902c2423a2d86f3a453a6bf4b25d",
+   "morceau 10 dB": "c66eb7327d78770b77b500ee191cd5494cba38cd013bf3f5c6e7e9c2ae9f74f8",
+   "morceau baissé, 20 dB": "e5192b008cddd3f394fc5edc43b28db24a504a906fce85634f9f696603486c74"
+  },
+  "c04": {
+   "propre": "df4d40d960915f4e90cc6a86290ff44419bac194aa5b005f8ca344524a9972da",
+   "morceau 0 dB": "ae10368db1610fe5a3bfe9a1a8033d675b180fc2e2cb6474845b20431b890f99",
+   "morceau 10 dB": "0ba34c37f423d70fe916e6a1b3544be93547104834bdcf7eacc0526f78ca4add",
+   "morceau baissé, 20 dB": "d9e5cc21f5ee952b833546e7ca1786aa5edaaefe2dc1749b247998f362cb20d5"
+  },
+  "c05": {
+   "propre": "c36d198eb6157aac87ec12858900e6a8be60e4eb43d9d03682dcb565c2c49c2e",
+   "morceau 0 dB": "783ca13c5830c888e87b522d750f20844f10b382fc6012587ef512636fb7489a",
+   "morceau 10 dB": "147d599ed21d16cc57cabac711e1452404eca0e9073d6b52753f760723d9cc2c",
+   "morceau baissé, 20 dB": "6782db1776b727a5ce1e1708f7e0454187bacf295baf56a879ece48f5a10c15e"
+  },
+  "c06": {
+   "propre": "d91c1eb9e52e20947e7a02f2a2247c45eaed9b9d1ea5f55901f8b95070548227",
+   "morceau 0 dB": "65d36d6e6554d0c2d261728957d319562d419e7b60b3d105ac1166973ca921b7",
+   "morceau 10 dB": "9184fc6e5a9584e7f8d79b3358030353e86a8f25e483f410006c20dcd8830951",
+   "morceau baissé, 20 dB": "7a69e62355eb5e155f086bd4536b738123b5ac98dd33fbc510b77c45031278da"
+  },
+  "c07": {
+   "propre": "1a033472cf61bf6fb0684a8f1fc026b9dac6dfaabb83dce0e759a042b820f4a2",
+   "morceau 0 dB": "881943515599b1bbec70b7ab5c5dfafd1cf051c6fe784cd6469235296f4fc06b",
+   "morceau 10 dB": "5ed6bc8f53c18e25bcce1ff2427a04bb34fb21367054db1eecad5a7277f828b3",
+   "morceau baissé, 20 dB": "80c9b5a5cf088305f1a75407a6fa8282fea836d3f49ba685408e9162547ee27b"
+  },
+  "c08": {
+   "propre": "35306fd7d5272eb4a006bc77048440cc80d3c3394ccc7163dbcbe5ca7767a46b",
+   "morceau 0 dB": "a6cf9c8181c0d38de131e729dea0c9103bce14ce2157dad9676d0238aaeb001c",
+   "morceau 10 dB": "d27e6e60f23122c70806466eba0636f3ec51fee80c75ee56d81f6b0472129f9f",
+   "morceau baissé, 20 dB": "61d1e5395d4e0e1ed07c17530fd330cb6398938783c8138b535a23caef03a8a9"
+  },
+  "c09": {
+   "propre": "6a8e4d4563256e7572d043b6f172a60327901c0e0971b7845670ce2967317989",
+   "morceau 0 dB": "130ae977eef83548a3e0196e2d944da9747b1e2c63b6b081b1de1b96cc762327",
+   "morceau 10 dB": "7177d61d95cad1bc024c9810ff7a34ca382a51b9e10901ee8bb46d980dd6a872",
+   "morceau baissé, 20 dB": "289c15ccec7e0a1e6adbc8599cd41ea1fb2250ae5ac7ac94e1eb1f1d41d79dfa"
+  },
+  "c10": {
+   "propre": "2318c654448730b731ec2202a986f8b6503a9dca03ceec2eec7b6346866cd01e",
+   "morceau 0 dB": "1d5eb4ab990512e292a6ce11531533df15c2ac09917ad76645e73036ce67a3bc",
+   "morceau 10 dB": "8918a94c25dd2e00b280de710a6e82ec0c9742f89c996e5d51b2e9e9893e3afd",
+   "morceau baissé, 20 dB": "72c08335a3fcc4264a8d9c5947ec15dab8a8750ec37ae3e6ffa6e19dcc102694"
+  },
+  "c11": {
+   "propre": "4d6abd1b5571500975fff4583271fe0b4ee68e693658d87bc87c94db6eaa35de",
+   "morceau 0 dB": "50dd9be55169782839d7db714fc386b40a115fdd179b96c4bdec43e2d9017611",
+   "morceau 10 dB": "a02d1ba5bc1c0f6f85f2badbd034244f9a824d5bd68f824f3b1036014fbc8d67",
+   "morceau baissé, 20 dB": "bddac5d8221542a3578d57d82539081afdf2d23ed4b49484f5b2c691bd6736a9"
+  },
+  "c12": {
+   "propre": "3943a1b612c19f15e77b7b27e8c13a79df12c3695a8b605db9ec009da40913c2",
+   "morceau 0 dB": "ed5deaaf9dc43430a969d4b77042045b3dfea2d9b2078c02a46b6f9d574be656",
+   "morceau 10 dB": "ad1a067a725bc0fe141eed85d02c5388e1aab7094f5ca4ea77987d7f95f681b0",
+   "morceau baissé, 20 dB": "b1111e313be2602c8dc934b03559d7d3b3c2ae9939bb9c0ccb502a6cf65573c2"
+  },
+  "t01": {
+   "propre": "1dd356b0d4d17296ee4dd624c6b7f60c4d3c4632b5513ebf48cfac9ceae71b57",
+   "morceau 0 dB": "6373e64abdf226b94dc89dc0d5a551738c7508c26998269ca4ee7f9964147cc2",
+   "morceau 10 dB": "5fbf8851af87d6c78dc563304cc81c7017951c8f1a808c9bb397e1ffdf6cce01",
+   "morceau baissé, 20 dB": "ad2da61f006845abb0da44bf4fa19d440f903e19a74e5ee42fdebefe67cb0b65"
+  },
+  "t02": {
+   "propre": "6cc348ecedef23c01fef1eb2ae132e166b4592502a6080b20044f45235485ebf",
+   "morceau 0 dB": "a1b24950f70717a93a1d5d2a3acfc968709eaca6a5098c967af2fdee875991de",
+   "morceau 10 dB": "9276ec8cd3e2dd27eef602626b1a263161db2406cc8d8b7171d078e594034ec7",
+   "morceau baissé, 20 dB": "c5ebfd99c1d961af3a3233ee7485a20c34569ff637aefaa60a36f2538444ed5e"
+  },
+  "t03": {
+   "propre": "ae2c4554287a94b749de62eb05efd3f0ae8c938aa3f477f6f2d683f4ff3acf30",
+   "morceau 0 dB": "4787132c3ad3eb8b9edf2b8b9f68af131d40f281e117df773d134a26855aea99",
+   "morceau 10 dB": "d97d7a55a5fc6fd8523c1e65083b0c7e1df1668daddebce5f754279859cbd8cc",
+   "morceau baissé, 20 dB": "b1b905d990519f9ee49a8da151cb0e8b15b553b80eb0fe68f87b59802bb34127"
+  },
+  "t04": {
+   "propre": "3730240fe3ec4e443b2a62752844f7f3361da690f5af7d14dd4f2b58969a7f29",
+   "morceau 0 dB": "14e59ec2bcfae1aa0d791cabbe757ebdbbfe47ce265b9c06fa77defe57a68373",
+   "morceau 10 dB": "4710ae055b8d02918ebcd87e430415c81d2cb9678c1bb5511c181ab4825c5c05",
+   "morceau baissé, 20 dB": "e6b6ecc7ef459fe93717f76382b255eb8f10c54da987817777c2f9cf5013cbe4"
+  },
+  "t05": {
+   "propre": "dd5769471eb11ae9e5f59ad877dc76e202063f4237789713f2e8acca54eaff25",
+   "morceau 0 dB": "b932fd9623eb4cff226d008247df6d58570d28ff1150f045ed24cf60201f2dab",
+   "morceau 10 dB": "9f8f0a70fd2f70772e8c79a006d0bb5e137b14557c8b44762c11275c02693d6f",
+   "morceau baissé, 20 dB": "d7d4da363b9edd0db64f81bcb72f35ff2df605d342cb4d19d7205d33697b4051"
+  },
+  "t06": {
+   "propre": "49cce7253aa792fdcec0e06cd3e8e2f2f9ad245ce88afc70cc55f265acf97a40",
+   "morceau 0 dB": "153f736b240b8cfd810c9bcc191cb1e680070c252b2b4aace939cabdf442d472",
+   "morceau 10 dB": "812f9ab31161cf9cd21d6f2cb8cc37e7b934cd00b8ab8aa6ea87e64058eefe50",
+   "morceau baissé, 20 dB": "ce26d754e1dab50e94ccb18902dc9734a234a42ddf4fa7eb79d2eada65de0736"
+  },
+  "t07": {
+   "propre": "0abde663bf40b586e6132613cc4506cca3baa5f2978c664933f842cdcc48c9bc",
+   "morceau 0 dB": "100cfe587f0bdf7e58439421b73108548a854706b58de11f015ca146941e2a7e",
+   "morceau 10 dB": "48651aaf22a809dd8e4d5495b40f7d2041c73a3e3cedf61ecb26a243b8eecb87",
+   "morceau baissé, 20 dB": "c2af94b8ee54dc2dee434278d9e25f9a944c7f7fb24831c26033842482d37a2a"
+  },
+  "t08": {
+   "propre": "15d4da17ed39db385eda7c09d35ee1bc7281a1b21d50582db34677fea47336bd",
+   "morceau 0 dB": "a03f1e59bfb1f54ac1f41fa777287747d4fcf8617726976a6bcfa2971396ebac",
+   "morceau 10 dB": "3a48f6a916034e395ff47ca740378c06c489b97c1a8767a3c9c708ab70449b26",
+   "morceau baissé, 20 dB": "16b5dfbd9d38b4d5e58fe77ce2f6662df03a01bcd5a4397e58adc51908d1854b"
+  },
+  "t09": {
+   "propre": "dda7493f69b14ce0cfdb5a4293d01d7229367775c9ab4e7de670c99fb5c36e97",
+   "morceau 0 dB": "3dc8d5ecce6134ddd394f3cedc80cfef17298f42f5b7a977c6a5367d36ed2d7b",
+   "morceau 10 dB": "626bfbb81446a2a46a4c5eb35588672fa74b6c1a06388bad57451f9ca8b1ae70",
+   "morceau baissé, 20 dB": "ef80326d245b9b5d25429e854d69531cd85997a9c5dc0664cd147a9d1d179211"
+  },
+  "t10": {
+   "propre": "c66f422dbe1887c02c9b5a742a60f810c17606484af694761aab4dc503351453",
+   "morceau 0 dB": "c9876d01f74bb5647d19b024a85cc1cae612a9424525a08309d4b5bba6a3c456",
+   "morceau 10 dB": "b74f912a6f092a713db27c5ff01a1f7ae0f40383aec04854bb306f7c9d470b90",
+   "morceau baissé, 20 dB": "3f903ebd65a4a246cd3ce87763e6e4ce366202d57c9eab68a5b0263c22e87707"
+  },
+  "n01": {
+   "propre": "f0a4d0b0e80cafdd2d70b21eb3137f753d3a01930436a5891cd9e10ca0be102d",
+   "morceau 0 dB": "864dd9daf54ab5635e1e4bc9252e17818acfe6f87d6bb1ab5245f369084d56b7",
+   "morceau 10 dB": "aacb64d237c9a5d7b9616dfa54440d692c4fc7a51619620e8b254d0df5b4441b",
+   "morceau baissé, 20 dB": "a09ecb0434074e2632343e486344989d2917c483849a0742614c5c39045c9e68"
+  },
+  "n02": {
+   "propre": "880cef76284d764ebde304a5464dbe7ba0149f2707eff19d3190439bb09ca5e8",
+   "morceau 0 dB": "1bf1fd24c70abe0c3f886ab9b995f740459e023b0a30569dbdc0864789d393e8",
+   "morceau 10 dB": "b58826f2743a4531e99347bc860167716b5dd050411ea6c55d4fed863fe9ffaf",
+   "morceau baissé, 20 dB": "69826b27f03b9a3bd088380885c402bdb4ccd291acee8ed87d87c6251bbb2b8d"
+  },
+  "n03": {
+   "propre": "f8199be39adf4335eea12fb268aa250799473ec110e8a4d0b3e4612a512ae2ba",
+   "morceau 0 dB": "cb77ef99b33c8416803251c6411ef0b045a24ea15728c34e4f1a5244022cee37",
+   "morceau 10 dB": "aeee79529f5dc29ebaf81d8bbf5ce273ab477bcc32442f9945f5a5375d41aa77",
+   "morceau baissé, 20 dB": "a574f435064047930e7bcb9ff63bcb55855c86ac0a733b8c365f1c7c0bd7c693"
+  },
+  "n04": {
+   "propre": "eaeadfbe1144dd57dbaa5a2b45c33839cffe400983a8cb2b3c9cc1051f679351",
+   "morceau 0 dB": "15d966d50f3756984a8f626863e62dc7171ba65e8f4a1cc57a286b888a2513f4",
+   "morceau 10 dB": "98baf0ba77931ee1cfa1b294d7ddc4e56b8fe13cd8481b06a0f2999260eb771f",
+   "morceau baissé, 20 dB": "cdc4cd14c9d37e4c757ab99dac7a32ec53db61f5f7f8774c6519655d98d85797"
+  },
+  "n05": {
+   "propre": "5714af8566e02fa04a1e4457071e39e232f64451a08eb965bb0258524ea806be",
+   "morceau 0 dB": "56f9767e5533498b1780e9c3c568dd09c84c27a1b564600ef311fd4369e09b97",
+   "morceau 10 dB": "d4adf60b10739e3c574c8a6caf29bbd446b68c74dc81b4a648df78f9d5e99de7",
+   "morceau baissé, 20 dB": "9629a978d89225407cacf7a6147c85c9e5515cc1922af4448c8b90b56670ce06"
+  },
+  "n06": {
+   "propre": "c92800cd35b7749974ebc20c7297387495714e6bb64d27989123e13d81837247",
+   "morceau 0 dB": "445fc79847bf744dc8527a4b9f70f333c7945fa0d8573737b8a2ab48502aba2b",
+   "morceau 10 dB": "5b7ff4e02b30a9aa1c148c3e8ef984aeec8531b817172c18a11d8d51d0020a11",
+   "morceau baissé, 20 dB": "5034f50dc8bb1daf25af3a79df950e9aba5a870042675301b0861094b71d4928"
+  },
+  "n07": {
+   "propre": "1f19c073cc125ca229b0a0cd4991b51a0fce7ca336bb62d14165da04a8666a06",
+   "morceau 0 dB": "a7ec62556fc762983e55e25ccd8ede69f82e434f0cd432c08a37fb593e527028",
+   "morceau 10 dB": "c8f4c022409e8dd2353adf4013b60e656d7c51b36b11b869b12fd40b2707a199",
+   "morceau baissé, 20 dB": "28246c85e53220193b90600b1828a5d803677f3743e9579556abf2059a58f5a4"
+  },
+  "n08": {
+   "propre": "db2aca0d9c59651ac5bd181ea75ea9c7d40b21a86c94b6132116a0d8cbad5c95",
+   "morceau 0 dB": "4cb6dafdcdc38462218253a32c99f4e91cb2752db87bd9559a63c5c50e5717f6",
+   "morceau 10 dB": "38491b5c36510a329ca947320bb1e25406e753a93d2c1393553e24e8a54018d1",
+   "morceau baissé, 20 dB": "a188dc30407b813185257b165397df63607387db4ffb5b56649d2964a0a5787a"
+  },
+  "n09": {
+   "propre": "d8785c93cb4ce02be0b5225092b15d7a2ed66141f451ce046b0a611216ad825e",
+   "morceau 0 dB": "6e477bb3ba79a794d41a699de41707c71980553164bb259c4220472eb48f8ae6",
+   "morceau 10 dB": "962215f45246488d658d094651a93bbfebe6c658efb7440d7b1188fa9c2d4cd9",
+   "morceau baissé, 20 dB": "496922f398238a9c13fb801775f79ce707e9b074d4913d1ed9782986fba99d6d"
+  },
+  "n10": {
+   "propre": "3158794d66174113edabd372cd74da6a98e44dc4134671920a3157429137c2c1",
+   "morceau 0 dB": "fd9e3281ab811eea05221875ac67426e815522bf721cbba2172b4fbf8a284b4e",
+   "morceau 10 dB": "b7bfbc02027e69dd69faffacc667cbb0c0d720cb90f30c0a202124223c216838",
+   "morceau baissé, 20 dB": "cffe92cc40101d3e5207a148e492810f93f5ee3e1d98d19aa7be3c5182199ecb"
+  },
+  "e01": {
+   "propre": "a5d805105395de901baa897b585e6e8f5ba0cf574bcd0d2c09f718822d7754dd",
+   "morceau 0 dB": "73dd5c13953143fac73e0f733e77d89951326ada6cff9c8a1028d1d795acb70b",
+   "morceau 10 dB": "3ba961686b0f3505d18ea2c5ed104147543807a913a426ee7de308bac81aef72",
+   "morceau baissé, 20 dB": "c4d62a7b7be58e2d557416dc517d037c3d7a10808fbb93b5ea9bc3a80d66d9fa"
+  },
+  "e02": {
+   "propre": "7433114b4df36aed138f17dcea1fdf37a95907c552bc3ce623525cb0268f26a0",
+   "morceau 0 dB": "238ca822214b758c4c9f91a5341e5118f967af74640d65b100c1df8bb5f759e8",
+   "morceau 10 dB": "229bfa23f26a5918e6caf1ab9e6de17d21f1d4e54435ccbfce1feef7b36eaa58",
+   "morceau baissé, 20 dB": "ffb4c21cde8f33d4489fafcd00731152bb91864aa858935242d36e5363a91afe"
+  },
+  "e03": {
+   "propre": "d9823cc4a5a27460e97bed1244a1e717fe7ed40a4a71e625d250d24596c46422",
+   "morceau 0 dB": "7fae647fcf41081744ea7c921468d1a1d225402ec6736df706cc8b0ff6ddb3b7",
+   "morceau 10 dB": "af04cb48a31dfb37e120f86ffb3f8f136dca4e1bea152b939ae5906066e2083e",
+   "morceau baissé, 20 dB": "f2067fd04409b3e16004768aa0c91abaff4678f3aabb2b2763dc590951b15f43"
+  },
+  "e04": {
+   "propre": "5458de45d5464ec585fc618f9142135de8030647073adb6d3cc6eec94408625c",
+   "morceau 0 dB": "0cd377c3379dd9381b4620b1497b1b03466edc2e89560fc2aac9129d45c5c3b7",
+   "morceau 10 dB": "be011806791924bf230dfb084b3ccf48f689f80fa9803d4ec95aaeaec08f3c49",
+   "morceau baissé, 20 dB": "b6edcf5e78bc3cad00ba7184ccdfb297655a5ce00008ff71ce19952a5f86c444"
+  },
+  "e05": {
+   "propre": "36652fc695fe0c24fbbce6b4a3a345c83de8706d0200d36357c74efa5423d6e0",
+   "morceau 0 dB": "39f88e6783b67f3644a9cf2debfc6e5571ef2951aadefff2a42413455c0e72ea",
+   "morceau 10 dB": "2064058ee315a48718ea26fc4871b672dfc97e25fcb2830eb35294a8b879ae76",
+   "morceau baissé, 20 dB": "405bb8ccc2e3cddd135aafa2739fd7af3ed5418071c4f86bcd4cb5e07bd03536"
+  },
+  "e06": {
+   "propre": "e5d3a93677e537bf78453bac36a05a194effc52c67a312b4c84ecf4793b52bf7",
+   "morceau 0 dB": "1b6fd673337a687625117c880e9d4a222ca229316db2d6e718d8a0426ffeec73",
+   "morceau 10 dB": "172b02603d3f2104c4e093d24a8c1077b3802fd12fac68db18241d59d6d53a8f",
+   "morceau baissé, 20 dB": "ea1db8217e5507a44797336a55038e9369d4522d9cb89409940ca774cdacef13"
+  },
+  "e07": {
+   "propre": "56b11ab0e3cff6e968a845b9f69c63f55de8c3208e24d48711f1f94950096975",
+   "morceau 0 dB": "144f293fa3b29c3df1f33e59dceca9ec4e957659e1e7ee66a75b9fa3960be4b1",
+   "morceau 10 dB": "98bc090d045019c09330297d660bc09349242fc526519f70e80639912e77dfc5",
+   "morceau baissé, 20 dB": "a3b5768d6adbe717ce709b5b60759efd826820640210bc2cbc8407f792e54053"
+  },
+  "e08": {
+   "propre": "72676cc11b027cd48277c6f23ded3597ae3b52251eec667053a4892225f0a3e3",
+   "morceau 0 dB": "13d49446c11163666576425cc82b2e12efd30450b36e295b89fa7abb210268b2",
+   "morceau 10 dB": "7e8b1e60f62ce64050f0496432efababb57f693fa958bd1f57749420873f1d90",
+   "morceau baissé, 20 dB": "90f3b244824f58654e42fca2068797a01be5a0b42f32d157611ef68dbc346c23"
+  },
+  "e09": {
+   "propre": "2cda74e9f083155b0ff9816d4e76a0df4e88ee21b628213e80f4f1938a9b1307",
+   "morceau 0 dB": "6a6fe7f7650b726b26c3de0ec32d5ab23c95627cb32a9b4e5c28cf2b4ee18fb0",
+   "morceau 10 dB": "6cdfe1ed21a638719c9d5727211570d5420528a65820a2d74b8b498039a161ff",
+   "morceau baissé, 20 dB": "1230dc32c0cc07045e4a86e1f51c01432fa9cd3045d95b9632aba5875ce8d4df"
+  },
+  "e10": {
+   "propre": "f8b9a5d77e3536dae359be714337b55a2aac435a6df70f25331d3f6373cf5a2b",
+   "morceau 0 dB": "ad1d8ce385db26bb2289189359f49dcaf078eafe94723c5d246550b1dbaee671",
+   "morceau 10 dB": "2c99497bfa75363222abfd012d5eeb5fa16ce65a30c9a3677a3d431e50cb1acc",
+   "morceau baissé, 20 dB": "c85b3bd46126088ee879da44b71e2056da2e3a94b661d9edb79d996b50246afb"
+  },
+  "p01": {
+   "propre": "eaa4123ab641261c5032aa4be45a22aeb4fa29950116e222eb173236aa103c20",
+   "morceau 0 dB": "a2eaf8065857ca39b71fbf734e753031a0388b9040fc7188fb920cc4045ec26d",
+   "morceau 10 dB": "9e2aed35fcab65938b03c8d71e258de01aff5aebc1baa756f3d3cbe69841be6d",
+   "morceau baissé, 20 dB": "e7ab8e5fe4e4b3458279d5db8b0badc7b4027efcb0f53844a34941c9eaa18636"
+  },
+  "p02": {
+   "propre": "fd05c52fff460f7767aa0539b41be414220a04e1ca16632a58bcd8f589b5b276",
+   "morceau 0 dB": "b0a5149993e66db368bbda54ece35f1c32c872ed00dcddd06afcf7f89487a153",
+   "morceau 10 dB": "c59169ce38c8d311c355d5fb2f56e6a50111cee7c6b7fbbb55260b7fed701a1f",
+   "morceau baissé, 20 dB": "187d343eef3ff290fa4cfbe13e1cc3a125149ff145a90d2696afbcf4b2c688ee"
+  },
+  "p03": {
+   "propre": "b56f5d8ab1064393156ab7a481af7f61db147ae3c6846cc2b8b062d30eb4bdda",
+   "morceau 0 dB": "25ed8ca025bfc01d599c07a241723ada99ca838d5df67b51f87e1e30fbcc7d61",
+   "morceau 10 dB": "fe0722afb3f3448bb34e28a5ce3711b8ce094334a61b4646006b1c6e3aaec67a",
+   "morceau baissé, 20 dB": "78694e2549a68f49e77b026b5b5d47602da611292b9f684088e52cc23b778c07"
+  },
+  "p04": {
+   "propre": "8ed7656bece8af8dcf00270648c395c6e9c8c43a78a5c47d4d4e4071bd7b92f5",
+   "morceau 0 dB": "33eb8e70b9a290b510779f033933c9b59e11348156f00aa695554676f10dd451",
+   "morceau 10 dB": "15541514ec5c81676bc1284c92f0c6c15482f060faf88d22b5400bdce20a5c1a",
+   "morceau baissé, 20 dB": "6c1c3ca85918c541d7361295b4d782c4288c1d7ddced99b04360a4340e455072"
+  },
+  "p05": {
+   "propre": "7a16a8baa6f747a7abf83cde76ff336b6a060cef0746ad00c97572b38100b0db",
+   "morceau 0 dB": "4862e23689c70632be9fb9092d93d8dd8bdbde1fff1054a809915ef80715fc7f",
+   "morceau 10 dB": "2e7f245fa7b3edb358eca2e988ab41a068c2e1ffbb24b3e4d1f802febd9119b0",
+   "morceau baissé, 20 dB": "6698dccc909ac6c1e7c42f8aed07ce9103aeee04c7d77dbf3d7ace091da98ffd"
+  },
+  "p06": {
+   "propre": "8739b3e4ad08102120e07f2e661e9793c1d4f64581b3f5f47a69dd8d325f297a",
+   "morceau 0 dB": "7c0c2a9551cbbf07bf6ad5e856ee99e246f92b642a211e449082898387c8edea",
+   "morceau 10 dB": "d528b5268917b06dc4f2930da3c4cba5bbb480f8b9d3303210cffad97135aab9",
+   "morceau baissé, 20 dB": "8af4f72c676258783058afa9f8bf8fb15692cf8b993efbee009289976bdbd654"
+  },
+  "p07": {
+   "propre": "2ede22030739d4c9b41e2b1f79e0bae2a1e153d50ffb09f7a34ed573559dd746",
+   "morceau 0 dB": "b0d1e8ffc0ad99e78239c890ce074b56ff060a6b13381bde28935366f337e724",
+   "morceau 10 dB": "7531a12a6e1aa7b40a2cf9c7673248454412bd8c860906826a092d1afa8b61de",
+   "morceau baissé, 20 dB": "6290ac27137f4ed48737e2121e72326fac157cce18dec9757e6ea9aba1acecbb"
+  },
+  "p08": {
+   "propre": "2974ef59ac73e23a393fe52842dc58c9de106f5f8063e7538cb4eb9d6ad5120f",
+   "morceau 0 dB": "2fc3747b0eca60bc0857db95452468c0fd3f5b4b4b955f0f1b6845032ffe9d34",
+   "morceau 10 dB": "1fa02e76495c718114af84d4fa5a02480ce5bf8acae9d20e93106655cc330bc5",
+   "morceau baissé, 20 dB": "48966e1b3f43bd561cf9e1eb8898eb286e9af1b6bfff51ea6fb577594091dba3"
+  },
+  "p09": {
+   "propre": "fe094df521de0db3359c9c8e40352b1c002474e787793a3eb7b840700afe8346",
+   "morceau 0 dB": "86f340bf37aa12c0ea627ff4901445970b6484d50b653b3d976dd586d5419ca7",
+   "morceau 10 dB": "c5a40365f674494c1f2a03acca184e5efccc0d95b08f0b087261ae6bb21693eb",
+   "morceau baissé, 20 dB": "e948f0d59f52d1430e23f79bf231c646538d0335947d0818f2ba93f2ea03d31c"
+  },
+  "p10": {
+   "propre": "ad9597d4643c4393e3c5b64a5529e96d11e185be95b1267fc244b9a0b27cac6e",
+   "morceau 0 dB": "57db1f06fa80c7086050e738221e895db6327e3179192cb96e6bb875663af08c",
+   "morceau 10 dB": "24ab072fd9abbbee4278c2bb0cb7ce5fa8607f86eb237257a5a86b780b54117e",
+   "morceau baissé, 20 dB": "e9f9566b0c522a2d76b8cc6f822e4a063b7f062c525354a79b76e78cee769da6"
+  },
+  "x01": {
+   "propre": "f8123d23a2ad8ae1781d9de79459427c5cd3380561cab5102e35462d36e19432",
+   "morceau 0 dB": "7a2c72618013465e11697b27fa4881a0601b4687f35ad61f64e659e1e31c7308",
+   "morceau 10 dB": "552ae46d82497cba0bbcde89d4675ed6a7026c5dad21b3d27cf7d564fd612cd8",
+   "morceau baissé, 20 dB": "12bc011130a06e365d118b863de09f30eb82a1825d22d3bdbe2bc1de3807565a"
+  },
+  "x02": {
+   "propre": "ba2a70a9f0900764c98a2e493ad227f9d058e402a1bd0955ba66ff39ede3a6a6",
+   "morceau 0 dB": "6408d3889826cec82b177ae6f8a55f5b2570d89ec7eb6ca92108d73608eaf40e",
+   "morceau 10 dB": "3f6d2056a928f689371acbf605b195fa498b731daf0e27c4016b7503685e8f39",
+   "morceau baissé, 20 dB": "00386cc8abaa8bd59ac652d9038eec65106473a8c50c694fcb4f6159dcbb2b63"
+  },
+  "x03": {
+   "propre": "44f2ca18ecb8d2b6f0974536ce0b544542eebbb5d59f78fd636a632b344aa6ec",
+   "morceau 0 dB": "a5e2b02c83e5aed9357538554322b49662d924f7f5190029a53b1826ef1f1d79",
+   "morceau 10 dB": "5dfacd173e450effa46d5e5799fd9c138a3c20d79c1dd8ed783af4cb1ce66052",
+   "morceau baissé, 20 dB": "0d74b8d14e7c1a5d102ac4bad812e2269f337dd9a05ebf1d078f91dbd62ef7e0"
+  },
+  "x04": {
+   "propre": "4c0490efca3a0deb313dbae038fdcad25a3baddb968f5219d9738e785dbad08b",
+   "morceau 0 dB": "e530d5f01adea0f12d7f87d7e7ed3a34b0b6b598535241f165fe22faa2131aee",
+   "morceau 10 dB": "f9e86df60846d50fb52550964d0edfb3f5e752369cada0b54027ad0895f26cd5",
+   "morceau baissé, 20 dB": "f6d575964ee5f756c561589e3dab59776c95ea15341b1d99dd5639d6bd06d543"
+  },
+  "x05": {
+   "propre": "beed1aa3c8b82284a1991b14269253dc61a281f53b18989f7b95d4bc5cc90783",
+   "morceau 0 dB": "a56fc516235aa6fbcb23a2f74ae8ce91f36fcfd790aea6784bf904b8beb8d91f",
+   "morceau 10 dB": "8aaf63a47f7d194f50cfe01c38bc4bf583a3043357f7a508c27e7ffae55e70c9",
+   "morceau baissé, 20 dB": "93db84ae99943145609c7652dbf1dca247dcecf02307281fb3437a6370d9e64a"
+  },
+  "x06": {
+   "propre": "a9fe155fd024fda911359e25757d5b1bb95670f560234bc3f1f39794f56034b2",
+   "morceau 0 dB": "7bcf0d1f97ec1a777c4795103f6f4e1806ef5069140a189a89b942774f7d9b36",
+   "morceau 10 dB": "1ec5a7d10d73bc0c4333e6726a17c694da90a85afa8516776b0d15f8c1d37c82",
+   "morceau baissé, 20 dB": "cf0c476d45e1dde84511a94a624030e096a58e3585984af567c8c44d6082843e"
+  },
+  "x07": {
+   "propre": "920a2fa430f2193badc3895fa1a5e34b566c234d862890be9dc59df1d472ab09",
+   "morceau 0 dB": "ae2d1fcf5b5cae3481804280c5dd8b0090982dea1c16ef13166afb6fcc42c9b5",
+   "morceau 10 dB": "e5a634da95015dcb27eb44f25aceb6e22dbda8c279652012da70466f72b3150d",
+   "morceau baissé, 20 dB": "1fcdebcfc62917de343480d2f1d5beca1479e97b790b095bb40e17f528c839e9"
+  },
+  "x08": {
+   "propre": "e5ef0c7ab3b76dd944c63d98cbab3d9be007b1102219b901dbe5b97219490970",
+   "morceau 0 dB": "31c34ca899a41cbcd015e8aec7f660cbd28d0532794b4f8ae7e61b288b29f9f6",
+   "morceau 10 dB": "842ecce7d27ff71956197fe3ed3cc08c60bc8cfc4698d7ad83804ff307c5eae4",
+   "morceau baissé, 20 dB": "5825e5f1a60880aeda56ff4b96f015727073078c141c34882dfcc7dd0409f3ad"
+  },
+  "d01": {
+   "propre": "bb918147fe10391b43adeba4bd21b9ef32e5bd6c5076c3517733a05ed6dd0569",
+   "morceau 0 dB": "863aa81d1b5ebb68351d408405d01e613eeb51d2db5efb76d6cdbed87020ba38",
+   "morceau 10 dB": "617a1435357210c770e2be58757c47ac6b1e70bc38047386c9265d3ecb360bde",
+   "morceau baissé, 20 dB": "2b4b91932442f2db79867ff8c918316a75e0c2232b78c8d2081b0088096b3048"
+  },
+  "d02": {
+   "propre": "15f1a102c68363831c5f5f2f31e214908c4fed46e04a3a301cb4fdc8a9f855d1",
+   "morceau 0 dB": "3b312d1079c7cb9e9804378f8088651d53531347aac855daa5e14e7dc77223eb",
+   "morceau 10 dB": "a91c81f6b002b0c4a5d72b6f37bdbf922733c2b0a7bc21b466b7d565ae08ef47",
+   "morceau baissé, 20 dB": "7a19c6480c7f46964d1f82ceb6941976f5c3e64cc93a7db22617d53c25f1d46a"
+  },
+  "d03": {
+   "propre": "046b203e45ca0203e590fa3af16fb7f1b0f8b6b75580110128de28657ba1775e",
+   "morceau 0 dB": "1fe75182a3f5c7475731f678e122d4a49f6b365d12f1222e3a19dd37f26016da",
+   "morceau 10 dB": "73bc049f4b8630db8e1df8190c6568e75afdcefae8ba926884dc0f5290cbee20",
+   "morceau baissé, 20 dB": "75b842cd70ea549ab5aac6d6603c34032be034ec419ab416dfef04bb9db3bc5c"
+  },
+  "d04": {
+   "propre": "74104d1a111ca978d86d73d42dbbe8a19fda9dd48f0e218f9943dbf4932e06d6",
+   "morceau 0 dB": "228d8cb5f3713e37667deebc567aae3dc518fdbaeb202d8604e18a009f7a8f5a",
+   "morceau 10 dB": "a518e95925a888caa970393d1c4ca31f4dba9c9ea6c4efd14321ac1bba75f3b4",
+   "morceau baissé, 20 dB": "c9039be142ea9b9048ba5c48a83a911053cdfcaaaccffc260119b3fca2856f61"
+  },
+  "d05": {
+   "propre": "1699d4d64088f3045c9b2f97e3311b5d8cbfd14cf858dcc81b89c6cf04ba8db3",
+   "morceau 0 dB": "201f0de5f2f84b10c2fa171d7d356ee733e744aae4113fb36ee022aec166f5a7",
+   "morceau 10 dB": "8c315ad540eb082fcf25503b7beaf48b9d8006a90e413270fdb6b1fbf7349bb2",
+   "morceau baissé, 20 dB": "a683544cb8d2744b5abd7f99751d04b7f3c6a283cf6d5b5ba59772701d367214"
+  },
+  "d06": {
+   "propre": "21f0ec6bcfcbfcc723f85e4fcd93286a1fdc0263dd23f4a7e40bf9a8877c49ce",
+   "morceau 0 dB": "ae05e4d3f8cd920fde014146d34c9d59bb0237d482c86ee38b5f523cb3129dfa",
+   "morceau 10 dB": "ea39b5ae303f7dca15a45fff3d2d6c780d04d4c49e7692cece04ea241b2bbb6b",
+   "morceau baissé, 20 dB": "bc623e6d7edd2dbdf9e45ee819ce223166044ad8372e618e3c6365f37daca472"
+  },
+  "d07": {
+   "propre": "12ebc78ade44615e06f788d5bb8cf423426a1a6795dd026943bb020c025a9d7c",
+   "morceau 0 dB": "46baec2d8f0c7891c51c0867a83fb65fc4c48b2b5443cc6f2fe78f80de7da7c0",
+   "morceau 10 dB": "09ebe86e867c90553ab24cd120770feb0f083df8e4407ddecd00901baf67946f",
+   "morceau baissé, 20 dB": "7799581f73bbe7d31f11f849303b2c3967507e838a8a67455f4bb50a7e143473"
+  }
+ },
+ "heard": {
+  "2fa7350cece539a6d5854bc3b33aa50c7314fbc2e9018a37f72eb95872c80444": {
+   "text": "Mets un compresseur sur la 808.",
+   "words": [
+    [
+     "Mets",
+     0.65,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.32
+    ],
+    [
+     "compresseur",
+     1.0,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "la",
+     1.0,
+     1.04
+    ],
+    [
+     "808.",
+     0.99,
+     1.44
+    ]
+   ]
+  },
+  "0cb9698cd03f977f62d15877cc604cbec9b48a211287bf5e4cfe0308e3560ec8": {
+   "text": "mais un compresseur sur la 808.",
+   "words": [
+    [
+     "mais",
+     0.88,
+     0.0
+    ],
+    [
+     "un",
+     0.999,
+     0.32
+    ],
+    [
+     "compresseur",
+     0.937,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "la",
+     0.999,
+     1.04
+    ],
+    [
+     "808.",
+     0.928,
+     1.44
+    ]
+   ]
+  },
+  "464c6b60a960228faf248c9ce041d6aa17897fef11a787e17c4f84243d50abbe": {
+   "text": "Mais un compresseur sur la 808.",
+   "words": [
+    [
+     "Mais",
+     0.488,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.32
+    ],
+    [
+     "compresseur",
+     0.8,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "la",
+     1.0,
+     1.04
+    ],
+    [
+     "808.",
+     0.993,
+     1.44
+    ]
+   ]
+  },
+  "a3dbe8df916208e1040cf67982a31111e3790ce4cb1092351b332311868e903d": {
+   "text": "Mais un compresseur sur la 808.",
+   "words": [
+    [
+     "Mais",
+     0.537,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.32
+    ],
+    [
+     "compresseur",
+     0.978,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "la",
+     1.0,
+     1.04
+    ],
+    [
+     "808.",
+     0.987,
+     1.44
+    ]
+   ]
+  },
+  "4ec52007afebed17ef03c7a94bfb69b3f58153bf93ef0b64175c13fb16e84e0b": {
+   "text": "Duplique le pattern 3.",
+   "words": [
+    [
+     "Duplique",
+     0.951,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.64
+    ],
+    [
+     "pattern",
+     0.914,
+     0.72
+    ],
+    [
+     "3.",
+     1.0,
+     1.52
+    ]
+   ]
+  },
+  "a410fa0b7a59e054f867271205d4ca92010ba23bef36042d2b2d5e61d8a69976": {
+   "text": "Duplique le pattern 3.",
+   "words": [
+    [
+     "Duplique",
+     0.767,
+     0.0
+    ],
+    [
+     "le",
+     0.993,
+     0.56
+    ],
+    [
+     "pattern",
+     0.826,
+     0.72
+    ],
+    [
+     "3.",
+     0.999,
+     1.44
+    ]
+   ]
+  },
+  "192b297c3db5455e0af6a653fc906c06e908e0a4763798df28dbcef65b24ef27": {
+   "text": "Duplique le pattern 3.",
+   "words": [
+    [
+     "Duplique",
+     0.87,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.64
+    ],
+    [
+     "pattern",
+     0.897,
+     0.72
+    ],
+    [
+     "3.",
+     1.0,
+     1.44
+    ]
+   ]
+  },
+  "7df37d64786bf7ba05fa722eff9e929d124423ca1f2fae0b9618d56e83773ef1": {
+   "text": "Duplique le pattern 3.",
+   "words": [
+    [
+     "Duplique",
+     0.903,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.64
+    ],
+    [
+     "pattern",
+     0.89,
+     0.72
+    ],
+    [
+     "3.",
+     1.0,
+     1.52
+    ]
+   ]
+  },
+  "858f168e07a0daa3ebac24fd1db29fcc335859e2cdb2fb8cbc7ab9b89ff61090": {
+   "text": "Baisse la caisse claire de 3 décibels.",
+   "words": [
+    [
+     "Baisse",
+     0.815,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "caisse",
+     0.997,
+     0.64
+    ],
+    [
+     "claire",
+     1.0,
+     0.96
+    ],
+    [
+     "de",
+     1.0,
+     1.28
+    ],
+    [
+     "3",
+     0.995,
+     1.52
+    ],
+    [
+     "décibels.",
+     0.685,
+     1.68
+    ]
+   ]
+  },
+  "feaf4c4508b1c9384159301933d8916f967f902c2423a2d86f3a453a6bf4b25d": {
+   "text": "Baisse la caisse claire de 3 décibels.",
+   "words": [
+    [
+     "Baisse",
+     0.737,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "caisse",
+     0.994,
+     0.64
+    ],
+    [
+     "claire",
+     0.999,
+     0.96
+    ],
+    [
+     "de",
+     1.0,
+     1.28
+    ],
+    [
+     "3",
+     0.994,
+     1.52
+    ],
+    [
+     "décibels.",
+     0.819,
+     1.68
+    ]
+   ]
+  },
+  "c66eb7327d78770b77b500ee191cd5494cba38cd013bf3f5c6e7e9c2ae9f74f8": {
+   "text": "Baisse la caisse claire de 3 décibels.",
+   "words": [
+    [
+     "Baisse",
+     0.945,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "caisse",
+     0.997,
+     0.64
+    ],
+    [
+     "claire",
+     0.999,
+     0.96
+    ],
+    [
+     "de",
+     1.0,
+     1.28
+    ],
+    [
+     "3",
+     0.993,
+     1.52
+    ],
+    [
+     "décibels.",
+     0.646,
+     1.68
+    ]
+   ]
+  },
+  "e5192b008cddd3f394fc5edc43b28db24a504a906fce85634f9f696603486c74": {
+   "text": "Baisse la caisse claire de 3 décibels.",
+   "words": [
+    [
+     "Baisse",
+     0.586,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "caisse",
+     0.996,
+     0.64
+    ],
+    [
+     "claire",
+     0.999,
+     0.96
+    ],
+    [
+     "de",
+     1.0,
+     1.28
+    ],
+    [
+     "3",
+     0.996,
+     1.52
+    ],
+    [
+     "décibels.",
+     0.655,
+     1.68
+    ]
+   ]
+  },
+  "df4d40d960915f4e90cc6a86290ff44419bac194aa5b005f8ca344524a9972da": {
+   "text": "Ajoute une piste de basse.",
+   "words": [
+    [
+     "Ajoute",
+     0.981,
+     0.0
+    ],
+    [
+     "une",
+     1.0,
+     0.48
+    ],
+    [
+     "piste",
+     1.0,
+     0.64
+    ],
+    [
+     "de",
+     1.0,
+     0.96
+    ],
+    [
+     "basse.",
+     0.972,
+     1.2
+    ]
+   ]
+  },
+  "ae10368db1610fe5a3bfe9a1a8033d675b180fc2e2cb6474845b20431b890f99": {
+   "text": "Ajoute une piste de basse.",
+   "words": [
+    [
+     "Ajoute",
+     0.6,
+     0.0
+    ],
+    [
+     "une",
+     1.0,
+     0.48
+    ],
+    [
+     "piste",
+     1.0,
+     0.64
+    ],
+    [
+     "de",
+     1.0,
+     1.04
+    ],
+    [
+     "basse.",
+     0.792,
+     1.2
+    ]
+   ]
+  },
+  "0ba34c37f423d70fe916e6a1b3544be93547104834bdcf7eacc0526f78ca4add": {
+   "text": "Ajoute une piste de basse.",
+   "words": [
+    [
+     "Ajoute",
+     0.955,
+     0.0
+    ],
+    [
+     "une",
+     1.0,
+     0.48
+    ],
+    [
+     "piste",
+     1.0,
+     0.64
+    ],
+    [
+     "de",
+     1.0,
+     1.04
+    ],
+    [
+     "basse.",
+     0.916,
+     1.2
+    ]
+   ]
+  },
+  "d9e5cc21f5ee952b833546e7ca1786aa5edaaefe2dc1749b247998f362cb20d5": {
+   "text": "Ajoute une piste de basse.",
+   "words": [
+    [
+     "Ajoute",
+     0.976,
+     0.0
+    ],
+    [
+     "une",
+     1.0,
+     0.48
+    ],
+    [
+     "piste",
+     1.0,
+     0.64
+    ],
+    [
+     "de",
+     1.0,
+     0.96
+    ],
+    [
+     "basse.",
+     0.941,
+     1.2
+    ]
+   ]
+  },
+  "c36d198eb6157aac87ec12858900e6a8be60e4eb43d9d03682dcb565c2c49c2e": {
+   "text": "Coupe le kick pendant les quatre premières mesures.",
+   "words": [
+    [
+     "Coupe",
+     0.978,
+     0.0
+    ],
+    [
+     "le",
+     0.965,
+     0.4
+    ],
+    [
+     "kick",
+     0.943,
+     0.48
+    ],
+    [
+     "pendant",
+     0.997,
+     0.96
+    ],
+    [
+     "les",
+     1.0,
+     1.2
+    ],
+    [
+     "quatre",
+     0.589,
+     1.44
+    ],
+    [
+     "premières",
+     1.0,
+     1.76
+    ],
+    [
+     "mesures.",
+     0.999,
+     2.16
+    ]
+   ]
+  },
+  "783ca13c5830c888e87b522d750f20844f10b382fc6012587ef512636fb7489a": {
+   "text": "Coupe le tick pendant les 4 premières mesures.",
+   "words": [
+    [
+     "Coupe",
+     0.948,
+     0.0
+    ],
+    [
+     "le",
+     0.918,
+     0.4
+    ],
+    [
+     "tick",
+     0.47,
+     0.48
+    ],
+    [
+     "pendant",
+     0.999,
+     0.96
+    ],
+    [
+     "les",
+     1.0,
+     1.2
+    ],
+    [
+     "4",
+     0.999,
+     1.52
+    ],
+    [
+     "premières",
+     0.999,
+     1.76
+    ],
+    [
+     "mesures.",
+     0.999,
+     2.16
+    ]
+   ]
+  },
+  "147d599ed21d16cc57cabac711e1452404eca0e9073d6b52753f760723d9cc2c": {
+   "text": "Coupe le kick pendant les 4 premières mesures.",
+   "words": [
+    [
+     "Coupe",
+     0.988,
+     0.0
+    ],
+    [
+     "le",
+     0.989,
+     0.4
+    ],
+    [
+     "kick",
+     0.93,
+     0.48
+    ],
+    [
+     "pendant",
+     0.998,
+     0.96
+    ],
+    [
+     "les",
+     1.0,
+     1.28
+    ],
+    [
+     "4",
+     1.0,
+     1.52
+    ],
+    [
+     "premières",
+     0.999,
+     1.76
+    ],
+    [
+     "mesures.",
+     1.0,
+     2.16
+    ]
+   ]
+  },
+  "6782db1776b727a5ce1e1708f7e0454187bacf295baf56a879ece48f5a10c15e": {
+   "text": "Coupe le kick pendant les 4 premières mesures.",
+   "words": [
+    [
+     "Coupe",
+     0.987,
+     0.0
+    ],
+    [
+     "le",
+     0.971,
+     0.4
+    ],
+    [
+     "kick",
+     0.945,
+     0.48
+    ],
+    [
+     "pendant",
+     1.0,
+     0.96
+    ],
+    [
+     "les",
+     1.0,
+     1.28
+    ],
+    [
+     "4",
+     1.0,
+     1.52
+    ],
+    [
+     "premières",
+     1.0,
+     1.76
+    ],
+    [
+     "mesures.",
+     0.999,
+     2.16
+    ]
+   ]
+  },
+  "d91c1eb9e52e20947e7a02f2a2247c45eaed9b9d1ea5f55901f8b95070548227": {
+   "text": "Monte le volume des Charles.",
+   "words": [
+    [
+     "Monte",
+     0.696,
+     0.0
+    ],
+    [
+     "le",
+     0.997,
+     0.48
+    ],
+    [
+     "volume",
+     1.0,
+     0.56
+    ],
+    [
+     "des",
+     0.966,
+     0.88
+    ],
+    [
+     "Charles.",
+     0.189,
+     1.28
+    ]
+   ]
+  },
+  "65d36d6e6554d0c2d261728957d319562d419e7b60b3d105ac1166973ca921b7": {
+   "text": "Montre volume de Charles.",
+   "words": [
+    [
+     "Montre",
+     0.32,
+     0.08
+    ],
+    [
+     "volume",
+     0.643,
+     0.64
+    ],
+    [
+     "de",
+     0.366,
+     1.04
+    ],
+    [
+     "Charles.",
+     0.518,
+     1.28
+    ]
+   ]
+  },
+  "9184fc6e5a9584e7f8d79b3358030353e86a8f25e483f410006c20dcd8830951": {
+   "text": "Monte le volume des Charlises.",
+   "words": [
+    [
+     "Monte",
+     0.662,
+     0.0
+    ],
+    [
+     "le",
+     0.998,
+     0.48
+    ],
+    [
+     "volume",
+     1.0,
+     0.56
+    ],
+    [
+     "des",
+     0.984,
+     0.88
+    ],
+    [
+     "Charlises.",
+     0.209,
+     1.28
+    ]
+   ]
+  },
+  "7a69e62355eb5e155f086bd4536b738123b5ac98dd33fbc510b77c45031278da": {
+   "text": "Monte le volume des Charlis.",
+   "words": [
+    [
+     "Monte",
+     0.597,
+     0.0
+    ],
+    [
+     "le",
+     0.998,
+     0.48
+    ],
+    [
+     "volume",
+     1.0,
+     0.56
+    ],
+    [
+     "des",
+     0.978,
+     0.88
+    ],
+    [
+     "Charlis.",
+     0.167,
+     1.28
+    ]
+   ]
+  },
+  "1a033472cf61bf6fb0684a8f1fc026b9dac6dfaabb83dce0e759a042b820f4a2": {
+   "text": "Supprime la piste guitare.",
+   "words": [
+    [
+     "Supprime",
+     0.998,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "piste",
+     1.0,
+     0.72
+    ],
+    [
+     "guitare.",
+     0.997,
+     1.12
+    ]
+   ]
+  },
+  "881943515599b1bbec70b7ab5c5dfafd1cf051c6fe784cd6469235296f4fc06b": {
+   "text": "Supprime la piste guitare.",
+   "words": [
+    [
+     "Supprime",
+     0.866,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "piste",
+     0.993,
+     0.72
+    ],
+    [
+     "guitare.",
+     0.995,
+     1.2
+    ]
+   ]
+  },
+  "5ed6bc8f53c18e25bcce1ff2427a04bb34fb21367054db1eecad5a7277f828b3": {
+   "text": "Supprime la piste guitare.",
+   "words": [
+    [
+     "Supprime",
+     0.995,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "piste",
+     0.998,
+     0.72
+    ],
+    [
+     "guitare.",
+     0.997,
+     1.2
+    ]
+   ]
+  },
+  "80c9b5a5cf088305f1a75407a6fa8282fea836d3f49ba685408e9162547ee27b": {
+   "text": "Supprime la piste guitare.",
+   "words": [
+    [
+     "Supprime",
+     0.997,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "piste",
+     1.0,
+     0.72
+    ],
+    [
+     "guitare.",
+     0.994,
+     1.12
+    ]
+   ]
+  },
+  "35306fd7d5272eb4a006bc77048440cc80d3c3394ccc7163dbcbe5ca7767a46b": {
+   "text": "Vide le pattern 2.",
+   "words": [
+    [
+     "Vide",
+     0.997,
+     0.0
+    ],
+    [
+     "le",
+     0.998,
+     0.4
+    ],
+    [
+     "pattern",
+     0.957,
+     0.56
+    ],
+    [
+     "2.",
+     0.826,
+     1.12
+    ]
+   ]
+  },
+  "a6cf9c8181c0d38de131e729dea0c9103bce14ce2157dad9676d0238aaeb001c": {
+   "text": "Vive le pattern 2",
+   "words": [
+    [
+     "Vive",
+     0.954,
+     0.0
+    ],
+    [
+     "le",
+     0.997,
+     0.4
+    ],
+    [
+     "pattern",
+     0.901,
+     0.56
+    ],
+    [
+     "2",
+     0.958,
+     1.12
+    ]
+   ]
+  },
+  "d27e6e60f23122c70806466eba0636f3ec51fee80c75ee56d81f6b0472129f9f": {
+   "text": "Vide le pattern 2.",
+   "words": [
+    [
+     "Vide",
+     0.965,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.48
+    ],
+    [
+     "pattern",
+     0.962,
+     0.56
+    ],
+    [
+     "2.",
+     0.885,
+     1.12
+    ]
+   ]
+  },
+  "61d1e5395d4e0e1ed07c17530fd330cb6398938783c8138b535a23caef03a8a9": {
+   "text": "Vide le pattern 2.",
+   "words": [
+    [
+     "Vide",
+     0.985,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.48
+    ],
+    [
+     "pattern",
+     0.964,
+     0.56
+    ],
+    [
+     "2.",
+     0.844,
+     1.12
+    ]
+   ]
+  },
+  "6a8e4d4563256e7572d043b6f172a60327901c0e0971b7845670ce2967317989": {
+   "text": "Mets un égaliseur sur la basse et coupe sous 100 Hz.",
+   "words": [
+    [
+     "Mets",
+     0.981,
+     0.0
+    ],
+    [
+     "un",
+     0.999,
+     0.32
+    ],
+    [
+     "égaliseur",
+     0.985,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     1.12
+    ],
+    [
+     "la",
+     1.0,
+     1.2
+    ],
+    [
+     "basse",
+     0.977,
+     1.36
+    ],
+    [
+     "et",
+     0.999,
+     1.68
+    ],
+    [
+     "coupe",
+     0.999,
+     1.84
+    ],
+    [
+     "sous",
+     0.997,
+     2.16
+    ],
+    [
+     "100",
+     1.0,
+     2.48
+    ],
+    [
+     "Hz.",
+     0.924,
+     2.72
+    ]
+   ]
+  },
+  "130ae977eef83548a3e0196e2d944da9747b1e2c63b6b081b1de1b96cc762327": {
+   "text": "Mets un égaliseur sur la base des coupe sous 100 Hz.",
+   "words": [
+    [
+     "Mets",
+     0.695,
+     0.0
+    ],
+    [
+     "un",
+     0.996,
+     0.32
+    ],
+    [
+     "égaliseur",
+     0.917,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     1.12
+    ],
+    [
+     "la",
+     1.0,
+     1.2
+    ],
+    [
+     "base",
+     0.906,
+     1.28
+    ],
+    [
+     "des",
+     0.868,
+     1.6
+    ],
+    [
+     "coupe",
+     0.557,
+     1.84
+    ],
+    [
+     "sous",
+     0.994,
+     2.16
+    ],
+    [
+     "100",
+     0.999,
+     2.48
+    ],
+    [
+     "Hz.",
+     0.534,
+     2.64
+    ]
+   ]
+  },
+  "7177d61d95cad1bc024c9810ff7a34ca382a51b9e10901ee8bb46d980dd6a872": {
+   "text": "Mets un égaliseur sur la basse et coupe sous 100 Hz.",
+   "words": [
+    [
+     "Mets",
+     0.97,
+     0.0
+    ],
+    [
+     "un",
+     0.998,
+     0.32
+    ],
+    [
+     "égaliseur",
+     0.971,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     1.12
+    ],
+    [
+     "la",
+     1.0,
+     1.2
+    ],
+    [
+     "basse",
+     0.705,
+     1.28
+    ],
+    [
+     "et",
+     0.996,
+     1.6
+    ],
+    [
+     "coupe",
+     0.909,
+     1.84
+    ],
+    [
+     "sous",
+     0.993,
+     2.16
+    ],
+    [
+     "100",
+     1.0,
+     2.48
+    ],
+    [
+     "Hz.",
+     0.867,
+     2.72
+    ]
+   ]
+  },
+  "289c15ccec7e0a1e6adbc8599cd41ea1fb2250ae5ac7ac94e1eb1f1d41d79dfa": {
+   "text": "Mets un égaliseur sur la basse et coupe sous 100 Hz.",
+   "words": [
+    [
+     "Mets",
+     0.967,
+     0.0
+    ],
+    [
+     "un",
+     0.998,
+     0.32
+    ],
+    [
+     "égaliseur",
+     0.945,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     1.12
+    ],
+    [
+     "la",
+     1.0,
+     1.2
+    ],
+    [
+     "basse",
+     0.899,
+     1.36
+    ],
+    [
+     "et",
+     0.991,
+     1.68
+    ],
+    [
+     "coupe",
+     0.999,
+     1.84
+    ],
+    [
+     "sous",
+     0.996,
+     2.16
+    ],
+    [
+     "100",
+     1.0,
+     2.48
+    ],
+    [
+     "Hz.",
+     0.907,
+     2.72
+    ]
+   ]
+  },
+  "2318c654448730b731ec2202a986f8b6503a9dca03ceec2eec7b6346866cd01e": {
+   "text": "Annule le dernier changement.",
+   "words": [
+    [
+     "Annule",
+     0.999,
+     0.0
+    ],
+    [
+     "le",
+     0.997,
+     0.56
+    ],
+    [
+     "dernier",
+     1.0,
+     0.64
+    ],
+    [
+     "changement.",
+     0.999,
+     1.04
+    ]
+   ]
+  },
+  "1d5eb4ab990512e292a6ce11531533df15c2ac09917ad76645e73036ce67a3bc": {
+   "text": "Annule le dernier changement.",
+   "words": [
+    [
+     "Annule",
+     0.877,
+     0.0
+    ],
+    [
+     "le",
+     0.986,
+     0.56
+    ],
+    [
+     "dernier",
+     0.999,
+     0.64
+    ],
+    [
+     "changement.",
+     0.996,
+     1.04
+    ]
+   ]
+  },
+  "8918a94c25dd2e00b280de710a6e82ec0c9742f89c996e5d51b2e9e9893e3afd": {
+   "text": "Annule le dernier changement.",
+   "words": [
+    [
+     "Annule",
+     0.998,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.56
+    ],
+    [
+     "dernier",
+     1.0,
+     0.64
+    ],
+    [
+     "changement.",
+     0.998,
+     1.04
+    ]
+   ]
+  },
+  "72c08335a3fcc4264a8d9c5947ec15dab8a8750ec37ae3e6ffa6e19dcc102694": {
+   "text": "Annule le dernier changement.",
+   "words": [
+    [
+     "Annule",
+     0.999,
+     0.0
+    ],
+    [
+     "le",
+     0.998,
+     0.56
+    ],
+    [
+     "dernier",
+     1.0,
+     0.64
+    ],
+    [
+     "changement.",
+     0.999,
+     1.04
+    ]
+   ]
+  },
+  "4d6abd1b5571500975fff4583271fe0b4ee68e693658d87bc87c94db6eaa35de": {
+   "text": "Lance la lecture depuis le début.",
+   "words": [
+    [
+     "Lance",
+     1.0,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "lecture",
+     1.0,
+     0.64
+    ],
+    [
+     "depuis",
+     1.0,
+     1.12
+    ],
+    [
+     "le",
+     1.0,
+     1.44
+    ],
+    [
+     "début.",
+     1.0,
+     1.6
+    ]
+   ]
+  },
+  "50dd9be55169782839d7db714fc386b40a115fdd179b96c4bdec43e2d9017611": {
+   "text": "Lance la lecture depuis le début.",
+   "words": [
+    [
+     "Lance",
+     0.999,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.48
+    ],
+    [
+     "lecture",
+     0.999,
+     0.64
+    ],
+    [
+     "depuis",
+     1.0,
+     1.12
+    ],
+    [
+     "le",
+     1.0,
+     1.44
+    ],
+    [
+     "début.",
+     1.0,
+     1.6
+    ]
+   ]
+  },
+  "a02d1ba5bc1c0f6f85f2badbd034244f9a824d5bd68f824f3b1036014fbc8d67": {
+   "text": "Lance la lecture depuis le début.",
+   "words": [
+    [
+     "Lance",
+     1.0,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.48
+    ],
+    [
+     "lecture",
+     1.0,
+     0.64
+    ],
+    [
+     "depuis",
+     1.0,
+     1.12
+    ],
+    [
+     "le",
+     1.0,
+     1.44
+    ],
+    [
+     "début.",
+     1.0,
+     1.6
+    ]
+   ]
+  },
+  "bddac5d8221542a3578d57d82539081afdf2d23ed4b49484f5b2c691bd6736a9": {
+   "text": "Lance la lecture depuis le début.",
+   "words": [
+    [
+     "Lance",
+     1.0,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.48
+    ],
+    [
+     "lecture",
+     1.0,
+     0.64
+    ],
+    [
+     "depuis",
+     1.0,
+     1.12
+    ],
+    [
+     "le",
+     1.0,
+     1.44
+    ],
+    [
+     "début.",
+     1.0,
+     1.6
+    ]
+   ]
+  },
+  "3943a1b612c19f15e77b7b27e8c13a79df12c3695a8b605db9ec009da40913c2": {
+   "text": "Renomme la piste 4 en refrain.",
+   "words": [
+    [
+     "Renomme",
+     0.996,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "piste",
+     0.999,
+     0.64
+    ],
+    [
+     "4",
+     1.0,
+     1.12
+    ],
+    [
+     "en",
+     0.998,
+     1.44
+    ],
+    [
+     "refrain.",
+     0.696,
+     1.6
+    ]
+   ]
+  },
+  "ed5deaaf9dc43430a969d4b77042045b3dfea2d9b2078c02a46b6f9d574be656": {
+   "text": "Renomme la piste 4 ans en refrain.",
+   "words": [
+    [
+     "Renomme",
+     0.953,
+     0.0
+    ],
+    [
+     "la",
+     0.948,
+     0.56
+    ],
+    [
+     "piste",
+     0.987,
+     0.64
+    ],
+    [
+     "4",
+     0.996,
+     1.12
+    ],
+    [
+     "ans",
+     0.698,
+     1.28
+    ],
+    [
+     "en",
+     0.69,
+     1.44
+    ],
+    [
+     "refrain.",
+     0.784,
+     1.6
+    ]
+   ]
+  },
+  "ad1a067a725bc0fe141eed85d02c5388e1aab7094f5ca4ea77987d7f95f681b0": {
+   "text": "Renomme la piste 4 en refrain.",
+   "words": [
+    [
+     "Renomme",
+     0.994,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "piste",
+     0.998,
+     0.72
+    ],
+    [
+     "4",
+     0.999,
+     1.12
+    ],
+    [
+     "en",
+     0.998,
+     1.44
+    ],
+    [
+     "refrain.",
+     0.891,
+     1.6
+    ]
+   ]
+  },
+  "b1111e313be2602c8dc934b03559d7d3b3c2ae9939bb9c0ccb502a6cf65573c2": {
+   "text": "Renomme la piste 4 en refrain.",
+   "words": [
+    [
+     "Renomme",
+     0.996,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "piste",
+     0.999,
+     0.72
+    ],
+    [
+     "4",
+     0.999,
+     1.12
+    ],
+    [
+     "en",
+     0.997,
+     1.44
+    ],
+    [
+     "refrain.",
+     0.848,
+     1.6
+    ]
+   ]
+  },
+  "1dd356b0d4d17296ee4dd624c6b7f60c4d3c4632b5513ebf48cfac9ceae71b57": {
+   "text": "Passant Fa dièse mineur à 140 BPM.",
+   "words": [
+    [
+     "Passant",
+     0.905,
+     0.0
+    ],
+    [
+     "Fa",
+     0.775,
+     0.4
+    ],
+    [
+     "dièse",
+     0.976,
+     0.72
+    ],
+    [
+     "mineur",
+     0.894,
+     1.12
+    ],
+    [
+     "à",
+     1.0,
+     1.44
+    ],
+    [
+     "140",
+     1.0,
+     1.6
+    ],
+    [
+     "BPM.",
+     0.568,
+     2.08
+    ]
+   ]
+  },
+  "6373e64abdf226b94dc89dc0d5a551738c7508c26998269ca4ee7f9964147cc2": {
+   "text": "Passant pas dièse mineur à 140 BPM.",
+   "words": [
+    [
+     "Passant",
+     0.902,
+     0.0
+    ],
+    [
+     "pas",
+     0.424,
+     0.48
+    ],
+    [
+     "dièse",
+     0.921,
+     0.72
+    ],
+    [
+     "mineur",
+     0.623,
+     1.04
+    ],
+    [
+     "à",
+     0.999,
+     1.44
+    ],
+    [
+     "140",
+     1.0,
+     1.6
+    ],
+    [
+     "BPM.",
+     0.51,
+     2.08
+    ]
+   ]
+  },
+  "5fbf8851af87d6c78dc563304cc81c7017951c8f1a808c9bb397e1ffdf6cce01": {
+   "text": "Passant Fa dièse mineur à 140 BPM.",
+   "words": [
+    [
+     "Passant",
+     0.908,
+     0.0
+    ],
+    [
+     "Fa",
+     0.672,
+     0.48
+    ],
+    [
+     "dièse",
+     0.956,
+     0.72
+    ],
+    [
+     "mineur",
+     0.87,
+     1.04
+    ],
+    [
+     "à",
+     0.999,
+     1.44
+    ],
+    [
+     "140",
+     1.0,
+     1.6
+    ],
+    [
+     "BPM.",
+     0.537,
+     2.08
+    ]
+   ]
+  },
+  "ad2da61f006845abb0da44bf4fa19d440f903e19a74e5ee42fdebefe67cb0b65": {
+   "text": "Passant Fa dièse mineur à 140 BPM.",
+   "words": [
+    [
+     "Passant",
+     0.908,
+     0.0
+    ],
+    [
+     "Fa",
+     0.745,
+     0.4
+    ],
+    [
+     "dièse",
+     0.968,
+     0.72
+    ],
+    [
+     "mineur",
+     0.84,
+     1.12
+    ],
+    [
+     "à",
+     0.999,
+     1.44
+    ],
+    [
+     "140",
+     1.0,
+     1.6
+    ],
+    [
+     "BPM.",
+     0.579,
+     2.08
+    ]
+   ]
+  },
+  "6cc348ecedef23c01fef1eb2ae132e166b4592502a6080b20044f45235485ebf": {
+   "text": "Mais le morceau en Ré mineur.",
+   "words": [
+    [
+     "Mais",
+     0.659,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.32
+    ],
+    [
+     "morceau",
+     1.0,
+     0.4
+    ],
+    [
+     "en",
+     0.999,
+     0.72
+    ],
+    [
+     "Ré",
+     0.636,
+     0.88
+    ],
+    [
+     "mineur.",
+     0.955,
+     1.28
+    ]
+   ]
+  },
+  "a1b24950f70717a93a1d5d2a3acfc968709eaca6a5098c967af2fdee875991de": {
+   "text": "Mets le morceau en Ré mineur.",
+   "words": [
+    [
+     "Mets",
+     0.387,
+     0.08
+    ],
+    [
+     "le",
+     0.996,
+     0.32
+    ],
+    [
+     "morceau",
+     1.0,
+     0.4
+    ],
+    [
+     "en",
+     0.999,
+     0.8
+    ],
+    [
+     "Ré",
+     0.438,
+     0.88
+    ],
+    [
+     "mineur.",
+     0.937,
+     1.28
+    ]
+   ]
+  },
+  "9276ec8cd3e2dd27eef602626b1a263161db2406cc8d8b7171d078e594034ec7": {
+   "text": "Mets le morceau en Ré mineur.",
+   "words": [
+    [
+     "Mets",
+     0.737,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.32
+    ],
+    [
+     "morceau",
+     1.0,
+     0.4
+    ],
+    [
+     "en",
+     0.999,
+     0.8
+    ],
+    [
+     "Ré",
+     0.6,
+     0.88
+    ],
+    [
+     "mineur.",
+     0.967,
+     1.28
+    ]
+   ]
+  },
+  "c5ebfd99c1d961af3a3233ee7485a20c34569ff637aefaa60a36f2538444ed5e": {
+   "text": "Mais le morceau en Ré mineur.",
+   "words": [
+    [
+     "Mais",
+     0.559,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.32
+    ],
+    [
+     "morceau",
+     1.0,
+     0.4
+    ],
+    [
+     "en",
+     0.999,
+     0.8
+    ],
+    [
+     "Ré",
+     0.55,
+     0.88
+    ],
+    [
+     "mineur.",
+     0.955,
+     1.28
+    ]
+   ]
+  },
+  "ae2c4554287a94b749de62eb05efd3f0ae8c938aa3f477f6f2d683f4ff3acf30": {
+   "text": "Transpose la mélodie en Si bémol majeur.",
+   "words": [
+    [
+     "Transpose",
+     0.999,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.72
+    ],
+    [
+     "mélodie",
+     1.0,
+     0.8
+    ],
+    [
+     "en",
+     1.0,
+     1.2
+    ],
+    [
+     "Si",
+     0.493,
+     1.36
+    ],
+    [
+     "bémol",
+     0.998,
+     1.68
+    ],
+    [
+     "majeur.",
+     0.997,
+     2.32
+    ]
+   ]
+  },
+  "4787132c3ad3eb8b9edf2b8b9f68af131d40f281e117df773d134a26855aea99": {
+   "text": "Transpose la mélodie en Si bémol majeur.",
+   "words": [
+    [
+     "Transpose",
+     0.996,
+     0.0
+    ],
+    [
+     "la",
+     0.999,
+     0.72
+    ],
+    [
+     "mélodie",
+     1.0,
+     0.88
+    ],
+    [
+     "en",
+     0.998,
+     1.28
+    ],
+    [
+     "Si",
+     0.508,
+     1.44
+    ],
+    [
+     "bémol",
+     0.977,
+     1.76
+    ],
+    [
+     "majeur.",
+     0.998,
+     2.32
+    ]
+   ]
+  },
+  "d97d7a55a5fc6fd8523c1e65083b0c7e1df1668daddebce5f754279859cbd8cc": {
+   "text": "Transpose la mélodie en Si bémol majeur.",
+   "words": [
+    [
+     "Transpose",
+     0.998,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.8
+    ],
+    [
+     "mélodie",
+     1.0,
+     0.88
+    ],
+    [
+     "en",
+     1.0,
+     1.28
+    ],
+    [
+     "Si",
+     0.492,
+     1.44
+    ],
+    [
+     "bémol",
+     0.996,
+     1.68
+    ],
+    [
+     "majeur.",
+     0.997,
+     2.32
+    ]
+   ]
+  },
+  "b1b905d990519f9ee49a8da151cb0e8b15b553b80eb0fe68f87b59802bb34127": {
+   "text": "Transpose la mélodie en Si bémol majeur.",
+   "words": [
+    [
+     "Transpose",
+     0.993,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.8
+    ],
+    [
+     "mélodie",
+     1.0,
+     0.88
+    ],
+    [
+     "en",
+     1.0,
+     1.28
+    ],
+    [
+     "Si",
+     0.484,
+     1.44
+    ],
+    [
+     "bémol",
+     0.998,
+     1.68
+    ],
+    [
+     "majeur.",
+     0.997,
+     2.32
+    ]
+   ]
+  },
+  "3730240fe3ec4e443b2a62752844f7f3361da690f5af7d14dd4f2b58969a7f29": {
+   "text": "Mais la 808 en sol.",
+   "words": [
+    [
+     "Mais",
+     0.934,
+     0.0
+    ],
+    [
+     "la",
+     0.999,
+     0.16
+    ],
+    [
+     "808",
+     0.992,
+     0.4
+    ],
+    [
+     "en",
+     0.642,
+     1.04
+    ],
+    [
+     "sol.",
+     0.75,
+     1.28
+    ]
+   ]
+  },
+  "14e59ec2bcfae1aa0d791cabbe757ebdbbfe47ce265b9c06fa77defe57a68373": {
+   "text": "mais la 808 en sol",
+   "words": [
+    [
+     "mais",
+     0.594,
+     0.0
+    ],
+    [
+     "la",
+     0.932,
+     0.16
+    ],
+    [
+     "808",
+     0.517,
+     0.4
+    ],
+    [
+     "en",
+     0.857,
+     1.12
+    ],
+    [
+     "sol",
+     0.936,
+     1.36
+    ]
+   ]
+  },
+  "4710ae055b8d02918ebcd87e430415c81d2cb9678c1bb5511c181ab4825c5c05": {
+   "text": "mais la 808 en sol",
+   "words": [
+    [
+     "mais",
+     0.495,
+     0.0
+    ],
+    [
+     "la",
+     0.996,
+     0.16
+    ],
+    [
+     "808",
+     0.828,
+     0.4
+    ],
+    [
+     "en",
+     0.97,
+     1.12
+    ],
+    [
+     "sol",
+     0.915,
+     1.36
+    ]
+   ]
+  },
+  "e6b6ecc7ef459fe93717f76382b255eb8f10c54da987817777c2f9cf5013cbe4": {
+   "text": "Mais la 808 en sol.",
+   "words": [
+    [
+     "Mais",
+     0.879,
+     0.0
+    ],
+    [
+     "la",
+     0.998,
+     0.16
+    ],
+    [
+     "808",
+     0.953,
+     0.4
+    ],
+    [
+     "en",
+     0.979,
+     1.12
+    ],
+    [
+     "sol.",
+     0.726,
+     1.28
+    ]
+   ]
+  },
+  "dd5769471eb11ae9e5f59ad877dc76e202063f4237789713f2e8acca54eaff25": {
+   "text": "Joue un accord de la mineur sur le PAD.",
+   "words": [
+    [
+     "Joue",
+     0.983,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.4
+    ],
+    [
+     "accord",
+     0.989,
+     0.48
+    ],
+    [
+     "de",
+     0.995,
+     0.8
+    ],
+    [
+     "la",
+     0.756,
+     0.88
+    ],
+    [
+     "mineur",
+     0.563,
+     1.12
+    ],
+    [
+     "sur",
+     1.0,
+     1.52
+    ],
+    [
+     "le",
+     1.0,
+     1.6
+    ],
+    [
+     "PAD.",
+     0.852,
+     1.84
+    ]
+   ]
+  },
+  "b932fd9623eb4cff226d008247df6d58570d28ff1150f045ed24cf60201f2dab": {
+   "text": "Joue un accord de la mineure sur le PAD.",
+   "words": [
+    [
+     "Joue",
+     0.903,
+     0.0
+    ],
+    [
+     "un",
+     0.999,
+     0.32
+    ],
+    [
+     "accord",
+     0.989,
+     0.48
+    ],
+    [
+     "de",
+     0.998,
+     0.8
+    ],
+    [
+     "la",
+     0.915,
+     0.88
+    ],
+    [
+     "mineure",
+     0.666,
+     1.12
+    ],
+    [
+     "sur",
+     1.0,
+     1.52
+    ],
+    [
+     "le",
+     1.0,
+     1.6
+    ],
+    [
+     "PAD.",
+     0.953,
+     1.76
+    ]
+   ]
+  },
+  "9f8f0a70fd2f70772e8c79a006d0bb5e137b14557c8b44762c11275c02693d6f": {
+   "text": "Joue un accord de la mineure sur le PAD.",
+   "words": [
+    [
+     "Joue",
+     0.986,
+     0.0
+    ],
+    [
+     "un",
+     0.999,
+     0.32
+    ],
+    [
+     "accord",
+     0.994,
+     0.48
+    ],
+    [
+     "de",
+     0.993,
+     0.8
+    ],
+    [
+     "la",
+     0.861,
+     0.88
+    ],
+    [
+     "mineure",
+     0.606,
+     1.12
+    ],
+    [
+     "sur",
+     1.0,
+     1.52
+    ],
+    [
+     "le",
+     1.0,
+     1.6
+    ],
+    [
+     "PAD.",
+     0.9,
+     1.76
+    ]
+   ]
+  },
+  "d7d4da363b9edd0db64f81bcb72f35ff2df605d342cb4d19d7205d33697b4051": {
+   "text": "Joue un accord de la mineur sur le PAD.",
+   "words": [
+    [
+     "Joue",
+     0.982,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.32
+    ],
+    [
+     "accord",
+     0.993,
+     0.48
+    ],
+    [
+     "de",
+     0.997,
+     0.8
+    ],
+    [
+     "la",
+     0.822,
+     0.88
+    ],
+    [
+     "mineur",
+     0.507,
+     1.12
+    ],
+    [
+     "sur",
+     1.0,
+     1.52
+    ],
+    [
+     "le",
+     1.0,
+     1.6
+    ],
+    [
+     "PAD.",
+     0.868,
+     1.76
+    ]
+   ]
+  },
+  "49cce7253aa792fdcec0e06cd3e8e2f2f9ad245ce88afc70cc55f265acf97a40": {
+   "text": "Passe le refrain en mi bémol.",
+   "words": [
+    [
+     "Passe",
+     0.984,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.4
+    ],
+    [
+     "refrain",
+     0.914,
+     0.48
+    ],
+    [
+     "en",
+     1.0,
+     0.96
+    ],
+    [
+     "mi",
+     0.8,
+     1.12
+    ],
+    [
+     "bémol.",
+     0.999,
+     1.44
+    ]
+   ]
+  },
+  "153f736b240b8cfd810c9bcc191cb1e680070c252b2b4aace939cabdf442d472": {
+   "text": "Passe le refrain en mi bémol.",
+   "words": [
+    [
+     "Passe",
+     0.778,
+     0.08
+    ],
+    [
+     "le",
+     0.999,
+     0.4
+    ],
+    [
+     "refrain",
+     0.957,
+     0.48
+    ],
+    [
+     "en",
+     0.999,
+     1.04
+    ],
+    [
+     "mi",
+     0.845,
+     1.2
+    ],
+    [
+     "bémol.",
+     0.998,
+     1.44
+    ]
+   ]
+  },
+  "812f9ab31161cf9cd21d6f2cb8cc37e7b934cd00b8ab8aa6ea87e64058eefe50": {
+   "text": "Passe le refrain en mi bémol.",
+   "words": [
+    [
+     "Passe",
+     0.967,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.4
+    ],
+    [
+     "refrain",
+     0.941,
+     0.48
+    ],
+    [
+     "en",
+     1.0,
+     0.96
+    ],
+    [
+     "mi",
+     0.83,
+     1.12
+    ],
+    [
+     "bémol.",
+     0.998,
+     1.44
+    ]
+   ]
+  },
+  "ce26d754e1dab50e94ccb18902dc9734a234a42ddf4fa7eb79d2eada65de0736": {
+   "text": "Passe le refrain en mi bémol.",
+   "words": [
+    [
+     "Passe",
+     0.972,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.4
+    ],
+    [
+     "refrain",
+     0.907,
+     0.48
+    ],
+    [
+     "en",
+     1.0,
+     0.96
+    ],
+    [
+     "mi",
+     0.728,
+     1.12
+    ],
+    [
+     "bémol.",
+     0.999,
+     1.44
+    ]
+   ]
+  },
+  "0abde663bf40b586e6132613cc4506cca3baa5f2978c664933f842cdcc48c9bc": {
+   "text": "Transpose la base d'une octave vers le bas.",
+   "words": [
+    [
+     "Transpose",
+     0.999,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.64
+    ],
+    [
+     "base",
+     0.636,
+     0.72
+    ],
+    [
+     "d'une",
+     0.99,
+     0.96
+    ],
+    [
+     "octave",
+     0.999,
+     1.28
+    ],
+    [
+     "vers",
+     1.0,
+     1.76
+    ],
+    [
+     "le",
+     1.0,
+     1.92
+    ],
+    [
+     "bas.",
+     1.0,
+     2.16
+    ]
+   ]
+  },
+  "100cfe587f0bdf7e58439421b73108548a854706b58de11f015ca146941e2a7e": {
+   "text": "Transpose la base d'une octave vers le bas.",
+   "words": [
+    [
+     "Transpose",
+     0.87,
+     0.0
+    ],
+    [
+     "la",
+     0.999,
+     0.72
+    ],
+    [
+     "base",
+     0.652,
+     0.8
+    ],
+    [
+     "d'une",
+     0.763,
+     1.04
+    ],
+    [
+     "octave",
+     0.772,
+     1.28
+    ],
+    [
+     "vers",
+     1.0,
+     1.84
+    ],
+    [
+     "le",
+     1.0,
+     2.0
+    ],
+    [
+     "bas.",
+     1.0,
+     2.16
+    ]
+   ]
+  },
+  "48651aaf22a809dd8e4d5495b40f7d2041c73a3e3cedf61ecb26a243b8eecb87": {
+   "text": "Transpose la base d'une octave vers le bas.",
+   "words": [
+    [
+     "Transpose",
+     0.998,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.64
+    ],
+    [
+     "base",
+     0.957,
+     0.72
+    ],
+    [
+     "d'une",
+     0.961,
+     0.96
+    ],
+    [
+     "octave",
+     0.999,
+     1.28
+    ],
+    [
+     "vers",
+     1.0,
+     1.76
+    ],
+    [
+     "le",
+     1.0,
+     1.92
+    ],
+    [
+     "bas.",
+     1.0,
+     2.08
+    ]
+   ]
+  },
+  "c2af94b8ee54dc2dee434278d9e25f9a944c7f7fb24831c26033842482d37a2a": {
+   "text": "Transpose la base d'une octave vers le bas.",
+   "words": [
+    [
+     "Transpose",
+     0.999,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.64
+    ],
+    [
+     "base",
+     0.882,
+     0.72
+    ],
+    [
+     "d'une",
+     0.984,
+     0.96
+    ],
+    [
+     "octave",
+     0.999,
+     1.28
+    ],
+    [
+     "vers",
+     1.0,
+     1.76
+    ],
+    [
+     "le",
+     1.0,
+     1.92
+    ],
+    [
+     "bas.",
+     1.0,
+     2.08
+    ]
+   ]
+  },
+  "15d4da17ed39db385eda7c09d35ee1bc7281a1b21d50582db34677fea47336bd": {
+   "text": "Change la tonalité en Do dièse mineure.",
+   "words": [
+    [
+     "Change",
+     0.998,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.4
+    ],
+    [
+     "tonalité",
+     1.0,
+     0.56
+    ],
+    [
+     "en",
+     0.999,
+     0.96
+    ],
+    [
+     "Do",
+     0.403,
+     1.12
+    ],
+    [
+     "dièse",
+     0.645,
+     1.44
+    ],
+    [
+     "mineure.",
+     0.736,
+     1.92
+    ]
+   ]
+  },
+  "a03f1e59bfb1f54ac1f41fa777287747d4fcf8617726976a6bcfa2971396ebac": {
+   "text": "Change la tonalité en deux dièse mineur.",
+   "words": [
+    [
+     "Change",
+     0.976,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.4
+    ],
+    [
+     "tonalité",
+     1.0,
+     0.56
+    ],
+    [
+     "en",
+     0.997,
+     0.96
+    ],
+    [
+     "deux",
+     0.356,
+     1.12
+    ],
+    [
+     "dièse",
+     0.861,
+     1.44
+    ],
+    [
+     "mineur.",
+     0.483,
+     1.84
+    ]
+   ]
+  },
+  "3a48f6a916034e395ff47ca740378c06c489b97c1a8767a3c9c708ab70449b26": {
+   "text": "Change la tonalité en Do dièse mineure.",
+   "words": [
+    [
+     "Change",
+     0.998,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.4
+    ],
+    [
+     "tonalité",
+     1.0,
+     0.56
+    ],
+    [
+     "en",
+     0.999,
+     0.96
+    ],
+    [
+     "Do",
+     0.294,
+     1.12
+    ],
+    [
+     "dièse",
+     0.637,
+     1.44
+    ],
+    [
+     "mineure.",
+     0.724,
+     1.92
+    ]
+   ]
+  },
+  "16b5dfbd9d38b4d5e58fe77ce2f6662df03a01bcd5a4397e58adc51908d1854b": {
+   "text": "Change la tonalité en Do dièse mineure.",
+   "words": [
+    [
+     "Change",
+     0.995,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.4
+    ],
+    [
+     "tonalité",
+     0.999,
+     0.56
+    ],
+    [
+     "en",
+     0.999,
+     0.96
+    ],
+    [
+     "Do",
+     0.425,
+     1.12
+    ],
+    [
+     "dièse",
+     0.626,
+     1.44
+    ],
+    [
+     "mineure.",
+     0.681,
+     1.92
+    ]
+   ]
+  },
+  "dda7493f69b14ce0cfdb5a4293d01d7229367775c9ab4e7de670c99fb5c36e97": {
+   "text": "Monte la mélodie de deux demi-tons.",
+   "words": [
+    [
+     "Monte",
+     0.676,
+     0.0
+    ],
+    [
+     "la",
+     0.999,
+     0.48
+    ],
+    [
+     "mélodie",
+     0.999,
+     0.56
+    ],
+    [
+     "de",
+     0.998,
+     1.04
+    ],
+    [
+     "deux",
+     0.96,
+     1.12
+    ],
+    [
+     "demi-tons.",
+     0.887,
+     1.36
+    ]
+   ]
+  },
+  "3dc8d5ecce6134ddd394f3cedc80cfef17298f42f5b7a977c6a5367d36ed2d7b": {
+   "text": "Montre la mélodie de deux demi-tons.",
+   "words": [
+    [
+     "Montre",
+     0.535,
+     0.08
+    ],
+    [
+     "la",
+     0.999,
+     0.48
+    ],
+    [
+     "mélodie",
+     0.998,
+     0.64
+    ],
+    [
+     "de",
+     0.996,
+     0.96
+    ],
+    [
+     "deux",
+     0.945,
+     1.12
+    ],
+    [
+     "demi-tons.",
+     0.462,
+     1.36
+    ]
+   ]
+  },
+  "626bfbb81446a2a46a4c5eb35588672fa74b6c1a06388bad57451f9ca8b1ae70": {
+   "text": "Montre la mélodie de deux demi-tons.",
+   "words": [
+    [
+     "Montre",
+     0.523,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.48
+    ],
+    [
+     "mélodie",
+     1.0,
+     0.56
+    ],
+    [
+     "de",
+     0.999,
+     0.96
+    ],
+    [
+     "deux",
+     0.95,
+     1.12
+    ],
+    [
+     "demi-tons.",
+     0.904,
+     1.36
+    ]
+   ]
+  },
+  "ef80326d245b9b5d25429e854d69531cd85997a9c5dc0664cd147a9d1d179211": {
+   "text": "Montes la mélodie de deux demi-tons.",
+   "words": [
+    [
+     "Montes",
+     0.505,
+     0.0
+    ],
+    [
+     "la",
+     0.999,
+     0.48
+    ],
+    [
+     "mélodie",
+     1.0,
+     0.56
+    ],
+    [
+     "de",
+     0.999,
+     1.04
+    ],
+    [
+     "deux",
+     0.95,
+     1.12
+    ],
+    [
+     "demi-tons.",
+     0.842,
+     1.36
+    ]
+   ]
+  },
+  "c66f422dbe1887c02c9b5a742a60f810c17606484af694761aab4dc503351453": {
+   "text": "La tonique, c'est Fa.",
+   "words": [
+    [
+     "La",
+     0.995,
+     0.0
+    ],
+    [
+     "tonique,",
+     0.98,
+     0.24
+    ],
+    [
+     "c'est",
+     0.556,
+     0.88
+    ],
+    [
+     "Fa.",
+     0.94,
+     1.2
+    ]
+   ]
+  },
+  "c9876d01f74bb5647d19b024a85cc1cae612a9424525a08309d4b5bba6a3c456": {
+   "text": "La tonique, c'est Fa.",
+   "words": [
+    [
+     "La",
+     0.861,
+     0.0
+    ],
+    [
+     "tonique,",
+     0.903,
+     0.24
+    ],
+    [
+     "c'est",
+     0.652,
+     0.88
+    ],
+    [
+     "Fa.",
+     0.714,
+     1.2
+    ]
+   ]
+  },
+  "b74f912a6f092a713db27c5ff01a1f7ae0f40383aec04854bb306f7c9d470b90": {
+   "text": "La tonique, Cfa.",
+   "words": [
+    [
+     "La",
+     0.986,
+     0.0
+    ],
+    [
+     "tonique,",
+     0.945,
+     0.24
+    ],
+    [
+     "Cfa.",
+     0.579,
+     0.88
+    ]
+   ]
+  },
+  "3f903ebd65a4a246cd3ce87763e6e4ce366202d57c9eab68a5b0263c22e87707": {
+   "text": "La tonique, c'est Fa.",
+   "words": [
+    [
+     "La",
+     0.994,
+     0.0
+    ],
+    [
+     "tonique,",
+     0.979,
+     0.24
+    ],
+    [
+     "c'est",
+     0.549,
+     0.88
+    ],
+    [
+     "Fa.",
+     0.953,
+     1.2
+    ]
+   ]
+  },
+  "f0a4d0b0e80cafdd2d70b21eb3137f753d3a01930436a5891cd9e10ca0be102d": {
+   "text": "Règle le tempo à 92 BPM.",
+   "words": [
+    [
+     "Règle",
+     0.851,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.4
+    ],
+    [
+     "tempo",
+     0.999,
+     0.56
+    ],
+    [
+     "à",
+     0.999,
+     0.96
+    ],
+    [
+     "92",
+     0.999,
+     1.28
+    ],
+    [
+     "BPM.",
+     0.655,
+     1.76
+    ]
+   ]
+  },
+  "864dd9daf54ab5635e1e4bc9252e17818acfe6f87d6bb1ab5245f369084d56b7": {
+   "text": "Règle le tempo à 90 BPM",
+   "words": [
+    [
+     "Règle",
+     0.77,
+     0.08
+    ],
+    [
+     "le",
+     0.974,
+     0.48
+    ],
+    [
+     "tempo",
+     0.988,
+     0.56
+    ],
+    [
+     "à",
+     0.997,
+     0.96
+    ],
+    [
+     "90",
+     0.969,
+     1.2
+    ],
+    [
+     "BPM",
+     0.816,
+     1.76
+    ]
+   ]
+  },
+  "aacb64d237c9a5d7b9616dfa54440d692c4fc7a51619620e8b254d0df5b4441b": {
+   "text": "Règle le tempo à 92 BPM.",
+   "words": [
+    [
+     "Règle",
+     0.824,
+     0.0
+    ],
+    [
+     "le",
+     0.998,
+     0.4
+    ],
+    [
+     "tempo",
+     0.998,
+     0.56
+    ],
+    [
+     "à",
+     0.998,
+     0.96
+    ],
+    [
+     "92",
+     0.999,
+     1.28
+    ],
+    [
+     "BPM.",
+     0.676,
+     1.76
+    ]
+   ]
+  },
+  "a09ecb0434074e2632343e486344989d2917c483849a0742614c5c39045c9e68": {
+   "text": "Règle le tempo à 92 BPM.",
+   "words": [
+    [
+     "Règle",
+     0.947,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.4
+    ],
+    [
+     "tempo",
+     0.999,
+     0.56
+    ],
+    [
+     "à",
+     0.999,
+     0.96
+    ],
+    [
+     "92",
+     0.999,
+     1.28
+    ],
+    [
+     "BPM.",
+     0.597,
+     1.68
+    ]
+   ]
+  },
+  "880cef76284d764ebde304a5464dbe7ba0149f2707eff19d3190439bb09ca5e8": {
+   "text": "Baisse le master de 6 décibels.",
+   "words": [
+    [
+     "Baisse",
+     0.995,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.48
+    ],
+    [
+     "master",
+     0.886,
+     0.56
+    ],
+    [
+     "de",
+     0.998,
+     0.96
+    ],
+    [
+     "6",
+     1.0,
+     1.28
+    ],
+    [
+     "décibels.",
+     0.539,
+     1.44
+    ]
+   ]
+  },
+  "1bf1fd24c70abe0c3f886ab9b995f740459e023b0a30569dbdc0864789d393e8": {
+   "text": "Baisse le master de 6 décibels.",
+   "words": [
+    [
+     "Baisse",
+     0.968,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.48
+    ],
+    [
+     "master",
+     0.91,
+     0.56
+    ],
+    [
+     "de",
+     0.998,
+     0.96
+    ],
+    [
+     "6",
+     1.0,
+     1.28
+    ],
+    [
+     "décibels.",
+     0.753,
+     1.44
+    ]
+   ]
+  },
+  "b58826f2743a4531e99347bc860167716b5dd050411ea6c55d4fed863fe9ffaf": {
+   "text": "Baisse le master de 6 décibels.",
+   "words": [
+    [
+     "Baisse",
+     0.98,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.48
+    ],
+    [
+     "master",
+     0.926,
+     0.56
+    ],
+    [
+     "de",
+     0.998,
+     0.96
+    ],
+    [
+     "6",
+     1.0,
+     1.28
+    ],
+    [
+     "décibels.",
+     0.632,
+     1.44
+    ]
+   ]
+  },
+  "69826b27f03b9a3bd088380885c402bdb4ccd291acee8ed87d87c6251bbb2b8d": {
+   "text": "Baisse le master de 6 décibels.",
+   "words": [
+    [
+     "Baisse",
+     0.986,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.48
+    ],
+    [
+     "master",
+     0.921,
+     0.56
+    ],
+    [
+     "de",
+     0.998,
+     0.96
+    ],
+    [
+     "6",
+     1.0,
+     1.28
+    ],
+    [
+     "décibels.",
+     0.58,
+     1.44
+    ]
+   ]
+  },
+  "f8199be39adf4335eea12fb268aa250799473ec110e8a4d0b3e4612a512ae2ba": {
+   "text": "Mais le panoramique de la guitare à 30% à gauche.",
+   "words": [
+    [
+     "Mais",
+     0.69,
+     0.0
+    ],
+    [
+     "le",
+     0.995,
+     0.32
+    ],
+    [
+     "panoramique",
+     0.999,
+     0.48
+    ],
+    [
+     "de",
+     1.0,
+     1.2
+    ],
+    [
+     "la",
+     1.0,
+     1.28
+    ],
+    [
+     "guitare",
+     0.981,
+     1.36
+    ],
+    [
+     "à",
+     0.998,
+     1.84
+    ],
+    [
+     "30%",
+     0.981,
+     2.24
+    ],
+    [
+     "à",
+     1.0,
+     2.88
+    ],
+    [
+     "gauche.",
+     1.0,
+     3.04
+    ]
+   ]
+  },
+  "cb77ef99b33c8416803251c6411ef0b045a24ea15728c34e4f1a5244022cee37": {
+   "text": "Mets le panoramique de la guitare à 30% à gauche.",
+   "words": [
+    [
+     "Mets",
+     0.653,
+     0.0
+    ],
+    [
+     "le",
+     0.993,
+     0.32
+    ],
+    [
+     "panoramique",
+     0.981,
+     0.48
+    ],
+    [
+     "de",
+     1.0,
+     1.2
+    ],
+    [
+     "la",
+     1.0,
+     1.28
+    ],
+    [
+     "guitare",
+     0.997,
+     1.36
+    ],
+    [
+     "à",
+     1.0,
+     1.92
+    ],
+    [
+     "30%",
+     0.981,
+     2.24
+    ],
+    [
+     "à",
+     1.0,
+     2.88
+    ],
+    [
+     "gauche.",
+     1.0,
+     3.04
+    ]
+   ]
+  },
+  "aeee79529f5dc29ebaf81d8bbf5ce273ab477bcc32442f9945f5a5375d41aa77": {
+   "text": "Mets le panoramique de la guitare à 30% à gauche.",
+   "words": [
+    [
+     "Mets",
+     0.525,
+     0.0
+    ],
+    [
+     "le",
+     0.997,
+     0.32
+    ],
+    [
+     "panoramique",
+     0.997,
+     0.48
+    ],
+    [
+     "de",
+     1.0,
+     1.2
+    ],
+    [
+     "la",
+     1.0,
+     1.28
+    ],
+    [
+     "guitare",
+     0.996,
+     1.36
+    ],
+    [
+     "à",
+     1.0,
+     1.92
+    ],
+    [
+     "30%",
+     0.986,
+     2.24
+    ],
+    [
+     "à",
+     1.0,
+     2.88
+    ],
+    [
+     "gauche.",
+     1.0,
+     3.04
+    ]
+   ]
+  },
+  "a574f435064047930e7bcb9ff63bcb55855c86ac0a733b8c365f1c7c0bd7c693": {
+   "text": "Mais le panoramique de la guitare à 30% à gauche.",
+   "words": [
+    [
+     "Mais",
+     0.586,
+     0.0
+    ],
+    [
+     "le",
+     0.995,
+     0.32
+    ],
+    [
+     "panoramique",
+     0.999,
+     0.48
+    ],
+    [
+     "de",
+     1.0,
+     1.2
+    ],
+    [
+     "la",
+     1.0,
+     1.28
+    ],
+    [
+     "guitare",
+     0.987,
+     1.36
+    ],
+    [
+     "à",
+     0.998,
+     1.84
+    ],
+    [
+     "30%",
+     0.998,
+     2.16
+    ],
+    [
+     "à",
+     1.0,
+     2.88
+    ],
+    [
+     "gauche.",
+     1.0,
+     3.04
+    ]
+   ]
+  },
+  "eaeadfbe1144dd57dbaa5a2b45c33839cffe400983a8cb2b3c9cc1051f679351": {
+   "text": "Mais le tempo à 128.",
+   "words": [
+    [
+     "Mais",
+     0.724,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.24
+    ],
+    [
+     "tempo",
+     0.999,
+     0.4
+    ],
+    [
+     "à",
+     0.965,
+     0.8
+    ],
+    [
+     "128.",
+     1.0,
+     1.12
+    ]
+   ]
+  },
+  "15d966d50f3756984a8f626863e62dc7171ba65e8f4a1cc57a286b888a2513f4": {
+   "text": "Mais le tempo à 128.",
+   "words": [
+    [
+     "Mais",
+     0.499,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.24
+    ],
+    [
+     "tempo",
+     0.967,
+     0.32
+    ],
+    [
+     "à",
+     0.882,
+     0.8
+    ],
+    [
+     "128.",
+     0.999,
+     1.04
+    ]
+   ]
+  },
+  "98baf0ba77931ee1cfa1b294d7ddc4e56b8fe13cd8481b06a0f2999260eb771f": {
+   "text": "Mais le tempo à 128.",
+   "words": [
+    [
+     "Mais",
+     0.831,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.24
+    ],
+    [
+     "tempo",
+     0.998,
+     0.4
+    ],
+    [
+     "à",
+     0.963,
+     0.8
+    ],
+    [
+     "128.",
+     1.0,
+     1.12
+    ]
+   ]
+  },
+  "cdc4cd14c9d37e4c757ab99dac7a32ec53db61f5f7f8774c6519655d98d85797": {
+   "text": "Mais le tempo à 128.",
+   "words": [
+    [
+     "Mais",
+     0.855,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.24
+    ],
+    [
+     "tempo",
+     0.999,
+     0.4
+    ],
+    [
+     "à",
+     0.975,
+     0.8
+    ],
+    [
+     "128.",
+     1.0,
+     1.12
+    ]
+   ]
+  },
+  "5714af8566e02fa04a1e4457071e39e232f64451a08eb965bb0258524ea806be": {
+   "text": "Boucle les mesures 9 à 16.",
+   "words": [
+    [
+     "Boucle",
+     0.963,
+     0.0
+    ],
+    [
+     "les",
+     0.922,
+     0.48
+    ],
+    [
+     "mesures",
+     0.998,
+     0.64
+    ],
+    [
+     "9",
+     1.0,
+     1.12
+    ],
+    [
+     "à",
+     0.993,
+     1.28
+    ],
+    [
+     "16.",
+     0.995,
+     1.6
+    ]
+   ]
+  },
+  "56f9767e5533498b1780e9c3c568dd09c84c27a1b564600ef311fd4369e09b97": {
+   "text": "Boucle de mesure 9 à 16.",
+   "words": [
+    [
+     "Boucle",
+     0.708,
+     0.0
+    ],
+    [
+     "de",
+     0.972,
+     0.56
+    ],
+    [
+     "mesure",
+     0.913,
+     0.64
+    ],
+    [
+     "9",
+     1.0,
+     1.12
+    ],
+    [
+     "à",
+     0.984,
+     1.28
+    ],
+    [
+     "16.",
+     0.977,
+     1.6
+    ]
+   ]
+  },
+  "d4adf60b10739e3c574c8a6caf29bbd446b68c74dc81b4a648df78f9d5e99de7": {
+   "text": "Boucle les mesures 9 à 16.",
+   "words": [
+    [
+     "Boucle",
+     0.735,
+     0.0
+    ],
+    [
+     "les",
+     0.807,
+     0.56
+    ],
+    [
+     "mesures",
+     0.998,
+     0.64
+    ],
+    [
+     "9",
+     1.0,
+     1.12
+    ],
+    [
+     "à",
+     0.995,
+     1.28
+    ],
+    [
+     "16.",
+     0.994,
+     1.6
+    ]
+   ]
+  },
+  "9629a978d89225407cacf7a6147c85c9e5515cc1922af4448c8b90b56670ce06": {
+   "text": "Boucle les mesures 9 à 16.",
+   "words": [
+    [
+     "Boucle",
+     0.938,
+     0.0
+    ],
+    [
+     "les",
+     0.896,
+     0.48
+    ],
+    [
+     "mesures",
+     0.999,
+     0.64
+    ],
+    [
+     "9",
+     1.0,
+     1.12
+    ],
+    [
+     "à",
+     0.995,
+     1.28
+    ],
+    [
+     "16.",
+     0.995,
+     1.6
+    ]
+   ]
+  },
+  "c92800cd35b7749974ebc20c7297387495714e6bb64d27989123e13d81837247": {
+   "text": "Monte la réverbération à 40%.",
+   "words": [
+    [
+     "Monte",
+     0.742,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.48
+    ],
+    [
+     "réverbération",
+     0.999,
+     0.64
+    ],
+    [
+     "à",
+     1.0,
+     1.68
+    ],
+    [
+     "40%.",
+     0.987,
+     2.0
+    ]
+   ]
+  },
+  "445fc79847bf744dc8527a4b9f70f333c7945fa0d8573737b8a2ab48502aba2b": {
+   "text": "Monte la réverbération à 40%.",
+   "words": [
+    [
+     "Monte",
+     0.758,
+     0.0
+    ],
+    [
+     "la",
+     0.999,
+     0.48
+    ],
+    [
+     "réverbération",
+     0.999,
+     0.64
+    ],
+    [
+     "à",
+     1.0,
+     1.68
+    ],
+    [
+     "40%.",
+     0.999,
+     2.0
+    ]
+   ]
+  },
+  "5b7ff4e02b30a9aa1c148c3e8ef984aeec8531b817172c18a11d8d51d0020a11": {
+   "text": "Monte la réverbération à 40%.",
+   "words": [
+    [
+     "Monte",
+     0.798,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.48
+    ],
+    [
+     "réverbération",
+     0.999,
+     0.64
+    ],
+    [
+     "à",
+     1.0,
+     1.68
+    ],
+    [
+     "40%.",
+     0.99,
+     2.0
+    ]
+   ]
+  },
+  "5034f50dc8bb1daf25af3a79df950e9aba5a870042675301b0861094b71d4928": {
+   "text": "Monte la réverbération à 40%.",
+   "words": [
+    [
+     "Monte",
+     0.819,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.48
+    ],
+    [
+     "réverbération",
+     0.999,
+     0.64
+    ],
+    [
+     "à",
+     1.0,
+     1.68
+    ],
+    [
+     "40%.",
+     0.987,
+     2.0
+    ]
+   ]
+  },
+  "1f19c073cc125ca229b0a0cd4991b51a0fce7ca336bb62d14165da04a8666a06": {
+   "text": "Mais le volume du kick à moins 4 dB.",
+   "words": [
+    [
+     "Mais",
+     0.874,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.24
+    ],
+    [
+     "volume",
+     1.0,
+     0.4
+    ],
+    [
+     "du",
+     1.0,
+     0.64
+    ],
+    [
+     "kick",
+     0.904,
+     0.8
+    ],
+    [
+     "à",
+     0.837,
+     1.2
+    ],
+    [
+     "moins",
+     0.994,
+     1.36
+    ],
+    [
+     "4",
+     1.0,
+     1.76
+    ],
+    [
+     "dB.",
+     0.587,
+     1.92
+    ]
+   ]
+  },
+  "a7ec62556fc762983e55e25ccd8ede69f82e434f0cd432c08a37fb593e527028": {
+   "text": "mais le volume du kick à moins 4 décibels.",
+   "words": [
+    [
+     "mais",
+     0.878,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.24
+    ],
+    [
+     "volume",
+     1.0,
+     0.4
+    ],
+    [
+     "du",
+     1.0,
+     0.64
+    ],
+    [
+     "kick",
+     0.685,
+     0.8
+    ],
+    [
+     "à",
+     0.984,
+     1.28
+    ],
+    [
+     "moins",
+     0.998,
+     1.36
+    ],
+    [
+     "4",
+     1.0,
+     1.76
+    ],
+    [
+     "décibels.",
+     0.776,
+     1.92
+    ]
+   ]
+  },
+  "c8f4c022409e8dd2353adf4013b60e656d7c51b36b11b869b12fd40b2707a199": {
+   "text": "Mais le volume du kick à moins 4 décibels.",
+   "words": [
+    [
+     "Mais",
+     0.824,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.24
+    ],
+    [
+     "volume",
+     1.0,
+     0.4
+    ],
+    [
+     "du",
+     1.0,
+     0.64
+    ],
+    [
+     "kick",
+     0.898,
+     0.8
+    ],
+    [
+     "à",
+     0.974,
+     1.28
+    ],
+    [
+     "moins",
+     0.995,
+     1.36
+    ],
+    [
+     "4",
+     1.0,
+     1.76
+    ],
+    [
+     "décibels.",
+     0.688,
+     1.92
+    ]
+   ]
+  },
+  "28246c85e53220193b90600b1828a5d803677f3743e9579556abf2059a58f5a4": {
+   "text": "Mais le volume du kick à moins 4 décibels.",
+   "words": [
+    [
+     "Mais",
+     0.804,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.24
+    ],
+    [
+     "volume",
+     1.0,
+     0.4
+    ],
+    [
+     "du",
+     1.0,
+     0.64
+    ],
+    [
+     "kick",
+     0.933,
+     0.8
+    ],
+    [
+     "à",
+     0.973,
+     1.28
+    ],
+    [
+     "moins",
+     0.994,
+     1.36
+    ],
+    [
+     "4",
+     1.0,
+     1.76
+    ],
+    [
+     "décibels.",
+     0.615,
+     1.92
+    ]
+   ]
+  },
+  "db2aca0d9c59651ac5bd181ea75ea9c7d40b21a86c94b6132116a0d8cbad5c95": {
+   "text": "Allonge le pattern à 8 mesures.",
+   "words": [
+    [
+     "Allonge",
+     0.667,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.56
+    ],
+    [
+     "pattern",
+     0.987,
+     0.64
+    ],
+    [
+     "à",
+     0.999,
+     1.04
+    ],
+    [
+     "8",
+     1.0,
+     1.28
+    ],
+    [
+     "mesures.",
+     0.996,
+     1.44
+    ]
+   ]
+  },
+  "4cb6dafdcdc38462218253a32c99f4e91cb2752db87bd9559a63c5c50e5717f6": {
+   "text": "Allonge le pattern à 8 mesures.",
+   "words": [
+    [
+     "Allonge",
+     0.988,
+     0.0
+    ],
+    [
+     "le",
+     0.497,
+     0.48
+    ],
+    [
+     "pattern",
+     0.458,
+     0.64
+    ],
+    [
+     "à",
+     0.989,
+     1.04
+    ],
+    [
+     "8",
+     0.999,
+     1.28
+    ],
+    [
+     "mesures.",
+     0.912,
+     1.44
+    ]
+   ]
+  },
+  "38491b5c36510a329ca947320bb1e25406e753a93d2c1393553e24e8a54018d1": {
+   "text": "Allonge le pattern à 8 mesures.",
+   "words": [
+    [
+     "Allonge",
+     0.997,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.56
+    ],
+    [
+     "pattern",
+     0.959,
+     0.64
+    ],
+    [
+     "à",
+     0.999,
+     1.04
+    ],
+    [
+     "8",
+     1.0,
+     1.28
+    ],
+    [
+     "mesures.",
+     0.995,
+     1.44
+    ]
+   ]
+  },
+  "a188dc30407b813185257b165397df63607387db4ffb5b56649d2964a0a5787a": {
+   "text": "Allonge le pattern à 8 mesures.",
+   "words": [
+    [
+     "Allonge",
+     0.997,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.56
+    ],
+    [
+     "pattern",
+     0.981,
+     0.64
+    ],
+    [
+     "à",
+     1.0,
+     1.04
+    ],
+    [
+     "8",
+     1.0,
+     1.28
+    ],
+    [
+     "mesures.",
+     0.996,
+     1.44
+    ]
+   ]
+  },
+  "d8785c93cb4ce02be0b5225092b15d7a2ed66141f451ce046b0a611216ad825e": {
+   "text": "Règle le ratio du compresseur à 4.",
+   "words": [
+    [
+     "Règle",
+     0.963,
+     0.0
+    ],
+    [
+     "le",
+     0.998,
+     0.56
+    ],
+    [
+     "ratio",
+     1.0,
+     0.72
+    ],
+    [
+     "du",
+     1.0,
+     1.12
+    ],
+    [
+     "compresseur",
+     0.999,
+     1.28
+    ],
+    [
+     "à",
+     0.639,
+     1.92
+    ],
+    [
+     "4.",
+     1.0,
+     2.32
+    ]
+   ]
+  },
+  "6e477bb3ba79a794d41a699de41707c71980553164bb259c4220472eb48f8ae6": {
+   "text": "Règle de ratio du compresseur à 4.",
+   "words": [
+    [
+     "Règle",
+     0.513,
+     0.08
+    ],
+    [
+     "de",
+     0.987,
+     0.56
+    ],
+    [
+     "ratio",
+     1.0,
+     0.72
+    ],
+    [
+     "du",
+     1.0,
+     1.12
+    ],
+    [
+     "compresseur",
+     0.994,
+     1.28
+    ],
+    [
+     "à",
+     0.763,
+     2.0
+    ],
+    [
+     "4.",
+     1.0,
+     2.32
+    ]
+   ]
+  },
+  "962215f45246488d658d094651a93bbfebe6c658efb7440d7b1188fa9c2d4cd9": {
+   "text": "Règle le ratio du compresseur à 4.",
+   "words": [
+    [
+     "Règle",
+     0.595,
+     0.0
+    ],
+    [
+     "le",
+     0.998,
+     0.56
+    ],
+    [
+     "ratio",
+     1.0,
+     0.72
+    ],
+    [
+     "du",
+     1.0,
+     1.12
+    ],
+    [
+     "compresseur",
+     0.999,
+     1.28
+    ],
+    [
+     "à",
+     0.905,
+     2.0
+    ],
+    [
+     "4.",
+     1.0,
+     2.32
+    ]
+   ]
+  },
+  "496922f398238a9c13fb801775f79ce707e9b074d4913d1ed9782986fba99d6d": {
+   "text": "Règle le ratio du compresseur à 4.",
+   "words": [
+    [
+     "Règle",
+     0.901,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.56
+    ],
+    [
+     "ratio",
+     1.0,
+     0.72
+    ],
+    [
+     "du",
+     1.0,
+     1.12
+    ],
+    [
+     "compresseur",
+     0.999,
+     1.28
+    ],
+    [
+     "à",
+     0.727,
+     1.92
+    ],
+    [
+     "4.",
+     1.0,
+     2.32
+    ]
+   ]
+  },
+  "3158794d66174113edabd372cd74da6a98e44dc4134671920a3157429137c2c1": {
+   "text": "Décale le clap d'un 16e.",
+   "words": [
+    [
+     "Décale",
+     0.99,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.56
+    ],
+    [
+     "clap",
+     0.983,
+     0.64
+    ],
+    [
+     "d'un",
+     0.998,
+     0.96
+    ],
+    [
+     "16e.",
+     0.5,
+     1.28
+    ]
+   ]
+  },
+  "fd9e3281ab811eea05221875ac67426e815522bf721cbba2172b4fbf8a284b4e": {
+   "text": "Décale le clap d'un 16ème.",
+   "words": [
+    [
+     "Décale",
+     0.757,
+     0.0
+    ],
+    [
+     "le",
+     0.789,
+     0.56
+    ],
+    [
+     "clap",
+     0.844,
+     0.64
+    ],
+    [
+     "d'un",
+     0.885,
+     1.04
+    ],
+    [
+     "16ème.",
+     0.693,
+     1.36
+    ]
+   ]
+  },
+  "b7bfbc02027e69dd69faffacc667cbb0c0d720cb90f30c0a202124223c216838": {
+   "text": "Décale le clap d'un 16ème.",
+   "words": [
+    [
+     "Décale",
+     0.963,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.56
+    ],
+    [
+     "clap",
+     0.969,
+     0.64
+    ],
+    [
+     "d'un",
+     0.996,
+     0.96
+    ],
+    [
+     "16ème.",
+     0.55,
+     1.28
+    ]
+   ]
+  },
+  "cffe92cc40101d3e5207a148e492810f93f5ee3e1d98d19aa7be3c5182199ecb": {
+   "text": "Décale le clap d'un 16ème.",
+   "words": [
+    [
+     "Décale",
+     0.981,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.56
+    ],
+    [
+     "clap",
+     0.976,
+     0.64
+    ],
+    [
+     "d'un",
+     0.997,
+     0.96
+    ],
+    [
+     "16ème.",
+     0.708,
+     1.28
+    ]
+   ]
+  },
+  "a5d805105395de901baa897b585e6e8f5ba0cf574bcd0d2c09f718822d7754dd": {
+   "text": "Mais ainsi de chaîne du kick sur la basse.",
+   "words": [
+    [
+     "Mais",
+     0.859,
+     0.0
+    ],
+    [
+     "ainsi",
+     0.944,
+     0.24
+    ],
+    [
+     "de",
+     0.909,
+     0.56
+    ],
+    [
+     "chaîne",
+     0.94,
+     0.72
+    ],
+    [
+     "du",
+     0.996,
+     1.04
+    ],
+    [
+     "kick",
+     0.77,
+     1.12
+    ],
+    [
+     "sur",
+     1.0,
+     1.52
+    ],
+    [
+     "la",
+     1.0,
+     1.68
+    ],
+    [
+     "basse.",
+     0.965,
+     1.76
+    ]
+   ]
+  },
+  "73dd5c13953143fac73e0f733e77d89951326ada6cff9c8a1028d1d795acb70b": {
+   "text": "mais ainsi de chaîne du kick sur la basse.",
+   "words": [
+    [
+     "mais",
+     0.662,
+     0.0
+    ],
+    [
+     "ainsi",
+     0.862,
+     0.24
+    ],
+    [
+     "de",
+     0.959,
+     0.56
+    ],
+    [
+     "chaîne",
+     0.857,
+     0.72
+    ],
+    [
+     "du",
+     0.956,
+     0.96
+    ],
+    [
+     "kick",
+     0.539,
+     1.12
+    ],
+    [
+     "sur",
+     1.0,
+     1.52
+    ],
+    [
+     "la",
+     0.999,
+     1.68
+    ],
+    [
+     "basse.",
+     0.871,
+     1.76
+    ]
+   ]
+  },
+  "3ba961686b0f3505d18ea2c5ed104147543807a913a426ee7de308bac81aef72": {
+   "text": "Mais ainsi de chaîne du kick sur la basse.",
+   "words": [
+    [
+     "Mais",
+     0.853,
+     0.0
+    ],
+    [
+     "ainsi",
+     0.951,
+     0.24
+    ],
+    [
+     "de",
+     0.958,
+     0.56
+    ],
+    [
+     "chaîne",
+     0.922,
+     0.72
+    ],
+    [
+     "du",
+     0.991,
+     1.04
+    ],
+    [
+     "kick",
+     0.795,
+     1.2
+    ],
+    [
+     "sur",
+     1.0,
+     1.52
+    ],
+    [
+     "la",
+     1.0,
+     1.68
+    ],
+    [
+     "basse.",
+     0.93,
+     1.76
+    ]
+   ]
+  },
+  "c4d62a7b7be58e2d557416dc517d037c3d7a10808fbb93b5ea9bc3a80d66d9fa": {
+   "text": "Mais ainsi de chaîne du kick sur la basse.",
+   "words": [
+    [
+     "Mais",
+     0.908,
+     0.0
+    ],
+    [
+     "ainsi",
+     0.958,
+     0.24
+    ],
+    [
+     "de",
+     0.92,
+     0.56
+    ],
+    [
+     "chaîne",
+     0.926,
+     0.72
+    ],
+    [
+     "du",
+     0.982,
+     1.04
+    ],
+    [
+     "kick",
+     0.768,
+     1.2
+    ],
+    [
+     "sur",
+     1.0,
+     1.52
+    ],
+    [
+     "la",
+     1.0,
+     1.68
+    ],
+    [
+     "basse.",
+     0.961,
+     1.76
+    ]
+   ]
+  },
+  "7433114b4df36aed138f17dcea1fdf37a95907c552bc3ce623525cb0268f26a0": {
+   "text": "Ajoute de la reverb sur les vocals.",
+   "words": [
+    [
+     "Ajoute",
+     0.952,
+     0.0
+    ],
+    [
+     "de",
+     1.0,
+     0.48
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "reverb",
+     0.694,
+     0.72
+    ],
+    [
+     "sur",
+     1.0,
+     1.2
+    ],
+    [
+     "les",
+     1.0,
+     1.36
+    ],
+    [
+     "vocals.",
+     0.805,
+     1.52
+    ]
+   ]
+  },
+  "238ca822214b758c4c9f91a5341e5118f967af74640d65b100c1df8bb5f759e8": {
+   "text": "Ajoute de la reverb sur les vocabules.",
+   "words": [
+    [
+     "Ajoute",
+     0.922,
+     0.0
+    ],
+    [
+     "de",
+     0.999,
+     0.48
+    ],
+    [
+     "la",
+     0.998,
+     0.56
+    ],
+    [
+     "reverb",
+     0.577,
+     0.72
+    ],
+    [
+     "sur",
+     1.0,
+     1.2
+    ],
+    [
+     "les",
+     0.995,
+     1.28
+    ],
+    [
+     "vocabules.",
+     0.418,
+     1.52
+    ]
+   ]
+  },
+  "229bfa23f26a5918e6caf1ab9e6de17d21f1d4e54435ccbfce1feef7b36eaa58": {
+   "text": "Ajoute de la reverb sur les vocals.",
+   "words": [
+    [
+     "Ajoute",
+     0.936,
+     0.0
+    ],
+    [
+     "de",
+     1.0,
+     0.48
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "reverb",
+     0.856,
+     0.72
+    ],
+    [
+     "sur",
+     1.0,
+     1.2
+    ],
+    [
+     "les",
+     0.999,
+     1.36
+    ],
+    [
+     "vocals.",
+     0.83,
+     1.52
+    ]
+   ]
+  },
+  "ffb4c21cde8f33d4489fafcd00731152bb91864aa858935242d36e5363a91afe": {
+   "text": "Ajoute de la reverb sur les vocals.",
+   "words": [
+    [
+     "Ajoute",
+     0.916,
+     0.0
+    ],
+    [
+     "de",
+     1.0,
+     0.48
+    ],
+    [
+     "la",
+     1.0,
+     0.56
+    ],
+    [
+     "reverb",
+     0.781,
+     0.72
+    ],
+    [
+     "sur",
+     1.0,
+     1.2
+    ],
+    [
+     "les",
+     1.0,
+     1.36
+    ],
+    [
+     "vocals.",
+     0.885,
+     1.52
+    ]
+   ]
+  },
+  "d9823cc4a5a27460e97bed1244a1e717fe7ed40a4a71e625d250d24596c46422": {
+   "text": "Fais un fadout sur le dernier drop.",
+   "words": [
+    [
+     "Fais",
+     0.822,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.32
+    ],
+    [
+     "fadout",
+     0.841,
+     0.4
+    ],
+    [
+     "sur",
+     1.0,
+     1.12
+    ],
+    [
+     "le",
+     1.0,
+     1.28
+    ],
+    [
+     "dernier",
+     1.0,
+     1.44
+    ],
+    [
+     "drop.",
+     0.973,
+     1.84
+    ]
+   ]
+  },
+  "7fae647fcf41081744ea7c921468d1a1d225402ec6736df706cc8b0ff6ddb3b7": {
+   "text": "Fais un pad out sur le dernier drop.",
+   "words": [
+    [
+     "Fais",
+     0.824,
+     0.0
+    ],
+    [
+     "un",
+     0.993,
+     0.32
+    ],
+    [
+     "pad",
+     0.474,
+     0.4
+    ],
+    [
+     "out",
+     0.612,
+     0.8
+    ],
+    [
+     "sur",
+     1.0,
+     1.12
+    ],
+    [
+     "le",
+     1.0,
+     1.28
+    ],
+    [
+     "dernier",
+     1.0,
+     1.44
+    ],
+    [
+     "drop.",
+     0.963,
+     1.84
+    ]
+   ]
+  },
+  "af04cb48a31dfb37e120f86ffb3f8f136dca4e1bea152b939ae5906066e2083e": {
+   "text": "Fais un Fado sur le dernier drop.",
+   "words": [
+    [
+     "Fais",
+     0.895,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.24
+    ],
+    [
+     "Fado",
+     0.512,
+     0.32
+    ],
+    [
+     "sur",
+     0.999,
+     1.2
+    ],
+    [
+     "le",
+     1.0,
+     1.36
+    ],
+    [
+     "dernier",
+     1.0,
+     1.44
+    ],
+    [
+     "drop.",
+     0.89,
+     1.84
+    ]
+   ]
+  },
+  "f2067fd04409b3e16004768aa0c91abaff4678f3aabb2b2763dc590951b15f43": {
+   "text": "Fais un fadout sur le dernier drop.",
+   "words": [
+    [
+     "Fais",
+     0.786,
+     0.0
+    ],
+    [
+     "un",
+     0.999,
+     0.24
+    ],
+    [
+     "fadout",
+     0.65,
+     0.4
+    ],
+    [
+     "sur",
+     1.0,
+     1.2
+    ],
+    [
+     "le",
+     1.0,
+     1.36
+    ],
+    [
+     "dernier",
+     1.0,
+     1.44
+    ],
+    [
+     "drop.",
+     0.966,
+     1.84
+    ]
+   ]
+  },
+  "5458de45d5464ec585fc618f9142135de8030647073adb6d3cc6eec94408625c": {
+   "text": "Ajoute un Delait sur le lead.",
+   "words": [
+    [
+     "Ajoute",
+     0.976,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.4
+    ],
+    [
+     "Delait",
+     0.287,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "le",
+     0.999,
+     1.12
+    ],
+    [
+     "lead.",
+     0.529,
+     1.2
+    ]
+   ]
+  },
+  "0cd377c3379dd9381b4620b1497b1b03466edc2e89560fc2aac9129d45c5c3b7": {
+   "text": "Ajoute un donné sur le lid.",
+   "words": [
+    [
+     "Ajoute",
+     0.832,
+     0.0
+    ],
+    [
+     "un",
+     0.984,
+     0.4
+    ],
+    [
+     "donné",
+     0.348,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "le",
+     0.999,
+     1.04
+    ],
+    [
+     "lid.",
+     0.372,
+     1.2
+    ]
+   ]
+  },
+  "be011806791924bf230dfb084b3ccf48f689f80fa9803d4ec95aaeaec08f3c49": {
+   "text": "Ajoute un delay sur le lead.",
+   "words": [
+    [
+     "Ajoute",
+     0.925,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.4
+    ],
+    [
+     "delay",
+     0.306,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "le",
+     0.999,
+     1.12
+    ],
+    [
+     "lead.",
+     0.776,
+     1.2
+    ]
+   ]
+  },
+  "b6edcf5e78bc3cad00ba7184ccdfb297655a5ce00008ff71ce19952a5f86c444": {
+   "text": "Ajoute un Delay sur le lead.",
+   "words": [
+    [
+     "Ajoute",
+     0.978,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.4
+    ],
+    [
+     "Delay",
+     0.267,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "le",
+     1.0,
+     1.12
+    ],
+    [
+     "lead.",
+     0.59,
+     1.2
+    ]
+   ]
+  },
+  "36652fc695fe0c24fbbce6b4a3a345c83de8706d0200d36357c74efa5423d6e0": {
+   "text": "Mets un look up sur les Charlies.",
+   "words": [
+    [
+     "Mets",
+     0.698,
+     0.0
+    ],
+    [
+     "un",
+     0.997,
+     0.24
+    ],
+    [
+     "look",
+     0.906,
+     0.4
+    ],
+    [
+     "up",
+     0.654,
+     0.72
+    ],
+    [
+     "sur",
+     1.0,
+     0.88
+    ],
+    [
+     "les",
+     0.998,
+     1.04
+    ],
+    [
+     "Charlies.",
+     0.493,
+     1.28
+    ]
+   ]
+  },
+  "39f88e6783b67f3644a9cf2debfc6e5571ef2951aadefff2a42413455c0e72ea": {
+   "text": "Mets un look up sur les Charlotes.",
+   "words": [
+    [
+     "Mets",
+     0.905,
+     0.0
+    ],
+    [
+     "un",
+     0.967,
+     0.24
+    ],
+    [
+     "look",
+     0.573,
+     0.4
+    ],
+    [
+     "up",
+     0.703,
+     0.72
+    ],
+    [
+     "sur",
+     0.999,
+     0.96
+    ],
+    [
+     "les",
+     0.997,
+     1.04
+    ],
+    [
+     "Charlotes.",
+     0.2,
+     1.2
+    ]
+   ]
+  },
+  "2064058ee315a48718ea26fc4871b672dfc97e25fcb2830eb35294a8b879ae76": {
+   "text": "Mets un look up sur les Charlie's.",
+   "words": [
+    [
+     "Mets",
+     0.815,
+     0.0
+    ],
+    [
+     "un",
+     0.995,
+     0.24
+    ],
+    [
+     "look",
+     0.807,
+     0.4
+    ],
+    [
+     "up",
+     0.704,
+     0.72
+    ],
+    [
+     "sur",
+     1.0,
+     0.88
+    ],
+    [
+     "les",
+     0.997,
+     1.04
+    ],
+    [
+     "Charlie's.",
+     0.357,
+     1.28
+    ]
+   ]
+  },
+  "405bb8ccc2e3cddd135aafa2739fd7af3ed5418071c4f86bcd4cb5e07bd03536": {
+   "text": "Mets un look up sur les Charlies.",
+   "words": [
+    [
+     "Mets",
+     0.756,
+     0.0
+    ],
+    [
+     "un",
+     0.999,
+     0.24
+    ],
+    [
+     "look",
+     0.876,
+     0.4
+    ],
+    [
+     "up",
+     0.536,
+     0.72
+    ],
+    [
+     "sur",
+     1.0,
+     0.88
+    ],
+    [
+     "les",
+     0.998,
+     1.04
+    ],
+    [
+     "Charlies.",
+     0.493,
+     1.28
+    ]
+   ]
+  },
+  "e5d3a93677e537bf78453bac36a05a194effc52c67a312b4c84ecf4793b52bf7": {
+   "text": "Fais un build-up avant le drop.",
+   "words": [
+    [
+     "Fais",
+     0.783,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.32
+    ],
+    [
+     "build-up",
+     0.631,
+     0.4
+    ],
+    [
+     "avant",
+     1.0,
+     0.96
+    ],
+    [
+     "le",
+     1.0,
+     1.2
+    ],
+    [
+     "drop.",
+     0.974,
+     1.36
+    ]
+   ]
+  },
+  "1b6fd673337a687625117c880e9d4a222ca229316db2d6e718d8a0426ffeec73": {
+   "text": "Fais un build-up avant le drop.",
+   "words": [
+    [
+     "Fais",
+     0.844,
+     0.0
+    ],
+    [
+     "un",
+     0.999,
+     0.32
+    ],
+    [
+     "build-up",
+     0.604,
+     0.4
+    ],
+    [
+     "avant",
+     0.999,
+     1.04
+    ],
+    [
+     "le",
+     0.999,
+     1.2
+    ],
+    [
+     "drop.",
+     0.955,
+     1.36
+    ]
+   ]
+  },
+  "172b02603d3f2104c4e093d24a8c1077b3802fd12fac68db18241d59d6d53a8f": {
+   "text": "Fais un build-up avant le drop.",
+   "words": [
+    [
+     "Fais",
+     0.897,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.32
+    ],
+    [
+     "build-up",
+     0.546,
+     0.4
+    ],
+    [
+     "avant",
+     1.0,
+     0.96
+    ],
+    [
+     "le",
+     1.0,
+     1.2
+    ],
+    [
+     "drop.",
+     0.974,
+     1.36
+    ]
+   ]
+  },
+  "ea1db8217e5507a44797336a55038e9369d4522d9cb89409940ca774cdacef13": {
+   "text": "Fais un build-up avant le drop.",
+   "words": [
+    [
+     "Fais",
+     0.84,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.32
+    ],
+    [
+     "build-up",
+     0.519,
+     0.4
+    ],
+    [
+     "avant",
+     1.0,
+     0.96
+    ],
+    [
+     "le",
+     1.0,
+     1.2
+    ],
+    [
+     "drop.",
+     0.976,
+     1.36
+    ]
+   ]
+  },
+  "56b11ab0e3cff6e968a845b9f69c63f55de8c3208e24d48711f1f94950096975": {
+   "text": "Ajoute du swing sur les IA.",
+   "words": [
+    [
+     "Ajoute",
+     0.877,
+     0.0
+    ],
+    [
+     "du",
+     1.0,
+     0.4
+    ],
+    [
+     "swing",
+     0.448,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "les",
+     0.99,
+     1.04
+    ],
+    [
+     "IA.",
+     0.994,
+     1.28
+    ]
+   ]
+  },
+  "144f293fa3b29c3df1f33e59dceca9ec4e957659e1e7ee66a75b9fa3960be4b1": {
+   "text": "Ajoute du swing sur les IA.",
+   "words": [
+    [
+     "Ajoute",
+     0.743,
+     0.0
+    ],
+    [
+     "du",
+     0.726,
+     0.4
+    ],
+    [
+     "swing",
+     0.713,
+     0.56
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "les",
+     0.989,
+     1.12
+    ],
+    [
+     "IA.",
+     0.942,
+     1.28
+    ]
+   ]
+  },
+  "98bc090d045019c09330297d660bc09349242fc526519f70e80639912e77dfc5": {
+   "text": "Ajoute du swing sur les IA.",
+   "words": [
+    [
+     "Ajoute",
+     0.843,
+     0.0
+    ],
+    [
+     "du",
+     1.0,
+     0.4
+    ],
+    [
+     "swing",
+     0.951,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "les",
+     0.98,
+     1.04
+    ],
+    [
+     "IA.",
+     0.984,
+     1.28
+    ]
+   ]
+  },
+  "a3b5768d6adbe717ce709b5b60759efd826820640210bc2cbc8407f792e54053": {
+   "text": "Ajoute du swing sur les IA.",
+   "words": [
+    [
+     "Ajoute",
+     0.789,
+     0.0
+    ],
+    [
+     "du",
+     1.0,
+     0.4
+    ],
+    [
+     "swing",
+     0.762,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "les",
+     0.99,
+     1.04
+    ],
+    [
+     "IA.",
+     0.994,
+     1.28
+    ]
+   ]
+  },
+  "72676cc11b027cd48277c6f23ded3597ae3b52251eec667053a4892225f0a3e3": {
+   "text": "Mais le kick en solo.",
+   "words": [
+    [
+     "Mais",
+     0.875,
+     0.0
+    ],
+    [
+     "le",
+     0.998,
+     0.24
+    ],
+    [
+     "kick",
+     0.573,
+     0.32
+    ],
+    [
+     "en",
+     0.999,
+     0.8
+    ],
+    [
+     "solo.",
+     0.999,
+     0.96
+    ]
+   ]
+  },
+  "13d49446c11163666576425cc82b2e12efd30450b36e295b89fa7abb210268b2": {
+   "text": "Mais le qui en solo.",
+   "words": [
+    [
+     "Mais",
+     0.471,
+     0.0
+    ],
+    [
+     "le",
+     0.952,
+     0.24
+    ],
+    [
+     "qui",
+     0.495,
+     0.4
+    ],
+    [
+     "en",
+     0.418,
+     0.72
+    ],
+    [
+     "solo.",
+     0.228,
+     0.88
+    ]
+   ]
+  },
+  "7e8b1e60f62ce64050f0496432efababb57f693fa958bd1f57749420873f1d90": {
+   "text": "Mais le kick en solo.",
+   "words": [
+    [
+     "Mais",
+     0.764,
+     0.0
+    ],
+    [
+     "le",
+     0.997,
+     0.24
+    ],
+    [
+     "kick",
+     0.493,
+     0.32
+    ],
+    [
+     "en",
+     0.999,
+     0.8
+    ],
+    [
+     "solo.",
+     0.996,
+     0.96
+    ]
+   ]
+  },
+  "90f3b244824f58654e42fca2068797a01be5a0b42f32d157611ef68dbc346c23": {
+   "text": "Mais le kick en solo.",
+   "words": [
+    [
+     "Mais",
+     0.807,
+     0.0
+    ],
+    [
+     "le",
+     0.998,
+     0.24
+    ],
+    [
+     "kick",
+     0.636,
+     0.32
+    ],
+    [
+     "en",
+     0.999,
+     0.8
+    ],
+    [
+     "solo.",
+     0.998,
+     0.96
+    ]
+   ]
+  },
+  "2cda74e9f083155b0ff9816d4e76a0df4e88ee21b628213e80f4f1938a9b1307": {
+   "text": "Fais un mut sur le PAD pendant le break.",
+   "words": [
+    [
+     "Fais",
+     0.957,
+     0.0
+    ],
+    [
+     "un",
+     0.999,
+     0.32
+    ],
+    [
+     "mut",
+     0.839,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.8
+    ],
+    [
+     "le",
+     1.0,
+     0.88
+    ],
+    [
+     "PAD",
+     0.953,
+     0.96
+    ],
+    [
+     "pendant",
+     1.0,
+     1.6
+    ],
+    [
+     "le",
+     1.0,
+     1.84
+    ],
+    [
+     "break.",
+     0.996,
+     2.0
+    ]
+   ]
+  },
+  "6a6fe7f7650b726b26c3de0ec32d5ab23c95627cb32a9b4e5c28cf2b4ee18fb0": {
+   "text": "Fais un mythe sur le PAD pendant le break.",
+   "words": [
+    [
+     "Fais",
+     0.966,
+     0.0
+    ],
+    [
+     "un",
+     0.985,
+     0.32
+    ],
+    [
+     "mythe",
+     0.678,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.8
+    ],
+    [
+     "le",
+     1.0,
+     0.96
+    ],
+    [
+     "PAD",
+     0.955,
+     1.04
+    ],
+    [
+     "pendant",
+     0.999,
+     1.6
+    ],
+    [
+     "le",
+     0.999,
+     1.84
+    ],
+    [
+     "break.",
+     0.971,
+     1.92
+    ]
+   ]
+  },
+  "6cdfe1ed21a638719c9d5727211570d5420528a65820a2d74b8b498039a161ff": {
+   "text": "Fais un mut sur le PAD pendant le break.",
+   "words": [
+    [
+     "Fais",
+     0.948,
+     0.0
+    ],
+    [
+     "un",
+     0.992,
+     0.32
+    ],
+    [
+     "mut",
+     0.72,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.8
+    ],
+    [
+     "le",
+     1.0,
+     0.88
+    ],
+    [
+     "PAD",
+     0.955,
+     0.96
+    ],
+    [
+     "pendant",
+     1.0,
+     1.6
+    ],
+    [
+     "le",
+     1.0,
+     1.84
+    ],
+    [
+     "break.",
+     0.996,
+     2.0
+    ]
+   ]
+  },
+  "1230dc32c0cc07045e4a86e1f51c01432fa9cd3045d95b9632aba5875ce8d4df": {
+   "text": "Fais un mut sur le PAD pendant le break.",
+   "words": [
+    [
+     "Fais",
+     0.951,
+     0.0
+    ],
+    [
+     "un",
+     0.998,
+     0.32
+    ],
+    [
+     "mut",
+     0.782,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.8
+    ],
+    [
+     "le",
+     1.0,
+     0.88
+    ],
+    [
+     "PAD",
+     0.947,
+     0.96
+    ],
+    [
+     "pendant",
+     1.0,
+     1.6
+    ],
+    [
+     "le",
+     1.0,
+     1.84
+    ],
+    [
+     "break.",
+     0.996,
+     2.0
+    ]
+   ]
+  },
+  "f8b9a5d77e3536dae359be714337b55a2aac435a6df70f25331d3f6373cf5a2b": {
+   "text": "Bance la piste vocals.",
+   "words": [
+    [
+     "Bance",
+     0.198,
+     0.08
+    ],
+    [
+     "la",
+     0.524,
+     0.48
+    ],
+    [
+     "piste",
+     0.958,
+     0.64
+    ],
+    [
+     "vocals.",
+     0.557,
+     0.96
+    ]
+   ]
+  },
+  "ad1d8ce385db26bb2289189359f49dcaf078eafe94723c5d246550b1dbaee671": {
+   "text": "Bansa piste vocale.",
+   "words": [
+    [
+     "Bansa",
+     0.125,
+     0.0
+    ],
+    [
+     "piste",
+     0.78,
+     0.64
+    ],
+    [
+     "vocale.",
+     0.319,
+     1.04
+    ]
+   ]
+  },
+  "2c99497bfa75363222abfd012d5eeb5fa16ce65a30c9a3677a3d431e50cb1acc": {
+   "text": "Vance la piste vocals.",
+   "words": [
+    [
+     "Vance",
+     0.549,
+     0.0
+    ],
+    [
+     "la",
+     0.742,
+     0.48
+    ],
+    [
+     "piste",
+     0.968,
+     0.64
+    ],
+    [
+     "vocals.",
+     0.714,
+     1.04
+    ]
+   ]
+  },
+  "c85b3bd46126088ee879da44b71e2056da2e3a94b661d9edb79d996b50246afb": {
+   "text": "Banse la piste vocals.",
+   "words": [
+    [
+     "Banse",
+     0.176,
+     0.0
+    ],
+    [
+     "la",
+     0.959,
+     0.48
+    ],
+    [
+     "piste",
+     0.972,
+     0.64
+    ],
+    [
+     "vocals.",
+     0.739,
+     1.04
+    ]
+   ]
+  },
+  "eaa4123ab641261c5032aa4be45a22aeb4fa29950116e222eb173236aa103c20": {
+   "text": "Messe Rome sur la piste lead plaque.",
+   "words": [
+    [
+     "Messe",
+     0.598,
+     0.0
+    ],
+    [
+     "Rome",
+     0.38,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.8
+    ],
+    [
+     "la",
+     1.0,
+     0.88
+    ],
+    [
+     "piste",
+     0.997,
+     1.04
+    ],
+    [
+     "lead",
+     0.401,
+     1.36
+    ],
+    [
+     "plaque.",
+     0.929,
+     1.76
+    ]
+   ]
+  },
+  "a2eaf8065857ca39b71fbf734e753031a0388b9040fc7188fb920cc4045ec26d": {
+   "text": "Messerum sur la piste plaque.",
+   "words": [
+    [
+     "Messerum",
+     0.509,
+     0.0
+    ],
+    [
+     "sur",
+     1.0,
+     0.8
+    ],
+    [
+     "la",
+     0.999,
+     0.88
+    ],
+    [
+     "piste",
+     0.656,
+     0.96
+    ],
+    [
+     "plaque.",
+     0.426,
+     1.68
+    ]
+   ]
+  },
+  "9e2aed35fcab65938b03c8d71e258de01aff5aebc1baa756f3d3cbe69841be6d": {
+   "text": "Mais c'est Rome sur la piste Leaf Plaque.",
+   "words": [
+    [
+     "Mais",
+     0.519,
+     0.0
+    ],
+    [
+     "c'est",
+     0.614,
+     0.24
+    ],
+    [
+     "Rome",
+     0.384,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.8
+    ],
+    [
+     "la",
+     1.0,
+     0.88
+    ],
+    [
+     "piste",
+     0.996,
+     0.96
+    ],
+    [
+     "Leaf",
+     0.356,
+     1.36
+    ],
+    [
+     "Plaque.",
+     0.406,
+     1.68
+    ]
+   ]
+  },
+  "e7ab8e5fe4e4b3458279d5db8b0badc7b4027efcb0f53844a34941c9eaa18636": {
+   "text": "Mais c'est Rome sur la piste livre.",
+   "words": [
+    [
+     "Mais",
+     0.699,
+     0.0
+    ],
+    [
+     "c'est",
+     0.56,
+     0.24
+    ],
+    [
+     "Rome",
+     0.441,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.8
+    ],
+    [
+     "la",
+     1.0,
+     0.88
+    ],
+    [
+     "piste",
+     0.997,
+     0.96
+    ],
+    [
+     "livre.",
+     0.435,
+     1.36
+    ]
+   ]
+  },
+  "fd05c52fff460f7767aa0539b41be414220a04e1ca16632a58bcd8f589b5b276": {
+   "text": "Ajoute Velray la supermassive sur PADM Beyond.",
+   "words": [
+    [
+     "Ajoute",
+     0.98,
+     0.0
+    ],
+    [
+     "Velray",
+     0.391,
+     0.4
+    ],
+    [
+     "la",
+     0.509,
+     0.88
+    ],
+    [
+     "supermassive",
+     0.534,
+     1.12
+    ],
+    [
+     "sur",
+     0.999,
+     1.76
+    ],
+    [
+     "PADM",
+     0.823,
+     1.92
+    ],
+    [
+     "Beyond.",
+     0.618,
+     2.64
+    ]
+   ]
+  },
+  "b0a5149993e66db368bbda54ece35f1c32c872ed00dcddd06afcf7f89487a153": {
+   "text": "Ajoute Velrelle Supermassif sur PADN violent.",
+   "words": [
+    [
+     "Ajoute",
+     0.869,
+     0.0
+    ],
+    [
+     "Velrelle",
+     0.181,
+     0.4
+    ],
+    [
+     "Supermassif",
+     0.508,
+     1.12
+    ],
+    [
+     "sur",
+     0.985,
+     1.76
+    ],
+    [
+     "PADN",
+     0.361,
+     2.0
+    ],
+    [
+     "violent.",
+     0.284,
+     2.64
+    ]
+   ]
+  },
+  "c59169ce38c8d311c355d5fb2f56e6a50111cee7c6b7fbbb55260b7fed701a1f": {
+   "text": "Ajoute Velrelay supermassive sur PADM Beyond.",
+   "words": [
+    [
+     "Ajoute",
+     0.952,
+     0.0
+    ],
+    [
+     "Velrelay",
+     0.176,
+     0.4
+    ],
+    [
+     "supermassive",
+     0.448,
+     1.12
+    ],
+    [
+     "sur",
+     0.999,
+     1.76
+    ],
+    [
+     "PADM",
+     0.518,
+     1.92
+    ],
+    [
+     "Beyond.",
+     0.65,
+     2.64
+    ]
+   ]
+  },
+  "187d343eef3ff290fa4cfbe13e1cc3a125149ff145a90d2696afbcf4b2c688ee": {
+   "text": "Ajoute Velrelay supermassive sur PAD Ambiont.",
+   "words": [
+    [
+     "Ajoute",
+     0.969,
+     0.0
+    ],
+    [
+     "Velrelay",
+     0.356,
+     0.4
+    ],
+    [
+     "supermassive",
+     0.51,
+     1.12
+    ],
+    [
+     "sur",
+     0.999,
+     1.76
+    ],
+    [
+     "PAD",
+     0.907,
+     1.92
+    ],
+    [
+     "Ambiont.",
+     0.552,
+     2.48
+    ]
+   ]
+  },
+  "b56f5d8ab1064393156ab7a481af7f61db147ae3c6846cc2b8b062d30eb4bdda": {
+   "text": "Solo sur la piste à troll.",
+   "words": [
+    [
+     "Solo",
+     0.702,
+     0.0
+    ],
+    [
+     "sur",
+     0.999,
+     0.56
+    ],
+    [
+     "la",
+     0.998,
+     0.64
+    ],
+    [
+     "piste",
+     0.817,
+     0.8
+    ],
+    [
+     "à",
+     0.488,
+     1.36
+    ],
+    [
+     "troll.",
+     0.917,
+     1.6
+    ]
+   ]
+  },
+  "25ed8ca025bfc01d599c07a241723ada99ca838d5df67b51f87e1e30fbcc7d61": {
+   "text": "Solo sur la piste and role",
+   "words": [
+    [
+     "Solo",
+     0.588,
+     0.08
+    ],
+    [
+     "sur",
+     0.997,
+     0.56
+    ],
+    [
+     "la",
+     0.997,
+     0.64
+    ],
+    [
+     "piste",
+     0.533,
+     0.8
+    ],
+    [
+     "and",
+     0.326,
+     1.36
+    ],
+    [
+     "role",
+     0.29,
+     1.68
+    ]
+   ]
+  },
+  "fe0722afb3f3448bb34e28a5ce3711b8ce094334a61b4646006b1c6e3aaec67a": {
+   "text": "Solo sur la piste and troll",
+   "words": [
+    [
+     "Solo",
+     0.725,
+     0.0
+    ],
+    [
+     "sur",
+     0.999,
+     0.56
+    ],
+    [
+     "la",
+     0.998,
+     0.64
+    ],
+    [
+     "piste",
+     0.655,
+     0.8
+    ],
+    [
+     "and",
+     0.409,
+     1.36
+    ],
+    [
+     "troll",
+     0.402,
+     1.6
+    ]
+   ]
+  },
+  "78694e2549a68f49e77b026b5b5d47602da611292b9f684088e52cc23b778c07": {
+   "text": "Solo sur la piste à troll.",
+   "words": [
+    [
+     "Solo",
+     0.885,
+     0.0
+    ],
+    [
+     "sur",
+     1.0,
+     0.56
+    ],
+    [
+     "la",
+     0.999,
+     0.64
+    ],
+    [
+     "piste",
+     0.765,
+     0.8
+    ],
+    [
+     "à",
+     0.473,
+     1.36
+    ],
+    [
+     "troll.",
+     0.874,
+     1.6
+    ]
+   ]
+  },
+  "8ed7656bece8af8dcf00270648c395c6e9c8c43a78a5c47d4d4e4071bd7b92f5": {
+   "text": "Ouvre contact sur la piste corde.",
+   "words": [
+    [
+     "Ouvre",
+     0.968,
+     0.0
+    ],
+    [
+     "contact",
+     0.938,
+     0.4
+    ],
+    [
+     "sur",
+     1.0,
+     0.88
+    ],
+    [
+     "la",
+     1.0,
+     0.96
+    ],
+    [
+     "piste",
+     1.0,
+     1.12
+    ],
+    [
+     "corde.",
+     0.749,
+     1.52
+    ]
+   ]
+  },
+  "33eb8e70b9a290b510779f033933c9b59e11348156f00aa695554676f10dd451": {
+   "text": "Ouvre contact sur la piste corde.",
+   "words": [
+    [
+     "Ouvre",
+     0.905,
+     0.0
+    ],
+    [
+     "contact",
+     0.951,
+     0.4
+    ],
+    [
+     "sur",
+     1.0,
+     0.88
+    ],
+    [
+     "la",
+     1.0,
+     0.96
+    ],
+    [
+     "piste",
+     0.999,
+     1.12
+    ],
+    [
+     "corde.",
+     0.841,
+     1.52
+    ]
+   ]
+  },
+  "15541514ec5c81676bc1284c92f0c6c15482f060faf88d22b5400bdce20a5c1a": {
+   "text": "Ouvre contact sur la piste corde.",
+   "words": [
+    [
+     "Ouvre",
+     0.968,
+     0.0
+    ],
+    [
+     "contact",
+     0.932,
+     0.4
+    ],
+    [
+     "sur",
+     1.0,
+     0.88
+    ],
+    [
+     "la",
+     1.0,
+     0.96
+    ],
+    [
+     "piste",
+     1.0,
+     1.12
+    ],
+    [
+     "corde.",
+     0.824,
+     1.52
+    ]
+   ]
+  },
+  "6c1c3ca85918c541d7361295b4d782c4288c1d7ddced99b04360a4340e455072": {
+   "text": "Ouvre contact sur la piste corde.",
+   "words": [
+    [
+     "Ouvre",
+     0.974,
+     0.0
+    ],
+    [
+     "contact",
+     0.939,
+     0.4
+    ],
+    [
+     "sur",
+     1.0,
+     0.88
+    ],
+    [
+     "la",
+     1.0,
+     0.96
+    ],
+    [
+     "piste",
+     1.0,
+     1.12
+    ],
+    [
+     "corde.",
+     0.809,
+     1.52
+    ]
+   ]
+  },
+  "7a16a8baa6f747a7abf83cde76ff336b6a060cef0746ad00c97572b38100b0db": {
+   "text": "M'échapper box sur la 808.",
+   "words": [
+    [
+     "M'échapper",
+     0.57,
+     0.0
+    ],
+    [
+     "box",
+     0.649,
+     0.8
+    ],
+    [
+     "sur",
+     1.0,
+     1.2
+    ],
+    [
+     "la",
+     0.999,
+     1.28
+    ],
+    [
+     "808.",
+     1.0,
+     1.6
+    ]
+   ]
+  },
+  "4862e23689c70632be9fb9092d93d8dd8bdbde1fff1054a809915ef80715fc7f": {
+   "text": "M'échapper Vox sur la 108.",
+   "words": [
+    [
+     "M'échapper",
+     0.538,
+     0.0
+    ],
+    [
+     "Vox",
+     0.439,
+     0.8
+    ],
+    [
+     "sur",
+     0.999,
+     1.2
+    ],
+    [
+     "la",
+     0.997,
+     1.28
+    ],
+    [
+     "108.",
+     0.56,
+     1.6
+    ]
+   ]
+  },
+  "2e7f245fa7b3edb358eca2e988ab41a068c2e1ffbb24b3e4d1f802febd9119b0": {
+   "text": "Mais chapé Vox sur la 808.",
+   "words": [
+    [
+     "Mais",
+     0.551,
+     0.0
+    ],
+    [
+     "chapé",
+     0.433,
+     0.32
+    ],
+    [
+     "Vox",
+     0.453,
+     0.8
+    ],
+    [
+     "sur",
+     1.0,
+     1.2
+    ],
+    [
+     "la",
+     0.998,
+     1.28
+    ],
+    [
+     "808.",
+     0.993,
+     1.6
+    ]
+   ]
+  },
+  "6698dccc909ac6c1e7c42f8aed07ce9103aeee04c7d77dbf3d7ace091da98ffd": {
+   "text": "M'échappe box sur la 808.",
+   "words": [
+    [
+     "M'échappe",
+     0.541,
+     0.0
+    ],
+    [
+     "box",
+     0.766,
+     0.8
+    ],
+    [
+     "sur",
+     1.0,
+     1.2
+    ],
+    [
+     "la",
+     0.999,
+     1.28
+    ],
+    [
+     "808.",
+     0.999,
+     1.6
+    ]
+   ]
+  },
+  "8739b3e4ad08102120e07f2e661e9793c1d4f64581b3f5f47a69dd8d325f297a": {
+   "text": "Coupe la piste vocals pendant le couplet.",
+   "words": [
+    [
+     "Coupe",
+     0.982,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.48
+    ],
+    [
+     "piste",
+     0.997,
+     0.56
+    ],
+    [
+     "vocals",
+     0.567,
+     0.88
+    ],
+    [
+     "pendant",
+     1.0,
+     1.6
+    ],
+    [
+     "le",
+     1.0,
+     1.84
+    ],
+    [
+     "couplet.",
+     0.994,
+     2.0
+    ]
+   ]
+  },
+  "7c0c2a9551cbbf07bf6ad5e856ee99e246f92b642a211e449082898387c8edea": {
+   "text": "Coupe la piste de Vocals pendant le couplet.",
+   "words": [
+    [
+     "Coupe",
+     0.855,
+     0.0
+    ],
+    [
+     "la",
+     0.998,
+     0.48
+    ],
+    [
+     "piste",
+     0.982,
+     0.56
+    ],
+    [
+     "de",
+     0.88,
+     0.8
+    ],
+    [
+     "Vocals",
+     0.527,
+     0.88
+    ],
+    [
+     "pendant",
+     0.964,
+     1.6
+    ],
+    [
+     "le",
+     1.0,
+     1.84
+    ],
+    [
+     "couplet.",
+     0.9,
+     1.92
+    ]
+   ]
+  },
+  "d528b5268917b06dc4f2930da3c4cba5bbb480f8b9d3303210cffad97135aab9": {
+   "text": "Coupe la piste vocals pendant le couplet.",
+   "words": [
+    [
+     "Coupe",
+     0.974,
+     0.0
+    ],
+    [
+     "la",
+     1.0,
+     0.48
+    ],
+    [
+     "piste",
+     0.997,
+     0.56
+    ],
+    [
+     "vocals",
+     0.645,
+     0.96
+    ],
+    [
+     "pendant",
+     0.999,
+     1.6
+    ],
+    [
+     "le",
+     1.0,
+     1.84
+    ],
+    [
+     "couplet.",
+     0.501,
+     1.92
+    ]
+   ]
+  },
+  "8af4f72c676258783058afa9f8bf8fb15692cf8b993efbee009289976bdbd654": {
+   "text": "Coupe la piste vocals pendant le couplet.",
+   "words": [
+    [
+     "Coupe",
+     0.976,
+     0.0
+    ],
+    [
+     "la",
+     0.999,
+     0.4
+    ],
+    [
+     "piste",
+     0.998,
+     0.56
+    ],
+    [
+     "vocals",
+     0.543,
+     0.88
+    ],
+    [
+     "pendant",
+     1.0,
+     1.6
+    ],
+    [
+     "le",
+     1.0,
+     1.84
+    ],
+    [
+     "couplet.",
+     0.998,
+     2.0
+    ]
+   ]
+  },
+  "2ede22030739d4c9b41e2b1f79e0bae2a1e153d50ffb09f7a34ed573559dd746": {
+   "text": "Ajoute Vital sur une nouvelle piste.",
+   "words": [
+    [
+     "Ajoute",
+     0.818,
+     0.0
+    ],
+    [
+     "Vital",
+     0.752,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "une",
+     1.0,
+     1.12
+    ],
+    [
+     "nouvelle",
+     1.0,
+     1.2
+    ],
+    [
+     "piste.",
+     1.0,
+     1.6
+    ]
+   ]
+  },
+  "b0d1e8ffc0ad99e78239c890ce074b56ff060a6b13381bde28935366f337e724": {
+   "text": "Ajoute Vital sur une nouvelle piste.",
+   "words": [
+    [
+     "Ajoute",
+     0.61,
+     0.0
+    ],
+    [
+     "Vital",
+     0.555,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "une",
+     1.0,
+     1.12
+    ],
+    [
+     "nouvelle",
+     1.0,
+     1.2
+    ],
+    [
+     "piste.",
+     0.997,
+     1.6
+    ]
+   ]
+  },
+  "7531a12a6e1aa7b40a2cf9c7673248454412bd8c860906826a092d1afa8b61de": {
+   "text": "Ajoute Vital sur une nouvelle piste.",
+   "words": [
+    [
+     "Ajoute",
+     0.843,
+     0.0
+    ],
+    [
+     "Vital",
+     0.731,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "une",
+     1.0,
+     1.12
+    ],
+    [
+     "nouvelle",
+     1.0,
+     1.2
+    ],
+    [
+     "piste.",
+     1.0,
+     1.6
+    ]
+   ]
+  },
+  "6290ac27137f4ed48737e2121e72326fac157cce18dec9757e6ea9aba1acecbb": {
+   "text": "Ajoute Vital sur une nouvelle piste.",
+   "words": [
+    [
+     "Ajoute",
+     0.736,
+     0.0
+    ],
+    [
+     "Vital",
+     0.675,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     0.96
+    ],
+    [
+     "une",
+     1.0,
+     1.12
+    ],
+    [
+     "nouvelle",
+     1.0,
+     1.2
+    ],
+    [
+     "piste.",
+     1.0,
+     1.6
+    ]
+   ]
+  },
+  "2974ef59ac73e23a393fe52842dc58c9de106f5f8063e7538cb4eb9d6ad5120f": {
+   "text": "Monte PADM Beyond de 2 décibels.",
+   "words": [
+    [
+     "Monte",
+     0.594,
+     0.0
+    ],
+    [
+     "PADM",
+     0.786,
+     0.32
+    ],
+    [
+     "Beyond",
+     0.446,
+     0.96
+    ],
+    [
+     "de",
+     0.982,
+     1.44
+    ],
+    [
+     "2",
+     0.999,
+     1.68
+    ],
+    [
+     "décibels.",
+     0.384,
+     1.76
+    ]
+   ]
+  },
+  "2fc3747b0eca60bc0857db95452468c0fd3f5b4b4b955f0f1b6845032ffe9d34": {
+   "text": "Monte PADM Bionde de 2 décibels",
+   "words": [
+    [
+     "Monte",
+     0.67,
+     0.0
+    ],
+    [
+     "PADM",
+     0.404,
+     0.4
+    ],
+    [
+     "Bionde",
+     0.366,
+     0.96
+    ],
+    [
+     "de",
+     0.968,
+     1.44
+    ],
+    [
+     "2",
+     0.998,
+     1.68
+    ],
+    [
+     "décibels",
+     0.557,
+     1.76
+    ]
+   ]
+  },
+  "1fa02e76495c718114af84d4fa5a02480ce5bf8acae9d20e93106655cc330bc5": {
+   "text": "Monte PADM Biont de 2 décibels.",
+   "words": [
+    [
+     "Monte",
+     0.574,
+     0.0
+    ],
+    [
+     "PADM",
+     0.759,
+     0.32
+    ],
+    [
+     "Biont",
+     0.256,
+     0.96
+    ],
+    [
+     "de",
+     0.962,
+     1.44
+    ],
+    [
+     "2",
+     0.998,
+     1.68
+    ],
+    [
+     "décibels.",
+     0.509,
+     1.76
+    ]
+   ]
+  },
+  "48966e1b3f43bd561cf9e1eb8898eb286e9af1b6bfff51ea6fb577594091dba3": {
+   "text": "Monte PADM vionte de 2 décibels.",
+   "words": [
+    [
+     "Monte",
+     0.5,
+     0.0
+    ],
+    [
+     "PADM",
+     0.697,
+     0.32
+    ],
+    [
+     "vionte",
+     0.257,
+     0.96
+    ],
+    [
+     "de",
+     0.976,
+     1.44
+    ],
+    [
+     "2",
+     1.0,
+     1.68
+    ],
+    [
+     "décibels.",
+     0.431,
+     1.76
+    ]
+   ]
+  },
+  "fe094df521de0db3359c9c8e40352b1c002474e787793a3eb7b840700afe8346": {
+   "text": "Duplique le pattern refrain.",
+   "words": [
+    [
+     "Duplique",
+     0.806,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.64
+    ],
+    [
+     "pattern",
+     0.98,
+     0.72
+    ],
+    [
+     "refrain.",
+     0.487,
+     1.2
+    ]
+   ]
+  },
+  "86f340bf37aa12c0ea627ff4901445970b6484d50b653b3d976dd586d5419ca7": {
+   "text": "Duplique le pattern refrain.",
+   "words": [
+    [
+     "Duplique",
+     0.771,
+     0.08
+    ],
+    [
+     "le",
+     0.997,
+     0.72
+    ],
+    [
+     "pattern",
+     0.962,
+     0.8
+    ],
+    [
+     "refrain.",
+     0.3,
+     1.28
+    ]
+   ]
+  },
+  "c5a40365f674494c1f2a03acca184e5efccc0d95b08f0b087261ae6bb21693eb": {
+   "text": "Duplique le pattern refrain.",
+   "words": [
+    [
+     "Duplique",
+     0.846,
+     0.0
+    ],
+    [
+     "le",
+     0.999,
+     0.64
+    ],
+    [
+     "pattern",
+     0.958,
+     0.8
+    ],
+    [
+     "refrain.",
+     0.722,
+     1.2
+    ]
+   ]
+  },
+  "e948f0d59f52d1430e23f79bf231c646538d0335947d0818f2ba93f2ea03d31c": {
+   "text": "Duplique le pattern refrain.",
+   "words": [
+    [
+     "Duplique",
+     0.863,
+     0.0
+    ],
+    [
+     "le",
+     1.0,
+     0.64
+    ],
+    [
+     "pattern",
+     0.978,
+     0.8
+    ],
+    [
+     "refrain.",
+     0.509,
+     1.28
+    ]
+   ]
+  },
+  "ad9597d4643c4393e3c5b64a5529e96d11e185be95b1267fc244b9a0b27cac6e": {
+   "text": "Envoie Lid Claque sur le but Réverbération.",
+   "words": [
+    [
+     "Envoie",
+     0.79,
+     0.0
+    ],
+    [
+     "Lid",
+     0.471,
+     0.32
+    ],
+    [
+     "Claque",
+     0.304,
+     0.72
+    ],
+    [
+     "sur",
+     1.0,
+     1.12
+    ],
+    [
+     "le",
+     0.999,
+     1.2
+    ],
+    [
+     "but",
+     0.942,
+     1.28
+    ],
+    [
+     "Réverbération.",
+     0.547,
+     1.6
+    ]
+   ]
+  },
+  "57db1f06fa80c7086050e738221e895db6327e3179192cb96e6bb875663af08c": {
+   "text": "Envoie l'e-flaque sur le but réverbération.",
+   "words": [
+    [
+     "Envoie",
+     0.899,
+     0.0
+    ],
+    [
+     "l'e-flaque",
+     0.238,
+     0.32
+    ],
+    [
+     "sur",
+     1.0,
+     1.04
+    ],
+    [
+     "le",
+     0.999,
+     1.12
+    ],
+    [
+     "but",
+     0.852,
+     1.2
+    ],
+    [
+     "réverbération.",
+     0.732,
+     1.6
+    ]
+   ]
+  },
+  "24ab072fd9abbbee4278c2bb0cb7ce5fa8607f86eb237257a5a86b780b54117e": {
+   "text": "Envoie l'e-plaque sur le but réverbération.",
+   "words": [
+    [
+     "Envoie",
+     0.92,
+     0.0
+    ],
+    [
+     "l'e-plaque",
+     0.182,
+     0.32
+    ],
+    [
+     "sur",
+     1.0,
+     1.12
+    ],
+    [
+     "le",
+     0.999,
+     1.2
+    ],
+    [
+     "but",
+     0.856,
+     1.28
+    ],
+    [
+     "réverbération.",
+     0.895,
+     1.6
+    ]
+   ]
+  },
+  "e9f9566b0c522a2d76b8cc6f822e4a063b7f062c525354a79b76e78cee769da6": {
+   "text": "Envoie Lid Claque sur le but réverbération.",
+   "words": [
+    [
+     "Envoie",
+     0.863,
+     0.0
+    ],
+    [
+     "Lid",
+     0.418,
+     0.32
+    ],
+    [
+     "Claque",
+     0.22,
+     0.72
+    ],
+    [
+     "sur",
+     1.0,
+     1.12
+    ],
+    [
+     "le",
+     0.999,
+     1.2
+    ],
+    [
+     "but",
+     0.91,
+     1.28
+    ],
+    [
+     "réverbération.",
+     0.634,
+     1.6
+    ]
+   ]
+  },
+  "f8123d23a2ad8ae1781d9de79459427c5cd3380561cab5102e35462d36e19432": {
+   "text": "Je crois que ça sonne bien comme ça.",
+   "words": [
+    [
+     "Je",
+     1.0,
+     0.0
+    ],
+    [
+     "crois",
+     1.0,
+     0.24
+    ],
+    [
+     "que",
+     1.0,
+     0.56
+    ],
+    [
+     "ça",
+     1.0,
+     0.72
+    ],
+    [
+     "sonne",
+     1.0,
+     0.88
+    ],
+    [
+     "bien",
+     1.0,
+     1.28
+    ],
+    [
+     "comme",
+     1.0,
+     1.6
+    ],
+    [
+     "ça.",
+     1.0,
+     1.92
+    ]
+   ]
+  },
+  "7a2c72618013465e11697b27fa4881a0601b4687f35ad61f64e659e1e31c7308": {
+   "text": "Je crois que ça sonne bien comme ça.",
+   "words": [
+    [
+     "Je",
+     0.994,
+     0.0
+    ],
+    [
+     "crois",
+     1.0,
+     0.24
+    ],
+    [
+     "que",
+     1.0,
+     0.56
+    ],
+    [
+     "ça",
+     1.0,
+     0.72
+    ],
+    [
+     "sonne",
+     1.0,
+     0.88
+    ],
+    [
+     "bien",
+     1.0,
+     1.36
+    ],
+    [
+     "comme",
+     1.0,
+     1.6
+    ],
+    [
+     "ça.",
+     1.0,
+     1.84
+    ]
+   ]
+  },
+  "552ae46d82497cba0bbcde89d4675ed6a7026c5dad21b3d27cf7d564fd612cd8": {
+   "text": "Je crois que ça sonne bien comme ça.",
+   "words": [
+    [
+     "Je",
+     1.0,
+     0.0
+    ],
+    [
+     "crois",
+     1.0,
+     0.24
+    ],
+    [
+     "que",
+     1.0,
+     0.56
+    ],
+    [
+     "ça",
+     1.0,
+     0.72
+    ],
+    [
+     "sonne",
+     1.0,
+     0.88
+    ],
+    [
+     "bien",
+     1.0,
+     1.28
+    ],
+    [
+     "comme",
+     1.0,
+     1.6
+    ],
+    [
+     "ça.",
+     1.0,
+     1.92
+    ]
+   ]
+  },
+  "12bc011130a06e365d118b863de09f30eb82a1825d22d3bdbe2bc1de3807565a": {
+   "text": "Je crois que ça sonne bien comme ça.",
+   "words": [
+    [
+     "Je",
+     1.0,
+     0.0
+    ],
+    [
+     "crois",
+     1.0,
+     0.24
+    ],
+    [
+     "que",
+     1.0,
+     0.56
+    ],
+    [
+     "ça",
+     1.0,
+     0.72
+    ],
+    [
+     "sonne",
+     1.0,
+     0.88
+    ],
+    [
+     "bien",
+     1.0,
+     1.28
+    ],
+    [
+     "comme",
+     1.0,
+     1.6
+    ],
+    [
+     "ça.",
+     1.0,
+     1.92
+    ]
+   ]
+  },
+  "ba2a70a9f0900764c98a2e493ad227f9d058e402a1bd0955ba66ff39ede3a6a6": {
+   "text": "Attends, je réfléchis.",
+   "words": [
+    [
+     "Attends,",
+     0.985,
+     0.0
+    ],
+    [
+     "je",
+     1.0,
+     0.56
+    ],
+    [
+     "réfléchis.",
+     1.0,
+     0.8
+    ]
+   ]
+  },
+  "6408d3889826cec82b177ae6f8a55f5b2570d89ec7eb6ca92108d73608eaf40e": {
+   "text": "Attends, je réfléchis.",
+   "words": [
+    [
+     "Attends,",
+     0.985,
+     0.0
+    ],
+    [
+     "je",
+     1.0,
+     0.56
+    ],
+    [
+     "réfléchis.",
+     1.0,
+     0.8
+    ]
+   ]
+  },
+  "3f6d2056a928f689371acbf605b195fa498b731daf0e27c4016b7503685e8f39": {
+   "text": "Attends, je réfléchis.",
+   "words": [
+    [
+     "Attends,",
+     0.992,
+     0.0
+    ],
+    [
+     "je",
+     1.0,
+     0.56
+    ],
+    [
+     "réfléchis.",
+     1.0,
+     0.8
+    ]
+   ]
+  },
+  "00386cc8abaa8bd59ac652d9038eec65106473a8c50c694fcb4f6159dcbb2b63": {
+   "text": "Attends, je réfléchis.",
+   "words": [
+    [
+     "Attends,",
+     0.988,
+     0.0
+    ],
+    [
+     "je",
+     1.0,
+     0.56
+    ],
+    [
+     "réfléchis.",
+     1.0,
+     0.8
+    ]
+   ]
+  },
+  "44f2ca18ecb8d2b6f0974536ce0b544542eebbb5d59f78fd636a632b344aa6ec": {
+   "text": "C'est quoi déjà le nom de ce plugin?",
+   "words": [
+    [
+     "C'est",
+     1.0,
+     0.0
+    ],
+    [
+     "quoi",
+     1.0,
+     0.32
+    ],
+    [
+     "déjà",
+     1.0,
+     0.64
+    ],
+    [
+     "le",
+     1.0,
+     0.88
+    ],
+    [
+     "nom",
+     1.0,
+     1.04
+    ],
+    [
+     "de",
+     1.0,
+     1.2
+    ],
+    [
+     "ce",
+     1.0,
+     1.36
+    ],
+    [
+     "plugin?",
+     0.995,
+     1.52
+    ]
+   ]
+  },
+  "a5e2b02c83e5aed9357538554322b49662d924f7f5190029a53b1826ef1f1d79": {
+   "text": "C'est quoi déjà le nom de ce plugin?",
+   "words": [
+    [
+     "C'est",
+     0.999,
+     0.0
+    ],
+    [
+     "quoi",
+     1.0,
+     0.32
+    ],
+    [
+     "déjà",
+     1.0,
+     0.64
+    ],
+    [
+     "le",
+     1.0,
+     0.88
+    ],
+    [
+     "nom",
+     1.0,
+     0.96
+    ],
+    [
+     "de",
+     1.0,
+     1.12
+    ],
+    [
+     "ce",
+     1.0,
+     1.28
+    ],
+    [
+     "plugin?",
+     0.974,
+     1.44
+    ]
+   ]
+  },
+  "5dfacd173e450effa46d5e5799fd9c138a3c20d79c1dd8ed783af4cb1ce66052": {
+   "text": "C'est quoi déjà le nom de ce plugin?",
+   "words": [
+    [
+     "C'est",
+     1.0,
+     0.0
+    ],
+    [
+     "quoi",
+     1.0,
+     0.32
+    ],
+    [
+     "déjà",
+     1.0,
+     0.64
+    ],
+    [
+     "le",
+     1.0,
+     0.88
+    ],
+    [
+     "nom",
+     1.0,
+     1.04
+    ],
+    [
+     "de",
+     1.0,
+     1.2
+    ],
+    [
+     "ce",
+     1.0,
+     1.28
+    ],
+    [
+     "plugin?",
+     0.996,
+     1.44
+    ]
+   ]
+  },
+  "0d74b8d14e7c1a5d102ac4bad812e2269f337dd9a05ebf1d078f91dbd62ef7e0": {
+   "text": "C'est quoi déjà le nom de ce plugin?",
+   "words": [
+    [
+     "C'est",
+     1.0,
+     0.0
+    ],
+    [
+     "quoi",
+     1.0,
+     0.32
+    ],
+    [
+     "déjà",
+     1.0,
+     0.64
+    ],
+    [
+     "le",
+     1.0,
+     0.88
+    ],
+    [
+     "nom",
+     1.0,
+     1.04
+    ],
+    [
+     "de",
+     1.0,
+     1.2
+    ],
+    [
+     "ce",
+     1.0,
+     1.36
+    ],
+    [
+     "plugin?",
+     0.996,
+     1.52
+    ]
+   ]
+  },
+  "4c0490efca3a0deb313dbae038fdcad25a3baddb968f5219d9738e785dbad08b": {
+   "text": "J'ai faim, on fait une pause.",
+   "words": [
+    [
+     "J'ai",
+     0.997,
+     0.0
+    ],
+    [
+     "faim,",
+     0.99,
+     0.32
+    ],
+    [
+     "on",
+     0.999,
+     0.72
+    ],
+    [
+     "fait",
+     0.999,
+     0.88
+    ],
+    [
+     "une",
+     1.0,
+     1.12
+    ],
+    [
+     "pause.",
+     1.0,
+     1.36
+    ]
+   ]
+  },
+  "e530d5f01adea0f12d7f87d7e7ed3a34b0b6b598535241f165fe22faa2131aee": {
+   "text": "J'ai faim, on fait une pause.",
+   "words": [
+    [
+     "J'ai",
+     0.89,
+     0.0
+    ],
+    [
+     "faim,",
+     0.784,
+     0.32
+    ],
+    [
+     "on",
+     0.951,
+     0.72
+    ],
+    [
+     "fait",
+     0.991,
+     0.88
+    ],
+    [
+     "une",
+     0.999,
+     1.2
+    ],
+    [
+     "pause.",
+     0.991,
+     1.36
+    ]
+   ]
+  },
+  "f9e86df60846d50fb52550964d0edfb3f5e752369cada0b54027ad0895f26cd5": {
+   "text": "J'ai faim, on fait une pause.",
+   "words": [
+    [
+     "J'ai",
+     0.992,
+     0.0
+    ],
+    [
+     "faim,",
+     0.988,
+     0.32
+    ],
+    [
+     "on",
+     0.997,
+     0.72
+    ],
+    [
+     "fait",
+     0.999,
+     0.88
+    ],
+    [
+     "une",
+     1.0,
+     1.12
+    ],
+    [
+     "pause.",
+     0.999,
+     1.36
+    ]
+   ]
+  },
+  "f6d575964ee5f756c561589e3dab59776c95ea15341b1d99dd5639d6bd06d543": {
+   "text": "J'ai faim, on fait une pause.",
+   "words": [
+    [
+     "J'ai",
+     0.995,
+     0.0
+    ],
+    [
+     "faim,",
+     0.985,
+     0.32
+    ],
+    [
+     "on",
+     0.999,
+     0.72
+    ],
+    [
+     "fait",
+     0.999,
+     0.88
+    ],
+    [
+     "une",
+     1.0,
+     1.12
+    ],
+    [
+     "pause.",
+     0.999,
+     1.36
+    ]
+   ]
+  },
+  "beed1aa3c8b82284a1991b14269253dc61a281f53b18989f7b95d4bc5cc90783": {
+   "text": "Il fait beau aujourd'hui.",
+   "words": [
+    [
+     "Il",
+     1.0,
+     0.0
+    ],
+    [
+     "fait",
+     1.0,
+     0.24
+    ],
+    [
+     "beau",
+     0.997,
+     0.48
+    ],
+    [
+     "aujourd'hui.",
+     1.0,
+     0.8
+    ]
+   ]
+  },
+  "a56fc516235aa6fbcb23a2f74ae8ce91f36fcfd790aea6784bf904b8beb8d91f": {
+   "text": "Il fait bon aujourd'hui.",
+   "words": [
+    [
+     "Il",
+     0.996,
+     0.0
+    ],
+    [
+     "fait",
+     0.985,
+     0.24
+    ],
+    [
+     "bon",
+     0.806,
+     0.48
+    ],
+    [
+     "aujourd'hui.",
+     1.0,
+     0.8
+    ]
+   ]
+  },
+  "8aaf63a47f7d194f50cfe01c38bc4bf583a3043357f7a508c27e7ffae55e70c9": {
+   "text": "Il fait bon aujourd'hui.",
+   "words": [
+    [
+     "Il",
+     1.0,
+     0.0
+    ],
+    [
+     "fait",
+     0.999,
+     0.24
+    ],
+    [
+     "bon",
+     0.965,
+     0.4
+    ],
+    [
+     "aujourd'hui.",
+     1.0,
+     0.8
+    ]
+   ]
+  },
+  "93db84ae99943145609c7652dbf1dca247dcecf02307281fb3437a6370d9e64a": {
+   "text": "Il fait beau aujourd'hui.",
+   "words": [
+    [
+     "Il",
+     1.0,
+     0.0
+    ],
+    [
+     "fait",
+     1.0,
+     0.24
+    ],
+    [
+     "beau",
+     0.866,
+     0.48
+    ],
+    [
+     "aujourd'hui.",
+     1.0,
+     0.8
+    ]
+   ]
+  },
+  "a9fe155fd024fda911359e25757d5b1bb95670f560234bc3f1f39794f56034b2": {
+   "text": "Tu peux me rappeler demain?",
+   "words": [
+    [
+     "Tu",
+     1.0,
+     0.0
+    ],
+    [
+     "peux",
+     0.999,
+     0.32
+    ],
+    [
+     "me",
+     1.0,
+     0.56
+    ],
+    [
+     "rappeler",
+     1.0,
+     0.72
+    ],
+    [
+     "demain?",
+     0.999,
+     1.2
+    ]
+   ]
+  },
+  "7bcf0d1f97ec1a777c4795103f6f4e1806ef5069140a189a89b942774f7d9b36": {
+   "text": "Tu peux me rappeler demain?",
+   "words": [
+    [
+     "Tu",
+     1.0,
+     0.0
+    ],
+    [
+     "peux",
+     0.999,
+     0.32
+    ],
+    [
+     "me",
+     0.999,
+     0.56
+    ],
+    [
+     "rappeler",
+     1.0,
+     0.72
+    ],
+    [
+     "demain?",
+     0.998,
+     1.2
+    ]
+   ]
+  },
+  "1ec5a7d10d73bc0c4333e6726a17c694da90a85afa8516776b0d15f8c1d37c82": {
+   "text": "Tu peux me rappeler demain?",
+   "words": [
+    [
+     "Tu",
+     1.0,
+     0.0
+    ],
+    [
+     "peux",
+     0.999,
+     0.32
+    ],
+    [
+     "me",
+     1.0,
+     0.56
+    ],
+    [
+     "rappeler",
+     1.0,
+     0.72
+    ],
+    [
+     "demain?",
+     0.999,
+     1.2
+    ]
+   ]
+  },
+  "cf0c476d45e1dde84511a94a624030e096a58e3585984af567c8c44d6082843e": {
+   "text": "Tu peux me rappeler demain?",
+   "words": [
+    [
+     "Tu",
+     1.0,
+     0.0
+    ],
+    [
+     "peux",
+     0.999,
+     0.32
+    ],
+    [
+     "me",
+     1.0,
+     0.56
+    ],
+    [
+     "rappeler",
+     1.0,
+     0.72
+    ],
+    [
+     "demain?",
+     0.999,
+     1.2
+    ]
+   ]
+  },
+  "920a2fa430f2193badc3895fa1a5e34b566c234d862890be9dc59df1d472ab09": {
+   "text": "Bon, on verra plus tard.",
+   "words": [
+    [
+     "Bon,",
+     1.0,
+     0.0
+    ],
+    [
+     "on",
+     1.0,
+     0.4
+    ],
+    [
+     "verra",
+     1.0,
+     0.56
+    ],
+    [
+     "plus",
+     1.0,
+     1.04
+    ],
+    [
+     "tard.",
+     1.0,
+     1.28
+    ]
+   ]
+  },
+  "ae2d1fcf5b5cae3481804280c5dd8b0090982dea1c16ef13166afb6fcc42c9b5": {
+   "text": "Bon, on verra plus tard.",
+   "words": [
+    [
+     "Bon,",
+     0.993,
+     0.0
+    ],
+    [
+     "on",
+     0.998,
+     0.4
+    ],
+    [
+     "verra",
+     1.0,
+     0.64
+    ],
+    [
+     "plus",
+     1.0,
+     1.04
+    ],
+    [
+     "tard.",
+     1.0,
+     1.28
+    ]
+   ]
+  },
+  "e5a634da95015dcb27eb44f25aceb6e22dbda8c279652012da70466f72b3150d": {
+   "text": "Bon, on verra plus tard.",
+   "words": [
+    [
+     "Bon,",
+     1.0,
+     0.0
+    ],
+    [
+     "on",
+     1.0,
+     0.4
+    ],
+    [
+     "verra",
+     1.0,
+     0.64
+    ],
+    [
+     "plus",
+     1.0,
+     1.04
+    ],
+    [
+     "tard.",
+     1.0,
+     1.28
+    ]
+   ]
+  },
+  "1fcdebcfc62917de343480d2f1d5beca1479e97b790b095bb40e17f528c839e9": {
+   "text": "Bon, on verra plus tard.",
+   "words": [
+    [
+     "Bon,",
+     1.0,
+     0.0
+    ],
+    [
+     "on",
+     1.0,
+     0.4
+    ],
+    [
+     "verra",
+     1.0,
+     0.64
+    ],
+    [
+     "plus",
+     1.0,
+     1.04
+    ],
+    [
+     "tard.",
+     1.0,
+     1.28
+    ]
+   ]
+  },
+  "e5ef0c7ab3b76dd944c63d98cbab3d9be007b1102219b901dbe5b97219490970": {
+   "text": "Ce morceau me fait penser à l'été dernier.",
+   "words": [
+    [
+     "Ce",
+     1.0,
+     0.0
+    ],
+    [
+     "morceau",
+     1.0,
+     0.24
+    ],
+    [
+     "me",
+     1.0,
+     0.72
+    ],
+    [
+     "fait",
+     1.0,
+     0.88
+    ],
+    [
+     "penser",
+     1.0,
+     1.12
+    ],
+    [
+     "à",
+     1.0,
+     1.36
+    ],
+    [
+     "l'été",
+     0.997,
+     1.52
+    ],
+    [
+     "dernier.",
+     1.0,
+     2.0
+    ]
+   ]
+  },
+  "31c34ca899a41cbcd015e8aec7f660cbd28d0532794b4f8ae7e61b288b29f9f6": {
+   "text": "Ce morceau me fait penser à l'été dernier.",
+   "words": [
+    [
+     "Ce",
+     0.999,
+     0.0
+    ],
+    [
+     "morceau",
+     1.0,
+     0.24
+    ],
+    [
+     "me",
+     0.999,
+     0.72
+    ],
+    [
+     "fait",
+     1.0,
+     0.88
+    ],
+    [
+     "penser",
+     0.999,
+     1.12
+    ],
+    [
+     "à",
+     1.0,
+     1.44
+    ],
+    [
+     "l'été",
+     0.985,
+     1.52
+    ],
+    [
+     "dernier.",
+     1.0,
+     2.0
+    ]
+   ]
+  },
+  "842ecce7d27ff71956197fe3ed3cc08c60bc8cfc4698d7ad83804ff307c5eae4": {
+   "text": "Ce morceau me fait penser à l'été dernier.",
+   "words": [
+    [
+     "Ce",
+     1.0,
+     0.0
+    ],
+    [
+     "morceau",
+     1.0,
+     0.24
+    ],
+    [
+     "me",
+     1.0,
+     0.72
+    ],
+    [
+     "fait",
+     1.0,
+     0.88
+    ],
+    [
+     "penser",
+     1.0,
+     1.12
+    ],
+    [
+     "à",
+     1.0,
+     1.36
+    ],
+    [
+     "l'été",
+     0.995,
+     1.52
+    ],
+    [
+     "dernier.",
+     1.0,
+     2.0
+    ]
+   ]
+  },
+  "5825e5f1a60880aeda56ff4b96f015727073078c141c34882dfcc7dd0409f3ad": {
+   "text": "Ce morceau me fait penser à l'été dernier.",
+   "words": [
+    [
+     "Ce",
+     1.0,
+     0.0
+    ],
+    [
+     "morceau",
+     1.0,
+     0.24
+    ],
+    [
+     "me",
+     1.0,
+     0.72
+    ],
+    [
+     "fait",
+     1.0,
+     0.88
+    ],
+    [
+     "penser",
+     1.0,
+     1.12
+    ],
+    [
+     "à",
+     1.0,
+     1.36
+    ],
+    [
+     "l'été",
+     0.997,
+     1.52
+    ],
+    [
+     "dernier.",
+     1.0,
+     2.0
+    ]
+   ]
+  },
+  "bb918147fe10391b43adeba4bd21b9ef32e5bd6c5076c3517733a05ed6dd0569": {
+   "text": "",
+   "words": []
+  },
+  "863aa81d1b5ebb68351d408405d01e613eeb51d2db5efb76d6cdbed87020ba38": {
+   "text": "",
+   "words": []
+  },
+  "617a1435357210c770e2be58757c47ac6b1e70bc38047386c9265d3ecb360bde": {
+   "text": "",
+   "words": []
+  },
+  "2b4b91932442f2db79867ff8c918316a75e0c2232b78c8d2081b0088096b3048": {
+   "text": "",
+   "words": []
+  },
+  "15f1a102c68363831c5f5f2f31e214908c4fed46e04a3a301cb4fdc8a9f855d1": {
+   "text": "",
+   "words": []
+  },
+  "3b312d1079c7cb9e9804378f8088651d53531347aac855daa5e14e7dc77223eb": {
+   "text": "",
+   "words": []
+  },
+  "a91c81f6b002b0c4a5d72b6f37bdbf922733c2b0a7bc21b466b7d565ae08ef47": {
+   "text": "",
+   "words": []
+  },
+  "7a19c6480c7f46964d1f82ceb6941976f5c3e64cc93a7db22617d53c25f1d46a": {
+   "text": "",
+   "words": []
+  },
+  "046b203e45ca0203e590fa3af16fb7f1b0f8b6b75580110128de28657ba1775e": {
+   "text": "Okay.",
+   "words": [
+    [
+     "Okay.",
+     0.286,
+     0.08
+    ]
+   ]
+  },
+  "1fe75182a3f5c7475731f678e122d4a49f6b365d12f1222e3a19dd37f26016da": {
+   "text": "Mm.",
+   "words": [
+    [
+     "Mm.",
+     0.167,
+     0.16
+    ]
+   ]
+  },
+  "73bc049f4b8630db8e1df8190c6568e75afdcefae8ba926884dc0f5290cbee20": {
+   "text": "Uh.",
+   "words": [
+    [
+     "Uh.",
+     0.305,
+     0.16
+    ]
+   ]
+  },
+  "75b842cd70ea549ab5aac6d6603c34032be034ec419ab416dfef04bb9db3bc5c": {
+   "text": "Uh.",
+   "words": [
+    [
+     "Uh.",
+     0.163,
+     0.16
+    ]
+   ]
+  },
+  "74104d1a111ca978d86d73d42dbbe8a19fda9dd48f0e218f9943dbf4932e06d6": {
+   "text": "Turn the bass up a little bit.",
+   "words": [
+    [
+     "Turn",
+     0.996,
+     0.0
+    ],
+    [
+     "the",
+     1.0,
+     0.32
+    ],
+    [
+     "bass",
+     0.806,
+     0.48
+    ],
+    [
+     "up",
+     1.0,
+     0.8
+    ],
+    [
+     "a",
+     1.0,
+     1.04
+    ],
+    [
+     "little",
+     1.0,
+     1.2
+    ],
+    [
+     "bit.",
+     1.0,
+     1.44
+    ]
+   ]
+  },
+  "228d8cb5f3713e37667deebc567aae3dc518fdbaeb202d8604e18a009f7a8f5a": {
+   "text": "Turn the base up a little bit.",
+   "words": [
+    [
+     "Turn",
+     0.973,
+     0.0
+    ],
+    [
+     "the",
+     1.0,
+     0.32
+    ],
+    [
+     "base",
+     0.448,
+     0.48
+    ],
+    [
+     "up",
+     1.0,
+     0.8
+    ],
+    [
+     "a",
+     1.0,
+     0.96
+    ],
+    [
+     "little",
+     1.0,
+     1.12
+    ],
+    [
+     "bit.",
+     1.0,
+     1.44
+    ]
+   ]
+  },
+  "a518e95925a888caa970393d1c4ca31f4dba9c9ea6c4efd14321ac1bba75f3b4": {
+   "text": "Turn the bass up a little bit.",
+   "words": [
+    [
+     "Turn",
+     0.979,
+     0.0
+    ],
+    [
+     "the",
+     1.0,
+     0.32
+    ],
+    [
+     "bass",
+     0.688,
+     0.48
+    ],
+    [
+     "up",
+     1.0,
+     0.8
+    ],
+    [
+     "a",
+     1.0,
+     1.04
+    ],
+    [
+     "little",
+     1.0,
+     1.2
+    ],
+    [
+     "bit.",
+     1.0,
+     1.44
+    ]
+   ]
+  },
+  "c9039be142ea9b9048ba5c48a83a911053cdfcaaaccffc260119b3fca2856f61": {
+   "text": "Turn the bass up a little bit.",
+   "words": [
+    [
+     "Turn",
+     0.992,
+     0.0
+    ],
+    [
+     "the",
+     1.0,
+     0.32
+    ],
+    [
+     "bass",
+     0.535,
+     0.48
+    ],
+    [
+     "up",
+     1.0,
+     0.8
+    ],
+    [
+     "a",
+     1.0,
+     0.96
+    ],
+    [
+     "little",
+     1.0,
+     1.12
+    ],
+    [
+     "bit.",
+     1.0,
+     1.44
+    ]
+   ]
+  },
+  "1699d4d64088f3045c9b2f97e3311b5d8cbfd14cf858dcc81b89c6cf04ba8db3": {
+   "text": "Can you mute the drums, please?",
+   "words": [
+    [
+     "Can",
+     1.0,
+     0.0
+    ],
+    [
+     "you",
+     1.0,
+     0.24
+    ],
+    [
+     "mute",
+     0.999,
+     0.4
+    ],
+    [
+     "the",
+     1.0,
+     0.72
+    ],
+    [
+     "drums,",
+     1.0,
+     0.8
+    ],
+    [
+     "please?",
+     1.0,
+     1.44
+    ]
+   ]
+  },
+  "201f0de5f2f84b10c2fa171d7d356ee733e744aae4113fb36ee022aec166f5a7": {
+   "text": "Can you move the drums, please?",
+   "words": [
+    [
+     "Can",
+     0.999,
+     0.0
+    ],
+    [
+     "you",
+     1.0,
+     0.24
+    ],
+    [
+     "move",
+     0.77,
+     0.4
+    ],
+    [
+     "the",
+     1.0,
+     0.72
+    ],
+    [
+     "drums,",
+     1.0,
+     0.8
+    ],
+    [
+     "please?",
+     1.0,
+     1.44
+    ]
+   ]
+  },
+  "8c315ad540eb082fcf25503b7beaf48b9d8006a90e413270fdb6b1fbf7349bb2": {
+   "text": "Can you mute the drums please?",
+   "words": [
+    [
+     "Can",
+     0.999,
+     0.0
+    ],
+    [
+     "you",
+     1.0,
+     0.24
+    ],
+    [
+     "mute",
+     0.998,
+     0.4
+    ],
+    [
+     "the",
+     1.0,
+     0.72
+    ],
+    [
+     "drums",
+     1.0,
+     0.8
+    ],
+    [
+     "please?",
+     1.0,
+     1.36
+    ]
+   ]
+  },
+  "a683544cb8d2744b5abd7f99751d04b7f3c6a283cf6d5b5ba59772701d367214": {
+   "text": "Can you mute the drums please?",
+   "words": [
+    [
+     "Can",
+     0.999,
+     0.0
+    ],
+    [
+     "you",
+     1.0,
+     0.24
+    ],
+    [
+     "mute",
+     0.999,
+     0.4
+    ],
+    [
+     "the",
+     1.0,
+     0.72
+    ],
+    [
+     "drums",
+     1.0,
+     0.8
+    ],
+    [
+     "please?",
+     1.0,
+     1.44
+    ]
+   ]
+  },
+  "21f0ec6bcfcbfcc723f85e4fcd93286a1fdc0263dd23f4a7e40bf9a8877c49ce": {
+   "text": "Mets un compresseur sur la piste Zorglube.",
+   "words": [
+    [
+     "Mets",
+     0.945,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.4
+    ],
+    [
+     "compresseur",
+     0.998,
+     0.48
+    ],
+    [
+     "sur",
+     1.0,
+     1.04
+    ],
+    [
+     "la",
+     1.0,
+     1.2
+    ],
+    [
+     "piste",
+     1.0,
+     1.28
+    ],
+    [
+     "Zorglube.",
+     0.922,
+     1.68
+    ]
+   ]
+  },
+  "ae05e4d3f8cd920fde014146d34c9d59bb0237d482c86ee38b5f523cb3129dfa": {
+   "text": "Mets un compresseur sur la piste Zorglube.",
+   "words": [
+    [
+     "Mets",
+     0.937,
+     0.0
+    ],
+    [
+     "un",
+     0.997,
+     0.4
+    ],
+    [
+     "compresseur",
+     0.981,
+     0.56
+    ],
+    [
+     "sur",
+     1.0,
+     1.04
+    ],
+    [
+     "la",
+     1.0,
+     1.2
+    ],
+    [
+     "piste",
+     0.998,
+     1.36
+    ],
+    [
+     "Zorglube.",
+     0.376,
+     1.76
+    ]
+   ]
+  },
+  "ea39b5ae303f7dca15a45fff3d2d6c780d04d4c49e7692cece04ea241b2bbb6b": {
+   "text": "Mets un compresseur sur la piste Zorglube.",
+   "words": [
+    [
+     "Mets",
+     0.847,
+     0.0
+    ],
+    [
+     "un",
+     0.999,
+     0.4
+    ],
+    [
+     "compresseur",
+     0.998,
+     0.56
+    ],
+    [
+     "sur",
+     1.0,
+     1.04
+    ],
+    [
+     "la",
+     1.0,
+     1.2
+    ],
+    [
+     "piste",
+     0.999,
+     1.28
+    ],
+    [
+     "Zorglube.",
+     0.896,
+     1.68
+    ]
+   ]
+  },
+  "bc623e6d7edd2dbdf9e45ee819ce223166044ad8372e618e3c6365f37daca472": {
+   "text": "Mets un compresseur sur la piste Zorglube.",
+   "words": [
+    [
+     "Mets",
+     0.859,
+     0.0
+    ],
+    [
+     "un",
+     1.0,
+     0.4
+    ],
+    [
+     "compresseur",
+     0.998,
+     0.56
+    ],
+    [
+     "sur",
+     1.0,
+     1.04
+    ],
+    [
+     "la",
+     1.0,
+     1.2
+    ],
+    [
+     "piste",
+     0.999,
+     1.28
+    ],
+    [
+     "Zorglube.",
+     0.901,
+     1.68
+    ]
+   ]
+  },
+  "12ebc78ade44615e06f788d5bb8cf423426a1a6795dd026943bb020c025a9d7c": {
+   "text": "Monte le volume de trombone fantôme.",
+   "words": [
+    [
+     "Monte",
+     0.8,
+     0.0
+    ],
+    [
+     "le",
+     0.998,
+     0.48
+    ],
+    [
+     "volume",
+     1.0,
+     0.56
+    ],
+    [
+     "de",
+     0.998,
+     0.88
+    ],
+    [
+     "trombone",
+     0.619,
+     1.04
+    ],
+    [
+     "fantôme.",
+     0.931,
+     1.76
+    ]
+   ]
+  },
+  "46baec2d8f0c7891c51c0867a83fb65fc4c48b2b5443cc6f2fe78f80de7da7c0": {
+   "text": "Monte le volume de trombone fantôme.",
+   "words": [
+    [
+     "Monte",
+     0.479,
+     0.08
+    ],
+    [
+     "le",
+     0.988,
+     0.48
+    ],
+    [
+     "volume",
+     1.0,
+     0.56
+    ],
+    [
+     "de",
+     0.992,
+     0.88
+    ],
+    [
+     "trombone",
+     0.462,
+     1.04
+    ],
+    [
+     "fantôme.",
+     0.846,
+     1.84
+    ]
+   ]
+  },
+  "09ebe86e867c90553ab24cd120770feb0f083df8e4407ddecd00901baf67946f": {
+   "text": "Monte le volume de trombone fantôme.",
+   "words": [
+    [
+     "Monte",
+     0.702,
+     0.0
+    ],
+    [
+     "le",
+     0.998,
+     0.48
+    ],
+    [
+     "volume",
+     1.0,
+     0.56
+    ],
+    [
+     "de",
+     0.998,
+     0.88
+    ],
+    [
+     "trombone",
+     0.777,
+     1.04
+    ],
+    [
+     "fantôme.",
+     0.935,
+     1.76
+    ]
+   ]
+  },
+  "7799581f73bbe7d31f11f849303b2c3967507e838a8a67455f4bb50a7e143473": {
+   "text": "Monte le volume de trombone fantôme.",
+   "words": [
+    [
+     "Monte",
+     0.672,
+     0.0
+    ],
+    [
+     "le",
+     0.998,
+     0.48
+    ],
+    [
+     "volume",
+     1.0,
+     0.56
+    ],
+    [
+     "de",
+     0.998,
+     0.88
+    ],
+    [
+     "trombone",
+     0.623,
+     1.04
+    ],
+    [
+     "fantôme.",
+     0.919,
+     1.76
+    ]
+   ]
+  }
+ }
+}
