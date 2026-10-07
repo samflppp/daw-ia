@@ -101,6 +101,9 @@ Verification::Verification(Wiring wiring)
     , audio_(wiring.audio)
     , kitSession_(wiring.kit)
     , busSession_(wiring.buses)
+    , voice_(wiring.voice)
+    , store_(wiring.store)
+    , realMicrophone_(wiring.realMicrophone)
 {
     exporter_ = wiring.exporter;
 }
@@ -173,6 +176,9 @@ void Verification::start()
         break;
     case Run::kit:
         buildKit();
+        break;
+    case Run::voice:
+        buildVoice();
         break;
     }
 

@@ -247,6 +247,11 @@ juce::StringArray CopilotBridge::childCommand(int port) const
     command.add("copilot");
     command.add("--port");
     command.add(juce::String{port});
+    if (table_ != juce::File{})
+    {
+        command.add("--table");
+        command.add(table_.getFullPathName());
+    }
     return command;
 }
 

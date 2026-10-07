@@ -105,6 +105,10 @@ public:
     // Opens the port, launches the process and starts watching it. Failures
     // are states, not exceptions: the panel says what happened.
     void start();
+
+    // A check's copilot (S25): the process answers from this table, written
+    // by the check, instead of a model. Before start().
+    void answerFromTable(juce::File table) { table_ = std::move(table); }
     void stop();
 
     // --- CopilotHost
@@ -183,6 +187,7 @@ private:
     std::unique_ptr<juce::StreamingSocket> connection_;
     std::unique_ptr<juce::ChildProcess> process_;
     int port_{0};
+    juce::File table_;
 
     mutable std::mutex mutex_;
     Status status_{Status::stopped};

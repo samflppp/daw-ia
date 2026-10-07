@@ -242,8 +242,34 @@ public:
 
         // --no-copilot exists for the runs where a child process would be in
         // the way: the plugin scan, the demo, and a machine with no key.
+        // --verify-voix answers from a table it writes (S25): no model, no key.
+        if (copilot_ != nullptr)
+        {
+            const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+            if (const auto at = tokens.indexOf("--verify-voix"); at >= 0 && at + 1 < tokens.size())
+                copilot_->answerFromTable(juce::File::getCurrentWorkingDirectory()
+                                              .getChildFile(tokens[at + 1].unquoted())
+                                              .getChildFile("copilote-table.json"));
+        }
         if (copilot_ != nullptr && !commandLine.contains("--no-copilot"))
             copilot_->start();
+
+        // --micro-ouvert, in a verification only (S25): this machine's
+        // microphone open for the whole run, read and thrown away, so that a
+        // run such as --verify-lecture says whether an open microphone
+        // changes what the card plays.
+        if (commandLine.contains("--micro-ouvert") && commandLine.contains("--verify") &&
+            voiceInput_ != nullptr)
+        {
+            juce::String error;
+            const auto chosen = juce::String{voiceInput_->microphone()};
+            if (voiceInput_->microphoneDevice().open(chosen, error))
+                juce::Logger::writeToLog(
+                    juce::String::fromUTF8("voix: micro ouvert pour toute la vérification, « ") + chosen +
+                    juce::String::fromUTF8(" »"));
+            else
+                juce::Logger::writeToLog("voix: --micro-ouvert : " + error);
+        }
 
         startVerificationIfAsked(commandLine);
 
@@ -295,6 +321,8 @@ public:
                 run = Verification::Run::kit;
             else if (tokens[index] == "--verify-stems")
                 run = Verification::Run::stems;
+            else if (tokens[index] == "--verify-voix")
+                run = Verification::Run::voice;
             else if (tokens[index] != "--verify")
                 continue;
 
@@ -351,7 +379,10 @@ public:
                 &engineHost_->live(),
                 &engineHost_->audio(),
                 kitSession_.get(),
-                busSession_.get()});
+                busSession_.get(),
+                voiceInput_.get(),
+                contentStore_.get(),
+                tokens.contains("--voix-micro-reel")});
 
             // A verification mixes by the rules: never a key, never an API.
             if (mixSession_ != nullptr)

@@ -30,8 +30,9 @@
 
 namespace daw::engine
 {
+class ContentStore;
 class LiveInputPlugin;
-}
+} // namespace daw::engine
 
 namespace daw::ui
 {
@@ -46,6 +47,7 @@ class BusSession;
 class KitSession;
 class MixSession;
 class StemSession;
+class VoiceInput;
 
 // The checks a person would run on the real binary, run by the binary itself.
 //
@@ -92,7 +94,8 @@ public:
         play,
         audio,
         flux,
-        kit
+        kit,
+        voice
     };
 
     struct Wiring
@@ -165,6 +168,14 @@ public:
         KitSession* kit{nullptr};
         // The smart buses (S24): --verify-flux tries and keeps one.
         BusSession* buses{nullptr};
+
+        // The push-to-talk (S25): --verify-voix holds its key, plays files
+        // where the microphone would be, and reads what the store kept.
+        VoiceInput* voice{nullptr};
+        engine::ContentStore* store{nullptr};
+        // --voix-micro-reel: opens this machine's microphone too, to measure
+        // that the output does not change when it opens.
+        bool realMicrophone{false};
     };
 
     explicit Verification(Wiring wiring);
@@ -225,6 +236,9 @@ private:
     // S24 (VerificationKit.cpp): the kit, on a library built here.
     struct KitRun;
     void buildKit();
+
+    struct VoiceRun;
+    void buildVoice();
     // An offline render of the Edit as it plays, read back; and the type of
     // the last command the journal holds.
     [[nodiscard]] juce::AudioBuffer<float> renderNamed(const std::string& name);
@@ -531,6 +545,9 @@ private:
     engine::AudioSettings* audio_{nullptr};
     KitSession* kitSession_{nullptr};
     BusSession* busSession_{nullptr};
+    VoiceInput* voice_{nullptr};
+    engine::ContentStore* store_{nullptr};
+    bool realMicrophone_{false};
 
     // S21: cycles run and silent ones, per action before the play.
     std::map<std::string, int> cyclesByAction_;

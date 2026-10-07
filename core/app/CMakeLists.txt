@@ -39,6 +39,7 @@ target_sources(daw_app PRIVATE
     src/QuitWatchdog.cpp
     src/Verification.cpp
     src/VerificationKit.cpp
+    src/VerificationVoice.cpp
     src/VerificationAutomation.cpp
     src/VerificationFluidity.cpp
     src/VerificationForm.cpp
