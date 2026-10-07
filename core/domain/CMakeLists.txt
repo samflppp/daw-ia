@@ -25,6 +25,8 @@ add_library(daw_domain STATIC
     src/flux/Graph.cpp
     src/flux/Picture.cpp
     src/sound/Pitch.cpp
+    src/kit/Features.cpp
+    src/kit/Choice.cpp
     src/direction/Reading.cpp
     src/direction/Direction.cpp
     src/commands/DirectionCommands.cpp
