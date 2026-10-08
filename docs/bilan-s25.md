@@ -373,6 +373,16 @@ ses premiers passages sont tombés sur de vrais défauts (§11), et le contrôle
 3. **Les instruments IA** : l'essai de Magenta RealTime 2 pendant l'incubation, ou rien avant le comité
    (`docs/evaluation-instruments-ia.md`).
 
+### Tes réponses, le 8 octobre 2026
+
+1. **La catégorie des plugins** : « tu peux reconnaître les VST […] par le nom, avec des suggestions à accepter pour
+   des cas durs à discerner ». Le détail est exposé avant d'être écrit.
+2. **La CI** : « oui ». Fait : clang-format depuis PyPI (`eaf2a71`), `--verify-voix` sur le job Windows (`2535573`),
+   198 sur 198 sur le runner en 9 min, chacun essayé d'abord sur une branche puis poussé après le vert.
+3. **Magenta RealTime 2** : « doit être intégré […] un outil fou pour mon projet […] on l'intégrera en incubation ».
+   Précision : sa carte le donne en temps réel sur Apple Silicon, pas seulement sur Mac ; sur un GPU NVIDIA hors
+   temps réel ; le CPU n'y est pas mentionné.
+
 ## 15. À essayer, dans l'ordre
 
 Sur `main`, Release recompilé par `scripts/build.cmd`. Les poids sont déjà sur ta machine.

@@ -200,9 +200,10 @@ travaille avec un dossier de réglages de la machine à elle (`<dossier>/reglage
 | Une note tenue coupée quand la tête est déplacée pendant la lecture | S23 | indiscernable d'un tour de boucle pour le plugin du jeu |
 | Les décalages de couleur des règles du mixage ignorent `direction.amount` | S23 | **fermé S24** (`4fb3fbd`) |
 | La ligne de génération lue un geste en retard, par intermittence | S19 | l'étape attend maintenant la fin de la lecture ; la cause de la variante n'est pas trouvée |
-| La catégorie « Fx » de Valhalla : la page « Bus » ne propose pas ses réverbérations | S25 | **à trancher** (bilan S25 §14) |
-| Le job Checks de la CI bloqué sur `apt-get update` | S25 | trois fois le 7 octobre ; relancé à la main ; **à trancher** |
-| `--verify-voix` pas lancé par la CI (aucune vérification ne l'est) | S25 | **à trancher** |
+| La catégorie « Fx » de Valhalla : la page « Bus » ne propose pas ses réverbérations | S25 | **tranché le 8 octobre 2026** : reconnaître par le nom, avec des suggestions à accepter dans les cas durs ; exposé avant d'écrire |
+| Le job Checks de la CI bloqué sur `apt-get update` | S25 | **fermé S25** (`eaf2a71`) : clang-format 18.1.8 depuis PyPI |
+| `--verify-voix` pas lancé par la CI (aucune vérification ne l'est) | S25 | **fermé S25** (`2535573`) : sur le job Windows, 198 sur 198, sans modèle, ni clé, ni micro ; 9 min sur le runner |
+| Magenta RealTime 2 à intégrer | S25 | **décidé le 8 octobre 2026, pendant l'incubation** ; temps réel sur Apple Silicon seulement selon sa carte, la machine du fondateur n'a pas de GPU |
 | Le taux d'erreur de la voix sur ta voix | S25 | **phase d'essais après la S26** : le jeu d'essai est en voix de synthèse (10,2 %) |
 | Un micro absent ou refusé par Windows, le micro d'un casque Bluetooth ouvert | S25 | jamais éprouvés par une vérification |
 | L'écran « À propos » doit citer NVIDIA (poids CC-BY-4.0 de Parakeet) | S25 | S26 |
