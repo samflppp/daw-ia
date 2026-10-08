@@ -19,11 +19,16 @@ constexpr int idleCheckMs = 30000;
 constexpr int acceptTimeoutMs = 30000;
 constexpr const char* modelFolder = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8";
 
+// Where the service downloads the weights, the same folder as parakeet.py:
+// %LOCALAPPDATA% on Windows, the only product target; ~/.cache elsewhere.
 juce::File modelsFolder()
 {
-    return juce::File::getSpecialLocation(juce::File::windowsLocalAppData)
-        .getChildFile("DAW IA")
-        .getChildFile("models");
+#if JUCE_WINDOWS
+    const auto root = juce::File::getSpecialLocation(juce::File::windowsLocalAppData);
+#else
+    const auto root = juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile(".cache");
+#endif
+    return root.getChildFile("DAW IA").getChildFile("models");
 }
 
 // The samples as 16-bit little-endian PCM, in standard base64 (juce::Base64;
