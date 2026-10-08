@@ -8,8 +8,9 @@ instruments IA et ce bilan.
 **La machine n'était pas au repos** pendant les mesures : Chrome et YouTube actifs pendant une partie de la
 session. Les temps sont donnés comme mesurés, sans les corriger.
 **Tests :** domaine, 523 cas (+7) ; moteur, 123 (+2) ; Python, 77 (+14).
-**CI :** voir §12 — un commit poussé pendant qu'une CI était *annulée* (pas rouge) ; **un commit rouge sur `main`**
-(`4e532dc`, ne compilait pas sous Linux), réparé par le suivant (`66554c4`) ; le reste, chaque commit seul, après
+**CI :** voir §12 — un commit poussé pendant qu'une CI était *annulée* (pas rouge) ; **deux commits rouges sur `main`**
+(`4e532dc`, ne compilait pas sous Linux, réparé par `66554c4` ; `82b9e66`, le copilote lent à démarrer sur le runner
+de `--verify-voix`, réparé par `eb0f929`) ; le reste, chaque commit seul, après
 le vert du précédent.
 **Vérifications :**
 - `--verify-voix` (neuve) : **202 sur 202** (Debug, transcripteur rejoué) ; **208 sur 208** (Release, vrai modèle
@@ -329,6 +330,11 @@ ses premiers passages sont tombés sur de vrais défauts (§11), et le contrôle
   puis les deux commits suivants rejoués dessus (`0af8c88`, `34618cf`, contenu inchangé) et poussés chacun après le
   vert du précédent. Le script qui enchaînait les poussées s'était arrêté sur un résultat vide, sans rien pousser de
   plus.
+- **`82b9e66` est rouge sur `main`** (9 octobre 2026), à cause de la CI et non du code des bus : sur le runner, le
+  copilote de `--verify-voix` n'a pas démarré dans la minute de la première étape, et les dix-sept échecs en découlent
+  (le passage d'avant, sur `2535573`, était à 198 sur 198). Cause non prouvée ; un `uv run` à froid est la piste.
+  Réparé par `eb0f929` : `daw-services` lancé une fois avant le passage, et `daw.log` gardé avec le rapport.
+  Essayé deux fois sur une branche avant `main`. Deux commits rouges sur `main` cette semaine.
 - **Le message de `d47ada1`** surestime ce que la fenêtre réduite explique (§2.4).
 - **Un `carte-audio.json` écrit dans tes réglages** par un binaire mutant de la vérification ; déplacé dans le
   dossier de travail de la session, tes `Settings.xml` et `plugins.xml` vérifiés identiques par empreinte.
@@ -376,7 +382,15 @@ ses premiers passages sont tombés sur de vrais défauts (§11), et le contrôle
 ### Tes réponses, le 8 octobre 2026
 
 1. **La catégorie des plugins** : « tu peux reconnaître les VST […] par le nom, avec des suggestions à accepter pour
-   des cas durs à discerner ». Le détail est exposé avant d'être écrit.
+   des cas durs à discerner ». Exposé, puis tes deux réponses : le catalogue cru avec une correction possible, et
+   construit tout de suite. Fait (`82b9e66`) : ta réponse d'abord, puis le catalogue, puis un mot sûr du nom
+   (« reverb », « verb », « delay », « echo ») lu mot à mot (« Valhalla » ne se lit jamais « hall ») ; sinon la page
+   « Bus » demande, avec ce que le nom suggère (« room », « plate », « tap »…) : **Réverbération**, **Écho**, **Ni l'un
+   ni l'autre** ; le troisième corrige aussi une proposition d'envoi (« UAD Little Labs IBP », rangé « Delay » par son
+   éditeur). Tes réponses restent sur la machine (`types-plugins.json`). Sur ton catalogue : ValhallaPlate et
+   Supermassive sont demandés (le premier avec la suggestion « réverbération ») ; « TR5 Mic Room » aussi, avec la même
+   suggestion, que tu refuseras. Domaine 528 cas (+5), `--verify-flux` 155 sur 155 (cinq étapes neuves), chacun
+   cassé une fois.
 2. **La CI** : « oui ». Fait : clang-format depuis PyPI (`eaf2a71`), `--verify-voix` sur le job Windows (`2535573`),
    198 sur 198 sur le runner en 9 min, chacun essayé d'abord sur une branche puis poussé après le vert.
 3. **Magenta RealTime 2** : « doit être intégré […] un outil fou pour mon projet […] on l'intégrera en incubation ».

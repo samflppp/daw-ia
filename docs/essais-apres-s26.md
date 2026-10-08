@@ -258,3 +258,9 @@ Sur `main`, Release recompilé par `scripts/build.cmd`. Les poids sont déjà su
 7. **Une phrase douteuse** : la raison affichée aide-t-elle à corriger ? Le mot proposé (« est-ce Charleys ? ») est-il
    le bon ?
 8. **Les instruments IA** : écoute les démos dans l'ordre de `docs/evaluation-instruments-ia.md` §2.
+
+### Ajouté le 9 octobre 2026 — la page « Bus » demande ce qu'est un plugin
+
+1. **Mets ValhallaPlate en dernier sur deux pistes**, puis « Chercher » sur la page « Bus » : la question est-elle
+   claire ? « Réverbération » : la proposition revient-elle comme une réverbération, et s'essaie-t-elle ?
+2. **Sur une proposition d'envoi qui se trompe**, « Ni l'un ni l'autre » : disparaît-elle, et ne revient-elle plus ?
