@@ -236,3 +236,25 @@ Sur `main`, Release recompilé par `scripts/build.cmd`.
    Le kit sonne-t-il ensemble à l'écoute ? Bouge les axes : le kit change-t-il dans le sens attendu ?
 8. **La page « Bus »** sur un projet où plusieurs pistes portent ta réverbération : la proposition est-elle juste,
    et la phrase sur le son sec, si elle vient ?
+
+## S25 — diriger le DAW à la voix
+
+### À essayer, dans l'ordre
+
+Sur `main`, Release recompilé par `scripts/build.cmd`. Les poids sont déjà sur ta machine.
+
+1. **Tiens Ctrl droit et dis « Baisse la caisse claire de trois décibels »** sur un projet qui a une caisse claire.
+   La phrase arrive-t-elle juste ? Le délai de 1,5 s se lit-il, et laisse-t-il le temps de lire ?
+2. **Tes phrases de tous les jours**, avec tes mots anglais et tes noms de pistes (« mets un compresseur sur la
+   808 », « passe en fa dièse mineur à 140 », « duplique le pattern trois »). Combien partent justes ? Combien
+   attendent alors qu'elles étaient justes ? Si trop attendent, le seuil de 0,6 descend.
+3. **Enregistre le jeu d'essai avec ta voix** (`services/tests/voix/phrases.tsv`, un fichier WAV 16 kHz mono par
+   phrase, même nom) : `voix_essai.py record` puis `report` donnent ton vrai taux d'erreur.
+4. **Parle pendant que le morceau joue**, sur les haut-parleurs puis au casque. La baisse de 20 dB gêne-t-elle ?
+   Suffit-elle sur les haut-parleurs ?
+5. **Avec tes AirPods sur les oreilles**, parle : le son des AirPods doit rester le même pendant que le micro de
+   l'ordinateur écoute. Choisis ensuite le micro des AirPods dans F12 pour entendre ce que l'avertissement annonce.
+6. **« Supprime la piste guitare » dite** : la confirmation est-elle de trop, ou bienvenue ?
+7. **Une phrase douteuse** : la raison affichée aide-t-elle à corriger ? Le mot proposé (« est-ce Charleys ? ») est-il
+   le bon ?
+8. **Les instruments IA** : écoute les démos dans l'ordre de `docs/evaluation-instruments-ia.md` §2.

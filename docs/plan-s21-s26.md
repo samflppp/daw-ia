@@ -271,6 +271,10 @@ démonstration.
 - Où la clé est rangée sur la machine (jamais dans un fichier du dépôt), et comment elle est demandée.
 - Ce qu'un plantage rattrapé fait ensuite (sauvegarde, message, relance).
 
+**Ajouté par la S25 (8 octobre 2026).** Les téléchargements au premier usage sont listés au bilan S25 §3.3 (la voix :
+sherpa-onnx et 487 Mo de poids, sans PyTorch ; les stems : PyTorch et HTDemucs). Les poids de Parakeet sont sous
+CC-BY-4.0 : l'application doit citer NVIDIA (un écran « À propos » ou équivalent).
+
 ## Hors des 26 semaines
 
 Noté comme tel, pour qu'aucun brief ne le prenne sans une décision du fondateur :

@@ -226,7 +226,14 @@ dans ce fichier : c'est dit à chaque fois, et rien n'est rouvert tant qu'une se
     donc une brique de reconnaissance vocale avant lui, locale si l'on veut tenir « inférence locale, coût
     marginal nul » ; Laya, lui, classerait la phrase transcrite. Aucune inférence sur le thread audio, et le
     micro du push-to-talk ne passe pas par le moteur.
-  **Prise en S25** (`docs/plan-s21-s26.md`).
+  **Prise en S25** (`docs/plan-s21-s26.md`) : Parakeet v3 en local, ni Jev ni Laya (bilan S25).
+  **Restent pour plus tard** (notés le 7 octobre 2026, non construits) :
+  - *la phrase qui se forme pendant qu'on parle* : il faudrait un modèle qui transcrit au fil de la parole
+    (Kyutai stt-1b-en_fr, ou un modèle français de sherpa-onnx en flux), ou redécoder toutes les secondes, ce
+    qu'un i5 sans carte graphique ne fait pas sans risque pour le son pendant la lecture ;
+  - *la voie distante en crédits* (Voxtral Mini Transcribe de Mistral, ou un autre service) derrière la même
+    interface, la voix quittant la machine dite à l'écran ;
+  - *Laya pour classer la phrase transcrite*, si le routeur d'intention de l'incubation le demande.
 - **Des instruments IA** (vu chez ACE Studio, « AI Instruments » : des interprétations d'instruments réalistes,
   sans télécharger de banques de samples). Un instrument dont le son est rendu par un modèle à partir des notes
   écrites, au lieu d'un synthé ou d'un sampler. **Ce n'est pas la génération d'un morceau fini, écartée plus haut**

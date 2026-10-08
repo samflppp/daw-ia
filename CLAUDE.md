@@ -27,7 +27,10 @@ mesuré sur la carte ; les effets posés, déplacés (`plugin.move`) et contourn
 (F3), le routage réel en graphe calculé depuis `ProjectState`, le son à chaque endroit par des prises dans chaque
 chaîne, l'avant et l'après d'un effet, les gestes du graphe, l'écoute seule d'un état, la proposition du mixage vue
 dans le graphe ; le kit choisi par des règles dans les samples de la personne, mesurés une fois sur la machine
-(page « Kit ») ; les bus intelligents, essayés à blanc et gardés en un groupe (page « Bus »). Plan des six dernières semaines (`docs/plan-s21-s26.md`) :
+(page « Kit ») ; les bus intelligents, essayés à blanc et gardés en un groupe (page « Bus »). S25 : on dirige le DAW à la voix — Ctrl droit
+tenu (ou « Parler »), le micro de l'ordinateur ouvert pendant l'appui seulement, le morceau baissé de 20 dB, Parakeet v3
+en local transcrit, la phrase s'affiche dans le champ du copilote : sûre, elle part après 1,5 s qu'une touche retient ;
+douteuse, elle attend Entrée et ne fait rien ; dite, elle est gardée comme telle dans le journal. Plan des six dernières semaines (`docs/plan-s21-s26.md`) :
 S21 solidité (lecture muette d'abord) et fin de l'ergonomie ; S22 séparateur de stems et direction par
 références ; S23 jouer au clavier MIDI et au clavier AZERTY ; S24 le kit et le mixer ; S25 le DAW à la voix ;
 S26 le prototype emballé. Le piano-roll reste jusqu'à la phase d'essais, après la S26 ; le fine-tune pendant
@@ -52,6 +55,7 @@ l'incubation. Plus aucun verbe ajouté au domaine sans une raison de démonstrat
 | Le clavier de l'ordinateur se lit par scan code (Raw Input, `RIDEV_INPUTSINK`, sur un fil à lui), disposition de FL ; avec Ctrl, Alt ou Windows, aucune touche ne joue | S23 | une lettre change de place entre AZERTY et QWERTY, la place non |
 | Le flux audio est calculé depuis `ProjectState` (`flux::graphOf`), sa disposition et sa vue restent à l'écran ; le son s'y lit par des prises de la projection dans chaque chaîne (`FluxTapPlugin`), armées seulement quand leur nœud est à l'écran, jamais un verrou ni une allocation sur le fil audio | S24 | un graphe qui montre le vrai routage, jamais une illustration ; une prise posée seulement à l'ouverture rebâtirait le graphe du moteur |
 | Le kit est choisi par des règles sur des mesures locales (`domain::kit`), sans modèle ; l'index des samples vit sur la machine, jamais dans le projet | S24 | les contraintes (808 accordée, grave libre, couleur commune) se mesurent et se vérifient ; décidé le 6 octobre 2026 |
+| Le push-to-talk : Parakeet TDT 0.6B v3 en local dans un processus Python à lui (`daw-services voix`), le micro hors du moteur et ouvert seulement pendant l'appui, jamais celui d'un casque Bluetooth sans le dire ; Ctrl droit lu par sa place ; une phrase douteuse n'agit jamais, une sûre part après 1,5 s ; ce qui a été entendu dans `Provenance.context`, jamais le son | S25 | décidé le 7 octobre 2026 ; une phrase mal comprise ne déclenche rien, le journal distingue dit et tapé sans changer l'enveloppe |
 | Windows seule cible | S1 (annoncé), acté S5 | support Linux/Ubuntu reporté post-MVP ; `setup-ubuntu.sh` reste pour la CI, jamais lancé en cible produit |
 
 Rouvrir une de ces lignes veut dire que quelque chose de nouveau la contredit réellement — c'est couvert
@@ -115,7 +119,7 @@ Mécanismes :
 
 ## 5. Où trouver quoi
 
-- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S24 au 07/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
+- **Bilans hebdomadaires** : `docs/bilan-sN.md` (S1 à S25 au 08/10/2026, plus `bilan-s18bis.md`), un par semaine, plus
   `docs/bilan-s7bis.md`. Chaque bilan documente les écarts à l'acquis, les tests cassés une fois, et le
   reste à faire.
 - **Plan des semaines S21 à S26** : `docs/plan-s21-s26.md` — base des briefs, pas un brief.
@@ -140,7 +144,10 @@ Mécanismes :
   de la CI), `--verify-jeu` (jouer et enregistrer par une entrée simulée, latence comprise), `--verify-audio` (la fenêtre
 « Audio » sur la carte de la machine : l'essai, le tampon relu au moteur, la latence), `--verify-flux` (les effets de
 la tranche, le flux audio, ses gestes, l'écoute seule, la proposition du mixage, le coût des prises, les bus
-intelligents), `--verify-kit` (le kit sur une bibliothèque construite, l'index de 10 000 fichiers). `--tampon N` et
+intelligents), `--verify-kit` (le kit sur une bibliothèque construite, l'index de 10 000 fichiers), `--verify-voix` (le push-to-talk du
+micro au projet : des fichiers du jeu d'essai à la place du micro, le transcripteur rejoué, un copilote qui répond par
+une table ; `--voix-transcripteur parakeet` prend le vrai modèle, `--voix-micro-reel` ouvre le vrai micro et compare la
+sortie). `--micro-ouvert` garde le micro ouvert toute une vérification (pour `--verify-lecture`). `--tampon N` et
 `--pilote partage|basse-latence|exclusif` ouvrent la carte ainsi, en vérification seulement. Toute vérification
 travaille avec un dossier de réglages de la machine à elle (`<dossier>/reglages-machine`, copie de `Settings.xml` et
 `plugins.xml`) : ni la carte, ni l'index des samples de la personne ne sont réécrits. `--sans-jeu` retire le
@@ -182,15 +189,22 @@ travaille avec un dossier de réglages de la machine à elle (`<dossier>/reglage
 | `--verify-lecture` avec le jeu : à 0 sur 75 ? | S23 | **fermé S24** : 0 sur 75 avec et sans `--sans-jeu`, et sur le code final de la S24, prises du flux comprises |
 | La fenêtre « Audio » (pilote, tampon, latence) | S23 | **fermé S24** (F12, conseil mesuré) |
 | Le mode exclusif décroche sur la Realtek du fondateur | S24 | une quarantaine de décrochages en 3 s à chaque tampon, au pire 75 ms ; le conseil reste le partagé ; `--verify-lecture` en exclusif 256 : 1 sur 75 |
-| Le repli de la carte sur « Windows Audio » partagé | S24 | jamais éprouvé : aucune vérification ne perd une carte en mode exclusif |
-| `scripts/verify-quit.ps1` utilise les réglages de la personne | S24 | il ne passe pas par `--verify` ni par son dossier de réglages |
+| Le repli de la carte sur « Windows Audio » partagé | S24 | **fermé S25** : `--verify-audio` perd une carte en exclusif (simulé) et se replie, puis revient |
+| `scripts/verify-quit.ps1` utilise les réglages de la personne | S24 | **fermé S25** (`--reglages`) |
 | Les prises du flux décalaient le relevé de `--verify-lecture` d'environ 50 ms | S24 | le relevé se lit maintenant par position (0 sur 75) ; la cause du décalage n'est pas trouvée |
-| « F3 rouvre la fenêtre » dans `--verify-flux` | S24 | deux fois sur une dizaine : la fenêtre dessinée, pas vue affichée en 3 s ; cause non trouvée |
+| « F3 rouvre la fenêtre » dans `--verify-flux` | S24 | **expliqué S25** : la fenêtre principale réduite pendant que Chrome était devant ; la vérification le dit (« passage non probant à l'écran ») |
 | `MeterTests`, « fader -6 dB », intermittent | S24 | 1 fois sur 4 ; probablement la phase de 4OSC, non prouvé |
-| La contrainte de couleur du kit sur une petite bibliothèque | S24 | à 0,75, quatre kicks laissaient le kit à trois éléments ; **à trancher** (bilan S24 §6.4) |
-| La réverbération par envoi (bus intelligents) non éprouvée au rendu | S24 | aucune réverbération sur une machine de vérification ; **à trancher** (bilan S24 §7.3) |
+| La contrainte de couleur du kit sur une petite bibliothèque | S24 | **fermé S25** : sous dix samples, l'élément le plus proche « hors couleur », son écart dit |
+| La réverbération par envoi (bus intelligents) non éprouvée au rendu | S24 | **fermé S25** : test `audio` avec un VST3 donné ; la queue au même niveau, le son sec ajouté par l'envoi mesuré (+7,2 dB) |
 | 4OSC garde une voix au-delà de 32 (voix volée, relâché pendant la coupure) | S23 | défaut de Tracktion prouvé au rendu ; non contourné |
 | Une note tenue coupée quand la tête est déplacée pendant la lecture | S23 | indiscernable d'un tour de boucle pour le plugin du jeu |
 | Les décalages de couleur des règles du mixage ignorent `direction.amount` | S23 | **fermé S24** (`4fb3fbd`) |
 | La ligne de génération lue un geste en retard, par intermittence | S19 | l'étape attend maintenant la fin de la lecture ; la cause de la variante n'est pas trouvée |
+| La catégorie « Fx » de Valhalla : la page « Bus » ne propose pas ses réverbérations | S25 | **à trancher** (bilan S25 §14) |
+| Le job Checks de la CI bloqué sur `apt-get update` | S25 | trois fois le 7 octobre ; relancé à la main ; **à trancher** |
+| `--verify-voix` pas lancé par la CI (aucune vérification ne l'est) | S25 | **à trancher** |
+| Le taux d'erreur de la voix sur ta voix | S25 | **phase d'essais après la S26** : le jeu d'essai est en voix de synthèse (10,2 %) |
+| Un micro absent ou refusé par Windows, le micro d'un casque Bluetooth ouvert | S25 | jamais éprouvés par une vérification |
+| L'écran « À propos » doit citer NVIDIA (poids CC-BY-4.0 de Parakeet) | S25 | S26 |
+| `--verify` complet à 672 sur 675 (étapes 58 et 60, vu-mètres muets au premier tour de boucle) | S25 | deux fois de suite en Release ; bissection commencée à `a782ac5`, pas finie ; cause non trouvée |
 | Support Ubuntu en cible produit | reporté S1/S5 | scripts gardés pour la CI seulement |
