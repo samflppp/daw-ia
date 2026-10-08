@@ -137,9 +137,14 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0
         if: runner.os == 'Windows'
 
+      # Once before the run: the copilot is started by `uv run`, and a cold
+      # first `uv run` on the runner once took more than the run's minute
+      # (8 October 2026).
       - name: Services environment (Windows)
         if: runner.os == 'Windows'
-        run: uv sync --locked --project services
+        run: |
+          uv sync --locked --project services
+          uv run --project services daw-services --help
 
       - name: --verify-voix (Windows)
         if: runner.os == 'Windows'
@@ -157,10 +162,21 @@ jobs:
           Get-Content $report -Encoding utf8
           if (-not (Select-String -Path $report -Pattern " 0 en échec" -Quiet -Encoding utf8)) { throw "--verify-voix failed" }
 
+      # One folder for the artifact: the report and the application's log.
+      - name: --verify-voix log
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:APPDATA "DAW IA/daw.log"
+          $folder = Join-Path $env:RUNNER_TEMP "verify-voix/verif"
+          if ((Test-Path $log) -and (Test-Path $folder)) { Copy-Item $log $folder }
+
       - name: --verify-voix report
         if: always() && runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: verify-voix
-          path: ${{ runner.temp }}/verify-voix/verif/rapport.md
+          path: |
+            ${{ runner.temp }}/verify-voix/verif/rapport.md
+            ${{ runner.temp }}/verify-voix/verif/daw.log
           if-no-files-found: ignore
