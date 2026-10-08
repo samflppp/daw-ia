@@ -29,6 +29,7 @@ add_library(daw_domain STATIC
     src/sound/Pitch.cpp
     src/kit/Features.cpp
     src/kit/Choice.cpp
+    src/buses/Kind.cpp
     src/buses/Shared.cpp
     src/direction/Reading.cpp
     src/direction/Direction.cpp

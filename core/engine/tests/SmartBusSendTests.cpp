@@ -177,7 +177,10 @@ TEST_CASE("Six tracks carrying the same reverb: one on a bus by sends, its tail 
     REQUIRE(projector.missingPlugins().empty());
 
     // The proposal, the plugin named taken for the reverb it is.
-    const auto proposals = buses::propose(state, [](const PluginRef&) { return std::string{"reverb"}; });
+    const auto proposals = buses::propose(
+        state,
+        [](const PluginRef&)
+        { return buses::Recognition{buses::Kind::reverb, buses::KnownBy::catalogue, std::nullopt}; });
     REQUIRE(proposals.size() == 1);
     const auto& shared = proposals.front();
     CHECK(shared.way == buses::Way::send);

@@ -155,32 +155,76 @@ void BusSession::timerCallback()
     sendChangeMessage();
 }
 
-std::string BusSession::categoryOf(const domain::PluginRef& ref) const
+juce::File BusSession::answersFile() const
 {
-    if (wiring_.catalogue == nullptr)
-        return {};
-    const auto found = wiring_.catalogue->find(ref);
-    if (!found)
-        return {};
-    if (found->isInstrument)
-        return "instrument";
-    const auto category = found->category.toLowerCase();
-    if (category.contains("reverb"))
-        return "reverb";
-    if (category.contains("delay") || category.contains("echo"))
-        return "delay";
-    return category.toStdString();
+    return wiring_.settings.getChildFile("types-plugins.json");
+}
+
+std::string BusSession::answerKey(const domain::PluginRef& ref)
+{
+    return ref.format + ":" + ref.identifier;
+}
+
+std::optional<domain::buses::Kind> BusSession::answerFor(const domain::PluginRef& ref) const
+{
+    if (wiring_.settings == juce::File{})
+        return std::nullopt;
+    const auto kept =
+        juce::JSON::parse(answersFile()).getProperty(juce::String::fromUTF8(answerKey(ref).c_str()), {});
+    return domain::buses::kindFromString(kept.toString().toStdString());
+}
+
+domain::buses::Recognition BusSession::recognitionOf(const domain::PluginRef& ref) const
+{
+    juce::String category;
+    bool instrument = false;
+    if (wiring_.catalogue != nullptr)
+        if (const auto found = wiring_.catalogue->find(ref); found)
+        {
+            category = found->category;
+            instrument = found->isInstrument;
+        }
+    return domain::buses::recognise(ref.name, category.toStdString(), instrument, answerFor(ref));
 }
 
 void BusSession::propose()
 {
     clearTry();
     proposals_ = domain::buses::propose(wiring_.state,
-                                        [this](const domain::PluginRef& ref) { return categoryOf(ref); });
+                                        [this](const domain::PluginRef& ref) { return recognitionOf(ref); });
+    const auto asked = static_cast<std::size_t>(std::count_if(
+        proposals_.begin(), proposals_.end(), [](const auto& shared) { return shared.toAsk(); }));
     setStage(Stage::idle,
-             proposals_.empty() ? std::string{"Aucun effet partagé à proposer."}
-                                : std::to_string(proposals_.size()) + " proposition" +
-                                      (proposals_.size() > 1 ? "s" : "") + " de bus.");
+             proposals_.empty()
+                 ? std::string{"Aucun effet partagé à proposer."}
+                 : std::to_string(proposals_.size()) + " proposition" + (proposals_.size() > 1 ? "s" : "") +
+                       " de bus" +
+                       (asked == 0 ? std::string{"."} : ", dont " + std::to_string(asked) + " à dire."));
+}
+
+void BusSession::answer(std::size_t proposal, domain::buses::Kind kind)
+{
+    if (stage_ == Stage::trying || proposal >= proposals_.size() ||
+        proposals_[proposal].way != domain::buses::Way::send || wiring_.settings == juce::File{})
+        return;
+    const auto& ref = proposals_[proposal].plugin.ref;
+
+    // Kept on this machine, never in the project: what a plugin is does not
+    // change from one song to the next.
+    auto kept = juce::JSON::parse(answersFile());
+    auto* object = kept.getDynamicObject();
+    if (object == nullptr)
+    {
+        kept = juce::var{new juce::DynamicObject()};
+        object = kept.getDynamicObject();
+    }
+    object->setProperty(juce::String::fromUTF8(answerKey(ref).c_str()),
+                        juce::String{domain::buses::toString(kind)});
+    static_cast<void>(wiring_.settings.createDirectory());
+    static_cast<void>(answersFile().replaceWithText(juce::JSON::toString(kept)));
+    juce::Logger::writeToLog(juce::String::fromUTF8(
+        ("bus: « " + ref.name + " » dit « " + domain::buses::toString(kind) + " »").c_str()));
+    propose();
 }
 
 void BusSession::clearTry()
@@ -202,7 +246,7 @@ void BusSession::clearTry()
 
 void BusSession::tryOut(std::size_t proposal)
 {
-    if (stage_ == Stage::trying || proposal >= proposals_.size())
+    if (stage_ == Stage::trying || proposal >= proposals_.size() || proposals_[proposal].toAsk())
         return;
     join();
     clearTry();

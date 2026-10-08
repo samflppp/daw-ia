@@ -52,8 +52,13 @@ PluginInstance reverb(double mix, char digest)
     return plugin;
 }
 
-const buses::CategoryOf category = [](const PluginRef& ref)
-{ return ref.name == "Room" ? "reverb" : "other"; };
+buses::Recognition known(buses::Kind kind)
+{
+    return {kind, buses::KnownBy::catalogue, std::nullopt};
+}
+
+const buses::Recognise category = [](const PluginRef& ref)
+{ return known(ref.name == "Room" ? buses::Kind::reverb : buses::Kind::other); };
 
 struct Session
 {
@@ -120,9 +125,9 @@ TEST_CASE("The same reverb by a send, a close one said, one followed by another 
     MESSAGE(proposals.front().sentence);
     CHECK(proposals.front().sentence.find("état interne différent") != std::string::npos);
 
-    // Without a catalogue that says « reverb », nothing.
-    CHECK(
-        buses::propose(session.harness.state, [](const PluginRef&) { return std::string{"other"}; }).empty());
+    // Filed as something else, nothing.
+    CHECK(buses::propose(session.harness.state, [](const PluginRef&) { return known(buses::Kind::other); })
+              .empty());
 }
 
 TEST_CASE(

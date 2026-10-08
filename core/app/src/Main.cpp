@@ -971,7 +971,8 @@ private:
                                &engineHost_->catalogue(),
                                [this] { return contentStore_.get(); },
                                clock_.get(),
-                               &engineHost_->engine().getDeviceManager().deviceManager});
+                               &engineHost_->engine().getDeviceManager().deviceManager,
+                               engineHost_->settingsFolder()});
 
         // The kit (S24): its index of the samples lives with this machine's
         // settings — a verification's are thrown away.

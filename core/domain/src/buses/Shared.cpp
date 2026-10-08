@@ -33,14 +33,21 @@ bool sameParameters(const PluginInstance& a, const PluginInstance& b, double tol
 
 // The last plugin of a channel, when it can be shared: on, and not its
 // instrument (an instrument leads a chain, an effect follows it).
-const PluginInstance* lastEffect(const Track& track, const CategoryOf& categoryOf)
+const PluginInstance* lastEffect(const Track& track, const Recognise& recognise)
 {
     if (track.plugins.empty() || track.plugins.back().bypassed)
         return nullptr;
     const auto& last = track.plugins.back();
-    if (last.ref.format != PluginRef::internalFormat && categoryOf && categoryOf(last.ref) == "instrument")
+    if (last.ref.format != PluginRef::internalFormat && recognise &&
+        recognise(last.ref).kind == Kind::instrument)
         return nullptr;
     return &last;
+}
+
+// What a send's sentence calls the effect.
+std::string called(std::optional<Kind> kind)
+{
+    return kind == Kind::delay ? "Le même écho" : "La même réverbération";
 }
 
 std::string names(const ProjectState& state, const std::vector<TrackId>& tracks)
@@ -59,7 +66,7 @@ std::string names(const ProjectState& state, const std::vector<TrackId>& tracks)
 
 } // namespace
 
-std::vector<Shared> propose(const ProjectState& state, const CategoryOf& categoryOf)
+std::vector<Shared> propose(const ProjectState& state, const Recognise& recognise)
 {
     std::vector<Shared> proposals;
     std::vector<bool> taken(state.tracks().size(), false);
@@ -69,19 +76,21 @@ std::vector<Shared> propose(const ProjectState& state, const CategoryOf& categor
     {
         if (taken[first])
             continue;
-        const auto* effect = lastEffect(tracks[first], categoryOf);
+        const auto* effect = lastEffect(tracks[first], recognise);
         if (effect == nullptr)
             continue;
 
         const bool internal = effect->ref.format == PluginRef::internalFormat;
         std::optional<Way> way;
+        Recognition recognised{};
         if (internal &&
             (effect->ref.identifier == internal::equaliser || effect->ref.identifier == internal::compressor))
             way = Way::group;
-        else if (!internal && categoryOf)
+        else if (!internal && recognise)
         {
-            const auto category = categoryOf(effect->ref);
-            if (category == "reverb" || category == "delay")
+            recognised = recognise(effect->ref);
+            if (recognised.kind == Kind::reverb || recognised.kind == Kind::delay ||
+                recognised.by == KnownBy::unknown)
                 way = Way::send;
         }
         if (!way)
@@ -96,12 +105,17 @@ std::vector<Shared> propose(const ProjectState& state, const CategoryOf& categor
         shared.tracks.push_back(tracks[first].id);
         shared.removed.push_back(effect->id);
         shared.destination = tracks[first].output;
+        if (*way == Way::send)
+        {
+            shared.by = recognised.by;
+            shared.suggested = recognised.suggested;
+        }
 
         for (std::size_t other = first + 1; other < tracks.size(); ++other)
         {
             if (taken[other])
                 continue;
-            const auto* candidate = lastEffect(tracks[other], categoryOf);
+            const auto* candidate = lastEffect(tracks[other], recognise);
             if (candidate == nullptr || !sameRef(candidate->ref, effect->ref))
                 continue;
             if (*way == Way::group)
@@ -131,11 +145,22 @@ std::vector<Shared> propose(const ProjectState& state, const CategoryOf& categor
 
         const auto who = names(state, shared.tracks);
         const auto count = std::to_string(shared.tracks.size());
-        if (shared.way == Way::send)
+        if (shared.toAsk())
             shared.sentence =
-                "La même " + std::string{categoryOf(effect->ref) == "delay" ? "écho" : "réverbération"} +
-                " (" + effect->ref.name + ") sur " + count + " pistes, " + who +
-                " : un bus d'envoi la porte une fois, chaque piste y envoie à 0 dB." +
+                effect->ref.name + ", en dernier sur " + count + " pistes, " + who + " : " +
+                (shared.suggested == Kind::reverb  ? std::string{"une réverbération, d'après son nom ?"}
+                 : shared.suggested == Kind::delay ? std::string{"un écho, d'après son nom ?"}
+                                                   : std::string{"une réverbération, un écho, ou ni l'un "
+                                                                 "ni l'autre ?"}) +
+                " Dites-le : s'il en est un, un bus d'envoi le portera une fois.";
+        else if (shared.way == Way::send)
+            shared.sentence =
+                called(recognised.kind) + " (" + effect->ref.name + ") sur " + count + " pistes, " + who +
+                " : un bus d'envoi " + (recognised.kind == Kind::delay ? "le" : "la") +
+                " porte une fois, chaque piste y envoie à 0 dB." +
+                (shared.by != KnownBy::name       ? ""
+                 : recognised.kind == Kind::delay ? " Reconnu par son nom."
+                                                  : " Reconnue par son nom.") +
                 (shared.certainty == Certainty::close ? " Réglages proches, état interne différent : "
                                                         "l'écoute tranche."
                                                       : "");

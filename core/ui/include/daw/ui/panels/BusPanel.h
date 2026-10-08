@@ -14,7 +14,8 @@ namespace daw::ui
 // The smart buses window (S24): the effects the project carries several
 // times, each proposal said in a sentence; one tried on a copy, its before
 // and after measured and listened to at equal loudness — and seen in the
-// flux —, kept in one group or refused.
+// flux —, kept in one group or refused. A plugin hard to tell is a question,
+// answered by three buttons; a send proposal is corrected by the third.
 class BusPanel final : public juce::Component, private juce::ChangeListener
 {
 public:
@@ -35,6 +36,8 @@ public:
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void refresh();
+    void enableForChoice();
+    void answer(domain::buses::Kind kind);
 
     const Tokens& tokens_;
     DawLookAndFeel& lookAndFeel_;
@@ -49,6 +52,11 @@ private:
     juce::TextButton stop_;
     juce::TextButton keep_;
     juce::TextButton refuse_;
+
+    // A plugin hard to tell, or a proposal to correct (8 October 2026).
+    juce::TextButton reverb_;
+    juce::TextButton delay_;
+    juce::TextButton neither_;
     juce::Label status_;
 };
 

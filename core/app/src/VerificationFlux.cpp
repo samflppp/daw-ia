@@ -12,13 +12,16 @@
 #include "daw/engine/FluxTaps.h"
 #include "daw/engine/MeterTap.h"
 #include "daw/engine/Rendering.h"
+#include "daw/ui/panels/BusPanel.h"
 #include "daw/ui/panels/FluxPanel.h"
 #include "daw/ui/panels/InsertSlots.h"
 #include "daw/ui/panels/MixerPanel.h"
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -80,6 +83,8 @@ struct Verification::FluxRun
     float sourceHeardDb{-100.0f};
     std::vector<domain::TrackId> grouped;
     std::string busBefore;
+    std::size_t plateDepth{0};
+    std::string plateBefore;
     double costSince{0.0};
     double armedShare{0.0};
     float sumHeardDb{-100.0f};
@@ -1118,6 +1123,183 @@ void Verification::addFluxWindow(const std::shared_ptr<FluxRun>& run)
             const auto before = domain::json::write(state_.toValue());
             busSession_->refuse();
             check(domain::json::write(state_.toValue()) == before, "rien n'est écrit");
+        });
+
+    // --- a plugin hard to tell (8 October 2026): asked, answered, corrected
+
+    const auto plateIndex = [this]() -> std::optional<std::size_t>
+    {
+        if (busSession_ == nullptr)
+            return std::nullopt;
+        const auto& proposals = busSession_->proposals();
+        for (std::size_t index = 0; index < proposals.size(); ++index)
+            if (proposals[index].plugin.ref.name == "ValhallaPlate")
+                return index;
+        return std::nullopt;
+    };
+    // The « Bus » page itself: another page has a « Chercher » and an
+    // « Essayer à blanc » too.
+    const auto busPanel = [this]() -> juce::Component*
+    {
+        std::function<juce::Component*(juce::Component&)> find =
+            [&find](juce::Component& root) -> juce::Component*
+        {
+            if (dynamic_cast<ui::BusPanel*>(&root) != nullptr)
+                return &root;
+            for (auto* child : root.getChildren())
+                if (auto* found = find(*child); found != nullptr)
+                    return found;
+            return nullptr;
+        };
+        return find(view_);
+    };
+    const auto choose = [busPanel](std::size_t index)
+    {
+        auto* panel = busPanel();
+        if (panel == nullptr)
+            return false;
+        for (auto* child : panel->getChildren())
+            if (auto* combo = dynamic_cast<juce::ComboBox*>(child); combo != nullptr)
+            {
+                combo->setSelectedItemIndex(static_cast<int>(index), juce::sendNotificationSync);
+                return true;
+            }
+        return false;
+    };
+    const auto enabled = [this, busPanel](const char* label)
+    {
+        auto* panel = busPanel();
+        const auto* found = panel != nullptr ? button(*panel, juce::String::fromUTF8(label)) : nullptr;
+        return found != nullptr && found->isEnabled();
+    };
+    const auto pressOnBus = [this, busPanel](const char* label)
+    {
+        auto* panel = busPanel();
+        auto* found = panel != nullptr ? button(*panel, juce::String::fromUTF8(label)) : nullptr;
+        check(found != nullptr, std::string{"« "} + label + " » sur la page « Bus »");
+        if (found != nullptr && found->onClick)
+            found->onClick();
+    };
+    // The page reads the proposals on a change message: it shows them a
+    // moment after the session has them.
+    const auto panelShows = [this, busPanel]
+    {
+        auto* panel = busPanel();
+        if (panel == nullptr || busSession_ == nullptr)
+            return false;
+        for (auto* child : panel->getChildren())
+            if (const auto* combo = dynamic_cast<juce::ComboBox*>(child); combo != nullptr)
+                return static_cast<std::size_t>(combo->getNumItems()) == busSession_->proposals().size();
+        return false;
+    };
+    const auto answers = [this]
+    { return folder_.getChildFile("reglages-machine").getChildFile("types-plugins.json"); };
+
+    add(
+        "deux pistes sous ValhallaPlate, rangé « Fx », absent de cette machine",
+        [this, run, answers, pressOnBus]
+        {
+            static_cast<void>(answers().deleteFile());
+            run->plateDepth = depth();
+            for (const auto* name : {"Plate 1", "Plate 2"})
+            {
+                const auto id = domain::TrackId::generate();
+                check(bus_.execute(std::make_unique<domain::AddTrack>(id, name)).ok(), name);
+                domain::PluginInstance plate{};
+                plate.id = domain::PluginId::generate();
+                plate.ref = domain::PluginRef{
+                    std::string{domain::PluginRef::vst3Format}, "verif-plate", "ValhallaPlate"};
+                check(bus_.execute(std::make_unique<domain::InsertPlugin>(id, plate, 0)).ok(),
+                      std::string{name} + " porte ValhallaPlate");
+            }
+            pressOnBus("Chercher");
+        },
+        [plateIndex, panelShows] { return plateIndex().has_value() && panelShows(); },
+        10000.0);
+
+    add("une question, la réverbération suggérée par le nom ; rien ne s'essaie avant la réponse",
+        [this, plateIndex, choose, enabled]
+        {
+            const auto index = plateIndex();
+            if (!index || busSession_ == nullptr)
+                return;
+            const auto& asked = busSession_->proposals()[*index];
+            note(asked.sentence);
+            check(asked.toAsk(), "une question");
+            check(asked.suggested == domain::buses::Kind::reverb, "la réverbération suggérée");
+            check(asked.sentence.find("une réverbération, d'après son nom ?") != std::string::npos,
+                  "la phrase le demande");
+            check(choose(*index), "la question choisie dans la liste");
+            check(!enabled("Essayer à blanc"), "« Essayer à blanc » éteint");
+            check(enabled("Réverbération") && enabled("Écho") && enabled("Ni l'un ni l'autre"),
+                  "les trois réponses allumées");
+            const auto tried = busSession_->tried();
+            busSession_->tryOut(*index);
+            check(busSession_->tried() == tried && busSession_->stage() != ui::BusHost::Stage::trying,
+                  "essayer une question ne fait rien");
+        });
+
+    add(
+        "« Réverbération »",
+        [this, run, pressOnBus]
+        {
+            run->plateBefore = domain::json::write(state_.toValue());
+            pressOnBus("Réverbération");
+        },
+        [this, plateIndex, panelShows]
+        {
+            const auto index = plateIndex();
+            return index && !busSession_->proposals()[*index].toAsk() && panelShows();
+        },
+        3000.0);
+
+    add("gardée sur la machine, la proposition revient, le projet inchangé",
+        [this, run, plateIndex, answers]
+        {
+            const auto index = plateIndex();
+            check(index.has_value(), "la proposition est toujours là");
+            if (!index || busSession_ == nullptr)
+                return;
+            const auto& said = busSession_->proposals()[*index];
+            note(said.sentence);
+            check(!said.toAsk() && said.by == domain::buses::KnownBy::answer, "dite par la réponse");
+            check(said.sentence.rfind("La même réverbération (ValhallaPlate)", 0) == 0, "une réverbération");
+            check(juce::JSON::parse(answers()).getProperty("VST3:verif-plate", {}).toString() == "reverb",
+                  "la réponse dans les réglages de la machine");
+            check(domain::json::write(state_.toValue()) == run->plateBefore,
+                  "rien n'est écrit dans le projet");
+        });
+
+    add(
+        "corrigée : « Ni l'un ni l'autre »",
+        [this, plateIndex, choose, enabled, pressOnBus]
+        {
+            const auto index = plateIndex();
+            if (!index)
+                return;
+            check(choose(*index), "la proposition choisie");
+            check(enabled("Essayer à blanc") && enabled("Ni l'un ni l'autre") && !enabled("Écho"),
+                  "s'essaie, se corrige, ne se demande plus");
+            pressOnBus("Ni l'un ni l'autre");
+        },
+        [plateIndex, panelShows] { return !plateIndex().has_value() && panelShows(); },
+        3000.0);
+
+    add("la proposition s'en va, la correction gardée",
+        [plateIndex, answers, this]
+        {
+            check(!plateIndex().has_value(), "plus de proposition pour ValhallaPlate");
+            check(juce::JSON::parse(answers()).getProperty("VST3:verif-plate", {}).toString() == "other",
+                  "la correction gardée");
+        });
+
+    add("les deux pistes retirées",
+        [this, run]
+        {
+            while (depth() > run->plateDepth)
+                if (!bus_.undo().ok())
+                    break;
+            check(depth() == run->plateDepth, "défaites");
         });
 
     add("la source écoutée seule de nouveau, avant de fermer la fenêtre",

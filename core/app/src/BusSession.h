@@ -40,6 +40,10 @@ public:
         std::function<engine::ContentStore*()> store;
         const ui::TransportClock* clock{nullptr};
         juce::AudioDeviceManager* device{nullptr};
+
+        // This machine's settings: the person's answers on what a plugin is
+        // (types-plugins.json). None, no answer is kept.
+        juce::File settings;
     };
 
     explicit BusSession(Wiring wiring);
@@ -64,14 +68,17 @@ public:
     [[nodiscard]] const domain::ProjectState* proposedState() const override { return proposedState_.get(); }
     [[nodiscard]] std::vector<float> proposedSound(const ui::FluxHost::Place& place) const override;
 
+    void answer(std::size_t proposal, domain::buses::Kind kind) override;
+
     void listen(bool after) override;
     void stopListening() override;
     bool keep() override;
     void refuse() override;
 
-    // What the catalogue says a plugin is: « reverb », « delay »,
-    // « instrument », or something else.
-    [[nodiscard]] std::string categoryOf(const domain::PluginRef& ref) const;
+    // What a plugin is (domain::buses::recognise): the person's answer, the
+    // catalogue, its name.
+    [[nodiscard]] domain::buses::Recognition recognitionOf(const domain::PluginRef& ref) const;
+    [[nodiscard]] juce::File answersFile() const;
 
     // The renders of the last try, for the verification.
     [[nodiscard]] const juce::File& beforeFile() const noexcept { return beforeFile_; }
@@ -79,6 +86,8 @@ public:
 
 private:
     void timerCallback() override;
+    [[nodiscard]] std::optional<domain::buses::Kind> answerFor(const domain::PluginRef& ref) const;
+    [[nodiscard]] static std::string answerKey(const domain::PluginRef& ref);
     void setStage(Stage stage, std::string status);
     void clearTry();
     void join();

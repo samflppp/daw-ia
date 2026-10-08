@@ -70,7 +70,8 @@ add_executable(daw_domain_tests
     FluxGraphTests.cpp
     FluxPictureTests.cpp
     KitTests.cpp
-    SharedBusTests.cpp)
+    SharedBusTests.cpp
+    PluginKindTests.cpp)
 
 target_link_libraries(daw_domain_tests PRIVATE daw::domain daw::ui_workspace doctest::doctest)
 daw_set_warnings(daw_domain_tests)

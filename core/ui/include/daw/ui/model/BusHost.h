@@ -55,6 +55,11 @@ public:
     virtual void propose() = 0;
     [[nodiscard]] virtual const std::vector<domain::buses::Shared>& proposals() const = 0;
 
+    // A question answered (a plugin hard to tell), or a proposal corrected
+    // (« ni l'un ni l'autre »): kept on this machine, the proposals read again.
+    virtual void answer(std::size_t proposal, domain::buses::Kind kind) = 0;
+
+    // Never a question: it is answered first.
     virtual void tryOut(std::size_t proposal) = 0;
     [[nodiscard]] virtual std::optional<std::size_t> tried() const = 0;
     [[nodiscard]] virtual const Tried* result() const = 0;

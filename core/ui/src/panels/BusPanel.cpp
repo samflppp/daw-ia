@@ -42,6 +42,10 @@ BusPanel::BusPanel(const PanelContext& context)
     button(stop_, "Stop", [this] { buses_.stopListening(); });
     button(keep_, "Garder", [this] { static_cast<void>(buses_.keep()); });
     button(refuse_, "Refuser", [this] { buses_.refuse(); });
+    button(reverb_, "Réverbération", [this] { answer(domain::buses::Kind::reverb); });
+    button(delay_, "Écho", [this] { answer(domain::buses::Kind::delay); });
+    button(neither_, "Ni l'un ni l'autre", [this] { answer(domain::buses::Kind::other); });
+    choice_.onChange = [this] { enableForChoice(); };
     addAndMakeVisible(choice_);
     status_.setColour(juce::Label::textColourId, tokens_.colour("color.text.tertiary"));
     addAndMakeVisible(status_);
@@ -75,10 +79,32 @@ void BusPanel::refresh()
         line += " " + juce::String(juce::roundToInt(buses_.progress() * 100.0)) + " %";
     status_.setText(line, juce::dontSendNotification);
     const bool tried = buses_.stage() == BusHost::Stage::tried;
-    tryOut_.setEnabled(!proposals.empty() && buses_.stage() != BusHost::Stage::trying);
     for (auto* each : {&before_, &after_, &stop_, &keep_, &refuse_})
         each->setEnabled(tried);
+    enableForChoice();
     repaint();
+}
+
+void BusPanel::enableForChoice()
+{
+    const auto& proposals = buses_.proposals();
+    const auto index = choice_.getSelectedItemIndex();
+    const auto* chosen = index >= 0 && static_cast<std::size_t>(index) < proposals.size()
+                             ? &proposals[static_cast<std::size_t>(index)]
+                             : nullptr;
+    const bool idle = buses_.stage() != BusHost::Stage::trying;
+    const bool asked = chosen != nullptr && chosen->toAsk();
+    const bool send = chosen != nullptr && chosen->way == domain::buses::Way::send;
+    tryOut_.setEnabled(chosen != nullptr && !asked && idle);
+    reverb_.setEnabled(asked && idle);
+    delay_.setEnabled(asked && idle);
+    neither_.setEnabled(send && idle);
+}
+
+void BusPanel::answer(domain::buses::Kind kind)
+{
+    if (const auto index = choice_.getSelectedItemIndex(); index >= 0)
+        buses_.answer(static_cast<std::size_t>(index), kind);
 }
 
 std::vector<std::string> BusPanel::shown() const
@@ -113,6 +139,14 @@ void BusPanel::resized()
     {
         each->setBounds(buttons.removeFromLeft(width));
         buttons.removeFromLeft(gap);
+    }
+    area.removeFromTop(gap);
+
+    auto answers = area.removeFromTop(row);
+    for (auto* each : {&reverb_, &delay_, &neither_})
+    {
+        each->setBounds(answers.removeFromLeft(width));
+        answers.removeFromLeft(gap);
     }
     area.removeFromTop(gap);
     status_.setBounds(area.removeFromTop(row));
