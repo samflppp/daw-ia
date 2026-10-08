@@ -130,3 +130,37 @@ jobs:
       - name: Cache stats
         if: always()
         run: sccache --show-stats
+
+      # The push-to-talk from the key to the project (S25, decided on
+      # 8 October 2026): the transcriber replays the test set's text and the
+      # copilot answers from a table. No weights, no key, no microphone.
+      - uses: astral-sh/setup-uv@v10.1.0
+        if: runner.os == 'Windows'
+
+      - name: Services environment (Windows)
+        if: runner.os == 'Windows'
+        run: uv sync --locked --project services
+
+      - name: --verify-voix (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 25
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP "verify-voix"
+          New-Item -ItemType Directory -Force $root | Out-Null
+          $exe = "build/windows-msvc-release/core/app/daw_app_artefacts/Release/DAW IA.exe"
+          $arguments = "--verify-voix `"$root/verif`" --project `"$root/projet`" --layout `"$root/layout.xml`""
+          $process = Start-Process -FilePath $exe -ArgumentList $arguments -PassThru
+          if (-not $process.WaitForExit(1200000)) { $process.Kill(); throw "--verify-voix did not finish in 20 minutes" }
+          $report = Join-Path $root "verif/rapport.md"
+          if (-not (Test-Path $report)) { throw "no report: the run did not reach its end" }
+          Get-Content $report -Encoding utf8
+          if (-not (Select-String -Path $report -Pattern " 0 en échec" -Quiet -Encoding utf8)) { throw "--verify-voix failed" }
+
+      - name: --verify-voix report
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-voix
+          path: ${{ runner.temp }}/verify-voix/verif/rapport.md
+          if-no-files-found: ignore
