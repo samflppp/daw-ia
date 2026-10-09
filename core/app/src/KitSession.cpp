@@ -3,6 +3,7 @@
 #include "daw/domain/commands/SampleCommands.h"
 #include "daw/domain/commands/TrackCommands.h"
 #include "daw/domain/direction/Direction.h"
+#include "daw/domain/rights/Rights.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
@@ -181,6 +182,11 @@ domain::kit::Axes KitSession::directionAxes() const
 
 void KitSession::choose(const domain::kit::Axes& axes)
 {
+    if (!domain::rights::allows(domain::rights::Feature::kit))
+    {
+        setStage(Stage::failed, domain::rights::refusal(domain::rights::Feature::kit));
+        return;
+    }
     const auto combined = domain::direction::combine(state_.direction());
     std::optional<int> tonic;
     if (combined.key)

@@ -22,6 +22,7 @@
 // Nothing here writes the project but acceptBand(), which sends one group.
 
 #include "daw/domain/generation/Phrase.h"
+#include "daw/domain/rights/Rights.h"
 #include "daw/ui/model/PatternEditing.h"
 #include "daw/ui/model/StyleLearning.h"
 #include "daw/ui/model/StyleSource.h"
@@ -223,6 +224,12 @@ void PlaylistPanel::generateInBand()
     if (text.isEmpty())
     {
         bar_.showMessage(juce::String::fromUTF8(u8"Écris d'abord ce que tu veux entendre."));
+        return;
+    }
+    if (!domain::rights::allows(domain::rights::Feature::generation))
+    {
+        bar_.showMessage(
+            juce::String::fromUTF8(domain::rights::refusal(domain::rights::Feature::generation).c_str()));
         return;
     }
 

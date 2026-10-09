@@ -107,6 +107,10 @@ Verification::Verification(Wiring wiring)
     , realMicrophone_(wiring.realMicrophone)
 {
     exporter_ = wiring.exporter;
+    apiKey_ = wiring.apiKey;
+    keySaid_ = std::move(wiring.keySaid);
+    projectFolder_ = std::move(wiring.projectFolder);
+    direction_ = wiring.direction;
 }
 
 Verification::~Verification()
@@ -182,6 +186,12 @@ void Verification::start()
         break;
     case Run::voice:
         buildVoice();
+        break;
+    case Run::key:
+        buildKey();
+        break;
+    case Run::rights:
+        buildRights();
         break;
     }
 
@@ -1682,8 +1692,8 @@ void Verification::buildFile()
             }
             click(*file, file->getLocalBounds().getCentre());
             // Nouveau, Ouvrir, Enregistrer, Enregistrer sous, Exporter,
-            // Génération, Affichage, then À propos: the eighth.
-            chooseMenuItem(8);
+            // Génération, Affichage, Clé d'API, then À propos: the ninth.
+            chooseMenuItem(9);
         },
         [this] { return panel("about") != nullptr && panel("about")->isShowing(); },
         3000.0);

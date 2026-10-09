@@ -47,7 +47,8 @@ public:
         std::function<bool()> lightDisplay;
         std::function<void(bool light)> setLightDisplay;
 
-        // Fichier > À propos de DAW IA (S26).
+        // Fichier > Clé d'API, and À propos de DAW IA (S26).
+        std::function<void()> apiKey;
         std::function<void()> about;
 
         std::function<void()> minimise;
@@ -89,6 +90,7 @@ public:
         fluidDisplayItem,
         lightDisplayItem,
         aboutItem,
+        apiKeyItem,
     };
 
     void paint(juce::Graphics& g) override;

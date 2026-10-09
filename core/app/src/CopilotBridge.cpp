@@ -1,6 +1,7 @@
 #include "CopilotBridge.h"
 
 #include "daw/domain/copilot/Tools.h"
+#include "daw/domain/rights/Rights.h"
 #include "daw/domain/serialization/Json.h"
 #include "daw/domain/voice/Removals.h"
 #include "daw/ui/model/CopilotRequest.h"
@@ -187,6 +188,15 @@ void CopilotBridge::stop()
     connected_ = false;
 }
 
+std::string CopilotBridge::readyNote() const
+{
+    // A check answering from a table needs no key, and says nothing.
+    if (table_ != juce::File{} || !wiring_.keyPresent || wiring_.keyPresent())
+        return {};
+    return "Prêt, sans clé d'API : le copilote et le mixage par le modèle sont éteints, tout le reste "
+           "marche. Fichier > Clé d'API...";
+}
+
 void CopilotBridge::restart()
 {
     start();
@@ -274,7 +284,7 @@ void CopilotBridge::run()
 
     connection_.reset(accepted);
     connected_ = true;
-    setStatus(Status::ready, {});
+    setStatus(Status::ready, readyNote());
 
     readMessages();
 
@@ -709,7 +719,7 @@ void CopilotBridge::handleAnswer(const Value& message)
             const std::lock_guard<std::mutex> lock{mutex_};
             spoken_.reset();
         }
-        setStatus(Status::ready, {});
+        setStatus(Status::ready, readyNote());
         return;
     }
 
@@ -729,7 +739,7 @@ void CopilotBridge::handleAnswer(const Value& message)
         juce::Logger::writeToLog("copilot: " + juce::String{domain::json::write(*cost)});
     }
 
-    setStatus(Status::ready, {});
+    setStatus(Status::ready, readyNote());
 }
 
 void CopilotBridge::send(const Value& message)
@@ -831,6 +841,13 @@ void CopilotBridge::ask(std::string_view request)
 {
     if (request.empty())
         return;
+
+    // « Ai-je le droit ? », asked here and nowhere else for the copilot (S26).
+    if (!domain::rights::allows(domain::rights::Feature::copilot))
+    {
+        addLine(Line::From::failure, domain::rights::refusal(domain::rights::Feature::copilot));
+        return;
+    }
 
     if (!connected_)
     {

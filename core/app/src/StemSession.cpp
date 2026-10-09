@@ -1,5 +1,6 @@
 #include "StemSession.h"
 
+#include "daw/domain/rights/Rights.h"
 #include "daw/domain/stems/Laying.h"
 
 #include <juce_events/juce_events.h>
@@ -111,6 +112,11 @@ void StemSession::setFailure(std::string message)
 
 void StemSession::separate(domain::AudioClipId clip, Quality quality)
 {
+    if (!domain::rights::allows(domain::rights::Feature::stems))
+    {
+        setFailure(domain::rights::refusal(domain::rights::Feature::stems));
+        return;
+    }
     if (importing_)
     {
         setFailure("Une séparation est déjà en cours.");

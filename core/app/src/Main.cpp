@@ -1,4 +1,5 @@
 #include "About.h"
+#include "ApiKey.h"
 #include "AppShellView.h"
 #include "BusSession.h"
 #include "CopilotBridge.h"
@@ -99,6 +100,20 @@ public:
 
         const auto domainVersion = domain::versionString();
         juce::Logger::writeToLog("core domain " + juce::String(domainVersion.data(), domainVersion.size()));
+
+        // The API key (S26): the variable first, else the one Windows keeps.
+        // A verification or a script driving the application never reads,
+        // writes or removes the person's: they have an entry of their own.
+        apiKey_ = std::make_unique<ApiKey>(throwawaySettingsFolder(commandLine) != juce::File{}
+                                               ? juce::String::fromUTF8("DAW IA/anthropic (vérification)")
+                                               : juce::String{ApiKey::defaultTarget});
+        apiKey_->load();
+        juce::Logger::writeToLog(
+            juce::String::fromUTF8("clé d'API : ") +
+            (apiKey_->source() == ApiKey::Source::environment ? "la variable d'environnement"
+             : apiKey_->source() == ApiKey::Source::vault
+                 ? juce::String::fromUTF8("rangée par Windows")
+                 : juce::String::fromUTF8("aucune : le copilote et le mixage par le modèle sont éteints")));
 
         // A verification plays with the engine's settings in a folder of its
         // own (S24): it may change the buffer, and must never rewrite this
@@ -324,6 +339,10 @@ public:
                 run = Verification::Run::stems;
             else if (tokens[index] == "--verify-voix")
                 run = Verification::Run::voice;
+            else if (tokens[index] == "--verify-cle")
+                run = Verification::Run::key;
+            else if (tokens[index] == "--verify-droits")
+                run = Verification::Run::rights;
             else if (tokens[index] != "--verify")
                 continue;
 
@@ -383,7 +402,11 @@ public:
                 busSession_.get(),
                 voiceInput_.get(),
                 contentStore_.get(),
-                tokens.contains("--voix-micro-reel")});
+                tokens.contains("--voix-micro-reel"),
+                apiKey_.get(),
+                [this] { return keySaid_; },
+                store_ != nullptr ? juce::File{juce::String{store_->folder().root().string()}} : juce::File{},
+                directionSession_.get()});
 
             // A verification mixes by the rules: never a key, never an API.
             if (mixSession_ != nullptr)
@@ -558,6 +581,7 @@ private:
         actions.forgetLearning = [this] { confirmForgetLearning(); };
         actions.lightDisplay = [this] { return display::isLight(layoutSettings_.get()); };
         actions.setLightDisplay = [this](bool light) { setLightDisplay(light); };
+        actions.apiKey = [this] { askForApiKey(); };
         actions.about = [this]
         {
             // A page in the workspaces made of pages; the others, laid out
@@ -660,6 +684,111 @@ private:
     }
 
     // Fichier > Affichage: kept with this machine's settings, applied at once.
+    // Fichier > Clé d'API (S26): typed once, kept by Windows, tried at once
+    // against Anthropic (the list of models: it costs nothing), and the
+    // copilot started again so it reads it. Removing it is the same window.
+    void askForApiKey()
+    {
+        if (apiKey_ == nullptr)
+            return;
+
+        const auto said =
+            apiKey_->source() == ApiKey::Source::environment
+                ? juce::String::fromUTF8("Une clé vient de la variable ") + ApiKey::variable +
+                      juce::String::fromUTF8(" : elle passe avant celle d'ici.")
+            : apiKey_->source() == ApiKey::Source::vault
+                ? juce::String::fromUTF8("Une clé est rangée. En taper une autre la remplace.")
+                : juce::String::fromUTF8("Aucune clé : le copilote et le mixage par le modèle sont "
+                                         "éteints ; tout le reste marche sans.");
+        auto* window = new juce::AlertWindow(
+            juce::String::fromUTF8("Clé d'API d'Anthropic"),
+            said +
+                juce::String::fromUTF8("\n\nWindows la range chiffrée, pour ta session, sur cette machine. "
+                                       "Une clé se crée sur console.anthropic.com."),
+            juce::MessageBoxIconType::NoIcon);
+        window->addTextEditor("cle", {}, juce::String::fromUTF8("Clé"), true);
+        window->addButton(
+            juce::String::fromUTF8("Enregistrer"), 1, juce::KeyPress{juce::KeyPress::returnKey});
+        window->addButton(juce::String::fromUTF8("Retirer la clé"), 2);
+        window->addButton(juce::String::fromUTF8("Annuler"), 0, juce::KeyPress{juce::KeyPress::escapeKey});
+        window->enterModalState(
+            true,
+            juce::ModalCallbackFunction::create(
+                [this, window](int result)
+                {
+                    if (result == 0 || apiKey_ == nullptr)
+                        return;
+                    juce::String error;
+                    if (result == 2)
+                    {
+                        const auto removed = apiKey_->remove(error);
+                        juce::Logger::writeToLog(removed ? juce::String::fromUTF8("clé d'API : retirée")
+                                                         : juce::String::fromUTF8("clé d'API : ") + error);
+                        keySaid_ = removed ? juce::String::fromUTF8("Clé retirée.") : error;
+                    }
+                    else
+                    {
+                        const auto typed = window->getTextEditorContents("cle").trim();
+                        if (!apiKey_->store(typed, error) || error.isNotEmpty())
+                        {
+                            juce::Logger::writeToLog(juce::String::fromUTF8("clé d'API : ") + error);
+                            keySaid_ = error;
+                        }
+                        else
+                        {
+                            juce::Logger::writeToLog(
+                                juce::String::fromUTF8("clé d'API : rangée par Windows"));
+                            keySaid_ = juce::String::fromUTF8("Clé rangée.");
+                            if (verification_ == nullptr)
+                                tryApiKey(typed);
+                        }
+                    }
+                    if (copilot_ != nullptr)
+                        copilot_->restart();
+                    if (verification_ == nullptr)
+                        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                                                               juce::String::fromUTF8("Clé d'API"),
+                                                               keySaid_);
+                }),
+            true);
+    }
+
+    // Asks Anthropic for its list of models with `key`: accepted or refused,
+    // said in a box. Off the message thread; the key goes in a header, and
+    // nowhere in daw.log.
+    void tryApiKey(juce::String key)
+    {
+        juce::Thread::launch(
+            [key]
+            {
+                int status = 0;
+                const auto options =
+                    juce::URL::InputStreamOptions{juce::URL::ParameterHandling::inAddress}
+                        .withExtraHeaders("x-api-key: " + key + "\r\nanthropic-version: 2023-06-01")
+                        .withConnectionTimeoutMs(10000)
+                        .withStatusCode(&status);
+                const auto stream =
+                    juce::URL{"https://api.anthropic.com/v1/models"}.createInputStream(options);
+                const auto told =
+                    stream == nullptr || status == 0
+                        ? juce::String::fromUTF8("Pas de réponse d'Anthropic (réseau ?) : la clé est "
+                                                 "rangée, elle sera essayée au premier usage.")
+                    : status == 200 ? juce::String::fromUTF8("Anthropic accepte la clé.")
+                    : status == 401 ? juce::String::fromUTF8("Anthropic refuse cette clé : vérifie-la "
+                                                             "sur console.anthropic.com.")
+                                    : juce::String::fromUTF8("Anthropic répond ") + juce::String{status} +
+                                          juce::String::fromUTF8(" : la clé est rangée.");
+                juce::Logger::writeToLog(juce::String::fromUTF8("clé d'API : essayée, réponse ") +
+                                         juce::String{status});
+                juce::MessageManager::callAsync(
+                    [told]
+                    {
+                        juce::AlertWindow::showMessageBoxAsync(
+                            juce::MessageBoxIconType::InfoIcon, juce::String::fromUTF8("Clé d'API"), told);
+                    });
+            });
+    }
+
     void setLightDisplay(bool light)
     {
         display::setLight(layoutSettings_.get(), light);
@@ -918,7 +1047,8 @@ private:
                                           return;
                                       }
                                       voiceInput_->askToConfirm(std::move(removals), std::move(answer));
-                                  }});
+                                  },
+                                  [this] { return apiKey_ != nullptr && apiKey_->present(); }});
 
         // The push-to-talk (S25): the right Ctrl or the button, the
         // microphone, the transcriber's process, the phrase to the copilot.
@@ -1505,6 +1635,8 @@ private:
     std::unique_ptr<engine::ParameterBridge> bridge_;
     std::unique_ptr<juce::FileLogger> logger_;
     About about_;
+    std::unique_ptr<ApiKey> apiKey_;
+    juce::String keySaid_; // what the last Clé d'API window did, for a check
     std::unique_ptr<ui::DawLookAndFeel> lookAndFeel_;
     ui::PanelRegistry panelRegistry_{ui::PanelRegistry::withBuiltinPanels()};
     ui::ProjectObserver projectObserver_;

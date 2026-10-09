@@ -21,6 +21,7 @@ add_library(daw_domain STATIC
     src/live/TypingKeyboard.cpp
     src/live/Take.cpp
     src/live/Inputs.cpp
+    src/rights/Rights.cpp
     src/voice/PushToTalk.cpp
     src/voice/Removals.cpp
     src/live/AudioAdvice.cpp

@@ -1,6 +1,7 @@
 #include "VoiceInput.h"
 
 #include "daw/domain/live/Router.h"
+#include "daw/domain/rights/Rights.h"
 #include "daw/domain/serialization/Json.h"
 #include "daw/engine/ProjectProjector.h"
 
@@ -108,6 +109,11 @@ void VoiceInput::apply(const PushToTalk::Step& step, double seconds)
         // A phrase shown and not sent is dropped by the next one.
         heard_.reset();
         removals_.clear();
+        if (!domain::rights::allows(domain::rights::Feature::voice))
+        {
+            setStage(Stage::failed, domain::rights::refusal(domain::rights::Feature::voice));
+            return;
+        }
         if (service_.stage() == VoiceService::Stage::absent ||
             service_.stage() == VoiceService::Stage::installing)
         {

@@ -155,7 +155,7 @@ class AnthropicProvider:
         key = os.environ.get(API_KEY_VARIABLE, "").strip()
         if not key:
             raise ProviderUnavailable(
-                f"Aucune clé d'API. Posez {API_KEY_VARIABLE} dans l'environnement, puis relancez le copilote."
+                "Aucune clé d'API : Fichier > Clé d'API... dans DAW IA. Tout le reste marche sans."
             )
 
         # The two blocks that do not change from one turn to the next are the

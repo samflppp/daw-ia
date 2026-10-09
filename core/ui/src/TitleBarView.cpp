@@ -151,6 +151,7 @@ void TitleBarView::showFileMenu()
     display.addItem(lightDisplayItem, juce::String::fromUTF8("Léger (PC modeste)"), true, light);
     menu.addSubMenu(juce::String::fromUTF8("Affichage"), display);
     menu.addSeparator();
+    menu.addItem(apiKeyItem, juce::String::fromUTF8("Clé d'API..."));
     menu.addItem(aboutItem, juce::String::fromUTF8("À propos de DAW IA..."));
 
     juce::Component::SafePointer<TitleBarView> self{this};
@@ -194,6 +195,9 @@ void TitleBarView::runMenuItem(int item)
     case lightDisplayItem:
         if (actions_.setLightDisplay)
             actions_.setLightDisplay(item == lightDisplayItem);
+        break;
+    case apiKeyItem:
+        call(actions_.apiKey);
         break;
     case aboutItem:
         call(actions_.about);

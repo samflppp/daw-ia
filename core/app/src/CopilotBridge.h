@@ -88,6 +88,8 @@ public:
         // asked, and `answer` told once, on the message thread.
         std::function<void(std::vector<std::string> removals, std::function<void(bool)> answer)>
             confirmRemovals;
+        // An API key is there (S26): without one, ready says what is off.
+        std::function<bool()> keyPresent;
     };
 
     // The services' folder (the one holding pyproject.toml): DAW_IA_SERVICES_DIR,
@@ -174,6 +176,8 @@ private:
 
     // --- state shared between the two threads
     void setStatus(Status status, std::string message);
+    // Ready, said: empty with a key; without one, what is off and what is not.
+    [[nodiscard]] std::string readyNote() const;
     void addLine(Line::From from, std::string text);
 
     [[nodiscard]] juce::StringArray childCommand(int port) const;

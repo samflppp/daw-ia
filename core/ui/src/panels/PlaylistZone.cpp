@@ -1,3 +1,4 @@
+#include "daw/domain/rights/Rights.h"
 #include "daw/domain/tidy/Roles.h"
 #include "daw/ui/model/StyleLearning.h"
 #include "daw/ui/model/StyleSource.h"
@@ -218,6 +219,12 @@ void PlaylistPanel::generateZone()
     if (text.isEmpty())
     {
         bar_.showMessage(juce::String::fromUTF8(u8"Écris d'abord ce que tu veux entendre."));
+        return;
+    }
+    if (!domain::rights::allows(domain::rights::Feature::generation))
+    {
+        bar_.showMessage(
+            juce::String::fromUTF8(domain::rights::refusal(domain::rights::Feature::generation).c_str()));
         return;
     }
     if (zoneProposal_.has_value() && text == promptedText_)

@@ -1,4 +1,5 @@
 #include "daw/domain/generation/Phrase.h"
+#include "daw/domain/rights/Rights.h"
 #include "daw/ui/model/StyleLearning.h"
 #include "daw/ui/model/StyleSource.h"
 #include "daw/ui/panels/PianoRollPanel.h"
@@ -140,6 +141,12 @@ void PianoRollPanel::generateFromPrompt()
     if (text.isEmpty())
     {
         bar_.showMessage(juce::String::fromUTF8(u8"Écris d'abord ce que tu veux entendre."));
+        return;
+    }
+    if (!domain::rights::allows(domain::rights::Feature::generation))
+    {
+        bar_.showMessage(
+            juce::String::fromUTF8(domain::rights::refusal(domain::rights::Feature::generation).c_str()));
         return;
     }
 

@@ -1,6 +1,7 @@
 #include "MixSession.h"
 
 #include "daw/domain/commands/SetTrackVolume.h"
+#include "daw/domain/rights/Rights.h"
 #include "daw/domain/serialization/Json.h"
 #include "daw/ui/Tokens.h"
 
@@ -150,6 +151,11 @@ void MixSession::start()
 {
     if (stage_ == Stage::measuring || stage_ == Stage::deciding || stage_ == Stage::verifying)
         return;
+    if (!domain::rights::allows(domain::rights::Feature::mix))
+    {
+        setStage(Stage::failed, domain::rights::refusal(domain::rights::Feature::mix));
+        return;
+    }
     cancelled_.store(false);
     clearProposal();
 
@@ -258,8 +264,13 @@ void MixSession::decide()
 
     if (useModel_ && wiring_.copilot != nullptr && wiring_.copilot->canInterpret())
     {
-        decideWithModel(1, Value{}, Value{});
-        return;
+        if (domain::rights::allows(domain::rights::Feature::mixByModel))
+        {
+            decideWithModel(1, Value{}, Value{});
+            return;
+        }
+        decisionNote_ =
+            domain::rights::refusal(domain::rights::Feature::mixByModel) + " Mixage de base, par les règles.";
     }
     decided(domain::mix::baseMix(*brief_));
 }

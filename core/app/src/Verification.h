@@ -47,6 +47,8 @@ class BusSession;
 class KitSession;
 class MixSession;
 class StemSession;
+class ApiKey;
+class DirectionSession;
 class VoiceInput;
 
 // Where in a beat the first bar of the list is loud: its kick strikes on
@@ -106,7 +108,9 @@ public:
         audio,
         flux,
         kit,
-        voice
+        voice,
+        key,
+        rights
     };
 
     struct Wiring
@@ -187,6 +191,14 @@ public:
         // --voix-micro-reel: opens this machine's microphone too, to measure
         // that the output does not change when it opens.
         bool realMicrophone{false};
+
+        // The API key (S26): --verify-cle types one in Fichier > Clé d'API,
+        // in an entry of the vault of its own, and looks for it on the disk.
+        ApiKey* apiKey{nullptr};
+        std::function<juce::String()> keySaid;
+        juce::File projectFolder;
+        // The direction by references: --verify-droits asks it once.
+        DirectionSession* direction{nullptr};
     };
 
     explicit Verification(Wiring wiring);
@@ -252,6 +264,8 @@ private:
 
     struct VoiceRun;
     void buildVoice();
+    void buildKey();    // VerificationKey.cpp (S26)
+    void buildRights(); // VerificationRights.cpp (S26)
     // An offline render of the Edit as it plays, read back; and the type of
     // the last command the journal holds.
     [[nodiscard]] juce::AudioBuffer<float> renderNamed(const std::string& name);
@@ -549,6 +563,11 @@ private:
     std::function<bool(const juce::File&)> openProjectAt_;
     std::function<bool(const juce::File&)> saveAsTo_;
     std::function<juce::String()> lastRefusal_;
+    ApiKey* apiKey_{nullptr};
+    std::function<juce::String()> keySaid_;
+    juce::File projectFolder_;
+    juce::String fakeKey_;
+    DirectionSession* direction_{nullptr};
     const PlaybackProbe* probe_{nullptr};
     ui::ProjectObserver* project_{nullptr};
     MixSession* mix_{nullptr};

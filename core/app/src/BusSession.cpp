@@ -1,5 +1,6 @@
 #include "BusSession.h"
 
+#include "daw/domain/rights/Rights.h"
 #include "daw/ui/Tokens.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -189,6 +190,11 @@ domain::buses::Recognition BusSession::recognitionOf(const domain::PluginRef& re
 
 void BusSession::propose()
 {
+    if (!domain::rights::allows(domain::rights::Feature::buses))
+    {
+        setStage(Stage::failed, domain::rights::refusal(domain::rights::Feature::buses));
+        return;
+    }
     clearTry();
     proposals_ = domain::buses::propose(wiring_.state,
                                         [this](const domain::PluginRef& ref) { return recognitionOf(ref); });

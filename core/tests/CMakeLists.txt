@@ -66,6 +66,7 @@ add_executable(daw_domain_tests
     TakeTests.cpp
     LiveInputsTests.cpp
     PushToTalkTests.cpp
+    RightsTests.cpp
     AudioAdviceTests.cpp
     FluxGraphTests.cpp
     FluxPictureTests.cpp

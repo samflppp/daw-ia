@@ -1,6 +1,7 @@
 #include "DirectionSession.h"
 
 #include "daw/domain/commands/DirectionCommands.h"
+#include "daw/domain/rights/Rights.h"
 #include "daw/engine/ContentStore.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -108,6 +109,11 @@ void DirectionSession::addReference(const std::string& path)
 {
     if (stage_ == Stage::reading)
         return;
+    if (!domain::rights::allows(domain::rights::Feature::direction))
+    {
+        setFailure(domain::rights::refusal(domain::rights::Feature::direction));
+        return;
+    }
     const juce::File file{toJuce(path)};
     if (!file.existsAsFile())
     {

@@ -6,6 +6,7 @@
 #include "daw/domain/generation/Harmony.h"
 #include "daw/domain/generation/Phrase.h"
 #include "daw/domain/generation/Transform.h"
+#include "daw/domain/rights/Rights.h"
 #include "daw/domain/serialization/Json.h"
 #include "daw/domain/sound/Pitch.h"
 #include "daw/engine/Rendering.h"
@@ -153,6 +154,25 @@ void Verification::addGenerationSteps()
             check(!panel->proposing(), "Entrée sur un prompt vide : toujours rien");
             note("la fenêtre dit : « " + panel->generationBar().message().toStdString() + " »");
             untouched("ouvrir la fenêtre");
+        });
+
+    // S26: the one right asked (domain::rights), refused for once: the
+    // window says so, and nothing is proposed or written.
+    add("le droit refusé : « propose-moi quelque chose », Entrée, la fenêtre le dit et rien n'est proposé",
+        [this, roll, untouched, enter]
+        {
+            domain::rights::refuseAllForCheck(true);
+            enter(juce::String::fromUTF8("propose-moi quelque chose"));
+            domain::rights::refuseAllForCheck(false);
+            auto* panel = roll();
+            if (panel == nullptr)
+                return;
+            check(!panel->proposing(), "rien n'est proposé");
+            check(panel->generationBar().message() ==
+                      juce::String::fromUTF8(
+                          domain::rights::refusal(domain::rights::Feature::generation).c_str()),
+                  "« " + panel->generationBar().message().toStdString() + " »");
+            untouched("le droit refusé");
         });
 
     add("« propose-moi quelque chose », Entrée : des notes grises et une phrase courte ; la ligne technique "
