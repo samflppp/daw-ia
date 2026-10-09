@@ -111,6 +111,10 @@ Verification::Verification(Wiring wiring)
     keySaid_ = std::move(wiring.keySaid);
     projectFolder_ = std::move(wiring.projectFolder);
     direction_ = wiring.direction;
+    previousSession_ = std::move(wiring.previousSession);
+    reopenAfterCrash_ = std::move(wiring.reopenAfterCrash);
+    reopenAsked_ = std::move(wiring.reopenAsked);
+    killCopilot_ = std::move(wiring.killCopilot);
 }
 
 Verification::~Verification()
@@ -192,6 +196,15 @@ void Verification::start()
         break;
     case Run::rights:
         buildRights();
+        break;
+    case Run::crash:
+        buildCrash();
+        break;
+    case Run::recovery:
+        buildRecovery();
+        break;
+    case Run::services:
+        buildServices();
         break;
     }
 

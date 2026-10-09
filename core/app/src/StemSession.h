@@ -58,6 +58,8 @@ public:
     [[nodiscard]] double progress() const override;
     [[nodiscard]] std::string status() const override;
     void separate(domain::AudioClipId clip, Quality quality) override;
+    // For a check only (S26): the separation's process killed (StemSeparation).
+    void killForTest();
     void cancel() override;
 
     // What the copilot asks (`stems.separate`, {clipId, quality}): started or

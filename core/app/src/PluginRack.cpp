@@ -38,6 +38,12 @@ bool PluginRack::isInstalled(const domain::PluginRef& ref) const
     return catalogue_.find(ref).has_value();
 }
 
+juce::String PluginRack::fileOf(const domain::PluginRef& ref) const
+{
+    const auto description = catalogue_.find(ref);
+    return description.has_value() ? description->fileOrIdentifier : juce::String{};
+}
+
 bool PluginRack::isInstrument(const domain::PluginRef& ref) const
 {
     const auto description = catalogue_.find(ref);

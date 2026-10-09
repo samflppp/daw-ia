@@ -110,6 +110,12 @@ void StemSession::setFailure(std::string message)
     sendChangeMessage();
 }
 
+void StemSession::killForTest()
+{
+    if (separation_ != nullptr)
+        separation_->killForTest();
+}
+
 void StemSession::separate(domain::AudioClipId clip, Quality quality)
 {
     if (!domain::rights::allows(domain::rights::Feature::stems))

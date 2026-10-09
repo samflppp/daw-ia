@@ -351,6 +351,29 @@ void Verification::buildStems()
             run->laidSeen = stems_->lastLaid().has_value() ? 1 : 0;
         });
 
+    // S26: the separator's process killed during a separation, as a crash of
+    // it would end it. The DAW says it and writes nothing; the separation
+    // below, asked again, starts it again.
+    add(
+        "séparer, puis le processus du séparateur tué",
+        [this, run]
+        {
+            run->before = domain::json::write(state_.toValue());
+            run->depth = depth();
+            stems_->separate(run->clip, ui::StemHost::Quality::fast);
+        },
+        [this] { return stems_->progress() > 0.05 || stems_->stage() == ui::StemHost::Stage::failed; },
+        separationTimeoutMs);
+    add("…le DAW le dit", [this] { stems_->killForTest(); }, [this] { return settled(*stems_); }, 10000.0);
+    add("…et le projet n'a pas bougé, sans piste ni entrée d'historique",
+        [this, run]
+        {
+            check(stems_->stage() == ui::StemHost::Stage::failed && !stems_->status().empty(),
+                  "« " + stems_->status() + " »");
+            check(domain::json::write(state_.toValue()) == run->before, "le projet, à l'octet");
+            check(depth() == run->depth, "aucune entrée d'historique");
+        });
+
     add(
         "séparer de nouveau, jusqu'au bout",
         [this, run] { stems_->separate(run->clip, ui::StemHost::Quality::fast); },

@@ -3,6 +3,7 @@
 #include "AppShellView.h"
 #include "BusSession.h"
 #include "CopilotBridge.h"
+#include "CrashGuard.h"
 #include "DirectionSession.h"
 #include "DisplayMode.h"
 #include "EditClock.h"
@@ -17,6 +18,7 @@
 #include "PlaybackProbe.h"
 #include "PluginRack.h"
 #include "PluginWindow.h"
+#include "ProcessTree.h"
 #include "PromptReading.h"
 #include "QuitWatchdog.h"
 #include "SampleLibrary.h"
@@ -129,6 +131,20 @@ public:
         {
             engineHost_ = std::make_unique<engine::EngineHost>(getApplicationName());
         }
+
+        // Every process the DAW starts, and theirs, dies with it (S26,
+        // ProcessTree.h): a crash leaves no service behind.
+        processes::dieWithThisProcess();
+
+        // A crash, caught and told (S26): the last session's marker read and
+        // taken, the handlers installed, the last command followed. The
+        // marker lives with the machine's settings; a check's, with its own.
+        crashGuard_ =
+            std::make_unique<CrashGuard>(engineHost_->settingsFolder(), crashReportsFolder(commandLine));
+        previousSession_ = crashGuard_->takePrevious();
+        crashGuard_->install();
+        bus_.addObserver(*crashGuard_);
+        bypassAtStart_ = argumentAfter(commandLine, "--contourner");
 
         // The history panel is fed by the bus like everything else, and it is
         // listening before the journal is replayed: a project reopened must
@@ -289,6 +305,13 @@ public:
 
         startVerificationIfAsked(commandLine);
 
+        // The plugin named by a crash, bypassed in the project reopened
+        // (--contourner, from the window below), and that window itself.
+        if (bypassAtStart_.isNotEmpty())
+            bypassPluginsFrom(bypassAtStart_);
+        if (previousSession_.has_value() && verification_ == nullptr)
+            juce::MessageManager::callAsync([this] { offerToReopen(); });
+
         // --mix-once: one mix by the model on this project, logged, refused,
         // and out (S21). Never with a verification: those mix by the rules.
         if (commandLine.contains("--mix-once") && verification_ == nullptr && mixSession_ != nullptr &&
@@ -343,6 +366,12 @@ public:
                 run = Verification::Run::key;
             else if (tokens[index] == "--verify-droits")
                 run = Verification::Run::rights;
+            else if (tokens[index] == "--verify-plantage")
+                run = Verification::Run::crash;
+            else if (tokens[index] == "--verify-reprise")
+                run = Verification::Run::recovery;
+            else if (tokens[index] == "--verify-services")
+                run = Verification::Run::services;
             else if (tokens[index] != "--verify")
                 continue;
 
@@ -406,7 +435,15 @@ public:
                 apiKey_.get(),
                 [this] { return keySaid_; },
                 store_ != nullptr ? juce::File{juce::String{store_->folder().root().string()}} : juce::File{},
-                directionSession_.get()});
+                directionSession_.get(),
+                [this] { return previousSession_; },
+                [this](bool bypass) { reopenAfterCrash(bypass); },
+                [this] { return reopenAsked_; },
+                [this]
+                {
+                    if (copilot_ != nullptr)
+                        copilot_->killForTest();
+                }});
 
             // A verification mixes by the rules: never a key, never an API.
             if (mixSession_ != nullptr)
@@ -684,6 +721,121 @@ private:
     }
 
     // Fichier > Affichage: kept with this machine's settings, applied at once.
+    // The token after `name` on the command line, unquoted; empty without.
+    [[nodiscard]] static juce::String argumentAfter(const juce::String& commandLine, const juce::String& name)
+    {
+        const auto tokens = juce::StringArray::fromTokens(commandLine, true);
+        const auto at = tokens.indexOf(name);
+        return at >= 0 && at + 1 < tokens.size() ? tokens[at + 1].unquoted() : juce::String{};
+    }
+
+    // Where crash reports go (S26): this machine's local data, never
+    // roaming; a check's beside its throwaway settings.
+    [[nodiscard]] juce::File crashReportsFolder(const juce::String& commandLine)
+    {
+        if (const auto throwaway = throwawaySettingsFolder(commandLine); throwaway != juce::File{})
+            return throwaway.getChildFile("plantages");
+        const auto local = juce::SystemStats::getEnvironmentVariable("LOCALAPPDATA", {});
+        const auto base = local.isNotEmpty()
+                              ? juce::File{local}
+                              : juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
+        return base.getChildFile(getApplicationName()).getChildFile("plantages");
+    }
+
+    // The last session did not close (S26): said, and its project offered.
+    void offerToReopen()
+    {
+        if (!previousSession_.has_value())
+            return;
+        const auto& previous = *previousSession_;
+        const auto name = previous.project.getFileNameWithoutExtension();
+        juce::String said;
+        if (previous.crashed)
+        {
+            said << juce::String::fromUTF8("DAW IA s'est fermé brutalement le ") << previous.at;
+            if (previous.module.isNotEmpty())
+                said << " (dans " << juce::File{previous.module}.getFileName() << ")";
+            said << ".";
+        }
+        else
+        {
+            said << juce::String::fromUTF8(
+                        "DAW IA ne s'est pas fermé normalement la dernière fois (projet ouvert le ")
+                 << previous.since << ").";
+        }
+        said << juce::String::fromUTF8("\n\nTout ce qui avait été fait est dans le journal du projet.");
+        if (previous.report.existsAsFile())
+            said << juce::String::fromUTF8("\nLe rapport, resté sur cette machine : ")
+                 << previous.report.getFullPathName();
+
+        auto* window = new juce::AlertWindow(
+            juce::String::fromUTF8("Reprendre"), said, juce::MessageBoxIconType::InfoIcon);
+        window->addButton(juce::String::fromUTF8("Rouvrir « ") + name + juce::String::fromUTF8(" »"),
+                          1,
+                          juce::KeyPress{juce::KeyPress::returnKey});
+        if (previous.plugin)
+            window->addButton(juce::String::fromUTF8("Rouvrir, ce plugin contourné"), 2);
+        window->addButton("Non", 0, juce::KeyPress{juce::KeyPress::escapeKey});
+        window->enterModalState(true,
+                                juce::ModalCallbackFunction::create(
+                                    [this](int result)
+                                    {
+                                        if (result != 0)
+                                            reopenAfterCrash(result == 2);
+                                    }),
+                                true);
+    }
+
+    // « Rouvrir »: the project relaunched, the plugin named by the crash
+    // bypassed in it when asked. A check records the project instead.
+    void reopenAfterCrash(bool bypass)
+    {
+        if (!previousSession_.has_value())
+            return;
+        const auto& previous = *previousSession_;
+        juce::Logger::writeToLog(
+            juce::String::fromUTF8("reprise : rouvrir ") + previous.project.getFullPathName() +
+            (bypass ? juce::String::fromUTF8(", ") + previous.module + juce::String::fromUTF8(" contourné")
+                    : juce::String{}));
+        if (verification_ != nullptr)
+        {
+            reopenAsked_ = previous.project;
+            return;
+        }
+        const auto current =
+            store_ != nullptr ? juce::File{juce::String{store_->folder().root().string()}} : juce::File{};
+        if (current == previous.project)
+        {
+            if (bypass)
+                bypassPluginsFrom(previous.module);
+            return;
+        }
+        if (bypass)
+            bypassModule_ = previous.module;
+        switchTo(previous.project);
+    }
+
+    // Every plugin of the project loaded from `module` (a file inside its
+    // bundle, as a crash names it), bypassed: one command each, undone by
+    // Ctrl+Z like any bypass.
+    void bypassPluginsFrom(const juce::String& module)
+    {
+        if (rack_ == nullptr)
+            return;
+        int bypassed = 0;
+        for (const auto& track : state_.tracks())
+            for (const auto& plugin : track.plugins)
+            {
+                const auto file = rack_->fileOf(plugin.ref);
+                if (plugin.bypassed || file.isEmpty() || !module.startsWithIgnoreCase(file))
+                    continue;
+                if (bus_.execute(std::make_unique<domain::SetPluginBypassed>(plugin.id, true)))
+                    ++bypassed;
+            }
+        juce::Logger::writeToLog(juce::String::fromUTF8("reprise : ") + juce::String{bypassed} +
+                                 juce::String::fromUTF8(" plugin(s) contourné(s), chargés de ") + module);
+    }
+
     // Fichier > Clé d'API (S26): typed once, kept by Windows, tried at once
     // against Anthropic (the list of models: it costs nothing), and the
     // copilot started again so it reads it. Removing it is the same window.
@@ -961,6 +1113,8 @@ private:
     void relaunch(const juce::File& folder) const
     {
         juce::String arguments = "--relaunched --project \"" + folder.getFullPathName() + "\"";
+        if (bypassModule_.isNotEmpty())
+            arguments << " --contourner \"" << bypassModule_ << "\"";
         if (lastWorkspace_.isNotEmpty())
             arguments << " --workspace " << lastWorkspace_;
         if (workshop_)
@@ -1364,6 +1518,9 @@ private:
             return false;
         }
 
+        if (crashGuard_ != nullptr)
+            crashGuard_->sessionOpened(folder);
+
         juce::Logger::writeToLog("project " + juce::String(store_->folder().name()) + ": " +
                                  juce::String(static_cast<int>(report.value().commands)) +
                                  " commands replayed, " +
@@ -1379,6 +1536,8 @@ private:
         store_->stopRecording();
         if (const auto closed = store_->close(); !closed)
             juce::Logger::writeToLog("project not saved: " + juce::String(closed.error().message));
+        else if (crashGuard_ != nullptr)
+            crashGuard_->sessionClosed();
 
         store_.reset();
     }
@@ -1671,6 +1830,11 @@ private:
     ui::TitleBarView* titleBar_{nullptr};
     std::unique_ptr<juce::FileChooser> chooser_;
     std::optional<juce::File> relaunchProject_;
+    std::unique_ptr<CrashGuard> crashGuard_;
+    std::optional<CrashGuard::Previous> previousSession_;
+    juce::File reopenAsked_;     // a check's « Rouvrir », instead of a relaunch
+    juce::String bypassModule_;  // the plugin to bypass in the project relaunched
+    juce::String bypassAtStart_; // --contourner, read at start
     juce::String lastWorkspace_;
     bool workshop_{false};
     juce::String lastRefusal_;

@@ -1,5 +1,6 @@
 #include "CopilotBridge.h"
 
+#include "ProcessTree.h"
 #include "daw/domain/copilot/Tools.h"
 #include "daw/domain/rights/Rights.h"
 #include "daw/domain/serialization/Json.h"
@@ -142,7 +143,11 @@ void CopilotBridge::start()
     process_ = std::make_unique<juce::ChildProcess>();
     const auto command = childCommand(port_);
     juce::Logger::writeToLog("copilot: launching " + command.joinIntoString(" "));
-    if (!process_->start(command, juce::ChildProcess::wantStdOut | juce::ChildProcess::wantStdErr))
+    const auto before = processes::children();
+    const auto started =
+        process_->start(command, juce::ChildProcess::wantStdOut | juce::ChildProcess::wantStdErr);
+    processId_ = started ? processes::startedBetween(before, processes::children()) : 0;
+    if (!started)
     {
         process_.reset();
         listener_.reset();
@@ -177,6 +182,9 @@ void CopilotBridge::stop()
     if (queue_ != nullptr)
         queue_->close();
 
+    // uv, and the Pythons under it (ProcessTree.h).
+    processes::killTree(processId_);
+    processId_ = 0;
     if (process_ != nullptr)
     {
         process_->kill();
@@ -195,6 +203,12 @@ std::string CopilotBridge::readyNote() const
         return {};
     return "Prêt, sans clé d'API : le copilote et le mixage par le modèle sont éteints, tout le reste "
            "marche. Fichier > Clé d'API...";
+}
+
+void CopilotBridge::killForTest()
+{
+    // Python itself, as a crash of it: what holds the socket.
+    processes::killTree(processId_);
 }
 
 void CopilotBridge::restart()
@@ -849,7 +863,9 @@ void CopilotBridge::ask(std::string_view request)
         return;
     }
 
-    if (!connected_)
+    // Not connected, or connected to a process that died since (S26: its
+    // socket can outlive it for a moment).
+    if (!connected_ || status() == Status::stopped || status() == Status::failed)
     {
         addLine(Line::From::failure,
                 "Le copilote n'est pas là. Relancez-le pour lui parler ; le projet ne bouge pas.");

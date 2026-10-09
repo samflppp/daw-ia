@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CrashGuard.h"
 #include "LevelMonitor.h"
 #include "PlaybackProbe.h"
 #include "SongExporter.h"
@@ -110,7 +111,10 @@ public:
         kit,
         voice,
         key,
-        rights
+        rights,
+        crash,
+        recovery,
+        services
     };
 
     struct Wiring
@@ -199,6 +203,14 @@ public:
         juce::File projectFolder;
         // The direction by references: --verify-droits asks it once.
         DirectionSession* direction{nullptr};
+
+        // A crash and what follows (S26): --verify-plantage crashes on
+        // purpose; --verify-reprise reads what the last session left.
+        std::function<std::optional<CrashGuard::Previous>()> previousSession;
+        std::function<void(bool bypass)> reopenAfterCrash;
+        std::function<juce::File()> reopenAsked;
+        // --verify-services kills the copilot's process (S26).
+        std::function<void()> killCopilot;
     };
 
     explicit Verification(Wiring wiring);
@@ -264,8 +276,11 @@ private:
 
     struct VoiceRun;
     void buildVoice();
-    void buildKey();    // VerificationKey.cpp (S26)
-    void buildRights(); // VerificationRights.cpp (S26)
+    void buildKey();      // VerificationKey.cpp (S26)
+    void buildRights();   // VerificationRights.cpp (S26)
+    void buildCrash();    // VerificationCrash.cpp (S26)
+    void buildRecovery(); // VerificationCrash.cpp (S26)
+    void buildServices(); // VerificationCrash.cpp (S26)
     // An offline render of the Edit as it plays, read back; and the type of
     // the last command the journal holds.
     [[nodiscard]] juce::AudioBuffer<float> renderNamed(const std::string& name);
@@ -568,6 +583,10 @@ private:
     juce::File projectFolder_;
     juce::String fakeKey_;
     DirectionSession* direction_{nullptr};
+    std::function<std::optional<CrashGuard::Previous>()> previousSession_;
+    std::function<void(bool)> reopenAfterCrash_;
+    std::function<juce::File()> reopenAsked_;
+    std::function<void()> killCopilot_;
     const PlaybackProbe* probe_{nullptr};
     ui::ProjectObserver* project_{nullptr};
     MixSession* mix_{nullptr};

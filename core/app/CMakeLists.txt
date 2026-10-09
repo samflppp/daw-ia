@@ -10,6 +10,8 @@ juce_add_gui_app(daw_app
 target_sources(daw_app PRIVATE
     src/Main.cpp
     src/About.cpp
+    src/CrashGuard.cpp
+    src/ProcessTree.cpp
     src/ApiKey.cpp
     src/MainWindow.cpp
     src/AppShellView.cpp
@@ -44,6 +46,7 @@ target_sources(daw_app PRIVATE
     src/VerificationVoice.cpp
     src/VerificationKey.cpp
     src/VerificationRights.cpp
+    src/VerificationCrash.cpp
     src/VerificationAutomation.cpp
     src/VerificationFluidity.cpp
     src/VerificationForm.cpp

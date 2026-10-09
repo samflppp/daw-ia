@@ -1,5 +1,6 @@
 #include "VoiceService.h"
 
+#include "ProcessTree.h"
 #include "daw/domain/serialization/Json.h"
 
 #include <algorithm>
@@ -112,6 +113,11 @@ void VoiceService::setStage(Stage stage, std::string message)
     message_ = std::move(message);
 }
 
+void VoiceService::killForTest()
+{
+    processes::killTree(processId_);
+}
+
 void VoiceService::warmUp()
 {
     {
@@ -139,7 +145,10 @@ void VoiceService::warmUp()
         command.addArray(juce::StringArray{"--replay", replay_.getFullPathName()});
     process_ = std::make_unique<juce::ChildProcess>();
     juce::Logger::writeToLog("voix: lancement de " + command.joinIntoString(" "));
-    if (!process_->start(command, 0))
+    const auto before = processes::children();
+    const auto started = process_->start(command, 0);
+    processId_ = started ? processes::startedBetween(before, processes::children()) : 0;
+    if (!started)
     {
         process_.reset();
         listener_.reset();
@@ -160,6 +169,9 @@ void VoiceService::stop()
     if (listener_ != nullptr)
         listener_->close();
     stopThread(3000);
+    // The launcher, and the Python under it (ProcessTree.h).
+    processes::killTree(processId_);
+    processId_ = 0;
     if (process_ != nullptr)
     {
         process_->kill();

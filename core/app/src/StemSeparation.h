@@ -5,6 +5,7 @@
 #include <juce_core/juce_core.h>
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -81,6 +82,9 @@ public:
     start(const juce::File& source, const std::string& digest, Model model, Finished finished);
 
     // Ends the separation in flight. Returns at once.
+    // For a check only (S26): the process killed from outside, as a crash of
+    // it would end it.
+    void killForTest();
     void cancel();
 
     [[nodiscard]] Stage stage() const noexcept { return stage_.load(); }
@@ -126,6 +130,7 @@ private:
 
     mutable std::mutex mutex_; // guards process_ and message_
     std::unique_ptr<juce::ChildProcess> process_;
+    std::uint32_t processId_{0}; // found at start (ProcessTree.h)
     std::string message_;
 
     // Shared with the callbacks posted to the message thread: false once

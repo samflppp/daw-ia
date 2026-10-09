@@ -1,5 +1,7 @@
 #include "StemSeparation.h"
 
+#include "ProcessTree.h"
+
 #include <juce_events/juce_events.h>
 
 #include <array>
@@ -74,6 +76,12 @@ StemSeparation::start(const juce::File& source, const std::string& digest, Model
     return {};
 }
 
+void StemSeparation::killForTest()
+{
+    const std::lock_guard<std::mutex> lock{mutex_};
+    processes::killTree(processId_);
+}
+
 void StemSeparation::cancel()
 {
     cancelled_.store(true);
@@ -81,6 +89,8 @@ void StemSeparation::cancel()
         current_->store(false);
     {
         const std::lock_guard<std::mutex> lock{mutex_};
+        // The process and what it started (ProcessTree.h).
+        processes::killTree(processId_);
         if (process_ != nullptr)
             static_cast<void>(process_->kill());
     }
@@ -150,11 +160,13 @@ int StemSeparation::runProcess(const juce::StringArray& command,
         if (cancelled_.load())
             return -1;
         process_ = std::make_unique<juce::ChildProcess>();
+        const auto before = processes::children();
         if (!process_->start(command, juce::ChildProcess::wantStdOut))
         {
             process_.reset();
             return -1;
         }
+        processId_ = processes::startedBetween(before, processes::children());
     }
 
     // One byte at a time: on Windows, juce::ChildProcess::readProcessOutput

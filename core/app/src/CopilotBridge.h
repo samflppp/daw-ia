@@ -113,6 +113,10 @@ public:
     void answerFromTable(juce::File table) { table_ = std::move(table); }
     void stop();
 
+    // For a check only (S26): the process killed from outside, as a crash
+    // of the service would end it. What follows is what a crash gets.
+    void killForTest();
+
     // --- CopilotHost
     [[nodiscard]] Status status() const override;
     [[nodiscard]] std::string statusMessage() const override;
@@ -190,6 +194,7 @@ private:
     std::unique_ptr<juce::StreamingSocket> listener_;
     std::unique_ptr<juce::StreamingSocket> connection_;
     std::unique_ptr<juce::ChildProcess> process_;
+    std::uint32_t processId_{0}; // uv's, found at start (ProcessTree.h)
     int port_{0};
     juce::File table_;
 

@@ -32,6 +32,9 @@ public:
     [[nodiscard]] std::vector<domain::PluginRef> available() const override;
     [[nodiscard]] bool isInstalled(const domain::PluginRef& ref) const override;
     [[nodiscard]] bool isInstrument(const domain::PluginRef& ref) const override;
+    // The file this machine loads `ref` from: a .vst3 bundle, a .clap file.
+    // Empty for an internal effect or a plugin this machine lacks (S26).
+    [[nodiscard]] juce::String fileOf(const domain::PluginRef& ref) const;
 
     [[nodiscard]] bool hasEditor(domain::PluginId pluginId) const override;
     [[nodiscard]] bool editorIsOpen(domain::PluginId pluginId) const override;

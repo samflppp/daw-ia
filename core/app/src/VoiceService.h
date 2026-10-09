@@ -108,6 +108,10 @@ public:
     // Ends the process (and frees its memory). Message thread.
     void stop();
 
+    // For a check only (S26): the process killed from outside, as a crash
+    // of the service would end it. What follows is what a crash gets.
+    void killForTest();
+
     // The process is ended after this long without a phrase.
     static constexpr int idleMinutes = 15;
 
@@ -137,6 +141,7 @@ private:
     std::unique_ptr<juce::StreamingSocket> listener_;
     std::unique_ptr<juce::StreamingSocket> connection_;
     std::unique_ptr<juce::ChildProcess> process_;
+    std::uint32_t processId_{0}; // the launcher's, found at start (ProcessTree.h)
     std::unique_ptr<std::thread> installer_;
     std::shared_ptr<std::atomic<bool>> alive_;
 };
