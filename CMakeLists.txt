@@ -5,6 +5,11 @@ project(DawIA
     DESCRIPTION "AI-assisted DAW"
     LANGUAGES C CXX)
 
+# The version as people read it: the alpha of the prototype (decided on
+# 9 October 2026). Windows takes numbers only in the executable's own
+# version, which stays PROJECT_VERSION.
+set(DAW_VERSION_LABEL "${PROJECT_VERSION}-alpha")
+
 # ---------------------------------------------------------------------------
 # Options
 # ---------------------------------------------------------------------------

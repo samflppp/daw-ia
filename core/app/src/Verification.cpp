@@ -12,6 +12,7 @@
 #include "daw/engine/MeterTap.h"
 #include "daw/engine/Rendering.h"
 #include "daw/ui/FrameTicker.h"
+#include "daw/ui/panels/AboutPanel.h"
 #include "daw/ui/panels/BrowserPanel.h"
 #include "daw/ui/panels/ChannelRackPanel.h"
 #include "daw/ui/panels/GenerationPanel.h"
@@ -1665,6 +1666,55 @@ void Verification::buildFile()
             check(saveAsTo_ && !saveAsTo_(existing), "Enregistrer sous refuse : rien n'est écrasé");
             check(existing.getNumberOfChildFiles(juce::File::findFilesAndDirectories) == 0,
                   "le dossier existant n'a pas été touché");
+        });
+
+    // S26: « À propos », from the File menu, as a person reaches it. What the
+    // licences require to be said is on the page, and the licences in full.
+    add(
+        "Fichier > À propos de DAW IA",
+        [this]
+        {
+            auto* file = button(titleBar_, "Fichier");
+            if (file == nullptr)
+            {
+                check(false, "le bouton Fichier");
+                return;
+            }
+            click(*file, file->getLocalBounds().getCentre());
+            // Nouveau, Ouvrir, Enregistrer, Enregistrer sous, Exporter,
+            // Génération, Affichage, then À propos: the eighth.
+            chooseMenuItem(8);
+        },
+        [this] { return panel("about") != nullptr && panel("about")->isShowing(); },
+        3000.0);
+    add("la page dit la version, le commit, et ce que les licences demandent",
+        [this]
+        {
+            auto* about = dynamic_cast<ui::AboutPanel*>(panel("about"));
+            if (about == nullptr)
+            {
+                check(false, "la page « À propos »");
+                return;
+            }
+            const auto heading = about->heading().toStdString();
+            check(heading == std::string{"DAW IA "} + DAW_VERSION_LABEL, "« " + heading + " »");
+            const auto mentions = about->mentions();
+            check(mentions.contains("Powered by Tracktion Engine"), "la mention de Tracktion");
+            check(mentions.contains("NVIDIA") && mentions.contains("CC-BY-4.0"), "l'attribution de NVIDIA");
+            const auto licences = about->licences();
+            check(licences.contains("JUCE") && licences.contains("Parakeet") && licences.contains("HTDemucs"),
+                  "les licences, " + std::to_string(licences.length()) + " caractères");
+            const auto* tab = button(view_, juce::String::fromUTF8("À propos"));
+            check(tab == nullptr || !tab->isVisible(), "aucun onglet dans la bande : le menu seul y mène");
+
+            // The page is a window of its own, which the window's capture
+            // does not show: its own.
+            const auto image = about->createComponentSnapshot(about->getLocalBounds(), true, 1.0f);
+            juce::PNGImageFormat png;
+            juce::FileOutputStream out{folder_.getChildFile("4b-a-propos.png")};
+            if (out.openedOk())
+                static_cast<void>(png.writeImageToStream(image, out));
+            static_cast<void>(view_.showPage("about", false));
         });
 
     // S18 bis: the window is moved by Windows, not by the bar. What the bar

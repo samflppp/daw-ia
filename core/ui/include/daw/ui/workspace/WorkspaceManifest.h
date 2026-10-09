@@ -63,6 +63,10 @@ struct Page
     // or closes it when it is already in front.
     std::string shortcut;
 
+    // False for a page reached from a menu only, never from the tab band
+    // (« À propos », S26).
+    bool tab{true};
+
     bool open{true};
     double x{0.0};
     double y{0.0};

@@ -166,6 +166,9 @@
                 "type": "string",
                 "pattern": "^F([1-9]|1[0-2])$"
               },
+              "tab": {
+                "type": "boolean"
+              },
               "open": {
                 "type": "boolean"
               },

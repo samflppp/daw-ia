@@ -4,6 +4,7 @@
 #include "daw/domain/project/ProjectState.h"
 #include "daw/ui/DawLookAndFeel.h"
 #include "daw/ui/Tokens.h"
+#include "daw/ui/model/AboutHost.h"
 #include "daw/ui/model/AudioHost.h"
 #include "daw/ui/model/BusHost.h"
 #include "daw/ui/model/CopilotHost.h"
@@ -104,6 +105,8 @@ struct PanelServices
     BusHost& buses;
     // The push-to-talk (S25): the microphone heard, the phrase understood.
     VoiceHost& voice;
+    // Which build this is, and what its licences ask to be said (S26).
+    AboutHost& about;
 };
 
 // The services, plus the one thing that differs from one panel to the next.

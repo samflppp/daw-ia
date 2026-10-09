@@ -1,3 +1,4 @@
+#include "About.h"
 #include "AppShellView.h"
 #include "BusSession.h"
 #include "CopilotBridge.h"
@@ -92,8 +93,8 @@ public:
         // A log file, so that what the application did can be read after the
         // fact: --demo and --scan report through it, and a plugin that refuses
         // to load says why.
-        logger_.reset(juce::FileLogger::createDefaultAppLogger(
-            getApplicationName(), "daw.log", getApplicationName() + " " + getApplicationVersion()));
+        logger_.reset(
+            juce::FileLogger::createDefaultAppLogger(getApplicationName(), "daw.log", About::banner()));
         juce::Logger::setCurrentLogger(logger_.get());
 
         const auto domainVersion = domain::versionString();
@@ -557,6 +558,16 @@ private:
         actions.forgetLearning = [this] { confirmForgetLearning(); };
         actions.lightDisplay = [this] { return display::isLight(layoutSettings_.get()); };
         actions.setLightDisplay = [this](bool light) { setLightDisplay(light); };
+        actions.about = [this]
+        {
+            // A page in the workspaces made of pages; the others, laid out
+            // in fixed splits, say the same in a box.
+            if (view_ == nullptr || !view_->showPage("about", true))
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                                                       juce::String::fromUTF8("À propos de DAW IA"),
+                                                       About::banner() + "\n\n" +
+                                                           juce::String::fromUTF8(about_.mentions().c_str()));
+        };
         actions.minimise = [this]
         {
             if (window_ != nullptr)
@@ -1030,7 +1041,8 @@ private:
                                          *flux_,
                                          *kitSession_,
                                          *busSession_,
-                                         *voiceInput_};
+                                         *voiceInput_,
+                                         about_};
 
         auto view = std::make_unique<ui::WorkspaceView>(services, panelRegistry_);
         view_ = view.get();
@@ -1492,6 +1504,7 @@ private:
     std::unique_ptr<engine::ProjectProjector> projector_;
     std::unique_ptr<engine::ParameterBridge> bridge_;
     std::unique_ptr<juce::FileLogger> logger_;
+    About about_;
     std::unique_ptr<ui::DawLookAndFeel> lookAndFeel_;
     ui::PanelRegistry panelRegistry_{ui::PanelRegistry::withBuiltinPanels()};
     ui::ProjectObserver projectObserver_;

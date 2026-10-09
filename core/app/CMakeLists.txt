@@ -9,6 +9,7 @@ juce_add_gui_app(daw_app
 
 target_sources(daw_app PRIVATE
     src/Main.cpp
+    src/About.cpp
     src/MainWindow.cpp
     src/AppShellView.cpp
     src/CopilotBridge.cpp
@@ -65,9 +66,21 @@ target_sources(daw_app PRIVATE
 
 target_include_directories(daw_app PRIVATE src)
 
+# The commit this binary was built from, read at each build (S26).
+add_custom_target(daw_build_info
+    COMMAND "${CMAKE_COMMAND}"
+        -DSOURCE=${PROJECT_SOURCE_DIR}
+        -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/generated/BuildInfo.h
+        -P ${PROJECT_SOURCE_DIR}/cmake/DawBuildInfo.cmake
+    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/generated/BuildInfo.h
+    VERBATIM)
+add_dependencies(daw_app daw_build_info)
+target_include_directories(daw_app PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+
 target_compile_definitions(daw_app PRIVATE
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:daw_app,JUCE_PRODUCT_NAME>"
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:daw_app,JUCE_VERSION>"
+    DAW_VERSION_LABEL="${DAW_VERSION_LABEL}"
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_PLUGINHOST_VST3=1

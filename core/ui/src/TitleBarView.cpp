@@ -150,6 +150,8 @@ void TitleBarView::showFileMenu()
     display.addItem(fluidDisplayItem, juce::String::fromUTF8("Fluide"), true, !light);
     display.addItem(lightDisplayItem, juce::String::fromUTF8("Léger (PC modeste)"), true, light);
     menu.addSubMenu(juce::String::fromUTF8("Affichage"), display);
+    menu.addSeparator();
+    menu.addItem(aboutItem, juce::String::fromUTF8("À propos de DAW IA..."));
 
     juce::Component::SafePointer<TitleBarView> self{this};
     menu.showMenuAsync(juce::PopupMenu::Options{}.withTargetComponent(&file_),
@@ -192,6 +194,9 @@ void TitleBarView::runMenuItem(int item)
     case lightDisplayItem:
         if (actions_.setLightDisplay)
             actions_.setLightDisplay(item == lightDisplayItem);
+        break;
+    case aboutItem:
+        call(actions_.about);
         break;
     default:
         break;

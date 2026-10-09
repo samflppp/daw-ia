@@ -47,6 +47,9 @@ public:
         std::function<bool()> lightDisplay;
         std::function<void(bool light)> setLightDisplay;
 
+        // Fichier > À propos de DAW IA (S26).
+        std::function<void()> about;
+
         std::function<void()> minimise;
         std::function<void()> toggleMaximise;
         std::function<void()> close;
@@ -85,6 +88,7 @@ public:
         forgetItem,
         fluidDisplayItem,
         lightDisplayItem,
+        aboutItem,
     };
 
     void paint(juce::Graphics& g) override;

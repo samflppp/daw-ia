@@ -20,7 +20,8 @@
     "flux",
     "kit",
     "buses",
-    "copilot"
+    "copilot",
+    "about"
   ],
   "layout": {
     "bar": [
@@ -171,6 +172,16 @@
         "y": 0.35,
         "width": 0.25,
         "height": 0.65
+      },
+      {
+        "panel": "about",
+        "title": "À propos",
+        "tab": false,
+        "open": false,
+        "x": 0.3,
+        "y": 0.1,
+        "width": 0.4,
+        "height": 0.75
       }
     ]
   },

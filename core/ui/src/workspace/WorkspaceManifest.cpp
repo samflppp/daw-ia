@@ -170,6 +170,14 @@ Result<WindowedLayout> windowsFromValue(const Value& value)
             page.open = flag.value();
         }
 
+        if (const auto* tab = item.find("tab"); tab != nullptr)
+        {
+            auto flag = tab->asBool();
+            if (!flag)
+                return flag.error();
+            page.tab = flag.value();
+        }
+
         auto x = fractionAt(item, "x", page.x);
         auto y = fractionAt(item, "y", page.y);
         auto width = fractionAt(item, "width", page.width);

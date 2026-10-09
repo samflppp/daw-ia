@@ -239,7 +239,8 @@ void WorkspaceView::buildPages(const WindowedLayout& layout)
             }
         };
 
-        addAndMakeVisible(*slot.tab);
+        if (slot.page.tab)
+            addAndMakeVisible(*slot.tab);
         addChildComponent(*slot.window);
         slot.window->setVisible(slot.open);
         slot.tab->setToggleState(slot.open, juce::dontSendNotification);
@@ -539,6 +540,8 @@ void WorkspaceView::resized()
             tabArea().reduced(services_.tokens.integer("space.sm"), services_.tokens.integer("space.xs"));
         for (auto& slot : pages_)
         {
+            if (!slot.page.tab)
+                continue;
             slot.tab->setBounds(tabs.removeFromLeft(services_.tokens.integer("metric.page.tabWidth")));
             tabs.removeFromLeft(services_.tokens.integer("space.xs"));
         }

@@ -222,6 +222,22 @@ TEST_CASE("a windowed manifest reads its bar and its pages, in that order")
     CHECK(placed[2] == "copilot");
 }
 
+TEST_CASE("a page has a tab unless its manifest says it is reached from a menu only")
+{
+    const auto manifest = WorkspaceManifest::parse(
+        std::string{R"({"schemaVersion":1,"id":"t","label":"T","panels":["playlist","about"],)"} +
+        R"("layout":{"pages":[{"panel":"playlist","title":"A"},{"panel":"about","title":"B","tab":false}]}})");
+    REQUIRE(manifest.ok());
+    const auto& pages = manifest.value().windows->pages;
+    REQUIRE(pages.size() == 2);
+    CHECK(pages[0].tab);
+    CHECK_FALSE(pages[1].tab);
+
+    const auto notAFlag = std::string{R"({"schemaVersion":1,"id":"t","label":"T","panels":["about"],)"} +
+                          R"("layout":{"pages":[{"panel":"about","title":"B","tab":"non"}]}})";
+    CHECK_FALSE(WorkspaceManifest::parse(notAFlag).ok());
+}
+
 TEST_CASE("a windowed manifest refuses a panel on two pages, and a page outside the desktop")
 {
     const auto twice =
@@ -263,8 +279,9 @@ TEST_CASE("the beatmaker manifest shipped with the application is windowed and p
     REQUIRE(manifest.ok());
     REQUIRE(manifest.value().windows.has_value());
     CHECK(manifest.value().windows->bar == std::vector<std::string>{"transport"});
-    CHECK(manifest.value().windows->pages.size() ==
-          15); // since S24: the audio window (F12), the flux (F3), the kit, the buses
+    // Since S24: the audio window (F12), the flux (F3), the kit, the buses;
+    // S26: « À propos », without a tab.
+    CHECK(manifest.value().windows->pages.size() == 16);
 }
 
 TEST_CASE("the discovery workspace is reserved for workshops, and the shipped beatmaker is not")
