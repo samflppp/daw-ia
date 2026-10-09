@@ -38,15 +38,8 @@ constexpr int cyclesPerAction = 15;
 constexpr double heardDb = -60.0;
 constexpr double secondReadingMs = 500.0;
 
-// Where in a beat the bar is loud: its kick strikes on every beat and is
-// gone before the next — at 90 BPM, the master's 300 ms peak falls under
-// -60 dBFS from 0.75 of a beat to the next strike. A reading taken there is
-// the music, not a silent playback: in S24, all 114 silent readings of five
-// runs sat between 0.55 and 0.65 s, the end of the first beat. So the
-// reading is the last one taken between these two places of a beat,
-// whenever the step comes.
-constexpr double loudFromBeat = 0.2;
-constexpr double loudToBeat = 0.55;
+// The reading is the last one taken in the loud part of a beat
+// (loudFromBeat, loudToBeat, Verification.h), whenever the step comes.
 
 constexpr std::array<const char*, 5> actions{
     "rien", "rendu hors ligne", "commande", "écoute d'un sample", "carte son perdue"};

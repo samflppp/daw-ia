@@ -122,6 +122,8 @@ void Verification::changeListenerCallback(juce::ChangeBroadcaster* source)
     if (source == &levels_ && recordingPlayback_ && clock_.isPlaying())
         playbackSeen_.emplace_back(clock_.positionBeats(),
                                    levelOf(engine::MeterTapPlugin::masterStrip.toStdString()).peakDb);
+    if (source == &levels_ && recordingStrips_ && clock_.isPlaying())
+        stripsSeen_.emplace_back(clock_.positionBeats(), levels_.levels());
 }
 
 void Verification::start()
@@ -1777,15 +1779,37 @@ void Verification::addMeterSteps()
             static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetLoop>(true, 0.0, 4.0)));
             static_cast<void>(bus_.execute(std::make_unique<domain::TransportSetPosition>(0.0)));
             droppedBefore_ = levels_.meters().droppedBlocks();
+            stripsSeen_.clear();
+            recordingStrips_ = true;
+            levels_.addChangeListener(this);
             key(juce::KeyPress{juce::KeyPress::spaceKey});
         },
         [this, master] { return clock_.isPlaying() && levelOf(master).peakDb > -60.0f; },
         6000.0);
 
+    // The meters as they were in the loud part of a beat, not when this step
+    // comes: after the step above, the runner settles and captures the
+    // window, which takes longer on a loaded machine, and a reading taken at
+    // the end of the beat hears the kick gone (S26: the two failures of S25).
     add("chaque piste mesure ce qu'elle joue, et seulement ça",
         [this, master]
         {
-            const auto levels = levels_.levels();
+            recordingStrips_ = false;
+            auto levels = levels_.levels();
+            double at = -1.0;
+            for (const auto& [beats, seen] : stripsSeen_)
+            {
+                const auto inBeat = beats - std::floor(beats);
+                if (inBeat >= loudFromBeat && inBeat <= loudToBeat)
+                {
+                    levels = seen;
+                    at = beats;
+                }
+            }
+            note(at < 0.0 ? std::string{"aucune lecture dans le temps fort d'un battement : les vu-mètres de "
+                                        "maintenant"}
+                          : "lus à " + juce::String(at, 2).toStdString() + " temps ; l'étape arrive à " +
+                                juce::String(clock_.positionBeats(), 2).toStdString() + " temps");
             const auto onMaster = levelIn(levels, master);
             note("master : crête " + juce::String(onMaster.peakDb, 1).toStdString() + " dBFS, RMS " +
                  juce::String(onMaster.rmsDb, 1).toStdString() + " dBFS");

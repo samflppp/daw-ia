@@ -49,6 +49,17 @@ class MixSession;
 class StemSession;
 class VoiceInput;
 
+// Where in a beat the first bar of the list is loud: its kick strikes on
+// every beat and is gone before the next — at 90 BPM, the master's 300 ms
+// peak falls under -60 dBFS from 0.75 of a beat to the next strike. A meter
+// read there is the music, not a silent playback: in S24, all 114 silent
+// readings of five --verify-lecture runs sat between 0.55 and 0.65 s, the
+// end of the first beat; in S25, the two failures of --verify at steps 58
+// and 60 read at 0.62 and 0.60 s. So a reading meant to hear the bar is the
+// last one taken between these two places of a beat.
+inline constexpr double loudFromBeat = 0.2;
+inline constexpr double loudToBeat = 0.55;
+
 // The checks a person would run on the real binary, run by the binary itself.
 //
 // Launched with --verify <folder>, the application builds its window as usual
@@ -213,7 +224,9 @@ private:
     // Every reading of the master meter while recordingMaster_ is set, at the
     // rate the meters are refreshed: what the copilot reads is one of them.
     // While recordingPlayback_ is set, each reading taken as the transport
-    // plays, with the position it was taken at (--verify-lecture).
+    // plays, with the position it was taken at (--verify-lecture). While
+    // recordingStrips_ is set, every strip's reading, with its position
+    // (the meters of --verify, S26).
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     void buildList();
@@ -529,6 +542,8 @@ private:
     bool recordingMaster_{false};
     std::vector<std::pair<double, float>> playbackSeen_;
     bool recordingPlayback_{false};
+    std::vector<std::pair<double, std::vector<engine::StripLevel>>> stripsSeen_;
+    bool recordingStrips_{false};
     std::size_t droppedBefore_{0};
     std::function<bool(const juce::File&)> newProjectAt_;
     std::function<bool(const juce::File&)> openProjectAt_;
