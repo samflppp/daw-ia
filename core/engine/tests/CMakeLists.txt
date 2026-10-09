@@ -40,7 +40,10 @@ target_compile_definitions(daw_engine_tests PRIVATE
     JUCE_PLUGINHOST_LADSPA=0
     JUCE_STRICT_REFCOUNTEDPOINTER=1
     JUCE_MODAL_LOOPS_PERMITTED=1
-    TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1)
+    # No time-stretcher (S26): the DAW never stretches a clip, and SoundTouch,
+    # Tracktion's default once compiled, is LGPL-2.1 - linked statically into a
+    # closed binary, it would oblige us to ship what relinks it.
+    TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=0)
 
 target_link_libraries(daw_engine_tests PRIVATE
     daw::engine
