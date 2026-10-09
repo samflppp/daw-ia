@@ -13,6 +13,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <memory>
 #include <string>
@@ -539,6 +540,74 @@ void Verification::buildVoice()
         "perdu la main");
     add("la main rendue", [this] { voice_->inFront = [] { return true; }; });
     heldEnd("tenue plus de 15 s", 15.4, [] {}, "15 secondes");
+
+    // --- no microphone, or one Windows refuses (S26) --------------------------------------
+    // The device fails to open: the push-to-talk says it, and nothing else
+    // moves — no phrase, nothing sent, the project and the song's level as
+    // they were. The next press, the failure gone, opens again.
+    const auto failing = [this, run, stateBytes](const std::string& title,
+                                                 Microphone::FailureForTest failure,
+                                                 const std::string& said)
+    {
+        add(
+            title,
+            [this, run, stateBytes, failure]
+            {
+                run->before = stateBytes();
+                run->transcript = copilot_.transcript().size();
+                voice_->microphoneDevice().failForTest(failure);
+                voice_->keyForTest(rightCtrl, true, true);
+                run->releaseAt = domain::live::now() + 1.0;
+            },
+            [run] { return domain::live::now() >= run->releaseAt; },
+            5000.0);
+        add(title + " : la touche tenue",
+            [this, run, said]
+            {
+                check(voice_->stage() == ui::VoiceHost::Stage::failed, "le push-to-talk dit l'échec");
+                check(voice_->message().find(said) != std::string::npos, "« " + voice_->message() + " »");
+                check(!voice_->microphoneDevice().isOpen(), "aucun micro ouvert");
+                const auto master = edit_.getMasterVolumePlugin();
+                check(master != nullptr && std::abs(master->getVolumeDb()) < 0.01f,
+                      "le morceau n'est pas baissé");
+                voice_->keyForTest(rightCtrl, true, false);
+            });
+        add(title + " : relâchée, rien n'a bougé",
+            [this, run, stateBytes, said]
+            {
+                check(voice_->message().find(said) != std::string::npos,
+                      "toujours dit : « " + voice_->message() + " »");
+                check(!voice_->lastHeard().has_value(), "aucune phrase");
+                check(copilot_.transcript().size() == run->transcript, "le copilote n'a rien reçu");
+                check(stateBytes() == run->before, "le projet à l'octet");
+                voice_->microphoneDevice().failForTest(Microphone::FailureForTest::none);
+            });
+    };
+    failing("aucun micro sur la machine", Microphone::FailureForTest::absent, "aucun micro");
+    failing("le micro refusé par Windows", Microphone::FailureForTest::refused, "réglages de Windows");
+    add(
+        "le micro rendu : la touche l'ouvre de nouveau",
+        [this, run]
+        {
+            run->transcript = copilot_.transcript().size();
+            voice_->microphoneDevice().injectForTest(readSet("c01"));
+            voice_->keyForTest(rightCtrl, true, true);
+            run->releaseAt = domain::live::now() + 1.0;
+        },
+        [this, run] { return domain::live::now() >= run->releaseAt && voice_->microphoneDevice().isOpen(); },
+        5000.0);
+    add(
+        "le micro rendu : ouvert, puis abandonné par une autre touche",
+        [this]
+        {
+            check(voice_->microphoneDevice().isOpen(),
+                  "ouvert : « " + voice_->microphoneDevice().openedName().toStdString() + " »");
+            voice_->keyForTest(0x2C, false, true);
+            voice_->keyForTest(0x2C, false, false);
+            voice_->keyForTest(rightCtrl, true, false);
+        },
+        [this] { return voice_->stage() == ui::VoiceHost::Stage::idle; },
+        5000.0);
 
     // --- this machine's microphone, when asked: the output does not change ------------
     if (!realMicrophone_)

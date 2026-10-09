@@ -83,6 +83,17 @@ public:
     // The next opens play `samples` (16 kHz, mono) instead of a device.
     void injectForTest(std::vector<float> samples16k);
 
+    // The next opens fail the way a machine without a microphone, or one
+    // whose microphone Windows' privacy settings refuse, makes them fail
+    // (S26): through the same branch and the same words as the real case.
+    enum class FailureForTest
+    {
+        none,
+        absent,
+        refused,
+    };
+    void failForTest(FailureForTest failure) noexcept { failure_ = failure; }
+
 private:
     void audioDeviceIOCallbackWithContext(const float* const* inputs,
                                           int numInputs,
@@ -109,6 +120,7 @@ private:
 
     std::vector<float> injected_;
     std::size_t injectedAt_{0};
+    FailureForTest failure_{FailureForTest::none};
 };
 
 } // namespace daw::app

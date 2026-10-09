@@ -68,7 +68,21 @@ bool Microphone::open(const juce::String& name, juce::String& error)
     written_.store(0);
     peak_.store(0.0f);
 
-    if (!injected_.empty())
+    // A refused microphone is told as one, by the words of the real branch
+    // below; an absent one goes through the real branch itself.
+    const auto refused = [&name](const juce::String& why)
+    {
+        return juce::String::fromUTF8("« ") + name + juce::String::fromUTF8(" » ne s'ouvre pas (") + why +
+               juce::String::fromUTF8(") — l'accès au micro est-il permis dans les réglages de Windows ?");
+    };
+    if (failure_ == FailureForTest::refused)
+    {
+        error = refused(juce::String::fromUTF8("accès refusé, simulé"));
+        return false;
+    }
+    const auto wanted = failure_ == FailureForTest::absent ? juce::String{} : name;
+
+    if (!injected_.empty() && failure_ == FailureForTest::none)
     {
         rate_.store(rate16k);
         injectedAt_ = 0;
@@ -83,13 +97,13 @@ bool Microphone::open(const juce::String& name, juce::String& error)
         error = juce::String::fromUTF8("pas de micro sur ce système");
         return false;
     }
-    if (name.isEmpty())
+    if (wanted.isEmpty())
     {
         error = juce::String::fromUTF8("aucun micro");
         return false;
     }
     type_->scanForDevices();
-    device_.reset(type_->createDevice({}, name));
+    device_.reset(type_->createDevice({}, wanted));
     if (device_ == nullptr)
     {
         error = juce::String::fromUTF8("« ") + name + juce::String::fromUTF8(" » n'est plus là");
@@ -103,8 +117,7 @@ bool Microphone::open(const juce::String& name, juce::String& error)
     {
         // Windows' privacy settings refuse the microphone as an open that
         // fails: said as such, the most likely cause.
-        error = juce::String::fromUTF8("« ") + name + juce::String::fromUTF8(" » ne s'ouvre pas (") + opened +
-                juce::String::fromUTF8(") — l'accès au micro est-il permis dans les réglages de Windows ?");
+        error = refused(opened);
         device_.reset();
         return false;
     }
